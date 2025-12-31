@@ -1,0 +1,51 @@
+.root {
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 10px;
+  padding: 22px 24px 18px 24px;
+  font-size: 15px;
+  box-shadow: 0 6px 24px rgba(17,24,39,0.08);
+  max-width: 400px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #2b2d42;
+}
+
+.close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: #f8fafc;
+  border-radius: 50%;
+  color: #888;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.close:hover {
+  background: #e0e7ef;
+  color: #2b6cb0;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #2b2d42;
+  margin: 18px 0 6px 0;
+}
+
+/* Relations and AddNode will inherit modern look */

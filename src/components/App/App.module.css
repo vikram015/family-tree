@@ -5,44 +5,21 @@
   height: 100%;
 }
 
-.header {
-  display: flex;
-  padding: 10px 20px;
-  align-items: center;
-  justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-  z-index: 999;
-}
-
-.title {
-  display: flex;
-  margin: 0;
-  padding: 0;
-  align-items: center;
-  gap: 10px;
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.version {
-  display: block;
-  padding: 4px 6px;
-  font-size: 10px;
-  line-height: 1;
-  background: #eee;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-
 .wrapper {
   flex: 1;
+  touch-action: none; /* Prevents the browser from interfering with your zoom logic */
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .tree {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 4px;
+  touch-action: none;
+  pointer-events: auto;
 }
 
 .reset {
@@ -63,6 +40,27 @@
   top: 60px;
 }
 
+.empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.startButton {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #888;
+  background: #fdfdfd;
+  cursor: pointer;
+}
+
+.startInput {
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  margin-right: 8px;
+}
 @media (max-width: 600px) {
   .header {
     flex-direction: column;

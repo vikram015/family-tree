@@ -1,0 +1,151 @@
+.noCardRoot {
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  max-width: 100%;
+}
+/* Radio group styling for modern look */
+.radioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: flex-start;
+  margin-top: 2px;
+}
+
+.radioLabel {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 400;
+  color: #2b2d42;
+  cursor: pointer;
+  gap: 5px;
+}
+.radioLabel input[type="radio"] {
+  accent-color: #2b6cb0;
+  margin-right: 4px;
+}
+.root {
+  background: #fff;
+  border: 1.5px solid #e3e8ee;
+  border-radius: 14px;
+  padding: 22px 24px 20px 24px;
+  margin-top: 24px;
+  font-size: 15px;
+  box-shadow: 0 6px 24px rgba(17,24,39,0.08);
+  max-width: 370px;
+  min-width: 270px;
+}
+
+.formHeading {
+  font-size: 1.18rem;
+  font-weight: 600;
+  color: #234075;
+  margin-bottom: 18px;
+  letter-spacing: 0.01em;
+}
+
+.formRow {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.label {
+  flex: 0 0 110px;
+  font-weight: 500;
+  color: #2b2d42;
+  font-size: 14px;
+  text-align: right;
+  margin-right: 12px;
+}
+
+.input, .select {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #d9d9d9;
+  font-size: 14px;
+  min-height: 36px;
+  background: #f8fafc;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+
+/* Limit width of name input specifically */
+.nameInput {
+  max-width: 180px;
+}
+.input:focus-visible, .select:focus-visible {
+  outline: none;
+  border-color: #2b6cb0;
+  box-shadow: 0 0 0 2px rgba(43,108,176,0.10);
+}
+
+.buttonRow {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.button {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: #f5f5f5;
+  min-width: 80px;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.button.primary {
+  background: #2b6cb0;
+  color: #fff;
+  border-color: #2b6cb0;
+}
+.button.primary:hover {
+  filter: brightness(0.97);
+}
+
+.addFieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.addFieldRow .input {
+  min-width: 0;
+  max-width: 120px;
+  flex: 1 1 40%;
+}
+
+.addFieldRow .input:last-of-type {
+  flex: 1 1 55%;
+}
+
+.addFieldButton {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #bdbdbd;
+  background: #f8fafc;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.removeFieldButton {
+  background: #fff0f0;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}

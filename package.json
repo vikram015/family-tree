@@ -3,6 +3,7 @@
   "version": "3.2.0",
   "dependencies": {
     "classnames": "2.3.2",
+    "firebase": "^12.6.0",
     "pinch-zoom-pan": "4.0.2",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -25,7 +26,6 @@
   "eslintConfig": {
     "extends": "react-app"
   },
-  "homepage": "https://sanichkotikov.github.io/react-family-tree-example/",
   "browserslist": [
     "Chrome 116",
     "Safari 16"

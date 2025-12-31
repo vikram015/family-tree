@@ -2,6 +2,12 @@
   position: relative;
   transform: translateZ(0);
   overflow: hidden;
+  touch-action: none;
+  -ms-touch-action: none; /* legacy Edge */
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: auto;
+  overscroll-behavior: contain; /* prevent page scroll/refresh while interacting */
 }
 
 .point {
@@ -11,9 +17,13 @@
   transform: translate(0, 0) scale(1);
   transform-origin: center;
   will-change: transform;
+  touch-action: none;
+  -ms-touch-action: none;
 }
 
 .canvas {
   position: absolute;
   transform: translate(-50%, -50%);
+  touch-action: none;
+  -ms-touch-action: none;
 }

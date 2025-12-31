@@ -1,0 +1,162 @@
+[
+  {
+    "id": "dhnnaram",
+    "name": "Dhannaram",
+    "gender": "male",
+    "children": [{"id":"magharam","type": "blood"},{"id":"maddoji","type": "adopted"}]
+  },
+  {
+    "id": "magharam",
+    "name": "Magharam",
+    "gender": "male",
+    "children": [{"id":"rama","type": "blood"},{"id":"chetan","type": "blood"}]  
+  },
+  {
+    "id": "rama",
+    "name": "Rama",
+    "gender": "male",
+    "children":[{"id":"haruram", "type": "blood"},{"id": "panna","type": "blood"}]
+  },
+  {
+    "id": "haruram",
+    "name": "Haruram",
+    "gender": "male",
+    "children": [{"id":"bagdawat","type": "blood"}]
+  },
+  {
+    "id": "bagdawat",
+    "name": "Bagdawat",
+    "gender": "male",
+    "children": [{"id":"nathuram","type": "blood"}]
+  },
+  {
+    "id": "nathuram",
+    "name": "Nathu Ram",
+    "gender": "male",
+    "children": [{"id":"umedsing", "type": "blood"},{"id": "ramkumar", "type":"blood"},{"id": "rajinderkumar","type":"blood"},{"id":"liluram","type":"blood"}, {"id":"jaisingh","type":"blood"}]
+  },
+  {
+    "id": "umedsing",
+    "name": "Umed Singh",
+    "gender": "male",
+    "children": []
+  },
+  {
+    "id": "ramkumar",
+    "name": "Ramkumar",
+    "gender": "male",
+    "children":[
+      {"id": "sharda", "type": "blood"},
+      {"id": "sandeep", "type": "blood"},
+      {"id": "pardeep", "type": "blood"}
+    ]
+  },
+  {
+    "id": "sharda",
+    "name": "Sharda",
+    "gender": "female"
+   
+  },
+  {
+    "id": "sandeep",
+    "name": "Sandeep",
+    "gender": "male"
+  },
+  {
+    "id": "pardeep",
+    "name": "Pardeep",
+    "gender": "male"
+  },
+  {
+    "id": "rajinderkumar",
+    "name": "Rajinder",
+    "gender": "male",
+    "children": [
+      {"id": "vikram","type":"blood"},
+      {"id": "mahabir", "type": "blood"},
+      {"id": "kirshan", "type": "blood"},
+      {"id": "sonia", "type": "adopted"}
+    ]
+  },
+  {
+    "id": "vikram",
+    "name": "Vikram Singh",
+    "gender": "male",
+    "children": []
+  },
+  {
+    "id": "mahabir",
+    "name": "Mahabir Verma",
+    "gender": "male",
+    "children": []
+  },
+  {
+    "id": "kirshan",
+    "name": "Kirshan kumar",
+    "gender": "male"
+  },
+  {
+    "id": "sonia",
+    "name": "Sonia Verma",
+    "gender": "female"
+  },
+
+  {
+    "id": "liluram",
+    "name": "Lilu Ram",
+    "gender": "male",
+    "children": [{"id":"parveen","type":"blood"},{"id": "sanjay","type":"blood"}]
+  },
+  {
+    "id": "parveen",
+    "name": "Parveen",
+    "gender": "male",
+    "children": []
+  },
+  {
+    "id": "sanjay",
+    "name": "Sanjay",
+    "gender": "male"
+  },
+  {
+    "id": "jaisingh",
+    "name": "Jaisingh",
+    "gender": "male",
+    "children": [{"id":"ravikumar","type":"blood"},{"id":"sloni","type":"blood"},{"id":"rajesh","type":"blood"}]
+  },
+  {
+    "id": "ravikumar",
+    "name": "Ravi kumar",
+    "gender": "male",
+    "children": []
+  },
+  {
+    "id": "sloni",
+    "gender": "female",
+    "name": "Sloni"
+  },
+  {
+    "id": "rajesh",
+    "gender": "male",
+    "name": "Rajesh"
+  },
+  {
+    "id": "panna",
+    "gender": "male",
+    "name": "Panna",
+    "children": []
+  },
+  {
+    "id": "chetan",
+    "gender": "male",
+    "name": "Chetan",
+    "children": []
+  },
+  {
+    "id": "maddoji",
+    "gender":"male",
+    "name": "Maddoji",
+    "children": []
+  }
+  
+]

@@ -2,6 +2,8 @@
   position: absolute;
   display: flex;
   padding: 10px;
+  pointer-events: auto; /* Re-enable pointer events for node interactions */
+  touch-action: none; /* Allow pinch/drag gestures to propagate */
 }
 
 .inner {
@@ -9,32 +11,88 @@
   flex: 1;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgba(0, 0, 0, .2);
+  border: 2px solid rgba(15, 23, 42, 0.06);
   border-radius: 10px 0;
   overflow: hidden;
   cursor: pointer;
+  /* subtle non-layout visual polish */
+  background: linear-gradient(180deg, #ffffff, #f7fafc);
+  box-shadow: 0 6px 14px rgba(2,6,23,0.06);
 }
 
 .male {
-  background: #a4ecff;
+  background: linear-gradient(180deg,#ffffff,#f1f5f9);
+  color: #0f172a;
 }
 
 .female {
-  background: #fdaed8;
+  background: linear-gradient(180deg,#fff0f6,#fde2fa);
+  color: #4a154b;
 }
 
 .isRoot {
-  border-color: rgba(0, 0, 0, .4);
+  border-color: rgba(43,108,176,0.3);
+  box-shadow: 0 8px 20px rgba(43,108,176,0.06);
 }
 
 .isHover {
-  border-color: rgba(0, 0, 0, .8);
+  border-color: rgba(15,23,42,0.12);
+  box-shadow: 0 8px 20px rgba(2,6,23,0.08);
 }
 
 .id {
-  font-size: 7px;
+  font-size: 14px;
   line-height: 1;
-  opacity: .5;
+  font-weight: 600;
+  color: #0f172a;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* tooltip showing full info on hover (non-layout) */
+.tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  background: rgba(15, 23, 42, 0.96);
+  color: #fff;
+  padding: 8px 10px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(2,6,23,0.25);
+  font-size: 13px;
+  min-width: 140px;
+  max-width: 280px;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 999;
+}
+
+.tooltipName {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.tooltipDob {
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 6px;
+}
+
+.tooltipMeta {
+  font-size: 12px;
+  color: rgba(255,255,255,0.72);
+}
+
+/* show tooltip when present */
+.tooltip[aria-hidden="false"] {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
 }
 
 .sub {
@@ -43,16 +101,17 @@
   right: 14px;
   width: 14px;
   height: 10px;
-  border: 1px solid rgba(0, 0, 0, .2);
+  border: 1px solid rgba(15,23,42,0.06);
   border-radius: 4px 0;
   background: #fff;
   cursor: pointer;
+  box-shadow: 0 4px 8px rgba(2,6,23,0.04);
 }
 
 .sub.male {
-  background: #fdaed8;
+  background: linear-gradient(180deg,#ffe6f0,#ffd7e8);
 }
 
 .sub.female {
-  background: #a4ecff;
+  background: linear-gradient(180deg,#e8f9ff,#dff5ff);
 }
