@@ -1,8 +1,9 @@
-import React, { memo, useCallback, ChangeEvent, useEffect } from "react";
+import React, { memo, useCallback, useEffect } from "react";
 import type { Node } from "relatives-tree/lib/types";
 import { db } from "../../firebase";
-import { collection, onSnapshot } from "firebase/firestore";
-import css from "./SourceSelect.module.css";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { FormControl, InputLabel, Select, MenuItem } from "@mui/material";
+import { useVillage } from "../context/VillageContext";
 
 interface SourceSelectProps {
   onChange: (value: string, nodes: readonly Readonly<Node>[]) => void;
@@ -21,9 +22,17 @@ export const SourceSelect = memo(function SourceSelect({
     const params = new URLSearchParams(window.location.search);
     return params.get("tree") || "";
   });
+  const { selectedVillage } = useVillage();
+
   useEffect(() => {
     const treeRef = collection(db, "tree");
-    const uunsub = onSnapshot(treeRef, (snapshot) => {
+
+    // Filter trees by village if a village is selected
+    const q = selectedVillage
+      ? query(treeRef, where("villageId", "==", selectedVillage))
+      : treeRef;
+
+    const uunsub = onSnapshot(q, (snapshot) => {
       const sources: typeof items = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -43,11 +52,17 @@ export const SourceSelect = memo(function SourceSelect({
         setValue(first.id);
         if (autoNotifyOnInit) onChange(first.id, []);
       }
+      // If current tree is not in filtered list, clear selection
+      else if (value && !sources.some((s) => s.id === value)) {
+        setValue("");
+        onChange("", []);
+      }
     });
     return () => uunsub();
-  }, [onChange, value, autoNotifyOnInit]);
+  }, [onChange, value, autoNotifyOnInit, selectedVillage]);
+
   const changeHandler = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
+    (event: any) => {
       const id = event.target.value;
       setValue(id);
       // pass the selected id; second param (nodes) is not available here so pass an empty array
@@ -57,23 +72,22 @@ export const SourceSelect = memo(function SourceSelect({
   );
 
   return (
-    <div className={css.root}>
-      <label className={css.label} htmlFor="source-select">
-        Source:
-      </label>
-      <select
+    <FormControl sx={{ minWidth: 200 }} size="small">
+      <InputLabel id="source-select-label">Source</InputLabel>
+      <Select
+        labelId="source-select-label"
         id="source-select"
-        className={css.select}
         value={value}
+        label="Source"
         onChange={changeHandler}
       >
-        <option value="">— select —</option>
+        <MenuItem value="">— select —</MenuItem>
         {items.map((item) => (
-          <option key={item.id} value={item.id}>
+          <MenuItem key={item.id} value={item.id}>
             {item.name}
-          </option>
+          </MenuItem>
         ))}
-      </select>
-    </div>
+      </Select>
+    </FormControl>
   );
 });

@@ -1,5 +1,24 @@
 import React, { useEffect, useState } from "react";
-import css from "./ContactPage.module.css";
+import { Helmet } from "react-helmet-async";
+import {
+  Container,
+  Paper,
+  Box,
+  Typography,
+  Avatar,
+  Button,
+  List,
+  ListItem,
+  ListItemText,
+  Stack,
+  Divider,
+  Link,
+} from "@mui/material";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import EmailIcon from "@mui/icons-material/Email";
+import LinkedInIcon from "@mui/icons-material/LinkedIn";
+import PhoneIcon from "@mui/icons-material/Phone";
+import LanguageIcon from "@mui/icons-material/Language";
 
 interface ProfileData {
   name: string;
@@ -30,13 +49,8 @@ If you have any feedback, corrections, or suggestions, feel free to contact me. 
     "https://firebasestorage.googleapis.com/v0/b/hotelmanager-c833b.firebasestorage.app/o/Screenshot_20251228_173624.jpg?alt=media&token=ed611029-4dcc-478d-8d89-5becaec52788",
 };
 
-interface ContactPageProps {
-  onBack?: () => void;
-}
-
-export const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
+export const ContactPage: React.FC = () => {
   const [data, setData] = useState<ProfileData>(defaultProfile);
-  const [padTop, setPadTop] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     const saved = localStorage.getItem("contact-profile");
@@ -49,136 +63,187 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
     }
   }, []);
 
-  useEffect(() => {
-    const updatePadding = () => {
-      const header = document.querySelector("header");
-      if (header) {
-        const h = (header as HTMLElement).offsetHeight || 56;
-        // On small screens, use 0 padding; on larger screens add breathing space
-        const padding = window.innerWidth <= 640 ? 0 : h + 24;
-        setPadTop(padding);
-      }
-    };
-    updatePadding();
-    window.addEventListener("resize", updatePadding);
-    window.addEventListener("orientationchange", updatePadding);
-    return () => {
-      window.removeEventListener("resize", updatePadding);
-      window.removeEventListener("orientationchange", updatePadding);
-    };
-  }, []);
-
   const phone = data.phone || defaultProfile.phone;
   const sanitizedPhone = phone.replace(/[^0-9]/g, "");
   const email = data.email || defaultProfile.email;
   const website = data.website || defaultProfile.website;
 
   return (
-    <div
-      className={css.page}
-      style={padTop ? { paddingTop: padTop } : undefined}
-    >
-      <div className={css.card}>
-        <header className={css.profileHeader}>
-          <div className={css.avatarWrap}>
-            <img
+    <>
+      <Helmet>
+        <title>Contact & Connect - Kinvia | Get in Touch</title>
+        <meta
+          name="description"
+          content="Connect with us on Kinvia. Reach out via email, phone, WhatsApp, or visit our website. We're here to help you build your family tree."
+        />
+        <meta
+          name="keywords"
+          content="contact us, support, customer service, help, get in touch, family tree help"
+        />
+        <meta property="og:title" content="Contact & Connect - Kinvia" />
+        <meta
+          property="og:description"
+          content="Get in touch with us via multiple channels. We're here to help with your family tree journey."
+        />
+      </Helmet>
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Paper elevation={3} sx={{ overflow: "hidden" }}>
+          <Box
+            sx={{
+              textAlign: "center",
+              p: 2,
+              bgcolor: "primary.main",
+              color: "white",
+            }}
+          >
+            <Avatar
               src={data.avatarUrl || defaultProfile.avatarUrl}
               alt="avatar"
-              className={css.avatar}
+              sx={{
+                width: 180,
+                height: 180,
+                mx: "auto",
+                mb: 2,
+                border: "4px solid white",
+              }}
             />
-          </div>
-          <div className={css.name}>{data.name || "Your Name"}</div>
-          <div className={css.title}>{data.title || defaultProfile.title}</div>
-          <div className={css.tagline}>
-            Preserving family history through technology.
-          </div>
-        </header>
+            <Typography variant="h4" gutterBottom>
+              {data.name || "Your Name"}
+            </Typography>
+            <Typography variant="h6" gutterBottom>
+              {data.title || defaultProfile.title}
+            </Typography>
+            <Typography variant="body2">
+              Preserving family history through technology.
+            </Typography>
+          </Box>
 
-        <section className={css.section}>
-          <div className={css.sectionTitle}>About the Creator</div>
-          <p className={css.paragraph}>{data.bio || defaultProfile.bio}</p>
-          <p className={css.paragraph}>
-            This app helps preserve lineage, relationships, and community
-            stories for future generations.
-          </p>
-        </section>
+          <Box sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: "bold" }}>
+              About the Creator
+            </Typography>
+            <Typography
+              variant="body1"
+              paragraph
+              sx={{ whiteSpace: "pre-line" }}
+            >
+              {data.bio || defaultProfile.bio}
+            </Typography>
+            <Typography variant="body1" paragraph>
+              This app helps preserve lineage, relationships, and community
+              stories for future generations.
+            </Typography>
 
-        <section className={css.section}>
-          <div className={css.sectionTitle}>Why I Built This App</div>
-          <p className={css.paragraph}>
-            Our family history is rich but often lives only in memory. I built
-            this to keep our bonds and heritage accessible to everyone.
-          </p>
-          <p className={css.paragraph}>
-            If you want a similar experience for your family or community, reach
-            out and I will help set it up.
-          </p>
-        </section>
+            <Divider sx={{ my: 3 }} />
 
-        <section className={css.section}>
-          <div className={css.sectionTitle}>Contact</div>
-          <div className={css.contactButtons}>
-            <a
-              className={`${css.contactButton} ${css.whatsapp}`}
-              href={sanitizedPhone ? `https://wa.me/${sanitizedPhone}` : "#"}
-              target="_blank"
-              rel="noreferrer"
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: "bold" }}>
+              Why I Built This App
+            </Typography>
+            <Typography variant="body1" paragraph>
+              Our family history is rich but often lives only in memory. I built
+              this to keep our bonds and heritage accessible to everyone.
+            </Typography>
+            <Typography variant="body1" paragraph>
+              If you want a similar experience for your family or community,
+              reach out and I will help set it up.
+            </Typography>
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: "bold" }}>
+              Contact
+            </Typography>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={2}
+              sx={{ mb: 3 }}
             >
-              WhatsApp
-            </a>
-            <a
-              className={`${css.contactButton} ${css.email}`}
-              href={`mailto:${email}`}
-            >
-              Email Me
-            </a>
-            <a
-              className={`${css.contactButton} ${css.linkedin}`}
-              href={
-                data.linkedin
-                  ? `https://${data.linkedin.replace(/^https?:\/\//, "")}`
-                  : "#"
-              }
-              target="_blank"
-              rel="noreferrer"
-            >
-              LinkedIn
-            </a>
-          </div>
-          <ul className={css.detailList}>
-            <li>
-              <span className={css.detailLabel}>Mobile:</span>
-              <a href={`tel:${phone}`}>{phone}</a>
-            </li>
-            <li>
-              <span className={css.detailLabel}>Email:</span>
-              <a href={`mailto:${email}`}>{email}</a>
-            </li>
-            <li>
-              <span className={css.detailLabel}>Website:</span>
-              <a
-                href={`https://${website.replace(/^https?:\/\//, "")}`}
+              <Button
+                variant="contained"
+                startIcon={<WhatsAppIcon />}
+                href={sanitizedPhone ? `https://wa.me/${sanitizedPhone}` : "#"}
                 target="_blank"
                 rel="noreferrer"
+                sx={{ bgcolor: "#25D366", "&:hover": { bgcolor: "#1DA851" } }}
+                fullWidth
               >
-                {website}
-              </a>
-            </li>
-          </ul>
-        </section>
+                WhatsApp
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<EmailIcon />}
+                href={`mailto:${email}`}
+                color="error"
+                fullWidth
+              >
+                Email Me
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<LinkedInIcon />}
+                href={
+                  data.linkedin
+                    ? `https://${data.linkedin.replace(/^https?:\/\//, "")}`
+                    : "#"
+                }
+                target="_blank"
+                rel="noreferrer"
+                sx={{ bgcolor: "#0077B5", "&:hover": { bgcolor: "#005885" } }}
+                fullWidth
+              >
+                LinkedIn
+              </Button>
+            </Stack>
 
-        <footer className={css.footerNote}>
-          Built with ❤️ for the family and village community.
-          {onBack && (
-            <button
-              className={`${css.button} ${css.secondary}`}
-              onClick={onBack}
-            >
-              Back to Tree
-            </button>
-          )}
-        </footer>
-      </div>
-    </div>
+            <List>
+              <ListItem>
+                <PhoneIcon sx={{ mr: 2, color: "text.secondary" }} />
+                <ListItemText
+                  primary="Mobile"
+                  secondary={
+                    <Link href={`tel:${phone}`} underline="hover">
+                      {phone}
+                    </Link>
+                  }
+                />
+              </ListItem>
+              <ListItem>
+                <EmailIcon sx={{ mr: 2, color: "text.secondary" }} />
+                <ListItemText
+                  primary="Email"
+                  secondary={
+                    <Link href={`mailto:${email}`} underline="hover">
+                      {email}
+                    </Link>
+                  }
+                />
+              </ListItem>
+              <ListItem>
+                <LanguageIcon sx={{ mr: 2, color: "text.secondary" }} />
+                <ListItemText
+                  primary="Website"
+                  secondary={
+                    <Link
+                      href={`https://${website.replace(/^https?:\/\//, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      underline="hover"
+                    >
+                      {website}
+                    </Link>
+                  }
+                />
+              </ListItem>
+            </List>
+          </Box>
+
+          <Box sx={{ p: 3, bgcolor: "grey.100", textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              Built with ❤️ for the family and village community.
+            </Typography>
+          </Box>
+        </Paper>
+      </Container>
+    </>
   );
 };

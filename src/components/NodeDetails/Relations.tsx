@@ -1,6 +1,16 @@
-import React, { memo, useCallback, useState } from "react";
-import { Relation } from "relatives-tree/lib/types";
-import css from "./Relations.module.css";
+import React, { memo, useCallback } from "react";
+import {
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Typography,
+  Chip,
+} from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 interface RelationsProps {
   title: string;
@@ -27,38 +37,41 @@ export const Relations = memo(function Relations({
   );
   const clearHandler = useCallback(() => onClear(), [onClear]);
 
-  const [open, setOpen] = useState(false);
-  if (!items.length) return null;
   return (
-    <div className={css.root}>
-      <button
-        className={css.collapseHeader}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
+    <Accordion>
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
         aria-controls={`rel-list-${title}`}
+        id={`rel-header-${title}`}
       >
-        <span className={css.collapseIcon} aria-hidden>
-          {open ? "▼" : "►"}
-        </span>
-        {title}
-        <span className={css.count}>({items.length})</span>
-      </button>
-      {open && (
-        <ul className={css.list} id={`rel-list-${title}`}>
-          {items.map((item, idx) => (
-            <li
-              key={idx}
-              className={css.item}
-              onClick={selectHandler(item.id)}
-              onMouseEnter={hoverHandler(item.id)}
-              onMouseLeave={clearHandler}
-            >
-              {item.name} ({item.type})
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+        <Typography sx={{ flexGrow: 1 }}>{title}</Typography>
+        <Chip label={items.length} size="small" />
+      </AccordionSummary>
+      <AccordionDetails sx={{ p: 0 }}>
+        {items.length > 0 ? (
+          <List>
+            {items.map((item, idx) => (
+              <ListItem key={idx} disablePadding>
+                <ListItemButton
+                  onClick={selectHandler(item.id)}
+                  onMouseEnter={hoverHandler(item.id)}
+                  onMouseLeave={clearHandler}
+                >
+                  <ListItemText primary={item.name} secondary={item.type} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        ) : (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ p: 2, textAlign: "center" }}
+          >
+            No {title.toLowerCase()} added yet
+          </Typography>
+        )}
+      </AccordionDetails>
+    </Accordion>
   );
 });

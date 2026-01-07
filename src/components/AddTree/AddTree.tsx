@@ -1,7 +1,21 @@
 import React, { useState } from "react";
 import { db } from "../../firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import css from "./AddTree.module.css";
+import {
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Alert,
+  CircularProgress,
+  Box,
+} from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import { useVillage } from "../context/VillageContext";
+import { useAuth } from "../context/AuthContext";
+import { useLoginModal } from "../context/LoginModalContext";
 
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
@@ -13,14 +27,18 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const { selectedVillage } = useVillage();
+  const { currentUser } = useAuth() as any;
+  const { openLoginModal } = useLoginModal();
 
   const submit = async () => {
     setError(null);
     setLoading(true);
     try {
-      // create tree doc
+      // create tree doc with villageId
       const treeRef = await addDoc(collection(db, "tree"), {
         treeName: name || "Default Tree",
+        villageId: selectedVillage || "",
         createdAt: serverTimestamp(),
       });
       const treeId = treeRef.id;
@@ -38,6 +56,13 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   };
 
   const openModal = () => {
+    if (!currentUser) {
+      openLoginModal(() => {
+        // After successful login, open the modal
+        setShowModal(true);
+      });
+      return;
+    }
     setError(null);
     setCreatedId(null);
     setName("");
@@ -52,52 +77,63 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   const isValid = name.trim().length >= 4 && name.trim().length <= 64;
 
   return (
-    <div className={css.root}>
-      <button onClick={openModal} className={`${css.button} ${css.primary}`}>
+    <Box>
+      <Button
+        variant="contained"
+        color="primary"
+        startIcon={<AddIcon />}
+        onClick={openModal}
+      >
         Create tree
-      </button>
-      {showModal && (
-        <div className={css.modalOverlay} onClick={closeModal}>
-          <div
-            className={css.modal}
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
+      </Button>
+
+      <Dialog open={showModal} onClose={closeModal} maxWidth="sm" fullWidth>
+        <DialogTitle>Create a new tree</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Tree name"
+            placeholder="e.g. Sharma Family"
+            fullWidth
+            variant="outlined"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={loading}
+            sx={{ mt: 1 }}
+          />
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Error: {error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeModal} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={submit}
+            disabled={!isValid || loading}
+            variant="contained"
+            startIcon={loading ? <CircularProgress size={20} /> : null}
           >
-            <div className={css.modalTitle}>Create a new tree</div>
-            <label className={css.modalLabel}>
-              Tree name
-              <input
-                className={css.modalInput}
-                placeholder="e.g. Sharma Family"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={loading}
-              />
-            </label>
-            <div className={css.modalActions}>
-              <button
-                className={`${css.button} ${css.secondary}`}
-                onClick={closeModal}
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                className={`${css.button} ${css.primary}`}
-                onClick={submit}
-                disabled={!isValid || loading}
-              >
-                {loading ? "Creating..." : "Create"}
-              </button>
-            </div>
-            {error && <div className={css.error}>Error: {error}</div>}
-          </div>
-        </div>
+            {loading ? "Creating..." : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {createdId && !showModal && (
+        <Alert severity="success" sx={{ mt: 1 }}>
+          Created: {createdId}
+        </Alert>
       )}
-      {createdId && <div className={css.success}>Created: {createdId}</div>}
-      {error && !showModal && <div className={css.error}>Error: {error}</div>}
-    </div>
+      {error && !showModal && (
+        <Alert severity="error" sx={{ mt: 1 }}>
+          Error: {error}
+        </Alert>
+      )}
+    </Box>
   );
 };
 

@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && getUserProfile().role == 'superadmin';
+    }
+
+    function canManageVillage(villageId) {
+      return isSignedIn() && (
+        getUserProfile().role == 'superadmin' || villageId in getUserProfile().villages
+      );
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // Villages collection (metadata for village selection)
+    match /villages/{villageId} {
+      allow read: if true; // Public read so app can list villages
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    // Trees collection (app uses collection name 'tree')
+    match /tree/{treeId} {
+      allow read: if true;
+      allow create: if isSuperAdmin();
+      allow update, delete: if isSignedIn() && canManageVillage(treeId);
+    }
+
+    // Heritage collection (village-scoped content)
+    match /heritage/{docId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && canManageVillage(
+        request.resource.data.villageId != null
+          ? request.resource.data.villageId
+          : resource.data.villageId
+      );
+      allow delete: if isSignedIn() && canManageVillage(resource.data.villageId);
+    }
+
+    // People collection (uses treeId on document)
+    match /people/{personId} {
+      allow read: if true;
+      allow create: if isSignedIn() && canManageVillage(request.resource.data.treeId);
+      allow update: if isSignedIn() && canManageVillage(
+        request.resource.data.treeId != null
+          ? request.resource.data.treeId
+          : resource.data.treeId
+      );
+      allow delete: if isSignedIn() && canManageVillage(resource.data.treeId);
+    }
+
+    // Custom fields configuration
+    match /node_fields/{fieldId} {
+      allow read: if true;
+      allow create, update, delete: if isSuperAdmin();
+    }
+  }
+}

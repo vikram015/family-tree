@@ -1,13 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Node, RelType } from "relatives-tree/lib/types";
-import css from "./AddNode.modern.module.css";
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Select,
+  MenuItem,
+  InputLabel,
+  Paper,
+  Stack,
+  Divider,
+} from "@mui/material";
 import { FNode } from "../model/FNode";
-
-interface CustomField {
-  id: string;
-  key: string;
-  value: string;
-}
+import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
+import { useAuth } from "../context/AuthContext";
+import { useLoginModal } from "../context/LoginModalContext";
 
 interface AddNodeProps {
   targetId?: string; // id of node in relation to which we add (e.g. parent/child/spouse)
@@ -44,7 +57,15 @@ const AddNode: React.FC<AddNodeProps> = ({
     RelType.blood,
     RelType.adopted,
   ]);
-  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const { currentUser } = useAuth() as any;
+  const { openLoginModal } = useLoginModal();
+
+  // Get the target node to determine opposite gender for spouse
+  const targetNode = useMemo(() => {
+    if (!nodes || !targetId) return null;
+    return nodes.find((n) => n.id === targetId);
+  }, [nodes, targetId]);
 
   // other-parent selection for child relation
   const spouseOptions = useMemo(() => {
@@ -71,32 +92,24 @@ const AddNode: React.FC<AddNodeProps> = ({
   useEffect(() => {
     if (relation === "spouse") {
       setRelTypes([RelType.married, RelType.divorced]);
+      setSelectedRelType(RelType.married); // Default to married for spouse
+
+      // Set opposite gender of target node
+      if (targetNode?.gender === "male") {
+        setGender("female");
+      } else if (targetNode?.gender === "female") {
+        setGender("male");
+      }
     } else if (relation === "child") {
       setRelTypes([RelType.blood, RelType.adopted]);
+      setSelectedRelType(RelType.blood);
+      setGender("male"); // Reset to default
     } else if (relation === "parent") {
       setRelTypes([RelType.blood, RelType.adopted]);
+      setSelectedRelType(RelType.blood);
+      setGender("male"); // Reset to default
     }
-  }, [relation]);
-
-  const addCustomField = useCallback(() => {
-    setCustomFields((s) => [
-      ...s,
-      { id: String(Date.now()), key: "", value: "" },
-    ]);
-  }, []);
-
-  const updateCustomField = useCallback(
-    (id: string, key: string, value: string) => {
-      setCustomFields((s) =>
-        s.map((f) => (f.id === id ? { ...f, key, value } : f))
-      );
-    },
-    []
-  );
-
-  const removeCustomField = useCallback((id: string) => {
-    setCustomFields((s) => s.filter((f) => f.id !== id));
-  }, []);
+  }, [relation, targetNode]);
 
   const handleCancel = useCallback(() => {
     onCancel?.();
@@ -105,7 +118,7 @@ const AddNode: React.FC<AddNodeProps> = ({
     setDob("");
     setGender("");
     setRelation("child");
-    setCustomFields([]);
+    setCustomFields({});
   }, [onCancel]);
 
   const handleSave = useCallback(() => {
@@ -114,9 +127,33 @@ const AddNode: React.FC<AddNodeProps> = ({
       return;
     }
 
-    const extra: Record<string, unknown> = {};
-    for (const f of customFields) {
-      if (f.key) extra[f.key] = f.value;
+    if (!currentUser) {
+      openLoginModal(() => {
+        // After successful login, save the node
+        // prepare parents array: include targetId (if adding child) and optional other parent
+        let parents: Array<{ id: string; type?: RelType }> = [];
+        if (relation === "child" && targetId) {
+          parents.push({ id: targetId, type: selectedRelType });
+          if (selectedOtherParentId && selectedOtherParentId !== targetId) {
+            parents.push({ id: selectedOtherParentId, type: selectedRelType });
+          }
+        }
+
+        const newNode: Partial<any> = {
+          name: name.trim(),
+          dob: dob || undefined,
+          gender: (gender as any) || undefined,
+          children: [],
+          parents: parents.length ? parents : undefined,
+          spouses: [],
+          customFields:
+            Object.keys(customFields).length > 0 ? customFields : undefined,
+        };
+
+        onAdd?.(newNode, relation, targetId, selectedRelType);
+        handleCancel();
+      });
+      return;
     }
 
     // prepare parents array: include targetId (if adding child) and optional other parent
@@ -135,12 +172,15 @@ const AddNode: React.FC<AddNodeProps> = ({
       children: [],
       parents: parents.length ? parents : undefined,
       spouses: [],
-      ...extra,
+      customFields:
+        Object.keys(customFields).length > 0 ? customFields : undefined,
     };
 
     onAdd?.(newNode, relation, targetId, selectedRelType);
     handleCancel();
   }, [
+    currentUser,
+    openLoginModal,
     name,
     dob,
     gender,
@@ -154,169 +194,124 @@ const AddNode: React.FC<AddNodeProps> = ({
   ]);
 
   return (
-    <div className={noCard ? css.noCardRoot : css.root}>
-      <div className={css.formHeading}>Add Family Member</div>
-      <div className={css.formRow}>
-        <label className={css.label}>Relation</label>
-        <div className={css.radioGroup}>
-          <label className={css.radioLabel}>
-            <input
-              type="radio"
-              name="relation"
-              value="child"
-              checked={relation === "child"}
-              onChange={() => setRelation("child")}
-            />
-            Child
-          </label>
-          <label className={css.radioLabel}>
-            <input
-              type="radio"
-              name="relation"
+    <Box
+      component={noCard ? "div" : Paper}
+      sx={noCard ? {} : { p: 3, elevation: 2 }}
+    >
+      <Typography variant="h6" gutterBottom>
+        Add Family Member
+      </Typography>
+
+      <Stack spacing={3}>
+        <FormControl component="fieldset">
+          <FormLabel component="legend">Relation</FormLabel>
+          <RadioGroup
+            row
+            value={relation}
+            onChange={(e) => setRelation(e.target.value as any)}
+          >
+            <FormControlLabel value="child" control={<Radio />} label="Child" />
+            <FormControlLabel
               value="spouse"
-              checked={relation === "spouse"}
-              onChange={() => setRelation("spouse")}
+              control={<Radio />}
+              label="Spouse"
             />
-            Spouse
-          </label>
-          <label className={css.radioLabel}>
-            <input
-              type="radio"
-              name="relation"
+            <FormControlLabel
               value="parent"
-              checked={relation === "parent"}
-              onChange={() => setRelation("parent")}
+              control={<Radio />}
+              label="Parent"
             />
-            Parent
-          </label>
-        </div>
-      </div>
-      <div className={css.formRow}>
-        <label className={css.label}>Relation Type</label>
-        <div className={css.radioGroup}>
-          {relTypes.map((type) => (
-            <label key={type} className={css.radioLabel}>
-              <input
-                type="radio"
-                name="relationType"
+          </RadioGroup>
+        </FormControl>
+
+        <FormControl component="fieldset">
+          <FormLabel component="legend">Relation Type</FormLabel>
+          <RadioGroup
+            row
+            value={selectedRelType}
+            onChange={(e) => setSelectedRelType(e.target.value as RelType)}
+          >
+            {relTypes.map((type) => (
+              <FormControlLabel
+                key={type}
                 value={type}
-                checked={selectedRelType === type}
-                onChange={() => setSelectedRelType(type)}
+                control={<Radio />}
+                label={type}
               />
-              {type}
-            </label>
-          ))}
-        </div>
-      </div>
-      {relation === "child" && (
-        <div className={css.formRow}>
-          <label className={css.label}>Other parent</label>
-          {spouseOptions.length > 0 ? (
-            <select
-              className={css.select}
+            ))}
+          </RadioGroup>
+        </FormControl>
+
+        {relation === "child" && (
+          <FormControl fullWidth>
+            <InputLabel>Other parent</InputLabel>
+            <Select
               value={selectedOtherParentId}
               onChange={(e) => setSelectedOtherParentId(e.target.value)}
+              label="Other parent"
             >
-              <option value="">None</option>
+              <MenuItem value="">None</MenuItem>
               {spouseOptions.map((s) => (
-                <option key={s.id} value={s.id}>
+                <MenuItem key={s.id} value={s.id}>
                   {s.name || s.id}
-                </option>
+                </MenuItem>
               ))}
-            </select>
-          ) : (
-            <span style={{ color: "#666" }}>No spouse found for target</span>
-          )}
-        </div>
-      )}
-      <div className={css.formRow}>
-        <label className={css.label}>Name</label>
-        <input
-          className={`${css.input} ${css.nameInput}`}
+            </Select>
+          </FormControl>
+        )}
+
+        <TextField
+          label="Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          type="text"
+          fullWidth
+          required
+          autoFocus
         />
-      </div>
-      <div className={css.formRow}>
-        <label className={css.label}>Date of birth (optional)</label>
-        <input
-          className={css.input}
+
+        <TextField
+          label="Date of birth (optional)"
+          type="date"
           value={dob}
           onChange={(e) => setDob(e.target.value)}
-          type="date"
+          fullWidth
+          InputLabelProps={{ shrink: true }}
         />
-      </div>
-      <div className={css.formRow}>
-        <label className={css.label}>Gender</label>
-        <select
-          className={css.select}
-          value={gender}
-          onChange={(e) => setGender(e.target.value as any)}
+
+        <FormControl fullWidth>
+          <InputLabel>Gender</InputLabel>
+          <Select
+            value={gender}
+            onChange={(e) => setGender(e.target.value as any)}
+            label="Gender"
+          >
+            <MenuItem value="">— select —</MenuItem>
+            <MenuItem value="male">Male</MenuItem>
+            <MenuItem value="female">Female</MenuItem>
+            <MenuItem value="other">Other</MenuItem>
+          </Select>
+        </FormControl>
+
+        <Divider />
+
+        <AdditionalDetails value={customFields} onChange={setCustomFields} />
+
+        <Box
+          sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 2 }}
         >
-          <option value="">— select —</option>
-          <option value="male">Male</option>
-          <option value="female">Female</option>
-          <option value="other">Other</option>
-        </select>
-      </div>
-      <div
-        className={css.formRow}
-        style={{
-          flexDirection: "column",
-          alignItems: "flex-start",
-          marginTop: 10,
-        }}
-      >
-        <strong style={{ fontSize: 13, color: "#2b2d42", marginBottom: 4 }}>
-          Additional fields
-        </strong>
-        {customFields.map((f) => (
-          <div key={f.id} className={css.addFieldRow}>
-            <input
-              className={css.input}
-              placeholder="key"
-              value={f.key}
-              onChange={(e) => updateCustomField(f.id, e.target.value, f.value)}
-              style={{ flex: "0 0 40%" }}
-            />
-            <input
-              className={css.input}
-              placeholder="value"
-              value={f.value}
-              onChange={(e) => updateCustomField(f.id, f.key, e.target.value)}
-              style={{ flex: "1 1 auto" }}
-            />
-            <button
-              type="button"
-              className={css.removeFieldButton}
-              onClick={() => removeCustomField(f.id)}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          className={css.addFieldButton}
-          onClick={addCustomField}
-        >
-          + Add field
-        </button>
-      </div>
-      <div className={css.buttonRow}>
-        <button type="button" className={css.button} onClick={handleCancel}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={`${css.button} ${css.primary}`}
-          onClick={handleSave}
-        >
-          Save
-        </button>
-      </div>
-    </div>
+          <Button onClick={handleCancel} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            variant="contained"
+            disabled={!name.trim()}
+          >
+            Save
+          </Button>
+        </Box>
+      </Stack>
+    </Box>
   );
 };
 
