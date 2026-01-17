@@ -1,11 +1,29 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import ReactFamilyTree from "react-family-tree";
-import { Box, TextField, Button, Typography, Container } from "@mui/material";
+import {
+  Box,
+  TextField,
+  Button,
+  Typography,
+  Container,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  useMediaQuery,
+  useTheme,
+} from "@mui/material";
+import { PersonAdd, Favorite, ChildCare } from "@mui/icons-material";
 import { useSearchParams } from "react-router-dom";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { FamilyNode } from "../FamilyNode/FamilyNode";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
+import { AddRelationDialog } from "../AddRelationDialog/AddRelationDialog";
 import { NODE_WIDTH, NODE_HEIGHT } from "../const";
 import { getNodeStyle } from "../App/utils";
 import { db } from "../../firebase";
@@ -38,12 +56,29 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 }) => {
   const [searchParams] = useSearchParams();
   const { hasPermission } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const firstNodeId = useMemo(() => nodes[0]?.id ?? "", [nodes]);
   const [rootId, setRootId] = useState(firstNodeId);
   const [selectId, setSelectId] = useState<string>();
   const [hoverId, setHoverId] = useState<string>();
   const [startName, setStartName] = useState<string>("");
+
+  // Context menu state
+  const [contextMenuNode, setContextMenuNode] = useState<string | null>(null);
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<{
+    mouseX: number;
+    mouseY: number;
+  } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Add relation dialog state
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogRelation, setAddDialogRelation] = useState<
+    "parent" | "spouse" | "child" | null
+  >(null);
 
   // Sync treeId with URL params
   useEffect(() => {
@@ -101,6 +136,45 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     () => nodes.find((item) => item.id === selectId),
     [nodes, selectId]
   );
+
+  const handleNodeContextMenu = useCallback(
+    (nodeId: string, event: React.MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      setContextMenuNode(nodeId);
+
+      if (isMobile) {
+        setMobileMenuOpen(true);
+      } else {
+        setContextMenuAnchor({
+          mouseX: event.clientX,
+          mouseY: event.clientY,
+        });
+      }
+    },
+    [isMobile]
+  );
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenuAnchor(null);
+    setMobileMenuOpen(false);
+    setContextMenuNode(null);
+  }, []);
+
+  const handleOpenAddDialog = useCallback(
+    (relation: "parent" | "spouse" | "child") => {
+      setAddDialogRelation(relation);
+      setAddDialogOpen(true);
+      handleCloseContextMenu();
+    },
+    [handleCloseContextMenu]
+  );
+
+  const handleCloseAddDialog = useCallback(() => {
+    setAddDialogOpen(false);
+    setAddDialogRelation(null);
+  }, []);
 
   const buildNewNode = useCallback((node: Partial<FNode>, newId: string) => {
     const base: any = { ...(node as any) };
@@ -510,6 +584,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     [buildNewNode, applyRelationInTransaction, hasPermission, treeId]
   );
 
+  const handleAddFromDialog = useCallback(
+    (node: Partial<FNode>) => {
+      if (contextMenuNode && addDialogRelation) {
+        onAdd(node, addDialogRelation, contextMenuNode);
+        handleCloseAddDialog();
+      }
+    },
+    [contextMenuNode, addDialogRelation, onAdd, handleCloseAddDialog]
+  );
+
   return (
     <>
       <Helmet>
@@ -586,6 +670,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                       isHover={node.id === hoverId}
                       onClick={setSelectId}
                       onSubClick={setRootId}
+                      onContextMenu={handleNodeContextMenu}
                       style={getNodeStyle(node)}
                     />
                   )}
@@ -645,10 +730,88 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           </Container>
         )
       )}
+
+      {/* Desktop Context Menu */}
+      <Menu
+        open={contextMenuAnchor !== null}
+        onClose={handleCloseContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenuAnchor !== null
+            ? { top: contextMenuAnchor.mouseY, left: contextMenuAnchor.mouseX }
+            : undefined
+        }
+      >
+        <MenuItem onClick={() => handleOpenAddDialog("parent")}>
+          <ListItemIcon>
+            <PersonAdd fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add Parent</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleOpenAddDialog("spouse")}>
+          <ListItemIcon>
+            <Favorite fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add Spouse</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={() => handleOpenAddDialog("child")}>
+          <ListItemIcon>
+            <ChildCare fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Add Child</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Mobile Action Sheet */}
+      <Drawer
+        anchor="bottom"
+        open={mobileMenuOpen}
+        onClose={handleCloseContextMenu}
+      >
+        <List>
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => handleOpenAddDialog("parent")}>
+              <ListItemIcon>
+                <PersonAdd />
+              </ListItemIcon>
+              <ListItemText primary="Add Parent" />
+            </ListItemButton>
+          </ListItem>
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => handleOpenAddDialog("spouse")}>
+              <ListItemIcon>
+                <Favorite />
+              </ListItemIcon>
+              <ListItemText primary="Add Spouse" />
+            </ListItemButton>
+          </ListItem>
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => handleOpenAddDialog("child")}>
+              <ListItemIcon>
+                <ChildCare />
+              </ListItemIcon>
+              <ListItemText primary="Add Child" />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Drawer>
+
+      {/* Add Relation Dialog */}
+      <AddRelationDialog
+        open={addDialogOpen}
+        targetNode={
+          contextMenuNode
+            ? nodes.find((n) => n.id === contextMenuNode) || null
+            : null
+        }
+        relation={addDialogRelation}
+        onClose={handleCloseAddDialog}
+        onAdd={handleAddFromDialog}
+      />
+
       <NodeDetails
         node={selected || null}
         nodes={nodes}
-        onAdd={onAdd}
         onUpdate={onUpdate}
         onDelete={onDelete}
         onSelect={setSelectId}

@@ -49,14 +49,14 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
 
   // Convert value prop to array format for editing
   // Update whenever the value prop genuinely changes (not when we're just typing)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const fieldsArray = Object.entries(value).map(([fieldName, val]) => ({
+    const entries = Object.entries(value);
+    const fieldsArray = entries.map(([fieldName, val]) => ({
       fieldName,
       value: val,
     }));
     setFieldValues(fieldsArray);
-  }, [JSON.stringify(value)]);
+  }, [value]);
 
   // Convert array back to object and notify parent
   // Only include complete fields (both fieldName and value)

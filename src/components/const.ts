@@ -1,6 +1,5 @@
-import { Gender, RelType, type Node } from 'relatives-tree/lib/types';
 import { db } from '../firebase';
-import { addDoc, collection, deleteField, writeBatch, getDocs, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, writeBatch, getDocs, serverTimestamp } from 'firebase/firestore';
 
 export const NODE_WIDTH = 120;
 export const NODE_HEIGHT = 80;

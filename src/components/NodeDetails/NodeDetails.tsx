@@ -20,8 +20,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { RelType, Gender } from "relatives-tree/lib/types";
-import AddNode from "../AddNode/AddNode";
+import { Gender } from "relatives-tree/lib/types";
 import { FNode } from "../model/FNode";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
@@ -35,13 +34,6 @@ interface NodeDetailsProps {
   onSelect: (nodeId: string | undefined) => void;
   onHover: (nodeId: string) => void;
   onClear: () => void;
-  // new callback to receive created node + relation
-  onAdd?: (
-    node: Partial<FNode>,
-    relation: "child" | "spouse" | "parent",
-    targetId?: string,
-    type?: RelType
-  ) => void;
   // callback to update node details
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
   // callback to delete node and its relations
@@ -449,36 +441,6 @@ export const NodeDetails = memo(function NodeDetails({
                   </Typography>
                 </Box>
               )}
-              {node.customFields &&
-                Object.keys(node.customFields).length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="subtitle2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      Additional Details
-                    </Typography>
-                    {Object.entries(node.customFields).map(([key, value]) => (
-                      <Box key={key} sx={{ mb: 1, pl: 1 }}>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          component="span"
-                        >
-                          {key}:
-                        </Typography>
-                        <Typography
-                          variant="body1"
-                          component="span"
-                          sx={{ ml: 1 }}
-                        >
-                          {value}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
               {(parents.length > 0 ||
                 children.length > 0 ||
                 siblings.length > 0 ||
@@ -515,15 +477,40 @@ export const NodeDetails = memo(function NodeDetails({
               children.length > 0 ||
               siblings.length > 0 ||
               spouses.length > 0) && <Divider sx={{ my: 2 }} />}
-          {!isEditMode && (
-            <AddNode
-              targetId={node.id}
-              nodes={nodes}
-              onAdd={props.onAdd}
-              onCancel={props.onClear}
-              noCard
-            />
-          )}
+          {!isEditMode &&
+            node.customFields &&
+            Object.keys(node.customFields).length > 0 && (
+              <>
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ mb: 2 }}>
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    Additional Details
+                  </Typography>
+                  {Object.entries(node.customFields).map(([key, value]) => (
+                    <Box key={key} sx={{ mb: 1, pl: 1 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        component="span"
+                      >
+                        {key}:
+                      </Typography>
+                      <Typography
+                        variant="body1"
+                        component="span"
+                        sx={{ ml: 1 }}
+                      >
+                        {value}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </>
+            )}
         </Box>
       </Box>
     </Drawer>
