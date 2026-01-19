@@ -68,5 +68,16 @@ service cloud.firestore {
       allow read: if true;
       allow create, update, delete: if isSuperAdmin();
     }
+
+    // Businesses collection (village-scoped)
+    match /businesses/{businessId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && canManageVillage(
+        request.resource.data.villageId != null
+          ? request.resource.data.villageId
+          : resource.data.villageId
+      );
+      allow delete: if isSignedIn() && canManageVillage(resource.data.villageId);
+    }
   }
 }
