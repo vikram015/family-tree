@@ -79,5 +79,11 @@ service cloud.firestore {
       );
       allow delete: if isSignedIn() && canManageVillage(resource.data.villageId);
     }
+
+    // Business Categories collection (global reference data)
+    match /businessCategories/{categoryId} {
+      allow read: if true; // Public read for all users
+      allow create, update, delete: if isSuperAdmin(); // Only superadmins can manage categories
+    }
   }
 }

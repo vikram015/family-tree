@@ -49,6 +49,8 @@ import {
   doc,
   updateDoc,
   serverTimestamp,
+  getDocs,
+  setDoc,
 } from "firebase/firestore";
 
 interface Business {
@@ -63,10 +65,20 @@ interface Business {
   updatedAt?: any;
 }
 
+interface BusinessCategory {
+  id: string;
+  title: string;
+  description: string;
+  color: string;
+  icon: string;
+  displayName: string;
+}
+
 export const BusinessPage: React.FC = () => {
   const { selectedVillage, villages } = useVillage();
   const { isAdmin } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [categories, setCategories] = useState<BusinessCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
@@ -79,8 +91,130 @@ export const BusinessPage: React.FC = () => {
   });
   const [submitting, setSubmitting] = useState(false);
 
+  // Initialize categories in database
+  const initializeCategories = async () => {
+    try {
+      const categoriesRef = collection(db, "businessCategories");
+      const snapshot = await getDocs(categoriesRef);
+
+      if (snapshot.empty) {
+        // Add default categories if none exist
+        const defaultCategories: BusinessCategory[] = [
+          {
+            id: "retail",
+            title: "Retail & Shops",
+            description:
+              "Family-owned stores, boutiques, and retail businesses",
+            color: "#E6A726",
+            icon: "StoreIcon",
+            displayName: "Retail & Shops",
+          },
+          {
+            id: "agriculture",
+            title: "Agriculture & Farming",
+            description:
+              "Agricultural businesses, farming, and related services",
+            color: "#90C43C",
+            icon: "AgricultureIcon",
+            displayName: "Agriculture & Farming",
+          },
+          {
+            id: "it",
+            title: "IT & Technology",
+            description:
+              "Software development, IT services, and tech professionals",
+            color: "#0066cc",
+            icon: "ComputerIcon",
+            displayName: "IT & Technology",
+          },
+          {
+            id: "education",
+            title: "Education",
+            description:
+              "Teachers, tutors, coaching centers, and educational services",
+            color: "#7BC65D",
+            icon: "SchoolIcon",
+            displayName: "Education",
+          },
+          {
+            id: "healthcare",
+            title: "Healthcare",
+            description: "Doctors, nurses, clinics, and medical professionals",
+            color: "#E74C3C",
+            icon: "LocalHospitalIcon",
+            displayName: "Healthcare",
+          },
+          {
+            id: "engineering",
+            title: "Engineering & Construction",
+            description: "Engineers, contractors, and construction businesses",
+            color: "#F39C12",
+            icon: "EngineeringIcon",
+            displayName: "Engineering & Construction",
+          },
+          {
+            id: "properties",
+            title: "Properties & Real Estate",
+            description:
+              "Real estate agents, property management, and property sales",
+            color: "#8B7355",
+            icon: "ApartmentIcon",
+            displayName: "Properties & Real Estate",
+          },
+        ];
+
+        // Batch add categories
+        for (const category of defaultCategories) {
+          await setDoc(doc(categoriesRef, category.id), category);
+        }
+        setCategories(defaultCategories);
+      } else {
+        const categoriesData: BusinessCategory[] = [];
+        snapshot.forEach((doc) => {
+          categoriesData.push({ ...doc.data() } as BusinessCategory);
+        });
+        setCategories(categoriesData);
+      }
+    } catch (error) {
+      console.error("Error initializing categories:", error);
+    }
+  };
+
+  // Fetch categories from database
+  const fetchCategories = () => {
+    try {
+      const categoriesRef = collection(db, "businessCategories");
+      const unsubscribe = onSnapshot(categoriesRef, (snapshot) => {
+        const categoriesData: BusinessCategory[] = [];
+        snapshot.forEach((doc) => {
+          categoriesData.push({ ...doc.data() } as BusinessCategory);
+        });
+        setCategories(categoriesData);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      return () => {};
+    }
+  };
+
   const villageName =
     villages.find((v) => v.id === selectedVillage)?.name || "Select a village";
+
+  useEffect(() => {
+    // Initialize categories on component mount
+    const initAndFetch = async () => {
+      await initializeCategories();
+    };
+
+    initAndFetch();
+
+    const unsubscribe = fetchCategories();
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedVillage) {
@@ -106,7 +240,7 @@ export const BusinessPage: React.FC = () => {
       (error) => {
         console.error("Error fetching businesses:", error);
         setLoading(false);
-      }
+      },
     );
 
     return unsubscribe;
@@ -134,6 +268,27 @@ export const BusinessPage: React.FC = () => {
         return <ApartmentIcon sx={{ fontSize: 24, color: "#8B7355" }} />;
       default:
         return <WorkIcon sx={{ fontSize: 24, color: "#666" }} />;
+    }
+  };
+
+  const getCategoryIconLarge = (category: string) => {
+    switch (category) {
+      case "retail":
+        return <StoreIcon sx={{ fontSize: 48, color: "#E6A726" }} />;
+      case "agriculture":
+        return <AgricultureIcon sx={{ fontSize: 48, color: "#90C43C" }} />;
+      case "it":
+        return <ComputerIcon sx={{ fontSize: 48, color: "#0066cc" }} />;
+      case "education":
+        return <SchoolIcon sx={{ fontSize: 48, color: "#7BC65D" }} />;
+      case "healthcare":
+        return <LocalHospitalIcon sx={{ fontSize: 48, color: "#E74C3C" }} />;
+      case "engineering":
+        return <EngineeringIcon sx={{ fontSize: 48, color: "#F39C12" }} />;
+      case "properties":
+        return <ApartmentIcon sx={{ fontSize: 48, color: "#8B7355" }} />;
+      default:
+        return <WorkIcon sx={{ fontSize: 48, color: "#666" }} />;
     }
   };
 
@@ -235,59 +390,13 @@ export const BusinessPage: React.FC = () => {
     );
   }
 
-  const businessCategories = [
-    {
-      icon: <StoreIcon sx={{ fontSize: 48, color: "#E6A726" }} />,
-      title: "Retail & Shops",
-      description: "Family-owned stores, boutiques, and retail businesses",
-      count: getCategoryCount("retail"),
-      category: "retail",
-    },
-    {
-      icon: <AgricultureIcon sx={{ fontSize: 48, color: "#90C43C" }} />,
-      title: "Agriculture & Farming",
-      description: "Agricultural businesses, farming, and related services",
-      count: getCategoryCount("agriculture"),
-      category: "agriculture",
-    },
-    {
-      icon: <ComputerIcon sx={{ fontSize: 48, color: "#0066cc" }} />,
-      title: "IT & Technology",
-      description: "Software development, IT services, and tech professionals",
-      count: getCategoryCount("it"),
-      category: "it",
-    },
-    {
-      icon: <SchoolIcon sx={{ fontSize: 48, color: "#7BC65D" }} />,
-      title: "Education",
-      description:
-        "Teachers, tutors, coaching centers, and educational services",
-      count: getCategoryCount("education"),
-      category: "education",
-    },
-    {
-      icon: <LocalHospitalIcon sx={{ fontSize: 48, color: "#E74C3C" }} />,
-      title: "Healthcare",
-      description: "Doctors, nurses, clinics, and medical professionals",
-      count: getCategoryCount("healthcare"),
-      category: "healthcare",
-    },
-    {
-      icon: <EngineeringIcon sx={{ fontSize: 48, color: "#F39C12" }} />,
-      title: "Engineering & Construction",
-      description: "Engineers, contractors, and construction businesses",
-      count: getCategoryCount("engineering"),
-      category: "engineering",
-    },
-    {
-      icon: <ApartmentIcon sx={{ fontSize: 48, color: "#8B7355" }} />,
-      title: "Properties & Real Estate",
-      description:
-        "Real estate agents, property management, and property sales",
-      count: getCategoryCount("properties"),
-      category: "properties",
-    },
-  ];
+  const businessCategories = categories.map((cat) => ({
+    icon: getCategoryIconLarge(cat.id),
+    title: cat.title,
+    description: cat.description,
+    count: getCategoryCount(cat.id),
+    category: cat.id,
+  }));
 
   const benefits = [
     {
@@ -426,6 +535,7 @@ export const BusinessPage: React.FC = () => {
                 >
                   {businesses.map((business) => (
                     <Card
+                      key={business.id}
                       sx={{
                         height: "100%",
                         display: "flex",
@@ -566,9 +676,9 @@ export const BusinessPage: React.FC = () => {
                   gap: 3,
                 }}
               >
-                {businessCategories.map((category, index) => (
+                {businessCategories.map((category) => (
                   <Card
-                    key={index}
+                    key={category.category}
                     sx={{
                       height: "100%",
                       transition: "transform 0.3s, boxShadow 0.3s",
@@ -631,7 +741,7 @@ export const BusinessPage: React.FC = () => {
                 }}
               >
                 {benefits.map((benefit, index) => (
-                  <Paper key={index} elevation={2} sx={{ p: 3 }}>
+                  <Paper key={`benefit-${index}`} elevation={2} sx={{ p: 3 }}>
                     <Typography
                       variant="h6"
                       gutterBottom
@@ -740,15 +850,11 @@ export const BusinessPage: React.FC = () => {
                 onChange={handleFormChange}
                 label="Category"
               >
-                <MenuItem value="retail">Retail & Shops</MenuItem>
-                <MenuItem value="agriculture">Agriculture & Farming</MenuItem>
-                <MenuItem value="it">IT & Technology</MenuItem>
-                <MenuItem value="education">Education</MenuItem>
-                <MenuItem value="healthcare">Healthcare</MenuItem>
-                <MenuItem value="engineering">
-                  Engineering & Construction
-                </MenuItem>
-                <MenuItem value="properties">Properties & Real Estate</MenuItem>
+                {categories.map((category) => (
+                  <MenuItem key={category.id} value={category.id}>
+                    {category.displayName}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
 
@@ -796,8 +902,8 @@ export const BusinessPage: React.FC = () => {
                 {submitting
                   ? "Saving..."
                   : editingBusiness
-                  ? "Update Business"
-                  : "Add Business"}
+                    ? "Update Business"
+                    : "Add Business"}
               </Button>
             </Stack>
           </Stack>
