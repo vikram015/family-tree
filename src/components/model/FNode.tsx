@@ -7,4 +7,9 @@ export type FNode = ExtNode & {
   notes?: string; // Additional notes
   photo?: string; // Photo URL
   customFields?: Record<string, string>; // Dynamic custom fields
+  hierarchy?: Array<{ name: string; id: string }>; // Complete parent chain hierarchy
+  treeId?: string; // Tree ID this node belongs to
+  villageId?: string; // Village ID this node belongs to
+  villageName?: string; // Village name
+  name_lowercase?: string; // Lowercase name for case-insensitive search
 };

@@ -40,7 +40,7 @@ interface NodeDetailsProps {
     node: Partial<FNode>,
     relation: "child" | "spouse" | "parent",
     targetId?: string,
-    type?: RelType
+    type?: RelType,
   ) => void;
   // callback to update node details
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
@@ -174,7 +174,7 @@ export const NodeDetails = memo(function NodeDetails({
       openLoginModal(() => {
         // After successful login, prompt for delete confirmation
         const confirmDelete = window.confirm(
-          `Are you sure you want to delete ${node.name}? This will remove them from the tree and unlink all their relationships.`
+          `Are you sure you want to delete ${node.name}? This will remove them from the tree and unlink all their relationships.`,
         );
         if (confirmDelete && props.onDelete) {
           props.onDelete(node.id);
@@ -185,7 +185,7 @@ export const NodeDetails = memo(function NodeDetails({
     }
 
     const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${node.name}? This will remove them from the tree and unlink all their relationships.`
+      `Are you sure you want to delete ${node.name}? This will remove them from the tree and unlink all their relationships.`,
     );
 
     if (confirmDelete && props.onDelete) {
@@ -203,7 +203,7 @@ export const NodeDetails = memo(function NodeDetails({
         type: rel.type,
       };
     },
-    [nodes]
+    [nodes],
   );
 
   if (!node) return null;
@@ -479,6 +479,36 @@ export const NodeDetails = memo(function NodeDetails({
                     ))}
                   </Box>
                 )}
+
+              {node.hierarchy && node.hierarchy.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    Ancestry Hierarchy
+                  </Typography>
+                  <Stack spacing={0.5}>
+                    {node.hierarchy.map((ancestor, index) => (
+                      <Box
+                        key={ancestor.id}
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          pl: index * 1.5,
+                          py: 0.5,
+                        }}
+                      >
+                        <Typography variant="body2">
+                          {Array(index).fill("↑ ").join("")}
+                          {ancestor.name}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
               {(parents.length > 0 ||
                 children.length > 0 ||
                 siblings.length > 0 ||

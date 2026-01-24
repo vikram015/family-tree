@@ -6,7 +6,12 @@ import { useSearchParams } from "react-router-dom";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { FamilyNode } from "../FamilyNode/FamilyNode";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
-import { NODE_WIDTH, NODE_HEIGHT } from "../const";
+import {
+  NODE_WIDTH,
+  NODE_HEIGHT,
+  populateHierarchyForAllNodes,
+  getNodeHierarchy,
+} from "../const";
 import { getNodeStyle } from "../App/utils";
 import { db } from "../../firebase";
 import {
@@ -22,6 +27,7 @@ import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../context/AuthContext";
+import { useVillage } from "../context/VillageContext";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -38,6 +44,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 }) => {
   const [searchParams] = useSearchParams();
   const { hasPermission } = useAuth();
+  const { selectedVillage, villages } = useVillage();
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const firstNodeId = useMemo(() => nodes[0]?.id ?? "", [nodes]);
   const [rootId, setRootId] = useState(firstNodeId);
@@ -71,7 +78,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         console.log("Loaded nodes:", items.length);
         console.log("First node:", items[0]);
 
-        setNodes(items);
+        // Populate hierarchy for all nodes
+        const itemsWithHierarchy = items.map((node) => ({
+          ...node,
+          hierarchy: getNodeHierarchy(node.id, items),
+        }));
+
+        setNodes(itemsWithHierarchy);
         setSelectId(undefined);
         setHoverId(undefined);
 
@@ -79,7 +92,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         const rootCandidate = items.find(
           (item) =>
             (item.parents?.length ?? 0) === 0 &&
-            (item.spouses?.length ?? 0) === 0
+            (item.spouses?.length ?? 0) === 0,
         );
         if (rootCandidate) {
           console.log("Root node found:", rootCandidate.id);
@@ -99,7 +112,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
-    [nodes, selectId]
+    [nodes, selectId],
   );
 
   const buildNewNode = useCallback((node: Partial<FNode>, newId: string) => {
@@ -128,7 +141,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       newNode: Partial<FNode>,
       relation: "child" | "spouse" | "parent",
       targetId?: string,
-      type?: RelType
+      type?: RelType,
     ) => {
       const newDocData: any = { ...(newNode as any) };
 
@@ -136,6 +149,21 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         newDocData.treeId = treeId;
       } else {
         throw new Error("Cannot add node without selected treeId");
+      }
+
+      // Add village information if available
+      if (selectedVillage) {
+        newDocData.villageId = selectedVillage;
+        // Find the village name from the villages array
+        const villageObj = villages.find((v) => v.id === selectedVillage);
+        if (villageObj) {
+          newDocData.villageName = villageObj.name;
+        }
+      }
+
+      // Add lowercase name for case-insensitive search
+      if (newNode.name) {
+        newDocData.name_lowercase = newNode.name.toLowerCase();
       }
 
       newDocData.parents = Array.isArray(newDocData.parents)
@@ -173,14 +201,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           ? newNode.children.map((c) => c.id)
           : [];
         childIdsToRead = Array.from(
-          new Set([...targetChildren, ...newChildrenProvided].filter(Boolean))
+          new Set([...targetChildren, ...newChildrenProvided].filter(Boolean)),
         );
       }
 
       const parentSnaps =
         relation === "child"
           ? await Promise.all(
-              parentIds.map((id) => tx.get(doc(db, "people", id)))
+              parentIds.map((id) => tx.get(doc(db, "people", id))),
             )
           : [];
 
@@ -188,15 +216,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         const childrenFromParents = parentSnaps.flatMap((snap) =>
           snap.exists()
             ? (snap.data() as FNode).children.map((c: any) => c.id)
-            : []
+            : [],
         );
         childIdsToRead = Array.from(
-          new Set(childrenFromParents.filter(Boolean))
+          new Set(childrenFromParents.filter(Boolean)),
         );
       }
 
       const childSnaps = await Promise.all(
-        childIdsToRead.map((id) => tx.get(doc(db, "people", id)))
+        childIdsToRead.map((id) => tx.get(doc(db, "people", id))),
       );
 
       if (relation === "child") {
@@ -226,6 +254,25 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             id,
             type: type ?? RelType.blood,
           }));
+        }
+
+        // Copy ancestor hierarchy from the primary (male) parent
+        const maleParentSnap = parentSnaps.find((snap) => {
+          const pData = snap.exists() ? (snap.data() as FNode) : null;
+          return pData && pData.gender === "male";
+        });
+
+        if (maleParentSnap && maleParentSnap.exists()) {
+          const maleParentData = maleParentSnap.data() as FNode;
+          // Copy parent's hierarchy and add the parent to it
+          const parentHierarchy = Array.isArray(maleParentData.hierarchy)
+            ? [...maleParentData.hierarchy]
+            : [];
+          parentHierarchy.push({
+            name: maleParentData.name,
+            id: maleParentSnap.id,
+          });
+          newDocData.hierarchy = parentHierarchy;
         }
 
         const siblingIds = new Set<string>();
@@ -311,7 +358,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
       tx.set(newRef, newDocData, { merge: true });
     },
-    [treeId]
+    [treeId, selectedVillage, villages],
   );
 
   const onUpdate = useCallback(
@@ -327,10 +374,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
         // Remove undefined values to avoid Firestore errors
         const cleanUpdates = Object.fromEntries(
-          Object.entries(updates).filter(([, v]) => v !== undefined)
+          Object.entries(updates).filter(([, v]) => v !== undefined),
         );
 
         console.log("Clean updates:", cleanUpdates);
+
+        // If name is being updated, also update name_lowercase
+        if (cleanUpdates.name) {
+          cleanUpdates.name_lowercase = (
+            cleanUpdates.name as string
+          ).toLowerCase();
+        }
 
         const nodeRef = doc(db, "people", nodeId);
         await runTransaction(db, async (transaction) => {
@@ -338,7 +392,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           if (!nodeSnap.exists()) {
             throw new Error("Node does not exist");
           }
-          transaction.update(nodeRef, cleanUpdates);
+
+          // Recalculate hierarchy after update
+          const hierarchy = getNodeHierarchy(nodeId, nodes);
+
+          transaction.update(nodeRef, { ...cleanUpdates, hierarchy });
           console.log("Transaction update completed");
         });
 
@@ -348,11 +406,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         alert(
           `Failed to update node: ${
             err instanceof Error ? err.message : String(err)
-          }`
+          }`,
         );
       }
     },
-    [hasPermission, treeId]
+    [hasPermission, treeId, nodes],
   );
 
   const onDelete = useCallback(
@@ -393,7 +451,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                   const parentData = parentSnap.data() as FNode;
                   console.log("Parent before update:", parentData.children);
                   const updatedChildren = (parentData.children || []).filter(
-                    (child) => child.id !== nodeId
+                    (child) => child.id !== nodeId,
                   );
                   console.log("Parent after filter:", updatedChildren);
                   transaction.update(parentRef, { children: updatedChildren });
@@ -414,7 +472,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 if (childSnap.exists()) {
                   const childData = childSnap.data() as FNode;
                   const updatedParents = (childData.parents || []).filter(
-                    (p) => p.id !== nodeId
+                    (p) => p.id !== nodeId,
                   );
                   transaction.update(childRef, { parents: updatedParents });
                 }
@@ -432,7 +490,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 if (spouseSnap.exists()) {
                   const spouseData = spouseSnap.data() as FNode;
                   const updatedSpouses = (spouseData.spouses || []).filter(
-                    (s) => s.id !== nodeId
+                    (s) => s.id !== nodeId,
                   );
                   transaction.update(spouseRef, { spouses: updatedSpouses });
                 }
@@ -449,7 +507,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 if (siblingSnap.exists()) {
                   const siblingData = siblingSnap.data() as FNode;
                   const updatedSiblings = (siblingData.siblings || []).filter(
-                    (s) => s.id !== nodeId
+                    (s) => s.id !== nodeId,
                   );
                   transaction.update(siblingRef, { siblings: updatedSiblings });
                 }
@@ -466,11 +524,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         alert(
           `Failed to delete node: ${
             err instanceof Error ? err.message : String(err)
-          }`
+          }`,
         );
       }
     },
-    [hasPermission, treeId]
+    [hasPermission, treeId],
   );
 
   const onAdd = useCallback(
@@ -478,7 +536,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       node: Partial<FNode>,
       relation: "child" | "spouse" | "parent",
       targetId?: string,
-      type?: RelType
+      type?: RelType,
     ) => {
       // Check permission before adding
       if (!hasPermission("admin", treeId)) {
@@ -500,14 +558,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             newNodeBuilt,
             relation,
             targetId,
-            type
+            type,
           );
         });
       } catch (err) {
         console.error("Failed to add node:", err);
       }
     },
-    [buildNewNode, applyRelationInTransaction, hasPermission, treeId]
+    [buildNewNode, applyRelationInTransaction, hasPermission, treeId],
   );
 
   return (

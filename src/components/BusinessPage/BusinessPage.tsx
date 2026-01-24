@@ -20,6 +20,8 @@ import {
   Select,
   MenuItem,
   IconButton,
+  Autocomplete,
+  ListItemText,
 } from "@mui/material";
 import WorkIcon from "@mui/icons-material/Work";
 import StoreIcon from "@mui/icons-material/Store";
@@ -43,6 +45,9 @@ import {
   collection,
   query,
   where,
+  orderBy,
+  startAt,
+  endAt,
   onSnapshot,
   addDoc,
   deleteDoc,
@@ -52,6 +57,8 @@ import {
   getDocs,
   setDoc,
 } from "firebase/firestore";
+import { FNode } from "../model/FNode";
+import { getNodeHierarchy } from "../const";
 
 interface Business {
   id: string;
@@ -59,6 +66,8 @@ interface Business {
   category: string;
   description: string;
   owner: string;
+  ownerId?: string; // Link to person in family tree
+  ownerName?: string; // Display name of owner
   contact?: string;
   villageId: string;
   createdAt?: any;
@@ -79,14 +88,19 @@ export const BusinessPage: React.FC = () => {
   const { isAdmin } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
+  const [people, setPeople] = useState<FNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
+  const [selectedOwner, setSelectedOwner] = useState<FNode | null>(null);
+  const [ownerSearchInput, setOwnerSearchInput] = useState("");
+  const [searchPerformed, setSearchPerformed] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     category: "retail",
     description: "",
     owner: "",
+    ownerId: "",
     contact: "",
   });
   const [submitting, setSubmitting] = useState(false);
@@ -246,6 +260,60 @@ export const BusinessPage: React.FC = () => {
     return unsubscribe;
   }, [selectedVillage]);
 
+  // Search people by name from family tree
+  const handleSearchOwner = async () => {
+    if (!selectedVillage || !formData.owner.trim()) {
+      setPeople([]);
+      setSearchPerformed(false);
+      return;
+    }
+
+    setSearchPerformed(true);
+
+    try {
+      const peopleRef = collection(db, "people");
+      const searchTerm = formData.owner.toLowerCase();
+
+      // Use orderBy with startAt and endAt for case-insensitive search on name_lowercase
+      // Also filter by villageId to scope results to the selected village
+      const q = query(
+        peopleRef,
+        where("villageId", "==", selectedVillage),
+        orderBy("name_lowercase"),
+        startAt(searchTerm),
+        endAt(searchTerm + "\uf8ff"),
+      );
+
+      const snapshot = await getDocs(q);
+      const peopleList: FNode[] = [];
+
+      snapshot.forEach((docSnapshot) => {
+        const person = { id: docSnapshot.id, ...docSnapshot.data() } as FNode;
+        peopleList.push(person);
+      });
+
+      // Fetch ALL people to build complete hierarchy
+      const allPeopleSnapshot = await getDocs(collection(db, "people"));
+      const allPeopleList: FNode[] = [];
+
+      allPeopleSnapshot.forEach((docSnapshot) => {
+        const person = { id: docSnapshot.id, ...docSnapshot.data() } as FNode;
+        allPeopleList.push(person);
+      });
+
+      // Compute hierarchy for filtered people using all people data
+      const peopleWithHierarchy = peopleList.map((person) => ({
+        ...person,
+        hierarchy: getNodeHierarchy(person.id, allPeopleList),
+      }));
+
+      setPeople(peopleWithHierarchy);
+    } catch (error) {
+      console.error("Error searching people:", error);
+      setPeople([]);
+    }
+  };
+
   const getCategoryCount = (category: string) => {
     return businesses.filter((b) => b.category === category).length;
   };
@@ -295,23 +363,36 @@ export const BusinessPage: React.FC = () => {
   const handleOpenDialog = (business?: Business) => {
     if (business) {
       setEditingBusiness(business);
+      // Find and set the selected owner if ownerId exists
+      if (business.ownerId) {
+        const owner = people.find((p) => p.id === business.ownerId);
+        setSelectedOwner(owner || null);
+      } else {
+        setSelectedOwner(null);
+      }
       setFormData({
         name: business.name,
         category: business.category,
         description: business.description,
         owner: business.owner,
+        ownerId: business.ownerId || "",
         contact: business.contact || "",
       });
     } else {
       setEditingBusiness(null);
+      setSelectedOwner(null);
       setFormData({
         name: "",
         category: "retail",
         description: "",
         owner: "",
+        ownerId: "",
         contact: "",
       });
     }
+    setOwnerSearchInput("");
+    setPeople([]);
+    setSearchPerformed(false);
     setOpenDialog(true);
   };
 
@@ -326,6 +407,23 @@ export const BusinessPage: React.FC = () => {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleOwnerChange = (event: any, value: FNode | null) => {
+    setSelectedOwner(value);
+    if (value) {
+      setFormData((prev) => ({
+        ...prev,
+        ownerId: value.id,
+        owner: value.name || "",
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        ownerId: "",
+        owner: "",
+      }));
+    }
   };
 
   const handleSubmit = async () => {
@@ -869,15 +967,119 @@ export const BusinessPage: React.FC = () => {
               placeholder="Describe what your business does"
             />
 
-            <TextField
-              label="Owner Name"
-              name="owner"
-              value={formData.owner}
-              onChange={handleFormChange}
-              fullWidth
-              required
-              placeholder="Enter owner name"
-            />
+            <Box sx={{ position: "relative", width: "100%" }}>
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ alignItems: "center", width: "100%" }}
+              >
+                <TextField
+                  label="Owner Name"
+                  name="owner"
+                  value={formData.owner}
+                  onChange={handleFormChange}
+                  fullWidth
+                  placeholder="Enter owner name and search"
+                  size="medium"
+                />
+                <Button
+                  variant="contained"
+                  onClick={handleSearchOwner}
+                  sx={{
+                    height: 56,
+                    minWidth: 100,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Search
+                </Button>
+              </Stack>
+
+              {/* Search Results Dropdown */}
+              {people && people.length > 0 && (
+                <Paper
+                  sx={{
+                    mt: 1,
+                    maxHeight: 300,
+                    overflow: "auto",
+                    border: "1px solid #ddd",
+                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
+                  }}
+                >
+                  {people.map((person) => (
+                    <Box
+                      key={person.id}
+                      onClick={() => {
+                        setSelectedOwner(person);
+                        setFormData((prev) => ({
+                          ...prev,
+                          owner: person.name || "",
+                          ownerId: person.id,
+                        }));
+                        setPeople([]);
+                      }}
+                      sx={{
+                        p: 2,
+                        borderBottom: "1px solid #eee",
+                        cursor: "pointer",
+                        backgroundColor: "#fff",
+                        transition: "backgroundColor 0.2s",
+                        "&:hover": { backgroundColor: "#f5f5f5" },
+                        "&:last-child": { borderBottom: "none" },
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {person.name}
+                      </Typography>
+                      {person.hierarchy && person.hierarchy.length > 0 && (
+                        <Typography
+                          variant="caption"
+                          sx={{ color: "#666", display: "block", mt: 0.5 }}
+                        >
+                          {person.hierarchy
+                            .slice(-5)
+                            .map((a) => a.name)
+                            .join(" → ")}
+                        </Typography>
+                      )}
+                    </Box>
+                  ))}
+                </Paper>
+              )}
+
+              {/* No Results Message */}
+              {searchPerformed && people && people.length === 0 && (
+                <Paper
+                  sx={{
+                    mt: 1,
+                    p: 2,
+                    backgroundColor: "#f0f8ff",
+                    border: "1px solid #ddd",
+                    textAlign: "center",
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    No people found with name "{formData.owner}"
+                  </Typography>
+                  <Typography variant="caption" sx={{ display: "block" }}>
+                    Please{" "}
+                    <Typography
+                      component="a"
+                      href="/families"
+                      sx={{
+                        color: "#0066cc",
+                        textDecoration: "none",
+                        fontWeight: 500,
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                    >
+                      build the family tree first
+                    </Typography>{" "}
+                    to add people.
+                  </Typography>
+                </Paper>
+              )}
+            </Box>
 
             <TextField
               label="Contact Number"

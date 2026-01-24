@@ -1,13 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../../firebase";
 import { collection, getDocs } from "firebase/firestore";
-import { Container, Typography, Box, Alert } from "@mui/material";
+import {
+  Container,
+  Typography,
+  Box,
+  Alert,
+  Button,
+  CircularProgress,
+} from "@mui/material";
+import { runHierarchyMigrationForAllTrees } from "../../utils/hierarchyMigration";
+import { populateVillageInfoForAllNodes } from "../../utils/populateVillageInfo";
 
 export const DebugPage: React.FC = () => {
   const [villages, setVillages] = useState<any[]>([]);
   const [heritageData, setHeritageData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,6 +56,52 @@ export const DebugPage: React.FC = () => {
     fetchData();
   }, []);
 
+  const handleRunHierarchyMigration = async () => {
+    if (
+      !window.confirm(
+        "This will update all family tree nodes with their hierarchy chain. This may take a while. Continue?",
+      )
+    ) {
+      return;
+    }
+
+    setMigrating(true);
+    setMigrationStatus("Starting hierarchy migration...");
+
+    try {
+      await runHierarchyMigrationForAllTrees();
+      setMigrationStatus("✅ Migration completed successfully!");
+    } catch (err: any) {
+      setMigrationStatus(`❌ Migration failed: ${err.message}`);
+      console.error(err);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handlePopulateVillageInfo = async () => {
+    if (
+      !window.confirm(
+        "This will populate villageId and villageName for all family tree nodes based on their tree associations. Continue?",
+      )
+    ) {
+      return;
+    }
+
+    setMigrating(true);
+    setMigrationStatus("Starting village info population...");
+
+    try {
+      await populateVillageInfoForAllNodes();
+      setMigrationStatus("✅ Village info population completed successfully!");
+    } catch (err: any) {
+      setMigrationStatus(`❌ Population failed: ${err.message}`);
+      console.error(err);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h3" gutterBottom>
@@ -57,6 +114,71 @@ export const DebugPage: React.FC = () => {
         <Typography>Loading...</Typography>
       ) : (
         <Box>
+          <Typography variant="h5" gutterBottom sx={{ mt: 3, mb: 2 }}>
+            🔧 Admin Tools
+          </Typography>
+          <Box sx={{ bgcolor: "#fff3cd", p: 3, borderRadius: 1, mb: 4 }}>
+            <Typography variant="body1" gutterBottom sx={{ fontWeight: 600 }}>
+              Hierarchy Migration
+            </Typography>
+            <Typography variant="body2" paragraph>
+              Populate the hierarchy field for all family tree nodes. This adds
+              a complete parent chain (ancestors) to each person in your family
+              trees.
+            </Typography>
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={handleRunHierarchyMigration}
+              disabled={migrating}
+              sx={{ mt: 2 }}
+            >
+              {migrating ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                  Migrating...
+                </>
+              ) : (
+                "Run Hierarchy Migration"
+              )}
+            </Button>
+            {migrationStatus && (
+              <Alert
+                severity={migrationStatus.includes("✅") ? "success" : "error"}
+                sx={{ mt: 2 }}
+              >
+                {migrationStatus}
+              </Alert>
+            )}
+          </Box>
+
+          <Box sx={{ bgcolor: "#e3f2fd", p: 3, borderRadius: 1, mb: 4 }}>
+            <Typography variant="body1" gutterBottom sx={{ fontWeight: 600 }}>
+              Populate Village Information
+            </Typography>
+            <Typography variant="body2" paragraph>
+              Populate villageId and villageName for all family tree nodes. This
+              ensures each person is associated with their correct village for
+              better search and filtering.
+            </Typography>
+            <Button
+              variant="contained"
+              color="info"
+              onClick={handlePopulateVillageInfo}
+              disabled={migrating}
+              sx={{ mt: 2 }}
+            >
+              {migrating ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                  Processing...
+                </>
+              ) : (
+                "Populate Village Info"
+              )}
+            </Button>
+          </Box>
+
           <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
             Villages in Database:
           </Typography>

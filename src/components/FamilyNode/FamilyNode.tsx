@@ -33,7 +33,7 @@ export const FamilyNode = React.memo(function FamilyNode({
   const clickHandler = useCallback(() => onClick(node.id), [node.id, onClick]);
   const clickSubHandler = useCallback(
     () => onSubClick(node.id),
-    [node.id, onSubClick]
+    [node.id, onSubClick],
   );
 
   const showTooltip = Boolean(localHover || isHover);
@@ -83,11 +83,49 @@ export const FamilyNode = React.memo(function FamilyNode({
           DOB: {node.dob}
         </Typography>
       )}
-      <Typography variant="caption" sx={{ opacity: 0.72 }}>
+      <Typography
+        variant="caption"
+        sx={{ opacity: 0.72, display: "block", mb: 0.75 }}
+      >
         Parents: {Array.isArray(node.parents) ? node.parents.length : 0} •
         Children: {Array.isArray(node.children) ? node.children.length : 0} •
         Spouses: {Array.isArray(node.spouses) ? node.spouses.length : 0}
       </Typography>
+
+      {/* Hierarchy Chain */}
+      {Array.isArray(node.hierarchy) && node.hierarchy.length > 0 && (
+        <>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 600,
+              display: "block",
+              mb: 0.5,
+              borderTop: "1px solid rgba(255,255,255,0.2)",
+              pt: 0.5,
+              opacity: 0.9,
+            }}
+          >
+            Ancestry:
+          </Typography>
+          <Box sx={{ ml: 1 }}>
+            {node.hierarchy.map((ancestor, index) => (
+              <Typography
+                key={ancestor.id}
+                variant="caption"
+                sx={{
+                  display: "block",
+                  opacity: 0.85,
+                  mb: index < node.hierarchy.length - 1 ? 0.25 : 0,
+                  fontSize: "0.7rem",
+                }}
+              >
+                {"↑ ".repeat(node.hierarchy.length - index)} {ancestor.name}
+              </Typography>
+            ))}
+          </Box>
+        </>
+      )}
     </Box>
   );
 
@@ -114,7 +152,7 @@ export const FamilyNode = React.memo(function FamilyNode({
             css.inner,
             css[node.gender],
             isRoot && css.isRoot,
-            isHover && css.isHover
+            isHover && css.isHover,
           )}
           onClick={clickHandler}
           onMouseEnter={() => setLocalHover(true)}
