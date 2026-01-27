@@ -20,6 +20,7 @@ import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
+import AddNode from "../AddNode/AddNode";
 import { useAuth } from "../context/AuthContext";
 import { useVillage } from "../context/VillageContext";
 
@@ -46,6 +47,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [selectId, setSelectId] = useState<string>();
   const [hoverId, setHoverId] = useState<string>();
   const [startName, setStartName] = useState<string>("");
+  const [showAddStartingNode, setShowAddStartingNode] = useState(false);
 
   useEffect(() => {
     // Only load data if a specific tree ID is selected
@@ -632,11 +634,36 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   // Update rootId when nodes change
   useEffect(() => {
     if (nodes.length > 0) {
-      const rootCandidate = nodes.find(
+      // First, try to find a male with no parents and no spouses
+      let rootCandidate = nodes.find(
         (item) =>
+          item.gender === Gender.male &&
           (item.parents?.length ?? 0) === 0 &&
           (item.spouses?.length ?? 0) === 0,
       );
+
+      // If not found, try to find any male with no parents
+      if (!rootCandidate) {
+        rootCandidate = nodes.find(
+          (item) =>
+            item.gender === Gender.male && (item.parents?.length ?? 0) === 0,
+        );
+      }
+
+      // If still not found, use the first male node
+      if (!rootCandidate) {
+        rootCandidate = nodes.find((item) => item.gender === Gender.male);
+      }
+
+      // If no males found, fall back to original logic
+      if (!rootCandidate) {
+        rootCandidate = nodes.find(
+          (item) =>
+            (item.parents?.length ?? 0) === 0 &&
+            (item.spouses?.length ?? 0) === 0,
+        );
+      }
+
       if (rootCandidate) {
         setRootId(rootCandidate.id);
       } else {
@@ -698,7 +725,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }}
       >
         <SourceSelect onChange={onSourceChange} />
-        <AddTree onCreate={onCreate} />
+        <AddTree
+          onCreate={(createdTreeId) => {
+            // Move to the newly created tree
+            setTreeId(createdTreeId);
+            // Call parent onCreate callback if provided
+            onCreate?.(createdTreeId);
+          }}
+        />
       </Box>
       {nodes.length > 0 && !isLoading && (
         <Box
@@ -886,28 +920,42 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 justifyContent: "center",
               }}
             >
-              <TextField
-                placeholder="Name of root person"
-                value={startName}
-                onChange={(e) => setStartName(e.target.value)}
-                variant="outlined"
-                size="medium"
-              />
               <Button
                 variant="contained"
-                onClick={() => {
-                  const name = startName.trim();
-                  if (!name) return;
-                  onAdd({ name }, "child");
-                  setStartName("");
-                }}
-                disabled={startName.trim().length === 0}
+                onClick={() => setShowAddStartingNode(true)}
               >
-                Add starting node
+                Create First Node
               </Button>
             </Box>
           </Container>
         )
+      )}
+      {showAddStartingNode && (
+        <Box
+          sx={{
+            position: "fixed",
+            right: 0,
+            top: 0,
+            height: "100%",
+            width: { xs: "100%", sm: "400px" },
+            backgroundColor: "background.paper",
+            boxShadow: "-2px 0 8px rgba(0, 0, 0, 0.1)",
+            zIndex: 1000,
+            overflow: "auto",
+            p: 3,
+          }}
+        >
+          <AddNode
+            onAdd={(node) => {
+              onAdd(node, "child");
+              setShowAddStartingNode(false);
+            }}
+            onCancel={() => setShowAddStartingNode(false)}
+            nodes={nodes}
+            noCard={true}
+            isFirstNode={true}
+          />
+        </Box>
       )}
       <NodeDetails
         node={selected || null}

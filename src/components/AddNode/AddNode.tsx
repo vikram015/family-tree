@@ -34,6 +34,7 @@ interface AddNodeProps {
   onCancel?: () => void;
   nodes?: Readonly<FNode>[];
   noCard?: boolean; // disables card border/background if true
+  isFirstNode?: boolean; // if true, hides relation selection fields
 }
 
 const AddNode: React.FC<AddNodeProps> = ({
@@ -42,6 +43,7 @@ const AddNode: React.FC<AddNodeProps> = ({
   onCancel,
   nodes,
   noCard = false,
+  isFirstNode = false,
 }) => {
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
@@ -212,50 +214,58 @@ const AddNode: React.FC<AddNodeProps> = ({
       sx={noCard ? {} : { p: 3, elevation: 2 }}
     >
       <Typography variant="h6" gutterBottom>
-        Add Family Member
+        {isFirstNode ? "Add First Family Member" : "Add Family Member"}
       </Typography>
 
       <Stack spacing={3}>
-        <FormControl component="fieldset">
-          <FormLabel component="legend">Relation</FormLabel>
-          <RadioGroup
-            row
-            value={relation}
-            onChange={(e) => setRelation(e.target.value as any)}
-          >
-            <FormControlLabel value="child" control={<Radio />} label="Child" />
-            <FormControlLabel
-              value="spouse"
-              control={<Radio />}
-              label="Spouse"
-            />
-            <FormControlLabel
-              value="parent"
-              control={<Radio />}
-              label="Parent"
-            />
-          </RadioGroup>
-        </FormControl>
-
-        <FormControl component="fieldset">
-          <FormLabel component="legend">Relation Type</FormLabel>
-          <RadioGroup
-            row
-            value={selectedRelType}
-            onChange={(e) => setSelectedRelType(e.target.value as RelType)}
-          >
-            {relTypes.map((type) => (
+        {!isFirstNode && (
+          <FormControl component="fieldset">
+            <FormLabel component="legend">Relation</FormLabel>
+            <RadioGroup
+              row
+              value={relation}
+              onChange={(e) => setRelation(e.target.value as any)}
+            >
               <FormControlLabel
-                key={type}
-                value={type}
+                value="child"
                 control={<Radio />}
-                label={type}
+                label="Child"
               />
-            ))}
-          </RadioGroup>
-        </FormControl>
+              <FormControlLabel
+                value="spouse"
+                control={<Radio />}
+                label="Spouse"
+              />
+              <FormControlLabel
+                value="parent"
+                control={<Radio />}
+                label="Parent"
+              />
+            </RadioGroup>
+          </FormControl>
+        )}
 
-        {relation === "child" && (
+        {!isFirstNode && (
+          <FormControl component="fieldset">
+            <FormLabel component="legend">Relation Type</FormLabel>
+            <RadioGroup
+              row
+              value={selectedRelType}
+              onChange={(e) => setSelectedRelType(e.target.value as RelType)}
+            >
+              {relTypes.map((type) => (
+                <FormControlLabel
+                  key={type}
+                  value={type}
+                  control={<Radio />}
+                  label={type}
+                />
+              ))}
+            </RadioGroup>
+          </FormControl>
+        )}
+
+        {!isFirstNode && relation === "child" && (
           <FormControl fullWidth>
             <InputLabel>Other parent</InputLabel>
             <Select
@@ -266,7 +276,8 @@ const AddNode: React.FC<AddNodeProps> = ({
               <MenuItem value="">None</MenuItem>
               {spouseOptions.map((s) => (
                 <MenuItem key={s.id} value={s.id}>
-                  {s.name || s.id}
+                  {s.name ||
+                    (targetNode?.name ? `${targetNode.name}'s Spouse` : s.id)}
                 </MenuItem>
               ))}
             </Select>

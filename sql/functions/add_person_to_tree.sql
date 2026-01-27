@@ -43,7 +43,7 @@ BEGIN
     --                    optionally: new_person → parent → related_person_id_2 (second parent)
     -- When adding parent: related_person_id (target) → parent → new_person (reverse)
     IF p_relation_type = 'parent' THEN
-      IF p_is_reverse_relation THEN
+      IF p_is_reverse_relation THEN--Adding parent to newly created person.
         -- Reverse: related_person_id → parent → new_person
         INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
         VALUES (p_related_person_id, v_new_person_id, 'parent', p_relation_subtype, now(), now());
@@ -110,7 +110,13 @@ BEGIN
         -- And when spouse's children are queried, this child will be found
         IF v_spouse_id IS NOT NULL THEN
           INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
-          VALUES (v_new_person_id, v_spouse_id, 'parent', p_relation_subtype, now(), now());
+          SELECT v_new_person_id, v_spouse_id, 'parent', p_relation_subtype, now(), now()
+          WHERE NOT EXISTS (
+            SELECT 1 FROM people_relations pr
+            WHERE pr.person_id = v_new_person_id
+              AND pr.related_person_id = v_spouse_id
+              AND pr.relation_type = 'parent'
+          );
         END IF;
       END IF;
     

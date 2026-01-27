@@ -49,7 +49,7 @@ function AppContent() {
         setSearchParams({});
       }
     },
-    [setSearchParams]
+    [setSearchParams],
   );
 
   return (
@@ -66,7 +66,10 @@ function AppContent() {
                 treeId={treeId}
                 setTreeId={setTreeId}
                 onSourceChange={onChange}
-                onCreate={(id) => setTreeId(id)}
+                onCreate={(id) => {
+                  setTreeId(id);
+                  onChange(id);
+                }}
               />
             }
           />

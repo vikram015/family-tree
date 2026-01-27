@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { Node } from "relatives-tree/lib/types";
 import { SupabaseService } from "../../services/supabaseService";
 import {
@@ -9,6 +9,7 @@ import {
   Box,
   Typography,
   Paper,
+  TextField,
 } from "@mui/material";
 import { useVillage } from "../context/VillageContext";
 
@@ -31,12 +32,27 @@ export const SourceSelect = memo(function SourceSelect({
 }: SourceSelectProps) {
   console.log("SourceSelect: Rendering component");
   const [items, setItems] = React.useState<TreeItem[]>([]);
+  const [searchText, setSearchText] = useState<string>("");
   const [value, setValue] = React.useState<string>(() => {
     // Read tree ID from URL on initial load
     const params = new URLSearchParams(window.location.search);
     return params.get("tree") || "";
   });
   const { selectedVillage } = useVillage();
+
+  // Filter items based on search text
+  const filteredItems = useMemo(() => {
+    if (!searchText.trim()) return items;
+
+    const lowerSearch = searchText.toLowerCase();
+    return items.filter(
+      (item) =>
+        item.name.toLowerCase().includes(lowerSearch) ||
+        item.caste?.toLowerCase().includes(lowerSearch) ||
+        item.sub_caste?.toLowerCase().includes(lowerSearch) ||
+        item.village_name?.toLowerCase().includes(lowerSearch),
+    );
+  }, [items, searchText]);
 
   // Memoize the onChange callback to prevent effect from re-running unnecessarily
   const memoizedOnChange = useCallback(onChange, [onChange]);
@@ -138,6 +154,7 @@ export const SourceSelect = memo(function SourceSelect({
         value={value}
         label="Family Tree"
         onChange={changeHandler}
+        onOpen={() => setSearchText("")}
         renderValue={(selected) => {
           if (!selected) {
             return (
@@ -176,13 +193,53 @@ export const SourceSelect = memo(function SourceSelect({
               },
             },
           },
+          slotProps: {
+            paper: {
+              sx: {
+                zIndex: 1300,
+              },
+            },
+          },
         }}
       >
-        {items.map((item) => (
-          <MenuItem key={item.id} value={item.id}>
-            {renderMenuItem(item)}
+        <Box
+          sx={{
+            p: 1,
+            pb: 0,
+            position: "sticky",
+            top: 0,
+            zIndex: 1,
+            backgroundColor: "background.paper",
+          }}
+        >
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search trees..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                fontSize: "0.875rem",
+              },
+            }}
+          />
+        </Box>
+        {filteredItems.length > 0 ? (
+          filteredItems.map((item) => (
+            <MenuItem key={item.id} value={item.id}>
+              {renderMenuItem(item)}
+            </MenuItem>
+          ))
+        ) : (
+          <MenuItem disabled>
+            <Typography variant="body2" sx={{ color: "text.disabled" }}>
+              No trees found
+            </Typography>
           </MenuItem>
-        ))}
+        )}
       </Select>
     </FormControl>
   );
