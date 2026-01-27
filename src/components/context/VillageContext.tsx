@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { db } from "../../firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { SupabaseService } from "../../services/supabaseService";
 
 interface Village {
   id: string;
@@ -35,35 +34,34 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
   const [villages, setVillages] = useState<Village[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load villages from Firestore
+  // Load villages from Supabase
   useEffect(() => {
-    const villagesRef = collection(db, "villages");
-    const unsubscribe = onSnapshot(villagesRef, (snapshot) => {
-      const villageList: Village[] = [];
-      snapshot.forEach((doc) => {
-        villageList.push({
-          id: doc.id,
-          name: doc.data().name,
-        });
-      });
-      console.log("Loaded villages from Firestore:", villageList);
-      setVillages(villageList);
-      setLoading(false);
+    const loadVillages = async () => {
+      try {
+        const villageData = await SupabaseService.getVillages();
+        const villageList: Village[] = villageData.map((village: any) => ({
+          id: village.id,
+          name: village.name,
+        }));
+        setVillages(villageList);
+        setLoading(false);
 
-      // Auto-select first village if none selected
-      if (villageList.length > 0 && !selectedVillage) {
-        console.log("Auto-selecting first village:", villageList[0].id);
-        setSelectedVillage(villageList[0].id);
+        // Auto-select first village if none selected
+        if (villageList.length > 0 && !selectedVillage) {
+          setSelectedVillage(villageList[0].id);
+        }
+      } catch (error) {
+        console.error("Failed to load villages from Supabase:", error);
+        setLoading(false);
       }
-    });
+    };
 
-    return unsubscribe;
-  }, [selectedVillage]);
+    loadVillages();
+  }, []);
 
   // Persist selected village to localStorage
   useEffect(() => {
     if (selectedVillage) {
-      console.log("Selected village changed to:", selectedVillage);
       localStorage.setItem("selectedVillage", selectedVillage);
     }
   }, [selectedVillage]);

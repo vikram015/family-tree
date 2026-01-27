@@ -6,6 +6,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.3.6",
+    "@supabase/supabase-js": "^2.91.1",
     "@types/react-router-dom": "^5.3.3",
     "classnames": "2.3.2",
     "firebase": "^12.6.0",

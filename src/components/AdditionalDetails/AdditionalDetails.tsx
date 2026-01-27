@@ -10,8 +10,7 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
-import { db } from "../../firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { SupabaseService } from "../../services/supabaseService";
 
 interface CustomFieldValue {
   fieldName: string;
@@ -30,21 +29,19 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [fieldValues, setFieldValues] = useState<CustomFieldValue[]>([]);
 
-  // Load available field names from Firestore
+  // Load available field names from Supabase people_field table
   useEffect(() => {
-    const nodeFieldsCollection = collection(db, "node_fields");
-    const unsubscribe = onSnapshot(nodeFieldsCollection, (snapshot) => {
-      const fields: string[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.name) {
-          fields.push(data.name);
-        }
-      });
-      setAvailableFields(fields.sort());
-    });
+    const loadFields = async () => {
+      try {
+        const fields = await SupabaseService.getPredefinedFields();
+        setAvailableFields(fields.sort());
+      } catch (error) {
+        console.error("Failed to load predefined fields:", error);
+        setAvailableFields([]);
+      }
+    };
 
-    return unsubscribe;
+    loadFields();
   }, []);
 
   // Convert value prop to array format for editing
@@ -70,7 +67,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
       });
       onChange(fieldsObject);
     },
-    [onChange]
+    [onChange],
   );
 
   const handleAddField = useCallback(() => {
@@ -84,7 +81,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
       setFieldValues(newFields);
       notifyChange(newFields);
     },
-    [fieldValues, notifyChange]
+    [fieldValues, notifyChange],
   );
 
   const handleFieldNameChange = useCallback(
@@ -94,7 +91,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
       setFieldValues(newFields);
       notifyChange(newFields);
     },
-    [fieldValues, notifyChange]
+    [fieldValues, notifyChange],
   );
 
   const handleFieldValueChange = useCallback(
@@ -104,7 +101,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
       setFieldValues(newFields);
       notifyChange(newFields);
     },
-    [fieldValues, notifyChange]
+    [fieldValues, notifyChange],
   );
 
   return (

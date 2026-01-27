@@ -28,7 +28,8 @@ interface AddNodeProps {
     node: Partial<Node>,
     relation: "child" | "spouse" | "parent",
     targetId?: string,
-    type?: RelType
+    type?: RelType,
+    otherParentId?: string, // second parent for children or second spouse
   ) => void;
   onCancel?: () => void;
   nodes?: Readonly<FNode>[];
@@ -45,13 +46,13 @@ const AddNode: React.FC<AddNodeProps> = ({
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
-    "male"
+    "male",
   );
   const [relation, setRelation] = useState<"child" | "spouse" | "parent">(
-    "child"
+    "child",
   );
   const [selectedRelType, setSelectedRelType] = useState<RelType>(
-    RelType.blood
+    RelType.blood,
   );
   const [relTypes, setRelTypes] = useState<RelType[]>([
     RelType.blood,
@@ -78,7 +79,7 @@ const AddNode: React.FC<AddNodeProps> = ({
   }, [nodes, targetId]);
 
   const [selectedOtherParentId, setSelectedOtherParentId] = useState<string>(
-    () => ""
+    () => "",
   );
   useEffect(() => {
     // default to first spouse if available
@@ -150,7 +151,13 @@ const AddNode: React.FC<AddNodeProps> = ({
             Object.keys(customFields).length > 0 ? customFields : undefined,
         };
 
-        onAdd?.(newNode, relation, targetId, selectedRelType);
+        onAdd?.(
+          newNode,
+          relation,
+          targetId,
+          selectedRelType,
+          selectedOtherParentId,
+        );
         handleCancel();
       });
       return;
@@ -176,7 +183,13 @@ const AddNode: React.FC<AddNodeProps> = ({
         Object.keys(customFields).length > 0 ? customFields : undefined,
     };
 
-    onAdd?.(newNode, relation, targetId, selectedRelType);
+    onAdd?.(
+      newNode,
+      relation,
+      targetId,
+      selectedRelType,
+      selectedOtherParentId,
+    );
     handleCancel();
   }, [
     currentUser,

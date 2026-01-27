@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import { runHierarchyMigrationForAllTrees } from "../../utils/hierarchyMigration";
 import { populateVillageInfoForAllNodes } from "../../utils/populateVillageInfo";
+import { MigrationService } from "../../services/migrationService";
 
 export const DebugPage: React.FC = () => {
   const [villages, setVillages] = useState<any[]>([]);
@@ -19,6 +20,7 @@ export const DebugPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
+  const [migrationResults, setMigrationResults] = useState<any>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -102,6 +104,34 @@ export const DebugPage: React.FC = () => {
     }
   };
 
+  const handleFirebaseToSupabaseMigration = async () => {
+    if (
+      !window.confirm(
+        "This will migrate all data from Firebase to Supabase. This includes states, villages, trees, people, relationships, and businesses. This may take a while. Continue?",
+      )
+    ) {
+      return;
+    }
+
+    setMigrating(true);
+    setMigrationStatus("Starting Firebase to Supabase migration...");
+    setMigrationResults(null);
+
+    try {
+      const results = await MigrationService.runFullMigration();
+      setMigrationResults(results);
+      setMigrationStatus(
+        "✅ Firebase to Supabase migration completed successfully!",
+      );
+      console.log("Migration results:", results);
+    } catch (err: any) {
+      setMigrationStatus(`❌ Migration failed: ${err.message}`);
+      console.error(err);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h3" gutterBottom>
@@ -177,6 +207,60 @@ export const DebugPage: React.FC = () => {
                 "Populate Village Info"
               )}
             </Button>
+          </Box>
+
+          <Box sx={{ bgcolor: "#f3e5f5", p: 3, borderRadius: 1, mb: 4 }}>
+            <Typography variant="body1" gutterBottom sx={{ fontWeight: 600 }}>
+              🚀 Firebase to Supabase Migration
+            </Typography>
+            <Typography variant="body2" paragraph>
+              Migrate all data from Firebase to Supabase (states, villages,
+              trees, people, relationships, and businesses). Run this only once.
+            </Typography>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleFirebaseToSupabaseMigration}
+              disabled={migrating}
+              sx={{ mt: 2 }}
+            >
+              {migrating ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                  Migrating...
+                </>
+              ) : (
+                "Run Full Migration"
+              )}
+            </Button>
+            {migrationStatus && (
+              <Alert
+                severity={migrationStatus.includes("✅") ? "success" : "error"}
+                sx={{ mt: 2 }}
+              >
+                {migrationStatus}
+              </Alert>
+            )}
+            {migrationResults && (
+              <Box sx={{ mt: 3, bgcolor: "white", p: 2, borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                  Migration Results:
+                </Typography>
+                <Box
+                  component="pre"
+                  sx={{
+                    fontSize: "0.85rem",
+                    overflow: "auto",
+                    maxHeight: "300px",
+                    p: 1,
+                    bgcolor: "#f5f5f5",
+                    borderRadius: 0.5,
+                  }}
+                >
+                  {JSON.stringify(migrationResults, null, 2)}
+                </Box>
+              </Box>
+            )}
           </Box>
 
           <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
