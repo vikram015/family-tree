@@ -12,7 +12,6 @@ import {
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
 import { useAuth } from "../context/AuthContext";
-import type { ConfirmationResult } from "firebase/auth";
 
 interface LoginModalProps {
   open: boolean;
@@ -30,11 +29,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [confirmationResult, setConfirmationResult] =
-    useState<ConfirmationResult | null>(null);
-  const { setupRecaptcha, signInWithPhone, verifyOtp } = useAuth();
-
-  // No-op effect now; recaptcha is created on demand in handleSendOtp
+  const { signInWithPhone, verifyOtp } = useAuth();
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,21 +47,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         ? phoneNumber
         : `+91${phoneNumber}`;
 
-      const recaptchaVerifier = setupRecaptcha("recaptcha-container");
-      // Ensure widget is rendered before sending SMS
-      await recaptchaVerifier.render();
-      const confirmation = await signInWithPhone(
-        formattedPhone,
-        recaptchaVerifier
-      );
+      await signInWithPhone(formattedPhone);
 
-      setConfirmationResult(confirmation);
       setOtpSent(true);
       setError("");
     } catch (err: any) {
       console.error("OTP send error:", err);
       setError(err.message || "Failed to send OTP");
-      (window as any).recaptchaVerifier = undefined;
     } finally {
       setLoading(false);
     }
@@ -79,21 +66,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return setError("Please enter a valid 6-digit OTP");
     }
 
-    if (!confirmationResult) {
-      return setError("Please request OTP first");
-    }
-
     try {
       setError("");
       setLoading(true);
 
-      await verifyOtp(confirmationResult, otp);
+      await verifyOtp(otp);
 
       // Clear form
       setPhoneNumber("");
       setOtp("");
       setOtpSent(false);
-      setConfirmationResult(null);
       onSuccess?.();
       onClose();
     } catch (err: any) {
@@ -109,22 +91,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setOtp("");
     setError("");
     setOtpSent(false);
-    setConfirmationResult(null);
-    if ((window as any).recaptchaVerifier?.clear) {
-      (window as any).recaptchaVerifier.clear();
-    }
-    (window as any).recaptchaVerifier = undefined;
     onClose();
   };
 
   const handleResendOtp = async () => {
     setOtpSent(false);
     setOtp("");
-    setConfirmationResult(null);
-    if ((window as any).recaptchaVerifier?.clear) {
-      (window as any).recaptchaVerifier.clear();
-    }
-    (window as any).recaptchaVerifier = undefined;
   };
 
   return (
@@ -223,9 +195,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               </Button>
             </form>
           )}
-
-          {/* Hidden reCAPTCHA container */}
-          <div id="recaptcha-container"></div>
         </Box>
       </DialogContent>
     </Dialog>

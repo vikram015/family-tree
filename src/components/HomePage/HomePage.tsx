@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   Container,
@@ -11,6 +11,8 @@ import {
   Divider,
   TextField,
   InputAdornment,
+  CircularProgress,
+  Paper,
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
@@ -18,9 +20,31 @@ import SchoolIcon from "@mui/icons-material/School";
 import WorkIcon from "@mui/icons-material/Work";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import SearchIcon from "@mui/icons-material/Search";
+import PeopleIcon from "@mui/icons-material/People";
+import BusinessIcon from "@mui/icons-material/Business";
+import SettingsIcon from "@mui/icons-material/Settings";
+import LocationCityIcon from "@mui/icons-material/LocationCity";
+import { SupabaseService } from "../../services/supabaseService";
 
 export const HomePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [statistics, setStatistics] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    const fetchStatistics = async () => {
+      try {
+        const stats = await SupabaseService.getDashboardStatistics();
+        setStatistics(stats);
+      } catch (error) {
+        console.error("Error fetching statistics:", error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    fetchStatistics();
+  }, []);
 
   const features = [
     {
@@ -238,6 +262,268 @@ export const HomePage: React.FC = () => {
               </Box>
             </Card>
           ))}
+        </Box>
+
+        <Divider sx={{ my: 6 }} />
+
+        {/* Dashboard Statistics */}
+        <Box sx={{ mb: 8 }}>
+          <Typography
+            variant="h4"
+            gutterBottom
+            sx={{ textAlign: "center", fontWeight: 700, mb: 6 }}
+          >
+            Kinvia by the Numbers
+          </Typography>
+
+          {loadingStats ? (
+            <Box sx={{ textAlign: "center", py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: {
+                  xs: "1fr",
+                  sm: "1fr 1fr",
+                  md: "1fr 1fr 1fr 1fr",
+                },
+                gap: 3,
+              }}
+            >
+              {/* Total People */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <PeopleIcon sx={{ fontSize: 48, color: "#0066cc" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#0066cc", mb: 1 }}
+                  >
+                    {statistics?.total_people || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Family Members
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              {/* Total Trees */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <AccountTreeIcon sx={{ fontSize: 48, color: "#90C43C" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#90C43C", mb: 1 }}
+                  >
+                    {statistics?.total_trees || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Family Trees
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              {/* Total Villages */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <LocationCityIcon sx={{ fontSize: 48, color: "#E6A726" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#E6A726", mb: 1 }}
+                  >
+                    {statistics?.total_villages || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Villages
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              {/* Total Businesses */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <BusinessIcon sx={{ fontSize: 48, color: "#7BC65D" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#7BC65D", mb: 1 }}
+                  >
+                    {statistics?.total_businesses || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Businesses
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              {/* Total Professions */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <SettingsIcon sx={{ fontSize: 48, color: "#E74C3C" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#E74C3C", mb: 1 }}
+                  >
+                    {statistics?.total_professions || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Professions
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              {/* People with Professions */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <WorkIcon sx={{ fontSize: 48, color: "#F39C12" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#F39C12", mb: 1 }}
+                  >
+                    {statistics?.people_with_professions || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    People with Professions
+                  </Typography>
+                </CardContent>
+              </Card>
+
+              {/* Total Professions Assigned */}
+              <Card
+                sx={{
+                  textAlign: "center",
+                  transition: "transform 0.3s, boxShadow 0.3s",
+                  "&:hover": {
+                    transform: "translateY(-8px)",
+                    boxShadow: 4,
+                  },
+                }}
+              >
+                <CardContent sx={{ py: 4 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      mb: 2,
+                    }}
+                  >
+                    <SchoolIcon sx={{ fontSize: 48, color: "#9B59B6" }} />
+                  </Box>
+                  <Typography
+                    variant="h4"
+                    sx={{ fontWeight: 700, color: "#9B59B6", mb: 1 }}
+                  >
+                    {statistics?.total_professions_assigned || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Professions Assigned
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Box>
+          )}
         </Box>
 
         <Divider sx={{ my: 6 }} />

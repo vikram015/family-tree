@@ -92,6 +92,42 @@ export const SupabaseService = {
   },
 
   /**
+   * Fetch all people for a specific village across all trees
+   */
+  async getPeopleByVillage(villageId: string): Promise<PersonWithRelations[]> {
+    // First get all trees in this village
+    const { data: trees, error: treesError } = await supabase
+      .from('tree')
+      .select('id')
+      .eq('village_id', villageId);
+
+    if (treesError) throw treesError;
+    if (!trees || trees.length === 0) return [];
+
+    // Get all people from all trees in this village
+    const treeIds = trees.map(t => t.id);
+    const { data, error } = await supabase
+      .from('people')
+      .select('*')
+      .in('tree_id', treeIds);
+
+    if (error) throw error;
+
+    // Fetch relationships for all people
+    const peopleWithRelations = await Promise.all(
+      (data || []).map(async (person) => {
+        const relations = await this.getPersonRelations(person.id);
+        return {
+          ...person,
+          ...relations,
+        };
+      })
+    );
+
+    return peopleWithRelations as PersonWithRelations[];
+  },
+
+  /**
    * Get relationships for a person from people_relations table
    */
   async getPersonRelations(
@@ -842,6 +878,33 @@ export const SupabaseService = {
   },
 
   /**
+   * Get all businesses
+   */
+  async getAllBusinesses(): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('business')
+      .select('*, people(*)');
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Get businesses by village with person hierarchy
+   */
+  async getBusinessesByVillageWithHierarchy(
+    villageId: string
+  ): Promise<any[]> {
+    const { data, error } = await supabase.rpc(
+      'get_businesses_by_village',
+      { p_village_id: villageId }
+    );
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
    * Subscribe to real-time updates for people in a tree
    */
   subscribeToPeople(treeId: string, callback: (people: PersonWithRelations[]) => void) {
@@ -912,6 +975,88 @@ export const SupabaseService = {
   },
 
   /**
+   * Get all professions
+   */
+  async getAllProfessions(): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('professions')
+      .select('*')
+      .eq('is_deleted', false);
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Create a profession
+   */
+  async createProfession(profession: { name: string; description?: string; category?: string }): Promise<any> {
+    const { data, error } = await supabase
+      .from('professions')
+      .insert([{ ...profession, is_deleted: false }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get professions for a person
+   */
+  async getPeopleProfileasons(peopleId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('people_professions')
+      .select('profession:professions(*)')
+      .eq('people_id', peopleId)
+      .eq('is_deleted', false);
+
+    if (error) throw error;
+    return data?.map((item: any) => item.profession) || [];
+  },
+
+  /**
+   * Add profession to a person
+   */
+  async addProfessionToPerson(peopleId: string, professionId: string): Promise<any> {
+    const { data, error } = await supabase
+      .from('people_professions')
+      .insert([{ people_id: peopleId, profession_id: professionId, is_deleted: false }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Remove profession from a person
+   */
+  async removeProfessionFromPerson(peopleId: string, professionId: string): Promise<void> {
+    const { error } = await supabase
+      .from('people_professions')
+      .update({ is_deleted: true })
+      .eq('people_id', peopleId)
+      .eq('profession_id', professionId);
+
+    if (error) throw error;
+  },
+
+  /**
+   * Get people with a specific profession
+   */
+  async getPeopleWithProfession(professionId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('people_professions')
+      .select('people(*)')
+      .eq('profession_id', professionId)
+      .eq('is_deleted', false);
+
+    if (error) throw error;
+    return data?.map((item: any) => item.people) || [];
+  },
+
+  /**
    * Create sub-caste
    */
   async createSubCaste(subCaste: { name: string; caste_id: string }): Promise<any> {
@@ -921,5 +1066,105 @@ export const SupabaseService = {
       .select();
     if (error) throw error;
     return data?.[0];
+  },
+
+  /**
+   * Search people by name in a village with parent hierarchy
+   * Returns person details including parent hierarchy up to 5 generations
+   */
+  async searchPeopleByVillageWithHierarchy(
+    searchTerm: string,
+    villageId: string
+  ): Promise<any[]> {
+    const { data, error } = await supabase.rpc(
+      'search_people_by_village',
+      {
+        p_search_term: searchTerm,
+        p_village_id: villageId,
+      }
+    );
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Get all people with their professions for a village
+   */
+  async getPeopleWithProfessionsByVillage(villageId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('people')
+      .select(`
+        id,
+        name,
+        gender,
+        dob,
+        tree_id,
+        people_professions(
+          profession:professions(*)
+        )
+      `)
+      .eq('villages_id', villageId)
+      .eq('is_deleted', false);
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
+   * Get professions by village with people and hierarchy
+   */
+  async getProfessionsByVillage(villageId: string): Promise<any[]> {
+    const { data, error } = await supabase.rpc(
+      'get_professions_by_village',
+      { p_village_id: villageId }
+    );
+
+    if (error) throw error;
+
+    // Transform the data to group people by profession
+    const professionsMap = new Map<string, any>();
+
+    (data || []).forEach((row: any) => {
+      if (!professionsMap.has(row.profession_id)) {
+        professionsMap.set(row.profession_id, {
+          profession_id: row.profession_id,
+          profession_name: row.profession_name,
+          profession_description: row.profession_description,
+          profession_category: row.profession_category,
+          people: [],
+        });
+      }
+
+      if (row.person_id) {
+        professionsMap.get(row.profession_id).people.push({
+          person_id: row.person_id,
+          person_name: row.person_name,
+          gender: row.person_gender,
+          dob: row.person_dob,
+          village_id: row.village_id,
+          village_name: row.village_name,
+          caste_name: row.caste_name,
+          sub_caste_name: row.sub_caste_name,
+          tree_id: row.tree_id,
+          tree_name: row.tree_name,
+          parent_hierarchy: row.parent_hierarchy || [],
+        });
+      }
+    });
+
+    return Array.from(professionsMap.values());
+  },
+
+  /**
+   * Get dashboard statistics (global, all villages)
+   */
+  async getDashboardStatistics(): Promise<any> {
+    const { data, error } = await supabase.rpc(
+      'get_dashboard_statistics'
+    );
+
+    if (error) throw error;
+    return data?.[0] || {};
   },
 };

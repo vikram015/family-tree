@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
   Container,
@@ -22,6 +23,7 @@ import {
   IconButton,
   Autocomplete,
   ListItemText,
+  Tooltip,
 } from "@mui/material";
 import WorkIcon from "@mui/icons-material/Work";
 import StoreIcon from "@mui/icons-material/Store";
@@ -40,23 +42,8 @@ import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
 import { useVillage } from "../context/VillageContext";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../../firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  startAt,
-  endAt,
-  onSnapshot,
-  addDoc,
-  deleteDoc,
-  doc,
-  updateDoc,
-  serverTimestamp,
-  getDocs,
-  setDoc,
-} from "firebase/firestore";
+import { SupabaseService } from "../../services/supabaseService";
+import { PersonSearchField } from "./PersonSearchField";
 import { FNode } from "../model/FNode";
 import { getNodeHierarchy } from "../const";
 
@@ -72,6 +59,12 @@ interface Business {
   villageId: string;
   createdAt?: any;
   updatedAt?: any;
+  treeId?: string; // Tree ID for family page navigation
+  gender?: string; // Owner gender
+  dob?: string; // Owner date of birth
+  hierarchy?: any[]; // Parent hierarchy
+  casteName?: string; // Caste name
+  subCasteName?: string; // Sub-caste name
 }
 
 interface BusinessCategory {
@@ -83,17 +76,108 @@ interface BusinessCategory {
   displayName: string;
 }
 
+interface Profession {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+}
+
+interface PersonWithProfessions {
+  person: FNode;
+  professions: Profession[];
+}
+
+interface PersonSearchResult {
+  id: string;
+  name: string;
+  gender?: string;
+  dob?: string;
+  treeId: string;
+  hierarchy: any[];
+  villageName?: string;
+  casteName?: string;
+  subCasteName?: string;
+}
+
+// Owner link component with hierarchy tooltip
+const OwnerLink: React.FC<{
+  business: Business;
+  onNavigate: (path: string) => void;
+}> = ({ business, onNavigate }) => {
+  const hierarchyText =
+    business.hierarchy && business.hierarchy.length > 0
+      ? business.hierarchy
+          .slice(-5)
+          .map((a: any) => a.name)
+          .join(" → ")
+      : "No ancestry data";
+
+  const tooltipContent = (
+    <Box sx={{ p: 1 }}>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {business.owner}
+      </Typography>
+      {business.casteName && (
+        <Typography variant="caption" display="block">
+          Caste: {business.casteName}
+        </Typography>
+      )}
+      {business.subCasteName && (
+        <Typography variant="caption" display="block">
+          Sub-Caste: {business.subCasteName}
+        </Typography>
+      )}
+      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+        🧬 {hierarchyText}
+      </Typography>
+    </Box>
+  );
+
+  return (
+    <Tooltip title={tooltipContent}>
+      <Box
+        component="span"
+        onClick={() => onNavigate(`/families?treeId=${business.treeId}`)}
+        sx={{
+          color: "#0066cc",
+          cursor: "pointer",
+          textDecoration: "underline",
+          "&:hover": { color: "#0052a3", fontWeight: 600 },
+          transition: "all 0.2s",
+        }}
+      >
+        {business.owner}
+      </Box>
+    </Tooltip>
+  );
+};
+
 export const BusinessPage: React.FC = () => {
+  const navigate = useNavigate();
   const { selectedVillage, villages } = useVillage();
   const { isAdmin } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
-  const [people, setPeople] = useState<FNode[]>([]);
+  const [people, setPeople] = useState<PersonSearchResult[]>([]);
+  const [allPeople, setAllPeople] = useState<FNode[]>([]);
+  const [professions, setProfessions] = useState<Profession[]>([]);
+  const [peopleWithProfessions, setPeopleWithProfessions] = useState<
+    PersonWithProfessions[]
+  >([]);
+  const [professionsWithCount, setProfessionsWithCount] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
+  const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
   const [selectedOwner, setSelectedOwner] = useState<FNode | null>(null);
+  const [selectedPersonForProfession, setSelectedPersonForProfession] =
+    useState<FNode | null>(null);
+  const [selectedProfession, setSelectedProfession] =
+    useState<Profession | null>(null);
+  const [newProfessionName, setNewProfessionName] = useState("");
   const [ownerSearchInput, setOwnerSearchInput] = useState("");
+  const [professionSearchInput, setProfessionSearchInput] = useState("");
   const [searchPerformed, setSearchPerformed] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -105,111 +189,70 @@ export const BusinessPage: React.FC = () => {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  // Initialize categories in database
-  const initializeCategories = async () => {
-    try {
-      const categoriesRef = collection(db, "businessCategories");
-      const snapshot = await getDocs(categoriesRef);
-
-      if (snapshot.empty) {
-        // Add default categories if none exist
-        const defaultCategories: BusinessCategory[] = [
-          {
-            id: "retail",
-            title: "Retail & Shops",
-            description:
-              "Family-owned stores, boutiques, and retail businesses",
-            color: "#E6A726",
-            icon: "StoreIcon",
-            displayName: "Retail & Shops",
-          },
-          {
-            id: "agriculture",
-            title: "Agriculture & Farming",
-            description:
-              "Agricultural businesses, farming, and related services",
-            color: "#90C43C",
-            icon: "AgricultureIcon",
-            displayName: "Agriculture & Farming",
-          },
-          {
-            id: "it",
-            title: "IT & Technology",
-            description:
-              "Software development, IT services, and tech professionals",
-            color: "#0066cc",
-            icon: "ComputerIcon",
-            displayName: "IT & Technology",
-          },
-          {
-            id: "education",
-            title: "Education",
-            description:
-              "Teachers, tutors, coaching centers, and educational services",
-            color: "#7BC65D",
-            icon: "SchoolIcon",
-            displayName: "Education",
-          },
-          {
-            id: "healthcare",
-            title: "Healthcare",
-            description: "Doctors, nurses, clinics, and medical professionals",
-            color: "#E74C3C",
-            icon: "LocalHospitalIcon",
-            displayName: "Healthcare",
-          },
-          {
-            id: "engineering",
-            title: "Engineering & Construction",
-            description: "Engineers, contractors, and construction businesses",
-            color: "#F39C12",
-            icon: "EngineeringIcon",
-            displayName: "Engineering & Construction",
-          },
-          {
-            id: "properties",
-            title: "Properties & Real Estate",
-            description:
-              "Real estate agents, property management, and property sales",
-            color: "#8B7355",
-            icon: "ApartmentIcon",
-            displayName: "Properties & Real Estate",
-          },
-        ];
-
-        // Batch add categories
-        for (const category of defaultCategories) {
-          await setDoc(doc(categoriesRef, category.id), category);
-        }
-        setCategories(defaultCategories);
-      } else {
-        const categoriesData: BusinessCategory[] = [];
-        snapshot.forEach((doc) => {
-          categoriesData.push({ ...doc.data() } as BusinessCategory);
-        });
-        setCategories(categoriesData);
-      }
-    } catch (error) {
-      console.error("Error initializing categories:", error);
-    }
-  };
-
-  // Fetch categories from database
-  const fetchCategories = () => {
-    try {
-      const categoriesRef = collection(db, "businessCategories");
-      const unsubscribe = onSnapshot(categoriesRef, (snapshot) => {
-        const categoriesData: BusinessCategory[] = [];
-        snapshot.forEach((doc) => {
-          categoriesData.push({ ...doc.data() } as BusinessCategory);
-        });
-        setCategories(categoriesData);
-      });
-      return unsubscribe;
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-      return () => {};
-    }
+  // Initialize default categories (static - no need to fetch from DB)
+  const initializeCategories = () => {
+    const defaultCategories: BusinessCategory[] = [
+      {
+        id: "retail",
+        title: "Retail & Shops",
+        description: "Family-owned stores, boutiques, and retail businesses",
+        color: "#E6A726",
+        icon: "StoreIcon",
+        displayName: "Retail & Shops",
+      },
+      {
+        id: "agriculture",
+        title: "Agriculture & Farming",
+        description: "Agricultural businesses, farming, and related services",
+        color: "#90C43C",
+        icon: "AgricultureIcon",
+        displayName: "Agriculture & Farming",
+      },
+      {
+        id: "it",
+        title: "IT & Technology",
+        description:
+          "Software development, IT services, and tech professionals",
+        color: "#0066cc",
+        icon: "ComputerIcon",
+        displayName: "IT & Technology",
+      },
+      {
+        id: "education",
+        title: "Education",
+        description:
+          "Teachers, tutors, coaching centers, and educational services",
+        color: "#7BC65D",
+        icon: "SchoolIcon",
+        displayName: "Education",
+      },
+      {
+        id: "healthcare",
+        title: "Healthcare",
+        description: "Doctors, nurses, clinics, and medical professionals",
+        color: "#E74C3C",
+        icon: "LocalHospitalIcon",
+        displayName: "Healthcare",
+      },
+      {
+        id: "engineering",
+        title: "Engineering & Construction",
+        description: "Engineers, contractors, and construction businesses",
+        color: "#F39C12",
+        icon: "EngineeringIcon",
+        displayName: "Engineering & Construction",
+      },
+      {
+        id: "properties",
+        title: "Properties & Real Estate",
+        description:
+          "Real estate agents, property management, and property sales",
+        color: "#8B7355",
+        icon: "ApartmentIcon",
+        displayName: "Properties & Real Estate",
+      },
+    ];
+    setCategories(defaultCategories);
   };
 
   const villageName =
@@ -217,17 +260,7 @@ export const BusinessPage: React.FC = () => {
 
   useEffect(() => {
     // Initialize categories on component mount
-    const initAndFetch = async () => {
-      await initializeCategories();
-    };
-
-    initAndFetch();
-
-    const unsubscribe = fetchCategories();
-
-    return () => {
-      unsubscribe();
-    };
+    initializeCategories();
   }, []);
 
   useEffect(() => {
@@ -238,79 +271,221 @@ export const BusinessPage: React.FC = () => {
     }
 
     setLoading(true);
-    const businessRef = collection(db, "businesses");
-    const q = query(businessRef, where("villageId", "==", selectedVillage));
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const businessList: Business[] = [];
-        snapshot.forEach((doc) => {
-          businessList.push({ id: doc.id, ...doc.data() } as Business);
-        });
+    const fetchBusinesses = async () => {
+      try {
+        const businessesWithHierarchy =
+          await SupabaseService.getBusinessesByVillageWithHierarchy(
+            selectedVillage,
+          );
+
+        const businessList: Business[] = businessesWithHierarchy.map(
+          (business) => ({
+            id: business.business_id,
+            name: business.business_name,
+            category: business.business_category || "",
+            description: business.business_description || "",
+            owner: business.person_name || "",
+            ownerId: business.person_id || "",
+            ownerName: business.person_name || "",
+            contact: business.business_contact || "",
+            villageId: selectedVillage,
+            treeId: business.tree_id || "",
+            gender: business.person_gender || "",
+            dob: business.person_dob || "",
+            hierarchy: business.parent_hierarchy || [],
+            casteName: business.caste_name || "",
+            subCasteName: business.sub_caste_name || "",
+            createdAt: business.business_created_at,
+            updatedAt: business.business_created_at,
+          }),
+        );
+
         setBusinesses(businessList);
         setLoading(false);
-      },
-      (error) => {
+      } catch (error) {
         console.error("Error fetching businesses:", error);
         setLoading(false);
-      },
-    );
+      }
+    };
 
-    return unsubscribe;
+    fetchBusinesses();
   }, [selectedVillage]);
 
-  // Search people by name from family tree
-  const handleSearchOwner = async () => {
-    if (!selectedVillage || !formData.owner.trim()) {
-      setPeople([]);
-      setSearchPerformed(false);
+  // Fetch professions and people with their professions
+  useEffect(() => {
+    if (!selectedVillage) {
+      setProfessions([]);
+      setPeopleWithProfessions([]);
+      setProfessionsWithCount([]);
       return;
     }
 
-    setSearchPerformed(true);
+    const fetchProfessionsData = async () => {
+      try {
+        // Fetch all professions for the select dropdown
+        const allProfessions = await SupabaseService.getAllProfessions();
+        setProfessions(allProfessions);
+
+        // Single efficient call: Fetch professions with people and hierarchy for the village
+        const profsWithPeopleData =
+          await SupabaseService.getProfessionsByVillage(selectedVillage);
+
+        // Transform data for professions display
+        setProfessionsWithCount(profsWithPeopleData);
+
+        // Extract all people from the professions data to populate allPeople
+        const uniquePeople = new Map<string, FNode>();
+        profsWithPeopleData.forEach((prof: any) => {
+          prof.people?.forEach((person: any) => {
+            if (!uniquePeople.has(person.person_id)) {
+              uniquePeople.set(person.person_id, {
+                id: person.person_id,
+                name: person.person_name,
+                gender: person.gender,
+                dob: person.person_dob || "",
+                treeId: person.tree_id,
+                parents: [] as any,
+                children: [] as any,
+                siblings: [] as any,
+                spouses: [] as any,
+                top: 0,
+                left: 0,
+                hasSubTree: false,
+              } as unknown as FNode);
+            }
+          });
+        });
+        setAllPeople(Array.from(uniquePeople.values()));
+
+        // Transform professions data to peopleWithProfessions format
+        const peopleProfsMap = new Map<string, PersonWithProfessions>();
+        profsWithPeopleData.forEach((prof: any) => {
+          prof.people?.forEach((person: any) => {
+            const personKey = person.person_id;
+            if (!peopleProfsMap.has(personKey)) {
+              peopleProfsMap.set(personKey, {
+                person: {
+                  id: person.person_id,
+                  name: person.person_name,
+                  gender: person.gender,
+                  dob: person.person_dob || "",
+                  treeId: person.tree_id,
+                  parents: [] as any,
+                  children: [] as any,
+                  siblings: [] as any,
+                  spouses: [] as any,
+                  top: 0,
+                  left: 0,
+                  hasSubTree: false,
+                } as unknown as FNode,
+                professions: [],
+              });
+            }
+            peopleProfsMap.get(personKey)!.professions.push({
+              id: prof.profession_id,
+              name: prof.profession_name,
+              description: prof.profession_description,
+              category: prof.profession_category,
+            });
+          });
+        });
+        setPeopleWithProfessions(Array.from(peopleProfsMap.values()));
+      } catch (error) {
+        console.error("Error fetching professions data:", error);
+      }
+    };
+
+    fetchProfessionsData();
+  }, [selectedVillage]);
+
+  const handleOpenProfessionDialog = (person: FNode) => {
+    setSelectedPersonForProfession(person);
+    setSelectedProfession(null);
+    setNewProfessionName("");
+    setOpenProfessionDialog(true);
+  };
+
+  const handleCloseProfessionDialog = () => {
+    setOpenProfessionDialog(false);
+    setSelectedPersonForProfession(null);
+    setSelectedProfession(null);
+    setNewProfessionName("");
+    setProfessionSearchInput("");
+  };
+
+  const handleAddProfession = async () => {
+    if (!selectedPersonForProfession || !selectedProfession) {
+      alert("Please select a profession");
+      return;
+    }
 
     try {
-      const peopleRef = collection(db, "people");
-      const searchTerm = formData.owner.toLowerCase();
-
-      // Use orderBy with startAt and endAt for case-insensitive search on name_lowercase
-      // Also filter by villageId to scope results to the selected village
-      const q = query(
-        peopleRef,
-        where("villageId", "==", selectedVillage),
-        orderBy("name_lowercase"),
-        startAt(searchTerm),
-        endAt(searchTerm + "\uf8ff"),
+      await SupabaseService.addProfessionToPerson(
+        selectedPersonForProfession.id,
+        selectedProfession.id,
       );
 
-      const snapshot = await getDocs(q);
-      const peopleList: FNode[] = [];
+      // Refresh professions data
+      const updatedProfs = await SupabaseService.getPeopleProfileasons(
+        selectedPersonForProfession.id,
+      );
+      setPeopleWithProfessions((prev) =>
+        prev.map((item) =>
+          item.person.id === selectedPersonForProfession.id
+            ? { ...item, professions: updatedProfs }
+            : item,
+        ),
+      );
 
-      snapshot.forEach((docSnapshot) => {
-        const person = { id: docSnapshot.id, ...docSnapshot.data() } as FNode;
-        peopleList.push(person);
-      });
-
-      // Fetch ALL people to build complete hierarchy
-      const allPeopleSnapshot = await getDocs(collection(db, "people"));
-      const allPeopleList: FNode[] = [];
-
-      allPeopleSnapshot.forEach((docSnapshot) => {
-        const person = { id: docSnapshot.id, ...docSnapshot.data() } as FNode;
-        allPeopleList.push(person);
-      });
-
-      // Compute hierarchy for filtered people using all people data
-      const peopleWithHierarchy = peopleList.map((person) => ({
-        ...person,
-        hierarchy: getNodeHierarchy(person.id, allPeopleList),
-      }));
-
-      setPeople(peopleWithHierarchy);
+      handleCloseProfessionDialog();
     } catch (error) {
-      console.error("Error searching people:", error);
-      setPeople([]);
+      console.error("Error adding profession:", error);
+      alert("Error adding profession");
+    }
+  };
+
+  const handleRemoveProfession = async (
+    personId: string,
+    professionId: string,
+  ) => {
+    try {
+      await SupabaseService.removeProfessionFromPerson(personId, professionId);
+
+      // Refresh professions data
+      const updatedProfs =
+        await SupabaseService.getPeopleProfileasons(personId);
+      setPeopleWithProfessions((prev) =>
+        prev.map((item) =>
+          item.person.id === personId
+            ? { ...item, professions: updatedProfs }
+            : item,
+        ),
+      );
+    } catch (error) {
+      console.error("Error removing profession:", error);
+      alert("Error removing profession");
+    }
+  };
+
+  const handleCreateNewProfession = async () => {
+    if (!newProfessionName.trim()) {
+      alert("Please enter a profession name");
+      return;
+    }
+
+    try {
+      const newProf = await SupabaseService.createProfession({
+        name: newProfessionName,
+        category: "General",
+      });
+
+      setProfessions((prev) => [...prev, newProf]);
+      setSelectedProfession(newProf);
+      setNewProfessionName("");
+    } catch (error) {
+      console.error("Error creating profession:", error);
+      alert("Error creating profession");
     }
   };
 
@@ -363,13 +538,6 @@ export const BusinessPage: React.FC = () => {
   const handleOpenDialog = (business?: Business) => {
     if (business) {
       setEditingBusiness(business);
-      // Find and set the selected owner if ownerId exists
-      if (business.ownerId) {
-        const owner = people.find((p) => p.id === business.ownerId);
-        setSelectedOwner(owner || null);
-      } else {
-        setSelectedOwner(null);
-      }
       setFormData({
         name: business.name,
         category: business.category,
@@ -434,23 +602,47 @@ export const BusinessPage: React.FC = () => {
 
     setSubmitting(true);
     try {
+      const businessData = {
+        name: formData.name,
+        category: formData.category,
+        description: formData.description,
+        people_id: formData.ownerId || null,
+        contact: formData.contact || null,
+      };
+
       if (editingBusiness) {
         // Update existing business
-        const businessRef = doc(db, "businesses", editingBusiness.id);
-        await updateDoc(businessRef, {
-          ...formData,
-          updatedAt: serverTimestamp(),
-        });
+        await SupabaseService.updateBusiness(editingBusiness.id, businessData);
       } else {
         // Add new business
-        await addDoc(collection(db, "businesses"), {
-          ...formData,
-          villageId: selectedVillage,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        await SupabaseService.createBusiness(businessData);
       }
       handleCloseDialog();
+
+      // Refresh businesses list
+      const allBusinesses = await SupabaseService.getAllBusinesses();
+      const filteredBusinesses = allBusinesses.filter((business) => {
+        if (business.people && business.people.tree_id === selectedVillage) {
+          return true;
+        }
+        return false;
+      });
+
+      const businessList: Business[] = filteredBusinesses.map((business) => ({
+        id: business.id,
+        name: business.name,
+        category: business.category || "",
+        description: business.description || "",
+        owner: business.people?.name || "",
+        ownerId: business.people_id || "",
+        ownerName: business.people?.name || "",
+        contact: business.contact || "",
+        villageId: selectedVillage,
+        createdAt: business.created_at,
+        updatedAt: business.modified_at,
+      }));
+
+      setBusinesses(businessList);
     } catch (error) {
       console.error("Error saving business:", error);
       alert("Error saving business. Please try again.");
@@ -462,7 +654,31 @@ export const BusinessPage: React.FC = () => {
   const handleDelete = async (businessId: string) => {
     if (window.confirm("Are you sure you want to delete this business?")) {
       try {
-        await deleteDoc(doc(db, "businesses", businessId));
+        await SupabaseService.deleteBusiness(businessId);
+        // Refresh businesses list
+        const allBusinesses = await SupabaseService.getAllBusinesses();
+        const filteredBusinesses = allBusinesses.filter((business) => {
+          if (business.people && business.people.tree_id === selectedVillage) {
+            return true;
+          }
+          return false;
+        });
+
+        const businessList: Business[] = filteredBusinesses.map((business) => ({
+          id: business.id,
+          name: business.name,
+          category: business.category || "",
+          description: business.description || "",
+          owner: business.people?.name || "",
+          ownerId: business.people_id || "",
+          ownerName: business.people?.name || "",
+          contact: business.contact || "",
+          villageId: selectedVillage,
+          createdAt: business.created_at,
+          updatedAt: business.modified_at,
+        }));
+
+        setBusinesses(businessList);
       } catch (error) {
         console.error("Error deleting business:", error);
         alert("Error deleting business. Please try again.");
@@ -718,7 +934,15 @@ export const BusinessPage: React.FC = () => {
                           >
                             <PersonIcon sx={{ fontSize: 18, color: "#666" }} />
                             <Typography variant="body2">
-                              <strong>Owner:</strong> {business.owner}
+                              <strong>Owner:</strong>{" "}
+                              {business.ownerId && business.treeId ? (
+                                <OwnerLink
+                                  business={business}
+                                  onNavigate={navigate}
+                                />
+                              ) : (
+                                business.owner
+                              )}
                             </Typography>
                           </Box>
                           {business.contact && (
@@ -857,6 +1081,292 @@ export const BusinessPage: React.FC = () => {
 
             <Divider sx={{ my: 6 }} />
 
+            {/* Professions & Occupations */}
+            <Box sx={{ mb: 8 }}>
+              <Stack
+                direction="row"
+                justifyContent="center"
+                alignItems="center"
+                spacing={2}
+                sx={{ mb: 6 }}
+              >
+                <Typography
+                  variant="h4"
+                  gutterBottom
+                  sx={{ textAlign: "center", fontWeight: 700, mb: 0 }}
+                >
+                  Professions & Occupations
+                </Typography>
+                {isAdmin() && (
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<AddIcon />}
+                    sx={{
+                      background: "linear-gradient(135deg, #0066cc, #00cc99)",
+                    }}
+                    onClick={() => {
+                      // Open profession dialog for selecting a person
+                      setSelectedPersonForProfession(null);
+                      setSelectedProfession(null);
+                      setNewProfessionName("");
+                      setOpenProfessionDialog(true);
+                    }}
+                  >
+                    Add Profession
+                  </Button>
+                )}
+              </Stack>
+
+              <Typography variant="body1" sx={{ mb: 4, textAlign: "center" }}>
+                Browse the professions and occupations of our family members
+              </Typography>
+
+              {peopleWithProfessions.length > 0 ? (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      sm: "1fr 1fr",
+                      md: "repeat(3, 1fr)",
+                    },
+                    gap: 2,
+                  }}
+                >
+                  {peopleWithProfessions.map((item) => (
+                    <Card
+                      key={item.person.id}
+                      sx={{
+                        p: 2,
+                        transition: "transform 0.2s, boxShadow 0.2s",
+                        "&:hover": {
+                          transform: "translateY(-4px)",
+                          boxShadow: 3,
+                        },
+                      }}
+                    >
+                      <Stack spacing={2}>
+                        <Box>
+                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                            {item.person.name}
+                          </Typography>
+                        </Box>
+
+                        <Box>
+                          {item.professions.length > 0 ? (
+                            <Box>
+                              <Typography
+                                variant="subtitle2"
+                                sx={{ mb: 1, fontWeight: 600 }}
+                              >
+                                Professions:
+                              </Typography>
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                sx={{ flexWrap: "wrap" }}
+                              >
+                                {item.professions.map((prof) => (
+                                  <Chip
+                                    key={prof.id}
+                                    label={prof.name}
+                                    onDelete={
+                                      isAdmin()
+                                        ? () =>
+                                            handleRemoveProfession(
+                                              item.person.id,
+                                              prof.id,
+                                            )
+                                        : undefined
+                                    }
+                                    variant="outlined"
+                                    size="small"
+                                  />
+                                ))}
+                              </Stack>
+                            </Box>
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              sx={{ color: "text.secondary" }}
+                            >
+                              No professions added yet
+                            </Typography>
+                          )}
+                        </Box>
+
+                        {isAdmin() && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={() =>
+                              handleOpenProfessionDialog(item.person)
+                            }
+                            startIcon={<AddIcon />}
+                          >
+                            Add Profession
+                          </Button>
+                        )}
+                      </Stack>
+                    </Card>
+                  ))}
+                </Box>
+              ) : (
+                <Paper sx={{ p: 3, textAlign: "center" }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No people data available
+                  </Typography>
+                </Paper>
+              )}
+            </Box>
+
+            <Divider sx={{ my: 6 }} />
+
+            {/* Professions Categories with People */}
+            {professionsWithCount.length > 0 && (
+              <Box sx={{ mb: 8 }}>
+                <Typography
+                  variant="h4"
+                  gutterBottom
+                  sx={{ textAlign: "center", fontWeight: 700, mb: 6 }}
+                >
+                  Professions Directory
+                </Typography>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: {
+                      xs: "1fr",
+                      sm: "1fr 1fr",
+                      md: "1fr 1fr 1fr",
+                    },
+                    gap: 3,
+                  }}
+                >
+                  {professionsWithCount.map((professionData: any) => {
+                    // Group people by profession
+                    const peopleInProfession = professionData.people || [];
+
+                    return (
+                      <Card
+                        key={professionData.profession_id}
+                        sx={{
+                          height: "100%",
+                          transition: "transform 0.3s, boxShadow 0.3s",
+                          "&:hover": {
+                            transform: "translateY(-8px)",
+                            boxShadow: 4,
+                          },
+                        }}
+                      >
+                        <CardContent>
+                          <Typography
+                            variant="h6"
+                            gutterBottom
+                            sx={{ fontWeight: 700, mb: 2 }}
+                          >
+                            {professionData.profession_name}
+                          </Typography>
+                          {professionData.profession_description && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              paragraph
+                              sx={{ minHeight: 40, mb: 2 }}
+                            >
+                              {professionData.profession_description}
+                            </Typography>
+                          )}
+                          <Stack spacing={1}>
+                            {peopleInProfession.map((person: any) => {
+                              const hierarchyText =
+                                person.parent_hierarchy &&
+                                person.parent_hierarchy.length > 0
+                                  ? person.parent_hierarchy
+                                      .slice(-5)
+                                      .map((a: any) => a.name)
+                                      .join(" → ")
+                                  : "No ancestry data";
+
+                              const tooltipContent = (
+                                <Box sx={{ p: 1 }}>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{ fontWeight: 600 }}
+                                  >
+                                    {person.person_name}
+                                  </Typography>
+                                  {person.caste_name && (
+                                    <Typography
+                                      variant="caption"
+                                      display="block"
+                                    >
+                                      Caste: {person.caste_name}
+                                    </Typography>
+                                  )}
+                                  {person.sub_caste_name && (
+                                    <Typography
+                                      variant="caption"
+                                      display="block"
+                                    >
+                                      Sub-Caste: {person.sub_caste_name}
+                                    </Typography>
+                                  )}
+                                  <Typography
+                                    variant="caption"
+                                    display="block"
+                                    sx={{ mt: 1 }}
+                                  >
+                                    🧬 {hierarchyText}
+                                  </Typography>
+                                </Box>
+                              );
+
+                              return (
+                                <Tooltip
+                                  key={person.person_id}
+                                  title={tooltipContent}
+                                >
+                                  <Box
+                                    onClick={() =>
+                                      navigate(
+                                        `/families?treeId=${person.tree_id}`,
+                                      )
+                                    }
+                                    sx={{
+                                      p: 1.5,
+                                      bgcolor: "#f5f5f5",
+                                      borderRadius: 1,
+                                      cursor: "pointer",
+                                      color: "#0066cc",
+                                      textDecoration: "underline",
+                                      transition: "all 0.2s",
+                                      "&:hover": {
+                                        bgcolor: "#e3f2fd",
+                                        fontWeight: 600,
+                                        transform: "translateX(4px)",
+                                      },
+                                    }}
+                                  >
+                                    <Typography variant="body2">
+                                      {person.person_name}
+                                    </Typography>
+                                  </Box>
+                                </Tooltip>
+                              );
+                            })}
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+
+            <Divider sx={{ my: 6 }} />
+
             {/* How to Get Listed */}
             <Box sx={{ mb: 8 }}>
               <Card elevation={3} sx={{ p: 4, bgcolor: "#f0f8ff" }}>
@@ -967,119 +1477,23 @@ export const BusinessPage: React.FC = () => {
               placeholder="Describe what your business does"
             />
 
-            <Box sx={{ position: "relative", width: "100%" }}>
-              <Stack
-                direction="row"
-                spacing={1}
-                sx={{ alignItems: "center", width: "100%" }}
-              >
-                <TextField
-                  label="Owner Name"
-                  name="owner"
-                  value={formData.owner}
-                  onChange={handleFormChange}
-                  fullWidth
-                  placeholder="Enter owner name and search"
-                  size="medium"
-                />
-                <Button
-                  variant="contained"
-                  onClick={handleSearchOwner}
-                  sx={{
-                    height: 56,
-                    minWidth: 100,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Search
-                </Button>
-              </Stack>
-
-              {/* Search Results Dropdown */}
-              {people && people.length > 0 && (
-                <Paper
-                  sx={{
-                    mt: 1,
-                    maxHeight: 300,
-                    overflow: "auto",
-                    border: "1px solid #ddd",
-                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-                  }}
-                >
-                  {people.map((person) => (
-                    <Box
-                      key={person.id}
-                      onClick={() => {
-                        setSelectedOwner(person);
-                        setFormData((prev) => ({
-                          ...prev,
-                          owner: person.name || "",
-                          ownerId: person.id,
-                        }));
-                        setPeople([]);
-                      }}
-                      sx={{
-                        p: 2,
-                        borderBottom: "1px solid #eee",
-                        cursor: "pointer",
-                        backgroundColor: "#fff",
-                        transition: "backgroundColor 0.2s",
-                        "&:hover": { backgroundColor: "#f5f5f5" },
-                        "&:last-child": { borderBottom: "none" },
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {person.name}
-                      </Typography>
-                      {person.hierarchy && person.hierarchy.length > 0 && (
-                        <Typography
-                          variant="caption"
-                          sx={{ color: "#666", display: "block", mt: 0.5 }}
-                        >
-                          {person.hierarchy
-                            .slice(-5)
-                            .map((a) => a.name)
-                            .join(" → ")}
-                        </Typography>
-                      )}
-                    </Box>
-                  ))}
-                </Paper>
-              )}
-
-              {/* No Results Message */}
-              {searchPerformed && people && people.length === 0 && (
-                <Paper
-                  sx={{
-                    mt: 1,
-                    p: 2,
-                    backgroundColor: "#f0f8ff",
-                    border: "1px solid #ddd",
-                    textAlign: "center",
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    No people found with name "{formData.owner}"
-                  </Typography>
-                  <Typography variant="caption" sx={{ display: "block" }}>
-                    Please{" "}
-                    <Typography
-                      component="a"
-                      href="/families"
-                      sx={{
-                        color: "#0066cc",
-                        textDecoration: "none",
-                        fontWeight: 500,
-                        "&:hover": { textDecoration: "underline" },
-                      }}
-                    >
-                      build the family tree first
-                    </Typography>{" "}
-                    to add people.
-                  </Typography>
-                </Paper>
-              )}
-            </Box>
+            <PersonSearchField
+              label="Owner Name"
+              placeholder="Enter owner name and search"
+              searchValue={formData.owner}
+              onSearchValueChange={(value) =>
+                setFormData((prev) => ({ ...prev, owner: value }))
+              }
+              onPersonSelect={(person) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  owner: person.name || "",
+                  ownerId: person.id,
+                }));
+              }}
+              selectedPerson={people.length > 0 ? people[0] : null}
+              villageId={selectedVillage}
+            />
 
             <TextField
               label="Contact Number"
@@ -1108,6 +1522,98 @@ export const BusinessPage: React.FC = () => {
                     : "Add Business"}
               </Button>
             </Stack>
+          </Stack>
+        </Box>
+      </Dialog>
+
+      {/* Professions Dialog */}
+      <Dialog
+        open={openProfessionDialog}
+        onClose={handleCloseProfessionDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Add Profession to{" "}
+            {selectedPersonForProfession?.name || "Family Member"}
+          </Typography>
+
+          <PersonSearchField
+            label="Select Person"
+            placeholder="Search person by name"
+            searchValue={professionSearchInput}
+            onSearchValueChange={(value) => {
+              setProfessionSearchInput(value);
+              if (!value) {
+                setSelectedPersonForProfession(null);
+              }
+            }}
+            onPersonSelect={(person) => {
+              setSelectedPersonForProfession(person as FNode);
+              setProfessionSearchInput(person.name);
+            }}
+            selectedPerson={selectedPersonForProfession}
+            villageId={selectedVillage}
+          />
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Select Profession</InputLabel>
+            <Select
+              value={selectedProfession?.id || ""}
+              label="Select Profession"
+              onChange={(e) => {
+                const prof = professions.find((p) => p.id === e.target.value);
+                setSelectedProfession(prof || null);
+              }}
+            >
+              {professions.map((prof) => (
+                <MenuItem key={prof.id} value={prof.id}>
+                  {prof.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Box sx={{ border: "1px solid #ddd", p: 2, mb: 2, borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Or Create New Profession
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                placeholder="New profession name..."
+                value={newProfessionName}
+                onChange={(e) => setNewProfessionName(e.target.value)}
+                size="small"
+                fullWidth
+              />
+              <Button
+                variant="outlined"
+                onClick={handleCreateNewProfession}
+                sx={{ whiteSpace: "nowrap" }}
+              >
+                Create
+              </Button>
+            </Stack>
+          </Box>
+
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              onClick={handleCloseProfessionDialog}
+              fullWidth
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleAddProfession}
+              disabled={!selectedProfession || !selectedPersonForProfession}
+              fullWidth
+              sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
+            >
+              Add Profession
+            </Button>
           </Stack>
         </Box>
       </Dialog>

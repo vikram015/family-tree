@@ -1,28 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { auth, db } from "../../firebase";
-import {
-  signOut,
-  onAuthStateChanged,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
-} from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { supabase } from "../../supabase";
 import { AppUser, UserRole } from "../model/User";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
   currentUser: any;
   userProfile: AppUser | null;
   loading: boolean;
-  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
-  signInWithPhone: (
-    phoneNumber: string,
-    recaptchaVerifier: RecaptchaVerifier
-  ) => Promise<ConfirmationResult>;
-  verifyOtp: (
-    confirmationResult: ConfirmationResult,
-    otp: string
-  ) => Promise<void>;
+  signInWithPhone: (phoneNumber: string) => Promise<void>;
+  verifyOtp: (otp: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (requiredRole?: UserRole, villageId?: string) => boolean;
   isSuperAdmin: () => boolean;
@@ -40,73 +26,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  let confirmationSession: Session | null = null;
 
-  // Setup reCAPTCHA for phone authentication (singleton per page)
-  function setupRecaptcha(containerId: string): RecaptchaVerifier {
-    // Reuse existing verifier if present
-    const existing = (window as any).recaptchaVerifier as
-      | RecaptchaVerifier
-      | undefined;
-    if (existing) return existing;
-
-    const container = document.getElementById(containerId);
-    if (!container) {
-      throw new Error(`reCAPTCHA container '${containerId}' not found`);
-    }
-
-    const verifier = new RecaptchaVerifier(auth, containerId, {
-      size: "invisible",
-      callback: () => {
-        console.log("reCAPTCHA solved");
-      },
+  // Sign in with phone number - sends OTP
+  async function signInWithPhone(phoneNumber: string): Promise<void> {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      phone: phoneNumber,
     });
 
-    (window as any).recaptchaVerifier = verifier;
-    return verifier;
-  }
+    if (error) {
+      throw new Error(error.message);
+    }
 
-  // Sign in with phone number
-  async function signInWithPhone(
-    phoneNumber: string,
-    recaptchaVerifier: RecaptchaVerifier
-  ): Promise<ConfirmationResult> {
-    return signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+    confirmationSession = data.session;
+    console.log("OTP sent to", phoneNumber);
   }
 
   // Verify OTP and complete sign in
-  async function verifyOtp(
-    confirmationResult: ConfirmationResult,
-    otp: string
-  ): Promise<void> {
-    const result = await confirmationResult.confirm(otp);
-    const user = result.user;
+  async function verifyOtp(otp: string): Promise<void> {
+    if (!confirmationSession?.user.phone) {
+      throw new Error("No phone number in session");
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: confirmationSession.user.phone,
+      token: otp,
+      type: "sms",
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const user = data.user;
+
+    if (!user) {
+      throw new Error("No user returned from verification");
+    }
 
     // Check if user profile exists, if not create one with default admin role
-    const userRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userRef);
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("*")
+      .eq("uid", user.id)
+      .single();
 
-    if (!userSnap.exists()) {
+    if (!existingUser) {
       // Create new user profile with admin role by default
-      // SuperAdmin needs to be set manually in Firestore or by another SuperAdmin
       const newUserProfile: Omit<AppUser, "uid"> = {
-        phoneNumber: user.phoneNumber || "",
+        phoneNumber: user.phone || "",
         role: "admin",
-        villages: [], // Empty by default, SuperAdmin will assign villages
-        displayName: user.phoneNumber || "",
+        villages: [],
+        displayName: user.phone || "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      await setDoc(userRef, newUserProfile);
-      setUserProfile({ ...newUserProfile, uid: user.uid });
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert([{ uid: user.id, ...newUserProfile }]);
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      setUserProfile({ ...newUserProfile, uid: user.id });
     } else {
-      setUserProfile({ uid: user.uid, ...userSnap.data() } as AppUser);
+      setUserProfile({ uid: user.id, ...existingUser } as AppUser);
     }
   }
 
   async function logout() {
     setUserProfile(null);
-    return signOut(auth);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      throw new Error(error.message);
+    }
   }
 
   // Permission checks
@@ -144,16 +139,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
+    // Subscribe to auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const user = session?.user;
+      setCurrentUser(user || null);
 
       if (user) {
-        // Fetch user profile from Firestore
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
+        // Fetch user profile from Supabase
+        const { data: userProfile } = await supabase
+          .from("users")
+          .select("*")
+          .eq("uid", user.id)
+          .single();
 
-        if (userSnap.exists()) {
-          setUserProfile({ uid: user.uid, ...userSnap.data() } as AppUser);
+        if (userProfile) {
+          setUserProfile({ uid: user.id, ...userProfile } as AppUser);
         }
       } else {
         setUserProfile(null);
@@ -162,14 +164,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const value: AuthContextType = {
     currentUser,
     userProfile,
     loading,
-    setupRecaptcha,
     signInWithPhone,
     verifyOtp,
     logout,
