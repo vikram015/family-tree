@@ -38,8 +38,22 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
-import { useVillage } from "../context/VillageContext";
-import { useAuth } from "../context/AuthContext";
+import { useVillage } from "../hooks/useVillage";
+import { useAuth } from "../hooks/useAuth";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  fetchBusinessesByVillage,
+  selectBusinesses,
+  selectBusinessLoading,
+  clearBusinesses,
+} from "../../store/slices/businessSlice";
+import {
+  fetchProfessionsData,
+  selectProfessions,
+  selectPeopleWithProfessions,
+  selectProfessionsWithCount,
+  clearProfessions,
+} from "../../store/slices/professionSlice";
 import { SupabaseService } from "../../services/supabaseService";
 import { PersonSearchField } from "./PersonSearchField";
 import { FNode } from "../model/FNode";
@@ -78,11 +92,6 @@ interface Profession {
   name: string;
   description?: string;
   category?: string;
-}
-
-interface PersonWithProfessions {
-  person: FNode;
-  professions: Profession[];
 }
 
 interface PersonSearchResult {
@@ -152,17 +161,20 @@ const OwnerLink: React.FC<{
 
 export const BusinessPage: React.FC = () => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { selectedVillage, villages } = useVillage();
   const { isAdmin } = useAuth();
-  const [businesses, setBusinesses] = useState<Business[]>([]);
+
+  // Redux state
+  const businesses = useAppSelector(selectBusinesses);
+  const loading = useAppSelector(selectBusinessLoading);
+  const professions = useAppSelector(selectProfessions);
+  const peopleWithProfessions = useAppSelector(selectPeopleWithProfessions);
+  const professionsWithCount = useAppSelector(selectProfessionsWithCount);
+
+  // Local component state
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
   const [people, setPeople] = useState<PersonSearchResult[]>([]);
-  const [professions, setProfessions] = useState<Profession[]>([]);
-  const [peopleWithProfessions, setPeopleWithProfessions] = useState<
-    PersonWithProfessions[]
-  >([]);
-  const [professionsWithCount, setProfessionsWithCount] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
@@ -256,154 +268,28 @@ export const BusinessPage: React.FC = () => {
     initializeCategories();
   }, []);
 
+  // Fetch businesses when village changes - dispatches Redux action
   useEffect(() => {
     if (!selectedVillage) {
-      setLoading(false);
-      setBusinesses([]);
+      dispatch(clearBusinesses());
       return;
     }
 
-    setLoading(true);
+    dispatch(fetchBusinessesByVillage(selectedVillage));
+  }, [selectedVillage, dispatch]);
 
-    const fetchBusinesses = async () => {
-      try {
-        console.log(
-          "BusinessPage: Starting to fetch businesses for village:",
-          selectedVillage,
-        );
-        const businessesWithHierarchy =
-          await SupabaseService.getBusinessesByVillageWithHierarchy(
-            selectedVillage,
-          );
-
-        console.log(
-          "BusinessPage: Businesses fetched:",
-          businessesWithHierarchy,
-        );
-        const businessList: Business[] = businessesWithHierarchy.map(
-          (business) => ({
-            id: business.business_id,
-            name: business.business_name,
-            category: business.business_category || "",
-            description: business.business_description || "",
-            owner: business.person_name || "",
-            ownerId: business.person_id || "",
-            ownerName: business.person_name || "",
-            contact: business.business_contact || "",
-            villageId: selectedVillage,
-            treeId: business.tree_id || "",
-            gender: business.person_gender || "",
-            dob: business.person_dob || "",
-            hierarchy: business.parent_hierarchy || [],
-            casteName: business.caste_name || "",
-            subCasteName: business.sub_caste_name || "",
-            createdAt: business.business_created_at,
-            updatedAt: business.business_created_at,
-          }),
-        );
-
-        console.log("BusinessPage: Mapped business list:", businessList);
-        setBusinesses(businessList);
-        setLoading(false);
-      } catch (error) {
-        console.error("BusinessPage: Error fetching businesses:", error);
-        setLoading(false);
-      }
-    };
-
-    fetchBusinesses();
-  }, [selectedVillage]);
-
-  // Fetch professions and people with their professions
+  // Fetch professions and people with their professions - dispatches Redux action
   useEffect(() => {
     if (!selectedVillage) {
-      setProfessions([]);
-      setPeopleWithProfessions([]);
-      setProfessionsWithCount([]);
+      dispatch(clearProfessions());
       return;
     }
 
-    const fetchProfessionsData = async () => {
-      try {
-        // Fetch all professions for the select dropdown
-        const allProfessions = await SupabaseService.getAllProfessions();
-        setProfessions(allProfessions);
-
-        // Single efficient call: Fetch professions with people and hierarchy for the village
-        const profsWithPeopleData =
-          await SupabaseService.getProfessionsByVillage(selectedVillage);
-
-        // Transform data for professions display
-        setProfessionsWithCount(profsWithPeopleData);
-
-        // Extract all people from the professions data to populate allPeople
-        const uniquePeople = new Map<string, FNode>();
-        profsWithPeopleData.forEach((prof: any) => {
-          prof.people?.forEach((person: any) => {
-            if (!uniquePeople.has(person.person_id)) {
-              uniquePeople.set(person.person_id, {
-                id: person.person_id,
-                name: person.person_name,
-                gender: person.gender,
-                dob: person.person_dob || "",
-                treeId: person.tree_id,
-                parents: [] as any,
-                children: [] as any,
-                siblings: [] as any,
-                spouses: [] as any,
-                top: 0,
-                left: 0,
-                hasSubTree: false,
-              } as unknown as FNode);
-            }
-          });
-        });
-
-        // Transform professions data to peopleWithProfessions format
-        const peopleProfsMap = new Map<string, PersonWithProfessions>();
-        profsWithPeopleData.forEach((prof: any) => {
-          prof.people?.forEach((person: any) => {
-            const personKey = person.person_id;
-            if (!peopleProfsMap.has(personKey)) {
-              peopleProfsMap.set(personKey, {
-                person: {
-                  id: person.person_id,
-                  name: person.person_name,
-                  gender: person.gender,
-                  dob: person.person_dob || "",
-                  treeId: person.tree_id,
-                  parents: [] as any,
-                  children: [] as any,
-                  siblings: [] as any,
-                  spouses: [] as any,
-                  top: 0,
-                  left: 0,
-                  hasSubTree: false,
-                } as unknown as FNode,
-                professions: [],
-              });
-            }
-            peopleProfsMap.get(personKey)!.professions.push({
-              id: prof.profession_id,
-              name: prof.profession_name,
-              description: prof.profession_description,
-              category: prof.profession_category,
-            });
-          });
-        });
-        setPeopleWithProfessions(Array.from(peopleProfsMap.values()));
-      } catch (error) {
-        console.error("Error fetching professions data:", error);
-      }
-    };
-
-    fetchProfessionsData();
-  }, [selectedVillage]);
+    dispatch(fetchProfessionsData(selectedVillage));
+  }, [selectedVillage, dispatch]);
 
   const handleOpenProfessionDialog = (person: FNode) => {
     setSelectedPersonForProfession(person);
-    setSelectedProfession(null);
-    setNewProfessionName("");
     setOpenProfessionDialog(true);
   };
 
@@ -427,22 +313,14 @@ export const BusinessPage: React.FC = () => {
         selectedProfession.id,
       );
 
-      // Refresh professions data
-      const updatedProfs = await SupabaseService.getPeopleProfileasons(
-        selectedPersonForProfession.id,
-      );
-      setPeopleWithProfessions((prev) =>
-        prev.map((item) =>
-          item.person.id === selectedPersonForProfession.id
-            ? { ...item, professions: updatedProfs }
-            : item,
-        ),
-      );
-
+      // Refresh professions data by dispatching Redux action
+      if (selectedVillage) {
+        dispatch(fetchProfessionsData(selectedVillage));
+      }
       handleCloseProfessionDialog();
     } catch (error) {
       console.error("Error adding profession:", error);
-      alert("Error adding profession");
+      alert("Error adding profession. Please try again.");
     }
   };
 
@@ -453,16 +331,10 @@ export const BusinessPage: React.FC = () => {
     try {
       await SupabaseService.removeProfessionFromPerson(personId, professionId);
 
-      // Refresh professions data
-      const updatedProfs =
-        await SupabaseService.getPeopleProfileasons(personId);
-      setPeopleWithProfessions((prev) =>
-        prev.map((item) =>
-          item.person.id === personId
-            ? { ...item, professions: updatedProfs }
-            : item,
-        ),
-      );
+      // Refresh professions data by dispatching Redux action
+      if (selectedVillage) {
+        dispatch(fetchProfessionsData(selectedVillage));
+      }
     } catch (error) {
       console.error("Error removing profession:", error);
       alert("Error removing profession");
@@ -481,7 +353,10 @@ export const BusinessPage: React.FC = () => {
         category: "General",
       });
 
-      setProfessions((prev) => [...prev, newProf]);
+      // Refresh professions data by dispatching Redux action
+      if (selectedVillage) {
+        dispatch(fetchProfessionsData(selectedVillage));
+      }
       setSelectedProfession(newProf);
       setNewProfessionName("");
     } catch (error) {
@@ -600,30 +475,10 @@ export const BusinessPage: React.FC = () => {
       }
       handleCloseDialog();
 
-      // Refresh businesses list
-      const allBusinesses = await SupabaseService.getAllBusinesses();
-      const filteredBusinesses = allBusinesses.filter((business) => {
-        if (business.people && business.people.tree_id === selectedVillage) {
-          return true;
-        }
-        return false;
-      });
-
-      const businessList: Business[] = filteredBusinesses.map((business) => ({
-        id: business.id,
-        name: business.name,
-        category: business.category || "",
-        description: business.description || "",
-        owner: business.people?.name || "",
-        ownerId: business.people_id || "",
-        ownerName: business.people?.name || "",
-        contact: business.contact || "",
-        villageId: selectedVillage,
-        createdAt: business.created_at,
-        updatedAt: business.modified_at,
-      }));
-
-      setBusinesses(businessList);
+      // Refresh businesses list by dispatching Redux action
+      if (selectedVillage) {
+        dispatch(fetchBusinessesByVillage(selectedVillage));
+      }
     } catch (error) {
       console.error("Error saving business:", error);
       alert("Error saving business. Please try again.");
@@ -636,30 +491,10 @@ export const BusinessPage: React.FC = () => {
     if (window.confirm("Are you sure you want to delete this business?")) {
       try {
         await SupabaseService.deleteBusiness(businessId);
-        // Refresh businesses list
-        const allBusinesses = await SupabaseService.getAllBusinesses();
-        const filteredBusinesses = allBusinesses.filter((business) => {
-          if (business.people && business.people.tree_id === selectedVillage) {
-            return true;
-          }
-          return false;
-        });
-
-        const businessList: Business[] = filteredBusinesses.map((business) => ({
-          id: business.id,
-          name: business.name,
-          category: business.category || "",
-          description: business.description || "",
-          owner: business.people?.name || "",
-          ownerId: business.people_id || "",
-          ownerName: business.people?.name || "",
-          contact: business.contact || "",
-          villageId: selectedVillage,
-          createdAt: business.created_at,
-          updatedAt: business.modified_at,
-        }));
-
-        setBusinesses(businessList);
+        // Refresh businesses list by dispatching Redux action
+        if (selectedVillage) {
+          dispatch(fetchBusinessesByVillage(selectedVillage));
+        }
       } catch (error) {
         console.error("Error deleting business:", error);
         alert("Error deleting business. Please try again.");

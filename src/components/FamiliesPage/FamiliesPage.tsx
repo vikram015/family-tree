@@ -19,7 +19,7 @@ import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
 import AddNode from "../AddNode/AddNode";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 
 interface FamiliesPageProps {
   treeId: string;

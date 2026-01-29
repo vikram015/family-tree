@@ -18,7 +18,7 @@ import PublicIcon from "@mui/icons-material/Public";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
-import { useVillage } from "../context/VillageContext";
+import { useVillage } from "../hooks/useVillage";
 import { supabase } from "../../supabase";
 
 interface HeritageData {

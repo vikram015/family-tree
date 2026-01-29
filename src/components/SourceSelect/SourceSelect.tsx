@@ -10,7 +10,7 @@ import {
   Typography,
   TextField,
 } from "@mui/material";
-import { useVillage } from "../context/VillageContext";
+import { useVillage } from "../hooks/useVillage";
 
 interface TreeItem {
   name: string;

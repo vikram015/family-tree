@@ -7,8 +7,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
-import { AuthProvider } from "../context/AuthContext";
-import { VillageProvider } from "../context/VillageContext";
+import { AuthInitializer } from "../AuthInitializer";
+import { VillageInitializer } from "../VillageInitializer";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 import { FamiliesPage } from "../FamiliesPage/FamiliesPage";
@@ -94,15 +94,15 @@ export default React.memo(function App() {
       <HelmetProvider>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <AuthProvider>
-            <VillageProvider>
+          <AuthInitializer>
+            <VillageInitializer>
               <LoginModalProvider>
                 <BrowserRouter>
                   <AppContent />
                 </BrowserRouter>
               </LoginModalProvider>
-            </VillageProvider>
-          </AuthProvider>
+            </VillageInitializer>
+          </AuthInitializer>
         </ThemeProvider>
       </HelmetProvider>
     );

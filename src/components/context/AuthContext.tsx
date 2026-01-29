@@ -48,11 +48,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Check if user profile exists, if not create one with default admin role
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: fetchError } = await supabase
       .from("users")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("Error fetching user profile:", fetchError);
+    }
 
     if (!existingUser) {
       // Create new user profile with admin role by default
@@ -99,11 +103,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Fetch user profile from Supabase
-    const { data: userProfileData } = await supabase
+    const { data: userProfileData, error: profileError } = await supabase
       .from("users")
       .select("*")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Error fetching user profile:", profileError);
+    }
 
     if (userProfileData) {
       setUserProfile({ id: user.id, ...userProfileData } as AppUser);
@@ -171,13 +179,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    let isMounted = true;
+
     // Check initial auth state
     const initAuth = async () => {
       try {
+        if (!isMounted) return;
+
         console.log("AuthProvider: Checking initial auth state");
         const {
           data: { session },
         } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
         console.log("AuthProvider: Initial session:", session?.user?.id);
 
         const user = session?.user;
@@ -185,13 +199,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (user) {
           // Fetch user profile from Supabase
-          const { data: userProfile } = await supabase
+          const { data: userProfile, error: profileError } = await supabase
             .from("users")
             .select("*")
             .eq("id", user.id)
-            .single();
+            .maybeSingle();
 
-          if (userProfile) {
+          if (!isMounted) return;
+
+          if (profileError) {
+            console.error(
+              "AuthProvider: Error fetching user profile:",
+              profileError,
+            );
+          } else if (userProfile) {
             console.log("AuthProvider: User profile loaded:", user.id);
             setUserProfile({ id: user.id, ...userProfile } as AppUser);
           } else {
@@ -203,10 +224,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error("AuthProvider: Error initializing auth:", error);
       } finally {
-        setLoading(false);
-        console.log(
-          "AuthProvider: Auth initialization complete, loading: false",
-        );
+        if (isMounted) {
+          setLoading(false);
+          console.log(
+            "AuthProvider: Auth initialization complete, loading: false",
+          );
+        }
       }
     };
 
@@ -217,6 +240,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
       console.log(
         "AuthProvider: Auth state changed, event:",
         event,
@@ -228,23 +253,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (user) {
         // Fetch user profile from Supabase
-        const { data: userProfile } = await supabase
+        const { data: userProfile, error: profileError } = await supabase
           .from("users")
           .select("*")
           .eq("id", user.id)
-          .single();
+          .maybeSingle();
 
-        if (userProfile) {
+        if (!isMounted) return;
+
+        if (profileError) {
+          console.error(
+            "AuthProvider: Error fetching user profile:",
+            profileError,
+          );
+        } else if (userProfile) {
           setUserProfile({ id: user.id, ...userProfile } as AppUser);
         }
       } else {
         setUserProfile(null);
       }
 
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
     return () => {
+      isMounted = false;
       subscription?.unsubscribe();
     };
   }, []);

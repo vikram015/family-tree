@@ -16,26 +16,37 @@ import {
   InputLabel,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
-import { useVillage } from "../context/VillageContext";
-import { useAuth } from "../context/AuthContext";
+import { useVillage } from "../hooks/useVillage";
+import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  fetchCastes,
+  fetchSubCastes,
+  selectCastes,
+  selectSubCastes,
+} from "../../store/slices/casteSlice";
 
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
 }
 
 export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
+  const dispatch = useAppDispatch();
+
+  // Redux state
+  const castes = useAppSelector(selectCastes);
+  const subCastes = useAppSelector(selectSubCastes);
+
+  // Local state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedCaste, setSelectedCaste] = useState<string>("");
   const [selectedSubCaste, setSelectedSubCaste] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [loadingData, setLoadingData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [castes, setCastes] = useState<any[]>([]);
-  const [subCastes, setSubCastes] = useState<any[]>([]);
   const { selectedVillage } = useVillage();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
@@ -43,41 +54,17 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   // Load castes when modal opens
   useEffect(() => {
     if (showModal && castes.length === 0) {
-      loadCastes();
+      dispatch(fetchCastes());
     }
-  }, [showModal, castes.length]);
+  }, [showModal, castes.length, dispatch]);
 
   // Load sub-castes when caste is selected
   useEffect(() => {
     if (selectedCaste) {
-      loadSubCastes(selectedCaste);
+      dispatch(fetchSubCastes(selectedCaste));
       setSelectedSubCaste(""); // Reset sub-caste when caste changes
-    } else {
-      setSubCastes([]);
-      setSelectedSubCaste("");
     }
-  }, [selectedCaste]);
-
-  const loadCastes = async () => {
-    try {
-      setLoadingData(true);
-      const data = await SupabaseService.getCastes();
-      setCastes(data);
-    } catch (err) {
-      console.error("Failed to load castes:", err);
-    } finally {
-      setLoadingData(false);
-    }
-  };
-
-  const loadSubCastes = async (casteId: string) => {
-    try {
-      const data = await SupabaseService.getSubCastes(casteId);
-      setSubCastes(data);
-    } catch (err) {
-      console.error("Failed to load sub-castes:", err);
-    }
-  };
+  }, [selectedCaste, dispatch]);
 
   const submit = async () => {
     setError(null);
@@ -157,7 +144,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
             variant="outlined"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            disabled={loading || loadingData}
+            disabled={loading}
             sx={{ mt: 1, mb: 2 }}
           />
 
@@ -171,7 +158,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
             rows={3}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            disabled={loading || loadingData}
+            disabled={loading}
             sx={{ mb: 2 }}
           />
 
@@ -183,7 +170,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
               value={selectedCaste}
               label="Caste (Optional)"
               onChange={(e) => setSelectedCaste(e.target.value)}
-              disabled={loading || loadingData}
+              disabled={loading}
             >
               <MenuItem value="">— None —</MenuItem>
               {castes.map((caste) => (
@@ -205,7 +192,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
                 value={selectedSubCaste}
                 label="Sub-Caste (Optional)"
                 onChange={(e) => setSelectedSubCaste(e.target.value)}
-                disabled={loading || loadingData}
+                disabled={loading}
               >
                 <MenuItem value="">— None —</MenuItem>
                 {subCastes.map((subCaste) => (
@@ -224,12 +211,12 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeModal} disabled={loading || loadingData}>
+          <Button onClick={closeModal} disabled={loading}>
             Cancel
           </Button>
           <Button
             onClick={submit}
-            disabled={!isValid || loading || loadingData}
+            disabled={!isValid || loading}
             variant="contained"
             startIcon={loading ? <CircularProgress size={20} /> : null}
           >

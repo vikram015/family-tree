@@ -31,8 +31,22 @@ import { Edit, Delete, Add } from "@mui/icons-material";
 import { supabase } from "../../supabase";
 import { SupabaseService } from "../../services/supabaseService";
 import { AppUser, UserRole } from "../model/User";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { formatDate } from "../../utils/dateFormatter";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  fetchStates,
+  fetchAllDistricts,
+  selectStates,
+  selectDistricts,
+} from "../../store/slices/locationSlice";
+import {
+  fetchCastes,
+  fetchAllSubCastes,
+  selectCastes,
+  selectSubCastes,
+} from "../../store/slices/casteSlice";
+import { fetchVillages, selectVillages } from "../../store/slices/villageSlice";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -57,7 +71,17 @@ function TabPanel(props: TabPanelProps) {
 }
 
 export const AdminManagement: React.FC = () => {
+  const dispatch = useAppDispatch();
   const { isSuperAdmin, userProfile } = useAuth();
+
+  // Redux state
+  const states = useAppSelector(selectStates);
+  const districts = useAppSelector(selectDistricts);
+  const villagesList = useAppSelector(selectVillages);
+  const castes = useAppSelector(selectCastes);
+  const subCastes = useAppSelector(selectSubCastes);
+
+  // Local component state
   const [users, setUsers] = useState<AppUser[]>([]);
   const [villages, setVillages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,13 +92,6 @@ export const AdminManagement: React.FC = () => {
   const [error, setError] = useState<string>("");
   const [tabValue, setTabValue] = useState(0);
 
-  // State management for hierarchy data
-  const [states, setStates] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [villagesList, setVillagesList] = useState<any[]>([]);
-  const [castes, setCastes] = useState<any[]>([]);
-  const [subCastes, setSubCastes] = useState<any[]>([]);
-
   // Add dialog states
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<
@@ -84,24 +101,7 @@ export const AdminManagement: React.FC = () => {
   const [selectedParentId, setSelectedParentId] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Debug effect to log when states changes
-  useEffect(() => {
-    console.log("States state updated:", states, "length:", states?.length);
-  }, [states]);
-
-  useEffect(() => {
-    const checkAccessAndLoad = async () => {
-      if (!isSuperAdmin()) {
-        setError("Access denied. Only superadmin can access this page.");
-        setLoading(false);
-        return;
-      }
-      await loadData();
-    };
-    checkAccessAndLoad();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
 
@@ -135,43 +135,32 @@ export const AdminManagement: React.FC = () => {
       setError("Failed to load data");
       setLoading(false);
     }
-  };
+  }, [dispatch]);
+
+  useEffect(() => {
+    const checkAccessAndLoad = async () => {
+      if (!isSuperAdmin()) {
+        setError("Access denied. Only superadmin can access this page.");
+        setLoading(false);
+        return;
+      }
+
+      await loadData();
+    };
+
+    checkAccessAndLoad();
+  }, [isSuperAdmin, loadData]);
 
   const loadHierarchyData = async () => {
     try {
-      console.log("Loading hierarchy data...");
-      console.log("SupabaseService methods:", {
-        hasGetStates: typeof SupabaseService.getStates,
-        hasGetDistricts: typeof SupabaseService.getDistricts,
-        hasGetVillages: typeof SupabaseService.getVillages,
-        hasGetCastes: typeof SupabaseService.getCastes,
-        hasGetSubCastes: typeof SupabaseService.getSubCastes,
-      });
-
-      const statesData = await SupabaseService.getStates();
-      console.log("States fetched:", statesData);
-
-      const districtsData = await SupabaseService.getDistricts();
-      console.log("Districts fetched:", districtsData);
-
-      const villagesData = await SupabaseService.getVillages();
-      console.log("Villages fetched:", villagesData);
-
-      const castesData = await SupabaseService.getCastes();
-      console.log("Castes fetched:", castesData);
-
-      const subCastesData = await SupabaseService.getSubCastes();
-      console.log("SubCastes fetched:", subCastesData);
-
-      console.log("All data fetched, now setting state...");
-
-      setStates(statesData || []);
-      setDistricts(districtsData || []);
-      setVillagesList(villagesData || []);
-      setCastes(castesData || []);
-      setSubCastes(subCastesData || []);
-
-      console.log("State setters called");
+      // Dispatch Redux actions to fetch all data
+      await Promise.all([
+        dispatch(fetchStates()),
+        dispatch(fetchAllDistricts()),
+        dispatch(fetchVillages()),
+        dispatch(fetchCastes()),
+        dispatch(fetchAllSubCastes()),
+      ]);
     } catch (err) {
       console.error("Error loading hierarchy data:", err);
     }

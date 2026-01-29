@@ -23,46 +23,24 @@ import PeopleIcon from "@mui/icons-material/People";
 import BusinessIcon from "@mui/icons-material/Business";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LocationCityIcon from "@mui/icons-material/LocationCity";
-import { SupabaseService } from "../../services/supabaseService";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  fetchDashboardStatistics,
+  selectStatistics,
+  selectStatisticsLoading,
+} from "../../store/slices/statisticsSlice";
 
 export const HomePage: React.FC = () => {
   console.log("HomePage: Rendering");
+  const dispatch = useAppDispatch();
   const [searchQuery, setSearchQuery] = useState("");
-  const [statistics, setStatistics] = useState<any>(null);
-  const [loadingStats, setLoadingStats] = useState(true);
+  const statistics = useAppSelector(selectStatistics);
+  const loadingStats = useAppSelector(selectStatisticsLoading);
 
+  // Dispatch Redux action to fetch statistics - no isMounted needed!
   useEffect(() => {
-    let isMounted = true;
-
-    const fetchStatistics = async () => {
-      try {
-        console.log("HomePage: Starting to fetch statistics");
-        const stats = await SupabaseService.getDashboardStatistics();
-
-        if (!isMounted) return;
-
-        console.log("HomePage: Statistics fetched:", stats);
-        setStatistics(stats);
-      } catch (error) {
-        console.error("HomePage: Error fetching statistics:", error);
-        if (isMounted) {
-          setStatistics(null);
-        }
-      } finally {
-        console.log("HomePage: Statistics fetch complete");
-        if (isMounted) {
-          setLoadingStats(false);
-        }
-      }
-    };
-
-    fetchStatistics();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
+    dispatch(fetchDashboardStatistics());
+  }, [dispatch]);
   const features = [
     {
       icon: <AccountTreeIcon sx={{ fontSize: 48, color: "#90C43C" }} />,

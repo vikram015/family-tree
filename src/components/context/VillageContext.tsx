@@ -42,6 +42,8 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
 
     const loadVillages = async () => {
       try {
+        if (!isMounted) return;
+
         console.log("VillageProvider: Starting to load villages");
         const villageData = await SupabaseService.getVillages();
 
