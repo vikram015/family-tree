@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { db } from "../../firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { supabase } from "../../supabase";
 import {
   Container,
   Typography,
@@ -25,24 +24,28 @@ export const DebugPage: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Get all villages
-        const villagesRef = collection(db, "villages");
-        const villageSnap = await getDocs(villagesRef);
-        const villagesList: any[] = [];
-        villageSnap.forEach((doc) => {
-          villagesList.push({ id: doc.id, data: doc.data() });
-        });
-        console.log("Villages found:", villagesList);
-        setVillages(villagesList);
+        // Get all villages from Supabase
+        const { data: villagesList, error: villagesError } = await supabase
+          .from("village")
+          .select("*");
 
-        // Get heritage data for first village
-        if (villagesList.length > 0) {
-          const heritageRef = collection(db, "heritage");
-          const heritageSnap = await getDocs(heritageRef);
-          const heritageList: any[] = [];
-          heritageSnap.forEach((doc) => {
-            heritageList.push({ id: doc.id, data: doc.data() });
-          });
+        if (villagesError) {
+          throw villagesError;
+        }
+
+        console.log("Villages found:", villagesList);
+        setVillages(villagesList || []);
+
+        // Get heritage data
+        if ((villagesList || []).length > 0) {
+          const { data: heritageList, error: heritageError } = await supabase
+            .from("heritage")
+            .select("*");
+
+          if (heritageError) {
+            throw heritageError;
+          }
+
           console.log("Heritage documents found:", heritageList);
           setHeritageData(heritageList);
         }
@@ -118,7 +121,7 @@ export const DebugPage: React.FC = () => {
     setMigrationResults(null);
 
     try {
-      const results = await MigrationService.runFullMigration();
+      const results = await MigrationService.runAllMigrations();
       setMigrationResults(results);
       setMigrationStatus(
         "✅ Firebase to Supabase migration completed successfully!",

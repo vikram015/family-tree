@@ -717,12 +717,21 @@ export const SupabaseService = {
    * Get all villages with hierarchy
    */
   async getVillages(): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('village')
-      .select('*, district(*, state(*))');
-
-    if (error) throw error;
-    return data || [];
+    try {
+      console.log("SupabaseService: getVillages called");
+      
+      const { data, error } = await supabase
+        .from('village')
+        .select('*, district(*, state(*))')
+        .is('is_deleted', false);
+      
+      console.log("SupabaseService: getVillages response - data count:", data?.length, "error:", error);
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error("SupabaseService: getVillages error:", error);
+      throw error;
+    }
   },
 
   /**
@@ -1160,11 +1169,17 @@ export const SupabaseService = {
    * Get dashboard statistics (global, all villages)
    */
   async getDashboardStatistics(): Promise<any> {
-    const { data, error } = await supabase.rpc(
-      'get_dashboard_statistics'
-    );
+    try {
+      console.log("SupabaseService: getDashboardStatistics called");
+      
+      const { data, error } = await supabase.rpc('get_dashboard_statistics');
 
-    if (error) throw error;
-    return data?.[0] || {};
+      console.log("SupabaseService: getDashboardStatistics response - data:", data, "error:", error);
+      if (error) throw error;
+      return data?.[0] || {};
+    } catch (error) {
+      console.error("SupabaseService: getDashboardStatistics error:", error);
+      throw error;
+    }
   },
 };

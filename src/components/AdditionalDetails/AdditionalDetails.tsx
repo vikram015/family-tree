@@ -53,7 +53,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
       value: val,
     }));
     setFieldValues(fieldsArray);
-  }, [JSON.stringify(value)]);
+  }, [value]);
 
   // Convert array back to object and notify parent
   // Only include complete fields (both fieldName and value)

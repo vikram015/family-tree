@@ -34,6 +34,7 @@ const theme = createTheme({
 });
 
 function AppContent() {
+  console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
   const [treeId, setTreeId] = useState<string>(() => {
     return searchParams.get("tree") || "";
@@ -52,6 +53,7 @@ function AppContent() {
     [setSearchParams],
   );
 
+  console.log("AppContent: About to return JSX");
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       <Header />
@@ -86,20 +88,26 @@ function AppContent() {
 }
 
 export default React.memo(function App() {
-  return (
-    <HelmetProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <AuthProvider>
-          <VillageProvider>
-            <LoginModalProvider>
-              <BrowserRouter>
-                <AppContent />
-              </BrowserRouter>
-            </LoginModalProvider>
-          </VillageProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </HelmetProvider>
-  );
+  console.log("App component: Starting to render");
+  try {
+    return (
+      <HelmetProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <AuthProvider>
+            <VillageProvider>
+              <LoginModalProvider>
+                <BrowserRouter>
+                  <AppContent />
+                </BrowserRouter>
+              </LoginModalProvider>
+            </VillageProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </HelmetProvider>
+    );
+  } catch (error) {
+    console.error("App component error:", error);
+    throw error;
+  }
 });

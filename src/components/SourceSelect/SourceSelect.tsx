@@ -8,7 +8,6 @@ import {
   MenuItem,
   Box,
   Typography,
-  Paper,
   TextField,
 } from "@mui/material";
 import { useVillage } from "../context/VillageContext";
@@ -109,14 +108,6 @@ export const SourceSelect = memo(function SourceSelect({
     },
     [onChange],
   );
-
-  const formatTreeLabel = (item: TreeItem): string => {
-    const parts = [item.name];
-    if (item.caste) parts.push(item.caste);
-    if (item.sub_caste) parts.push(item.sub_caste);
-    if (item.village_name) parts.push(item.village_name);
-    return parts.join(" - ");
-  };
 
   const getSelectedItem = (): TreeItem | undefined => {
     return items.find((item) => item.id === value);

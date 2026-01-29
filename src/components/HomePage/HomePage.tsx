@@ -12,7 +12,6 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
-  Paper,
 } from "@mui/material";
 import { Link } from "react-router-dom";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
@@ -27,23 +26,41 @@ import LocationCityIcon from "@mui/icons-material/LocationCity";
 import { SupabaseService } from "../../services/supabaseService";
 
 export const HomePage: React.FC = () => {
+  console.log("HomePage: Rendering");
   const [searchQuery, setSearchQuery] = useState("");
   const [statistics, setStatistics] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchStatistics = async () => {
       try {
+        console.log("HomePage: Starting to fetch statistics");
         const stats = await SupabaseService.getDashboardStatistics();
+
+        if (!isMounted) return;
+
+        console.log("HomePage: Statistics fetched:", stats);
         setStatistics(stats);
       } catch (error) {
-        console.error("Error fetching statistics:", error);
+        console.error("HomePage: Error fetching statistics:", error);
+        if (isMounted) {
+          setStatistics(null);
+        }
       } finally {
-        setLoadingStats(false);
+        console.log("HomePage: Statistics fetch complete");
+        if (isMounted) {
+          setLoadingStats(false);
+        }
       }
     };
 
     fetchStatistics();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const features = [

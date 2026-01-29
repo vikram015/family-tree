@@ -45,7 +45,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
     if (showModal && castes.length === 0) {
       loadCastes();
     }
-  }, [showModal]);
+  }, [showModal, castes.length]);
 
   // Load sub-castes when caste is selected
   useEffect(() => {

@@ -34,11 +34,20 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
   const [villages, setVillages] = useState<Village[]>([]);
   const [loading, setLoading] = useState(true);
 
+  console.log("VillageProvider: Initializing");
+
   // Load villages from Supabase
   useEffect(() => {
+    let isMounted = true;
+
     const loadVillages = async () => {
       try {
+        console.log("VillageProvider: Starting to load villages");
         const villageData = await SupabaseService.getVillages();
+
+        if (!isMounted) return;
+
+        console.log("VillageProvider: Villages loaded:", villageData);
         const villageList: Village[] = villageData.map((village: any) => ({
           id: village.id,
           name: village.name,
@@ -51,12 +60,21 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
           setSelectedVillage(villageList[0].id);
         }
       } catch (error) {
-        console.error("Failed to load villages from Supabase:", error);
-        setLoading(false);
+        console.error(
+          "VillageProvider: Failed to load villages from Supabase:",
+          error,
+        );
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadVillages();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Persist selected village to localStorage
@@ -73,6 +91,7 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
     loading,
   };
 
+  console.log("VillageProvider: About to return context provider");
   return (
     <VillageContext.Provider value={value}>{children}</VillageContext.Provider>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,86 +24,83 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [otp, setOtp] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const { signInWithPhone, verifyOtp } = useAuth();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const { signInWithEmail, signUpWithEmail } = useAuth();
 
-  const handleSendOtp = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!phoneNumber || phoneNumber.length < 10) {
-      return setError("Please enter a valid phone number");
+    if (!email || !password) {
+      return setError("Please enter email and password");
     }
 
     try {
       setError("");
       setLoading(true);
+      await signInWithEmail(email, password);
 
-      // Format phone number with country code if not present
-      const formattedPhone = phoneNumber.startsWith("+")
-        ? phoneNumber
-        : `+91${phoneNumber}`;
-
-      await signInWithPhone(formattedPhone);
-
-      setOtpSent(true);
-      setError("");
+      // Clear form
+      setEmail("");
+      setPassword("");
+      onSuccess?.();
+      onClose();
     } catch (err: any) {
-      console.error("OTP send error:", err);
-      setError(err.message || "Failed to send OTP");
+      console.error("Sign in error:", err);
+      setError(err.message || "Failed to sign in");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!otp || otp.length !== 6) {
-      return setError("Please enter a valid 6-digit OTP");
+    if (!email || !password) {
+      return setError("Please enter email and password");
+    }
+
+    if (password.length < 6) {
+      return setError("Password must be at least 6 characters");
     }
 
     try {
       setError("");
       setLoading(true);
-
-      await verifyOtp(otp);
+      await signUpWithEmail(email, password);
 
       // Clear form
-      setPhoneNumber("");
-      setOtp("");
-      setOtpSent(false);
+      setEmail("");
+      setPassword("");
+      setIsSignUp(false);
       onSuccess?.();
       onClose();
     } catch (err: any) {
-      console.error("OTP verification error:", err);
-      setError(err.message || "Invalid OTP. Please try again.");
+      console.error("Sign up error:", err);
+      setError(err.message || "Failed to create account");
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    setPhoneNumber("");
-    setOtp("");
+    setEmail("");
+    setPassword("");
     setError("");
-    setOtpSent(false);
+    setIsSignUp(false);
     onClose();
-  };
-
-  const handleResendOtp = async () => {
-    setOtpSent(false);
-    setOtp("");
   };
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Sign In with Phone</Typography>
+          <Typography variant="h6">
+            {isSignUp ? "Create Account" : "Sign In"}
+          </Typography>
           <IconButton onClick={handleClose} size="small">
             <Close />
           </IconButton>
@@ -117,84 +114,61 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </Alert>
           )}
 
-          {!otpSent ? (
-            <form onSubmit={handleSendOtp}>
-              <TextField
-                label="Phone Number"
-                fullWidth
-                variant="outlined"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="10-digit mobile number"
-                helperText="Enter your 10-digit mobile number (without +91)"
-                sx={{ mb: 2 }}
-                disabled={loading}
-              />
+          <form onSubmit={isSignUp ? handleSignUp : handleSignIn}>
+            <TextField
+              label="Email"
+              fullWidth
+              variant="outlined"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              sx={{ mb: 2 }}
+              disabled={loading}
+            />
 
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                size="large"
-                disabled={loading}
-              >
-                {loading ? "Sending OTP..." : "Send OTP"}
-              </Button>
+            <TextField
+              label="Password"
+              fullWidth
+              variant="outlined"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              helperText={isSignUp ? "Minimum 6 characters" : ""}
+              sx={{ mb: 2 }}
+              disabled={loading}
+            />
 
-              <Typography
-                variant="caption"
-                display="block"
-                sx={{ mt: 2, textAlign: "center", color: "text.secondary" }}
-              >
-                You will receive a 6-digit OTP on your mobile number
-              </Typography>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOtp}>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                OTP sent to {phoneNumber}
-              </Alert>
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              size="large"
+              disabled={loading}
+              sx={{ mb: 1 }}
+            >
+              {loading
+                ? "Processing..."
+                : isSignUp
+                  ? "Create Account"
+                  : "Sign In"}
+            </Button>
 
-              <TextField
-                label="Enter OTP"
-                fullWidth
-                variant="outlined"
-                value={otp}
-                onChange={(e) =>
-                  setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))
-                }
-                placeholder="6-digit OTP"
-                helperText="Enter the 6-digit OTP sent to your phone"
-                sx={{ mb: 2 }}
-                disabled={loading}
-                inputProps={{
-                  maxLength: 6,
-                  inputMode: "numeric",
-                  pattern: "[0-9]*",
-                }}
-              />
-
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                size="large"
-                disabled={loading}
-                sx={{ mb: 1 }}
-              >
-                {loading ? "Verifying..." : "Verify OTP"}
-              </Button>
-
-              <Button
-                variant="text"
-                fullWidth
-                onClick={handleResendOtp}
-                disabled={loading}
-              >
-                Resend OTP
-              </Button>
-            </form>
-          )}
+            <Button
+              variant="text"
+              fullWidth
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError("");
+              }}
+              disabled={loading}
+            >
+              {isSignUp
+                ? "Already have an account? Sign In"
+                : "Don't have an account? Sign Up"}
+            </Button>
+          </form>
         </Box>
       </DialogContent>
     </Dialog>

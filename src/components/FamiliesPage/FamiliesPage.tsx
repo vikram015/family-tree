@@ -3,13 +3,11 @@ import { Helmet } from "react-helmet-async";
 import ReactFamilyTree from "react-family-tree";
 import {
   Box,
-  TextField,
   Button,
   Typography,
   Container,
   CircularProgress,
 } from "@mui/material";
-import { useSearchParams } from "react-router-dom";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import { FamilyNode } from "../FamilyNode/FamilyNode";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
@@ -22,7 +20,6 @@ import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
 import AddNode from "../AddNode/AddNode";
 import { useAuth } from "../context/AuthContext";
-import { useVillage } from "../context/VillageContext";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -37,16 +34,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   onSourceChange,
   onCreate,
 }) => {
-  const [searchParams] = useSearchParams();
   const { hasPermission } = useAuth();
-  const { villages } = useVillage();
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const firstNodeId = useMemo(() => nodes[0]?.id ?? "", [nodes]);
   const [rootId, setRootId] = useState(firstNodeId);
   const [selectId, setSelectId] = useState<string>();
   const [hoverId, setHoverId] = useState<string>();
-  const [startName, setStartName] = useState<string>("");
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
 
   useEffect(() => {
@@ -54,10 +48,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     if (treeId && treeId !== "") {
       const loadTreeData = async () => {
         try {
+          console.log(
+            "FamiliesPage: Starting to load tree data for treeId:",
+            treeId,
+          );
           setIsLoading(true);
           // Fetch complete tree from Supabase using the PostgreSQL function
           const treeData = await SupabaseService.getCompleteTreeById(treeId);
-          console.log("Loaded tree data:", treeData);
+          console.log("FamiliesPage: Tree data loaded:", treeData);
           // Convert tree data to FNode format
           const items: Readonly<FNode>[] = (treeData.members || []).map(
             (person: any) =>
@@ -88,7 +86,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 treeId: treeId,
               }) as FNode,
           );
-          console.log("Converted tree data to FNode format:", items);
+          console.log(
+            "FamiliesPage: Converted tree data to FNode format, items count:",
+            items.length,
+          );
           // Populate hierarchy for all nodes
           const itemsWithHierarchy = items.map((node) => ({
             ...node,
@@ -100,6 +101,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           setHoverId(undefined);
 
           if (items.length === 0) {
+            console.log("FamiliesPage: No items in tree");
             setIsLoading(false);
             return;
           }
@@ -114,9 +116,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             setRootId(items[0].id);
           }
           setIsLoading(false);
-          console.log("Tree data loaded and state updated.");
+          console.log("FamiliesPage: Tree data loaded and state updated.");
         } catch (error) {
-          console.error("Failed to load tree data:", error);
+          console.error("FamiliesPage: Failed to load tree data:", error);
           setNodes([]);
           setIsLoading(false);
         }
@@ -127,13 +129,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodes([]);
       setSelectId(undefined);
       setHoverId(undefined);
+      setIsLoading(false);
     }
   }, [treeId]);
 
   // Load additional details when a node is selected
   useEffect(() => {
     console.log("Selected node ID changed to:", selectId);
-    if (selectId) {
+    if (selectId && nodes.length > 0) {
       const selectedNode = nodes.find((item) => item.id === selectId);
       if (selectedNode) {
         const loadAdditionalDetails = async () => {
@@ -157,7 +160,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         loadAdditionalDetails();
       }
     }
-  }, [selectId]);
+  }, [selectId, nodes]);
 
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
@@ -383,7 +386,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId, nodes],
+    [hasPermission, treeId],
   );
 
   const onDelete = useCallback(

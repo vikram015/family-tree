@@ -25,6 +25,7 @@ import { useVillage } from "../context/VillageContext";
 import { useAuth } from "../context/AuthContext";
 
 export const Header: React.FC = () => {
+  console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));

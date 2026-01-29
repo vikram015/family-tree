@@ -1,14 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../../supabase";
 import { AppUser, UserRole } from "../model/User";
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
   currentUser: any;
   userProfile: AppUser | null;
   loading: boolean;
-  signInWithPhone: (phoneNumber: string) => Promise<void>;
-  verifyOtp: (otp: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (requiredRole?: UserRole, villageId?: string) => boolean;
   isSuperAdmin: () => boolean;
@@ -26,32 +25,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  let confirmationSession: Session | null = null;
 
-  // Sign in with phone number - sends OTP
-  async function signInWithPhone(phoneNumber: string): Promise<void> {
-    const { data, error } = await supabase.auth.signInWithOtp({
-      phone: phoneNumber,
-    });
+  console.log("AuthProvider: Initializing, loading:", loading);
 
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    confirmationSession = data.session;
-    console.log("OTP sent to", phoneNumber);
-  }
-
-  // Verify OTP and complete sign in
-  async function verifyOtp(otp: string): Promise<void> {
-    if (!confirmationSession?.user.phone) {
-      throw new Error("No phone number in session");
-    }
-
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone: confirmationSession.user.phone,
-      token: otp,
-      type: "sms",
+  // Sign up with email and password
+  async function signUpWithEmail(
+    email: string,
+    password: string,
+  ): Promise<void> {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
     });
 
     if (error) {
@@ -59,40 +43,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const user = data.user;
-
     if (!user) {
-      throw new Error("No user returned from verification");
+      throw new Error("No user returned from signup");
     }
 
     // Check if user profile exists, if not create one with default admin role
     const { data: existingUser } = await supabase
       .from("users")
       .select("*")
-      .eq("uid", user.id)
+      .eq("id", user.id)
       .single();
 
     if (!existingUser) {
       // Create new user profile with admin role by default
-      const newUserProfile: Omit<AppUser, "uid"> = {
-        phoneNumber: user.phone || "",
+      const newUserProfile: Omit<AppUser, "id"> = {
+        email: user.email || "",
         role: "admin",
         villages: [],
-        displayName: user.phone || "",
+        displayName: user.email?.split("@")[0] || "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
       const { error: insertError } = await supabase
         .from("users")
-        .insert([{ uid: user.id, ...newUserProfile }]);
+        .insert([{ id: user.id, ...newUserProfile }]);
 
       if (insertError) {
         throw new Error(insertError.message);
       }
 
-      setUserProfile({ ...newUserProfile, uid: user.id });
+      setUserProfile({ ...newUserProfile, id: user.id });
     } else {
-      setUserProfile({ uid: user.id, ...existingUser } as AppUser);
+      setUserProfile({ id: user.id, ...existingUser } as AppUser);
+    }
+  }
+
+  // Sign in with email and password
+  async function signInWithEmail(
+    email: string,
+    password: string,
+  ): Promise<void> {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const user = data.user;
+    if (!user) {
+      throw new Error("No user returned from login");
+    }
+
+    // Fetch user profile from Supabase
+    const { data: userProfileData } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (userProfileData) {
+      setUserProfile({ id: user.id, ...userProfileData } as AppUser);
+    } else {
+      // If no profile exists, create one
+      const newUserProfile: Omit<AppUser, "id"> = {
+        email: user.email || "",
+        role: "admin",
+        villages: [],
+        displayName: user.email?.split("@")[0] || "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert([{ id: user.id, ...newUserProfile }]);
+
+      if (!insertError) {
+        setUserProfile({ ...newUserProfile, id: user.id });
+      }
     }
   }
 
@@ -139,10 +171,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    // Check initial auth state
+    const initAuth = async () => {
+      try {
+        console.log("AuthProvider: Checking initial auth state");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        console.log("AuthProvider: Initial session:", session?.user?.id);
+
+        const user = session?.user;
+        setCurrentUser(user || null);
+
+        if (user) {
+          // Fetch user profile from Supabase
+          const { data: userProfile } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", user.id)
+            .single();
+
+          if (userProfile) {
+            console.log("AuthProvider: User profile loaded:", user.id);
+            setUserProfile({ id: user.id, ...userProfile } as AppUser);
+          } else {
+            console.log("AuthProvider: No user profile found for:", user.id);
+          }
+        } else {
+          console.log("AuthProvider: No session found");
+        }
+      } catch (error) {
+        console.error("AuthProvider: Error initializing auth:", error);
+      } finally {
+        setLoading(false);
+        console.log(
+          "AuthProvider: Auth initialization complete, loading: false",
+        );
+      }
+    };
+
+    initAuth();
+
     // Subscribe to auth state changes
+    console.log("AuthProvider: Setting up auth state listener");
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log(
+        "AuthProvider: Auth state changed, event:",
+        event,
+        "session user:",
+        session?.user?.id,
+      );
       const user = session?.user;
       setCurrentUser(user || null);
 
@@ -151,11 +231,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: userProfile } = await supabase
           .from("users")
           .select("*")
-          .eq("uid", user.id)
+          .eq("id", user.id)
           .single();
 
         if (userProfile) {
-          setUserProfile({ uid: user.id, ...userProfile } as AppUser);
+          setUserProfile({ id: user.id, ...userProfile } as AppUser);
         }
       } else {
         setUserProfile(null);
@@ -173,8 +253,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     currentUser,
     userProfile,
     loading,
-    signInWithPhone,
-    verifyOtp,
+    signUpWithEmail,
+    signInWithEmail,
     logout,
     hasPermission,
     isSuperAdmin,
@@ -182,9 +262,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     canManageVillage,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
+  console.log(
+    "AuthProvider: About to return context provider, loading:",
+    loading,
   );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -28,14 +28,7 @@ import {
   TextField,
 } from "@mui/material";
 import { Edit, Delete, Add } from "@mui/icons-material";
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  deleteDoc,
-} from "firebase/firestore";
-import { db } from "../../firebase";
+import { supabase } from "../../supabase";
 import { SupabaseService } from "../../services/supabaseService";
 import { AppUser, UserRole } from "../model/User";
 import { useAuth } from "../context/AuthContext";
@@ -97,28 +90,36 @@ export const AdminManagement: React.FC = () => {
   }, [states]);
 
   useEffect(() => {
-    if (!isSuperAdmin()) {
-      setError("Access denied. Only superadmin can access this page.");
-      setLoading(false);
-      return;
-    }
-    loadData();
-  }, [isSuperAdmin]);
+    const checkAccessAndLoad = async () => {
+      if (!isSuperAdmin()) {
+        setError("Access denied. Only superadmin can access this page.");
+        setLoading(false);
+        return;
+      }
+      await loadData();
+    };
+    checkAccessAndLoad();
+  }, []);
 
   const loadData = async () => {
     try {
       setLoading(true);
 
-      // Load users
-      const usersSnapshot = await getDocs(collection(db, "users"));
-      const usersData = usersSnapshot.docs.map(
-        (doc) =>
-          ({
-            ...doc.data(),
-            uid: doc.id,
-          }) as AppUser,
+      // Load users from Supabase
+      const { data: usersData, error: usersError } = await supabase
+        .from("users")
+        .select("*");
+
+      if (usersError) {
+        throw usersError;
+      }
+
+      setUsers(
+        (usersData || []).map((user) => ({
+          ...user,
+          id: user.id,
+        })) as AppUser[],
       );
-      setUsers(usersData);
 
       // Load trees from Supabase
       const trees = await SupabaseService.getTrees();
@@ -254,13 +255,20 @@ export const AdminManagement: React.FC = () => {
     if (!editUser) return;
 
     try {
-      const userRef = doc(db, "users", editUser.uid);
-      await updateDoc(userRef, {
-        role: selectedRole,
-        villages: selectedRole === "superadmin" ? [] : selectedVillages,
-        updatedAt: new Date().toISOString(),
-        updatedBy: userProfile?.uid,
-      });
+      // Update user in Supabase
+      const { error } = await supabase
+        .from("users")
+        .update({
+          role: selectedRole,
+          villages: selectedRole === "superadmin" ? [] : selectedVillages,
+          updatedAt: new Date().toISOString(),
+          updatedBy: userProfile?.id,
+        })
+        .eq("id", editUser.id);
+
+      if (error) {
+        throw error;
+      }
 
       await loadData();
       setEditDialogOpen(false);
@@ -277,7 +285,13 @@ export const AdminManagement: React.FC = () => {
     }
 
     try {
-      await deleteDoc(doc(db, "users", userId));
+      // Delete user from Supabase
+      const { error } = await supabase.from("users").delete().eq("id", userId);
+
+      if (error) {
+        throw error;
+      }
+
       await loadData();
     } catch (err) {
       console.error("Error deleting user:", err);
@@ -382,8 +396,8 @@ export const AdminManagement: React.FC = () => {
               </TableHead>
               <TableBody>
                 {users.map((user) => (
-                  <TableRow key={user.uid}>
-                    <TableCell>{user.phoneNumber}</TableCell>
+                  <TableRow key={user.id}>
+                    <TableCell>{user.email}</TableCell>
                     <TableCell>{user.displayName || "-"}</TableCell>
                     <TableCell>
                       <Chip
@@ -417,7 +431,7 @@ export const AdminManagement: React.FC = () => {
                         <IconButton
                           size="small"
                           onClick={() => handleEditClick(user)}
-                          disabled={user.uid === userProfile?.uid}
+                          disabled={user.id === userProfile?.id}
                         >
                           <Edit />
                         </IconButton>
@@ -426,8 +440,8 @@ export const AdminManagement: React.FC = () => {
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => handleDeleteUser(user.uid)}
-                          disabled={user.uid === userProfile?.uid}
+                          onClick={() => handleDeleteUser(user.id)}
+                          disabled={user.id === userProfile?.id}
                         >
                           <Delete />
                         </IconButton>
@@ -697,7 +711,7 @@ export const AdminManagement: React.FC = () => {
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" sx={{ mb: 2 }}>
-              Phone: {editUser?.phoneNumber}
+              Email: {editUser?.email}
             </Typography>
 
             <FormControl fullWidth sx={{ mb: 3 }}>

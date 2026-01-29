@@ -21,8 +21,6 @@ import {
   Select,
   MenuItem,
   IconButton,
-  Autocomplete,
-  ListItemText,
   Tooltip,
 } from "@mui/material";
 import WorkIcon from "@mui/icons-material/Work";
@@ -45,7 +43,6 @@ import { useAuth } from "../context/AuthContext";
 import { SupabaseService } from "../../services/supabaseService";
 import { PersonSearchField } from "./PersonSearchField";
 import { FNode } from "../model/FNode";
-import { getNodeHierarchy } from "../const";
 
 interface Business {
   id: string;
@@ -160,7 +157,6 @@ export const BusinessPage: React.FC = () => {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
   const [people, setPeople] = useState<PersonSearchResult[]>([]);
-  const [allPeople, setAllPeople] = useState<FNode[]>([]);
   const [professions, setProfessions] = useState<Profession[]>([]);
   const [peopleWithProfessions, setPeopleWithProfessions] = useState<
     PersonWithProfessions[]
@@ -170,15 +166,12 @@ export const BusinessPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
-  const [selectedOwner, setSelectedOwner] = useState<FNode | null>(null);
   const [selectedPersonForProfession, setSelectedPersonForProfession] =
     useState<FNode | null>(null);
   const [selectedProfession, setSelectedProfession] =
     useState<Profession | null>(null);
   const [newProfessionName, setNewProfessionName] = useState("");
-  const [ownerSearchInput, setOwnerSearchInput] = useState("");
   const [professionSearchInput, setProfessionSearchInput] = useState("");
-  const [searchPerformed, setSearchPerformed] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     category: "retail",
@@ -274,11 +267,19 @@ export const BusinessPage: React.FC = () => {
 
     const fetchBusinesses = async () => {
       try {
+        console.log(
+          "BusinessPage: Starting to fetch businesses for village:",
+          selectedVillage,
+        );
         const businessesWithHierarchy =
           await SupabaseService.getBusinessesByVillageWithHierarchy(
             selectedVillage,
           );
 
+        console.log(
+          "BusinessPage: Businesses fetched:",
+          businessesWithHierarchy,
+        );
         const businessList: Business[] = businessesWithHierarchy.map(
           (business) => ({
             id: business.business_id,
@@ -301,10 +302,11 @@ export const BusinessPage: React.FC = () => {
           }),
         );
 
+        console.log("BusinessPage: Mapped business list:", businessList);
         setBusinesses(businessList);
         setLoading(false);
       } catch (error) {
-        console.error("Error fetching businesses:", error);
+        console.error("BusinessPage: Error fetching businesses:", error);
         setLoading(false);
       }
     };
@@ -356,7 +358,6 @@ export const BusinessPage: React.FC = () => {
             }
           });
         });
-        setAllPeople(Array.from(uniquePeople.values()));
 
         // Transform professions data to peopleWithProfessions format
         const peopleProfsMap = new Map<string, PersonWithProfessions>();
@@ -548,7 +549,6 @@ export const BusinessPage: React.FC = () => {
       });
     } else {
       setEditingBusiness(null);
-      setSelectedOwner(null);
       setFormData({
         name: "",
         category: "retail",
@@ -558,9 +558,7 @@ export const BusinessPage: React.FC = () => {
         contact: "",
       });
     }
-    setOwnerSearchInput("");
     setPeople([]);
-    setSearchPerformed(false);
     setOpenDialog(true);
   };
 
@@ -575,23 +573,6 @@ export const BusinessPage: React.FC = () => {
       ...prev,
       [name]: value,
     }));
-  };
-
-  const handleOwnerChange = (event: any, value: FNode | null) => {
-    setSelectedOwner(value);
-    if (value) {
-      setFormData((prev) => ({
-        ...prev,
-        ownerId: value.id,
-        owner: value.name || "",
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        ownerId: "",
-        owner: "",
-      }));
-    }
   };
 
   const handleSubmit = async () => {
