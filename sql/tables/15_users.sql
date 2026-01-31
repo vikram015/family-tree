@@ -27,18 +27,19 @@ CREATE INDEX IF NOT EXISTS idx_users_role ON users(role) WHERE is_deleted = FALS
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 -- USERS: Public read and write access
+-- USERS: Public read, authenticated write
 DROP POLICY IF EXISTS "users_read_policy" ON users;
 CREATE POLICY "users_read_policy" ON users
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "users_create_policy" ON users;
 CREATE POLICY "users_create_policy" ON users
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "users_update_policy" ON users;
 CREATE POLICY "users_update_policy" ON users
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "users_delete_policy" ON users;
 CREATE POLICY "users_delete_policy" ON users
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

@@ -29,19 +29,19 @@ CREATE INDEX IF NOT EXISTS idx_people_search ON people USING GIN(to_tsvector('en
 -- =====================================================
 ALTER TABLE people ENABLE ROW LEVEL SECURITY;
 
--- PEOPLE: Public read and write access
+-- PEOPLE: Public read, authenticated write
 DROP POLICY IF EXISTS "people_read_policy" ON people;
 CREATE POLICY "people_read_policy" ON people
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "people_create_policy" ON people;
 CREATE POLICY "people_create_policy" ON people
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_update_policy" ON people;
 CREATE POLICY "people_update_policy" ON people
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_delete_policy" ON people;
 CREATE POLICY "people_delete_policy" ON people
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

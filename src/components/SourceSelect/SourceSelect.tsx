@@ -58,7 +58,20 @@ export const SourceSelect = memo(function SourceSelect({
 
   useEffect(() => {
     const loadTrees = async () => {
+      // Don't load trees if no village is selected
+      if (!selectedVillage) {
+        console.log("SourceSelect: No village selected, skipping tree load");
+        setItems([]);
+        setValue("");
+        memoizedOnChange("", []);
+        return;
+      }
+
       try {
+        console.log(
+          "SourceSelect: Loading trees for village:",
+          selectedVillage,
+        );
         let trees = await SupabaseService.getTrees(selectedVillage);
 
         // No need to filter again since getTrees now handles it
@@ -137,7 +150,10 @@ export const SourceSelect = memo(function SourceSelect({
   const selectedItem = getSelectedItem();
 
   return (
-    <FormControl sx={{ minWidth: 350 }} size="small">
+    <FormControl
+      sx={{ minWidth: { xs: "100%", sm: 350 }, flex: { xs: 1, sm: "initial" } }}
+      size="small"
+    >
       <InputLabel id="source-select-label">Family Tree</InputLabel>
       <Select
         labelId="source-select-label"

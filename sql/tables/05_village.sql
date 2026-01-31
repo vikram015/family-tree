@@ -23,19 +23,19 @@ CREATE INDEX IF NOT EXISTS idx_village_district_id ON village(district_id) WHERE
 -- =====================================================
 ALTER TABLE village ENABLE ROW LEVEL SECURITY;
 
--- VILLAGE: Public read and write access
+-- VILLAGE: Public read, authenticated write
 DROP POLICY IF EXISTS "village_read_policy" ON village;
 CREATE POLICY "village_read_policy" ON village
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "village_create_policy" ON village;
 CREATE POLICY "village_create_policy" ON village
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "village_update_policy" ON village;
 CREATE POLICY "village_update_policy" ON village
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "village_delete_policy" ON village;
 CREATE POLICY "village_delete_policy" ON village
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

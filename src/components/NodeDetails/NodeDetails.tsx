@@ -248,20 +248,24 @@ export const NodeDetails = memo(function NodeDetails({
           <Box sx={{ display: "flex", gap: 1 }}>
             {!isEditMode ? (
               <>
-                <Tooltip title="Delete this person (relationships will be unlinked)">
-                  <IconButton
-                    onClick={handleDeleteClick}
-                    edge="end"
-                    color="error"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Edit details">
-                  <IconButton onClick={handleEditClick} edge="end">
-                    <EditIcon />
-                  </IconButton>
-                </Tooltip>
+                {currentUser && (
+                  <>
+                    <Tooltip title="Delete this person (relationships will be unlinked)">
+                      <IconButton
+                        onClick={handleDeleteClick}
+                        edge="end"
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit details">
+                      <IconButton onClick={handleEditClick} edge="end">
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
                 <Tooltip title="Close panel">
                   <IconButton onClick={closeHandler}>
                     <CloseIcon />

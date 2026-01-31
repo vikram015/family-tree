@@ -23,19 +23,19 @@ CREATE INDEX IF NOT EXISTS idx_sub_caste_caste_id ON sub_caste(caste_id) WHERE i
 -- =====================================================
 ALTER TABLE sub_caste ENABLE ROW LEVEL SECURITY;
 
--- SUB_CASTE: Public read and write access
+-- SUB_CASTE: Public read, authenticated write
 DROP POLICY IF EXISTS "sub_caste_read_policy" ON sub_caste;
 CREATE POLICY "sub_caste_read_policy" ON sub_caste
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "sub_caste_create_policy" ON sub_caste;
 CREATE POLICY "sub_caste_create_policy" ON sub_caste
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "sub_caste_update_policy" ON sub_caste;
 CREATE POLICY "sub_caste_update_policy" ON sub_caste
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "sub_caste_delete_policy" ON sub_caste;
 CREATE POLICY "sub_caste_delete_policy" ON sub_caste
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

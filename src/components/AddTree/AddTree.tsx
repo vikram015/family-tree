@@ -121,6 +121,11 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
 
   const isValid = name.trim().length >= 4 && name.trim().length <= 64;
 
+  // Don't show the button if user is not logged in
+  if (!currentUser) {
+    return null;
+  }
+
   return (
     <Box>
       <Button

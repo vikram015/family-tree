@@ -24,19 +24,19 @@ CREATE INDEX IF NOT EXISTS idx_profession_category ON professions(category) WHER
 -- =====================================================
 ALTER TABLE professions ENABLE ROW LEVEL SECURITY;
 
--- PROFESSIONS: Public read and write access
+-- PROFESSIONS: Public read, authenticated write
 DROP POLICY IF EXISTS "professions_read_policy" ON professions;
 CREATE POLICY "professions_read_policy" ON professions
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "professions_create_policy" ON professions;
 CREATE POLICY "professions_create_policy" ON professions
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "professions_update_policy" ON professions;
 CREATE POLICY "professions_update_policy" ON professions
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "professions_delete_policy" ON professions;
 CREATE POLICY "professions_delete_policy" ON professions
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

@@ -24,19 +24,19 @@ CREATE INDEX IF NOT EXISTS idx_people_professions_profession_id ON people_profes
 -- =====================================================
 ALTER TABLE people_professions ENABLE ROW LEVEL SECURITY;
 
--- PEOPLE_PROFESSIONS: Public read and write access
+-- PEOPLE_PROFESSIONS: Public read, authenticated write
 DROP POLICY IF EXISTS "people_professions_read_policy" ON people_professions;
 CREATE POLICY "people_professions_read_policy" ON people_professions
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "people_professions_create_policy" ON people_professions;
 CREATE POLICY "people_professions_create_policy" ON people_professions
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_professions_update_policy" ON people_professions;
 CREATE POLICY "people_professions_update_policy" ON people_professions
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_professions_delete_policy" ON people_professions;
 CREATE POLICY "people_professions_delete_policy" ON people_professions
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

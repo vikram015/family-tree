@@ -18,7 +18,18 @@ const initialState: VillageState = {
   selectedVillage: (() => {
     const stored = localStorage.getItem('selectedVillage');
     const params = new URLSearchParams(window.location.search);
-    return params.get('village') || stored || '';
+    const villageId = params.get('village') || stored || '';
+    
+    // Validate if it's a UUID format (Firebase IDs are shorter alphanumeric strings)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    if (villageId && !uuidRegex.test(villageId)) {
+      console.log('Redux: Clearing invalid village ID from localStorage:', villageId);
+      localStorage.removeItem('selectedVillage');
+      return '';
+    }
+    
+    return villageId;
   })(),
   loading: true,
   error: null,

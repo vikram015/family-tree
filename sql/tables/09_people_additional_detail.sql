@@ -23,19 +23,19 @@ CREATE INDEX IF NOT EXISTS idx_people_additional_field_id ON people_additional_d
 -- =====================================================
 ALTER TABLE people_additional_detail ENABLE ROW LEVEL SECURITY;
 
--- PEOPLE_ADDITIONAL_DETAIL: Public read and write access
+-- PEOPLE_ADDITIONAL_DETAIL: Public read, authenticated write
 DROP POLICY IF EXISTS "people_additional_detail_read_policy" ON people_additional_detail;
 CREATE POLICY "people_additional_detail_read_policy" ON people_additional_detail
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "people_additional_detail_create_policy" ON people_additional_detail;
 CREATE POLICY "people_additional_detail_create_policy" ON people_additional_detail
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_additional_detail_update_policy" ON people_additional_detail;
 CREATE POLICY "people_additional_detail_update_policy" ON people_additional_detail
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_additional_detail_delete_policy" ON people_additional_detail;
 CREATE POLICY "people_additional_detail_delete_policy" ON people_additional_detail
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

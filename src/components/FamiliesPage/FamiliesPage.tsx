@@ -723,7 +723,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           p: 2,
           borderBottom: 1,
           borderColor: "divider",
-          alignItems: "center",
+          alignItems: { xs: "stretch", sm: "center" },
+          flexDirection: { xs: "column", sm: "row" },
           flexWrap: "wrap",
         }}
       >
@@ -740,7 +741,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       {nodes.length > 0 && !isLoading && (
         <Box
           sx={{
-            display: "flex",
+            display: { xs: "none", md: "flex" }, // Hide on mobile (xs, sm), show on tablet and up (md, lg, xl)
             gap: 2,
             p: 1.5,
             px: 2,

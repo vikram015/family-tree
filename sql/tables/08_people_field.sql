@@ -20,19 +20,19 @@ CREATE INDEX IF NOT EXISTS idx_people_field_name_lowercase ON people_field(LOWER
 -- =====================================================
 ALTER TABLE people_field ENABLE ROW LEVEL SECURITY;
 
--- PEOPLE_FIELD: Public read and write access
+-- PEOPLE_FIELD: Public read, authenticated write
 DROP POLICY IF EXISTS "people_field_read_policy" ON people_field;
 CREATE POLICY "people_field_read_policy" ON people_field
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "people_field_create_policy" ON people_field;
 CREATE POLICY "people_field_create_policy" ON people_field
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_field_update_policy" ON people_field;
 CREATE POLICY "people_field_update_policy" ON people_field
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "people_field_delete_policy" ON people_field;
 CREATE POLICY "people_field_delete_policy" ON people_field
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

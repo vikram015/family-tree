@@ -28,19 +28,19 @@ CREATE INDEX IF NOT EXISTS idx_business_search ON business USING GIN(to_tsvector
 -- =====================================================
 ALTER TABLE business ENABLE ROW LEVEL SECURITY;
 
--- BUSINESS: Public read and write access
+-- BUSINESS: Public read, authenticated write
 DROP POLICY IF EXISTS "business_read_policy" ON business;
 CREATE POLICY "business_read_policy" ON business
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "business_create_policy" ON business;
 CREATE POLICY "business_create_policy" ON business
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "business_update_policy" ON business;
 CREATE POLICY "business_update_policy" ON business
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "business_delete_policy" ON business;
 CREATE POLICY "business_delete_policy" ON business
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

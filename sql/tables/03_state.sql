@@ -21,19 +21,19 @@ CREATE INDEX IF NOT EXISTS idx_state_name_lowercase ON state(LOWER(name)) WHERE 
 -- =====================================================
 ALTER TABLE state ENABLE ROW LEVEL SECURITY;
 
--- STATE: Public read and write access
+-- STATE: Public read, authenticated write
 DROP POLICY IF EXISTS "state_read_policy" ON state;
 CREATE POLICY "state_read_policy" ON state
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "state_create_policy" ON state;
 CREATE POLICY "state_create_policy" ON state
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "state_update_policy" ON state;
 CREATE POLICY "state_update_policy" ON state
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "state_delete_policy" ON state;
 CREATE POLICY "state_delete_policy" ON state
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

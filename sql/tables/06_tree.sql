@@ -26,19 +26,19 @@ CREATE INDEX IF NOT EXISTS idx_tree_name_lowercase ON tree(LOWER(name)) WHERE is
 -- =====================================================
 ALTER TABLE tree ENABLE ROW LEVEL SECURITY;
 
--- TREE: Public read and write access
+-- TREE: Public read, authenticated write
 DROP POLICY IF EXISTS "tree_read_policy" ON tree;
 CREATE POLICY "tree_read_policy" ON tree
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "tree_create_policy" ON tree;
 CREATE POLICY "tree_create_policy" ON tree
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "tree_update_policy" ON tree;
 CREATE POLICY "tree_update_policy" ON tree
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "tree_delete_policy" ON tree;
 CREATE POLICY "tree_delete_policy" ON tree
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

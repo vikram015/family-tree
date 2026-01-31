@@ -30,13 +30,21 @@ export const FamilyNode = React.memo(function FamilyNode({
   style,
 }: FamilyNodeProps) {
   const [localHover, setLocalHover] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  React.useEffect(() => {
+    // Detect if it's a touch device
+    setIsTouchDevice("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  }, []);
+
   const clickHandler = useCallback(() => onClick(node.id), [node.id, onClick]);
   const clickSubHandler = useCallback(
     () => onSubClick(node.id),
     [node.id, onSubClick],
   );
 
-  const showTooltip = Boolean(localHover || isHover);
+  // Disable tooltip on touch devices
+  const showTooltip = !isTouchDevice && Boolean(localHover || isHover);
 
   // Define colors based on gender
   const getCardColors = () => {

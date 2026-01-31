@@ -29,7 +29,24 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
     // Try to get from localStorage or URL
     const stored = localStorage.getItem("selectedVillage");
     const params = new URLSearchParams(window.location.search);
-    return params.get("village") || stored || "";
+    const villageId = params.get("village") || stored || "";
+
+    // Validate if it's a UUID format (Firebase IDs are shorter alphanumeric strings)
+    // UUID format: 8-4-4-4-12 hexadecimal characters
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (villageId && !uuidRegex.test(villageId)) {
+      // Clear invalid (Firebase) village ID from localStorage
+      console.log(
+        "VillageProvider: Clearing invalid village ID from localStorage:",
+        villageId,
+      );
+      localStorage.removeItem("selectedVillage");
+      return "";
+    }
+
+    return villageId;
   });
   const [villages, setVillages] = useState<Village[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +76,10 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
 
         // Auto-select first village if none selected
         if (villageList.length > 0 && !selectedVillage) {
+          console.log(
+            "VillageProvider: Auto-selecting first village:",
+            villageList[0].id,
+          );
           setSelectedVillage(villageList[0].id);
         }
       } catch (error) {
@@ -77,7 +98,7 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedVillage]);
 
   // Persist selected village to localStorage
   useEffect(() => {

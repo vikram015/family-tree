@@ -28,23 +28,19 @@ CREATE INDEX IF NOT EXISTS idx_people_relations_related_person_id ON people_rela
 -- =====================================================
 ALTER TABLE people_relations ENABLE ROW LEVEL SECURITY;
 
--- PEOPLE_RELATIONS: Authenticated users can insert
-DROP POLICY IF EXISTS "people_relations_create_policy" ON people_relations;
-CREATE POLICY "people_relations_create_policy" ON people_relations
-  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-
--- PEOPLE_RELATIONS: Authenticated users can update
-DROP POLICY IF EXISTS "people_relations_update_policy" ON people_relations;
-CREATE POLICY "people_relations_update_policy" ON people_relations
-  FOR UPDATE USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
-
--- PEOPLE_RELATIONS: Authenticated users can delete
-DROP POLICY IF EXISTS "people_relations_delete_policy" ON people_relations;
-CREATE POLICY "people_relations_delete_policy" ON people_relations
-  FOR DELETE USING (auth.role() = 'authenticated');
-
--- PEOPLE_RELATIONS: Public read access
+-- PEOPLE_RELATIONS: Public read, authenticated write
 DROP POLICY IF EXISTS "people_relations_read_policy" ON people_relations;
 CREATE POLICY "people_relations_read_policy" ON people_relations
   FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "people_relations_create_policy" ON people_relations;
+CREATE POLICY "people_relations_create_policy" ON people_relations
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "people_relations_update_policy" ON people_relations;
+CREATE POLICY "people_relations_update_policy" ON people_relations
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "people_relations_delete_policy" ON people_relations;
+CREATE POLICY "people_relations_delete_policy" ON people_relations
+  FOR DELETE TO authenticated USING (true);

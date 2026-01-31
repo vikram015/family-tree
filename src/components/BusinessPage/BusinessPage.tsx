@@ -144,7 +144,7 @@ const OwnerLink: React.FC<{
     <Tooltip title={tooltipContent}>
       <Box
         component="span"
-        onClick={() => onNavigate(`/families?treeId=${business.treeId}`)}
+        onClick={() => onNavigate(`/families?tree=${business.treeId}`)}
         sx={{
           color: "#0066cc",
           cursor: "pointer",
@@ -1147,7 +1147,7 @@ export const BusinessPage: React.FC = () => {
                                   <Box
                                     onClick={() =>
                                       navigate(
-                                        `/families?treeId=${person.tree_id}`,
+                                        `/families?tree=${person.tree_id}`,
                                       )
                                     }
                                     sx={{

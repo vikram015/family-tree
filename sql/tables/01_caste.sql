@@ -21,19 +21,19 @@ CREATE INDEX IF NOT EXISTS idx_caste_name_lowercase ON caste(LOWER(name)) WHERE 
 -- =====================================================
 ALTER TABLE caste ENABLE ROW LEVEL SECURITY;
 
--- CASTE: Public read and write access
+-- CASTE: Public read, authenticated write
 DROP POLICY IF EXISTS "caste_read_policy" ON caste;
 CREATE POLICY "caste_read_policy" ON caste
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "caste_create_policy" ON caste;
 CREATE POLICY "caste_create_policy" ON caste
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "caste_update_policy" ON caste;
 CREATE POLICY "caste_update_policy" ON caste
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "caste_delete_policy" ON caste;
 CREATE POLICY "caste_delete_policy" ON caste
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);

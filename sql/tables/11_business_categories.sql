@@ -18,19 +18,19 @@ CREATE INDEX IF NOT EXISTS idx_business_categories_name_lowercase ON business_ca
 -- =====================================================
 ALTER TABLE business_categories ENABLE ROW LEVEL SECURITY;
 
--- BUSINESS_CATEGORIES: Public read and write access
+-- BUSINESS_CATEGORIES: Public read, authenticated write
 DROP POLICY IF EXISTS "business_categories_read_policy" ON business_categories;
 CREATE POLICY "business_categories_read_policy" ON business_categories
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "business_categories_create_policy" ON business_categories;
 CREATE POLICY "business_categories_create_policy" ON business_categories
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 DROP POLICY IF EXISTS "business_categories_update_policy" ON business_categories;
 CREATE POLICY "business_categories_update_policy" ON business_categories
-  FOR UPDATE USING (true) WITH CHECK (true);
+  FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "business_categories_delete_policy" ON business_categories;
 CREATE POLICY "business_categories_delete_policy" ON business_categories
-  FOR DELETE USING (true);
+  FOR DELETE TO authenticated USING (true);
