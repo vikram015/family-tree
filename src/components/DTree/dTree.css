@@ -1,0 +1,94 @@
+/* dTree CSS styles - Official dTree format */
+.linage {
+  fill: none;
+  stroke: #666;
+  stroke-width: 2px;
+}
+
+.marriage {
+  fill: none;
+  stroke: #e91e63;
+  stroke-width: 2.5px;
+  stroke-dasharray: 5, 3;
+}
+
+.node {
+  background-color: lightblue;
+  border-style: solid;
+  border-width: 2px;
+  border-color: #333;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+}
+
+/* Gender-specific styling - support both compound and standalone */
+.node.man,
+.man {
+  background-color: #e3f2fd;
+  border-color: #1976d2;
+  border-style: solid;
+  border-width: 2px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+}
+
+.node.woman,
+.woman {
+  background-color: #fce4ec;
+  border-color: #c2185b;
+  border-style: solid;
+  border-width: 2px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+}
+
+.node.person,
+.person {
+  background-color: lightgray;
+  border-color: gray;
+  border-style: solid;
+  border-width: 2px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 40px;
+}
+
+.nodeText {
+  font: 12px sans-serif;
+  text-align: center;
+  word-wrap: break-word;
+}
+
+.marriageNode {
+  background-color: black;
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+}
+
+.node:hover,
+.man:hover,
+.woman:hover,
+.person:hover {
+  border-width: 3px;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
+}

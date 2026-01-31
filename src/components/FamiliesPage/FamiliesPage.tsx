@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
-import ReactFamilyTree from "react-family-tree";
 import {
   Box,
   Button,
@@ -8,8 +7,7 @@ import {
   Container,
   CircularProgress,
 } from "@mui/material";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { FamilyNode } from "../FamilyNode/FamilyNode";
+import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import { NODE_WIDTH, NODE_HEIGHT, getNodeHierarchy } from "../const";
 import { getNodeStyle } from "../App/utils";
@@ -851,62 +849,26 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             overflow: "hidden",
           }}
         >
-          <TransformWrapper
-            initialScale={1}
-            minScale={0.1}
-            maxScale={2.5}
-            centerOnInit={true}
-            limitToBounds={false}
-            wheel={{ step: 0.1 }}
-            doubleClick={{ disabled: false, mode: "reset" }}
-            panning={{ disabled: false, velocityDisabled: true }}
-            pinch={{ disabled: false }}
-          >
-            <TransformComponent
-              wrapperStyle={{
-                width: "100%",
+          {rootId && nodes.find((n) => n.id === rootId) ? (
+            <DTreeComponent
+              nodes={nodes}
+              rootId={rootId}
+              onNodeClick={setSelectId}
+            />
+          ) : (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
                 height: "100%",
-              }}
-              contentStyle={{
-                width: "100%",
-                height: "100%",
-                cursor: "grab",
               }}
             >
-              {rootId && nodes.find((n) => n.id === rootId) ? (
-                <ReactFamilyTree
-                  nodes={nodes as Readonly<FNode>[]}
-                  rootId={rootId}
-                  width={NODE_WIDTH}
-                  height={NODE_HEIGHT}
-                  renderNode={(node: Readonly<FNode>) => (
-                    <FamilyNode
-                      key={node.id}
-                      node={node}
-                      isRoot={node.id === rootId}
-                      isHover={node.id === hoverId}
-                      onClick={setSelectId}
-                      onSubClick={setRootId}
-                      style={getNodeStyle(node)}
-                    />
-                  )}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    height: "100%",
-                  }}
-                >
-                  <Typography>
-                    Unable to find root node. Please check tree data.
-                  </Typography>
-                </Box>
-              )}
-            </TransformComponent>
-          </TransformWrapper>
+              <Typography>
+                Unable to find root node. Please check tree data.
+              </Typography>
+            </Box>
+          )}
         </Box>
       ) : (
         treeId &&
