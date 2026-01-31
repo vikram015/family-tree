@@ -19,7 +19,7 @@ import {
 } from "@mui/material";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 
 interface AddNodeProps {
@@ -28,11 +28,13 @@ interface AddNodeProps {
     node: Partial<Node>,
     relation: "child" | "spouse" | "parent",
     targetId?: string,
-    type?: RelType
+    type?: RelType,
+    otherParentId?: string, // second parent for children or second spouse
   ) => void;
   onCancel?: () => void;
   nodes?: Readonly<FNode>[];
   noCard?: boolean; // disables card border/background if true
+  isFirstNode?: boolean; // if true, hides relation selection fields
 }
 
 const AddNode: React.FC<AddNodeProps> = ({
@@ -41,17 +43,18 @@ const AddNode: React.FC<AddNodeProps> = ({
   onCancel,
   nodes,
   noCard = false,
+  isFirstNode = false,
 }) => {
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
-    "male"
+    "male",
   );
   const [relation, setRelation] = useState<"child" | "spouse" | "parent">(
-    "child"
+    "child",
   );
   const [selectedRelType, setSelectedRelType] = useState<RelType>(
-    RelType.blood
+    RelType.blood,
   );
   const [relTypes, setRelTypes] = useState<RelType[]>([
     RelType.blood,
@@ -78,7 +81,7 @@ const AddNode: React.FC<AddNodeProps> = ({
   }, [nodes, targetId]);
 
   const [selectedOtherParentId, setSelectedOtherParentId] = useState<string>(
-    () => ""
+    () => "",
   );
   useEffect(() => {
     // default to first spouse if available
@@ -150,7 +153,13 @@ const AddNode: React.FC<AddNodeProps> = ({
             Object.keys(customFields).length > 0 ? customFields : undefined,
         };
 
-        onAdd?.(newNode, relation, targetId, selectedRelType);
+        onAdd?.(
+          newNode,
+          relation,
+          targetId,
+          selectedRelType,
+          selectedOtherParentId,
+        );
         handleCancel();
       });
       return;
@@ -176,7 +185,13 @@ const AddNode: React.FC<AddNodeProps> = ({
         Object.keys(customFields).length > 0 ? customFields : undefined,
     };
 
-    onAdd?.(newNode, relation, targetId, selectedRelType);
+    onAdd?.(
+      newNode,
+      relation,
+      targetId,
+      selectedRelType,
+      selectedOtherParentId,
+    );
     handleCancel();
   }, [
     currentUser,
@@ -199,50 +214,58 @@ const AddNode: React.FC<AddNodeProps> = ({
       sx={noCard ? {} : { p: 3, elevation: 2 }}
     >
       <Typography variant="h6" gutterBottom>
-        Add Family Member
+        {isFirstNode ? "Add First Family Member" : "Add Family Member"}
       </Typography>
 
       <Stack spacing={3}>
-        <FormControl component="fieldset">
-          <FormLabel component="legend">Relation</FormLabel>
-          <RadioGroup
-            row
-            value={relation}
-            onChange={(e) => setRelation(e.target.value as any)}
-          >
-            <FormControlLabel value="child" control={<Radio />} label="Child" />
-            <FormControlLabel
-              value="spouse"
-              control={<Radio />}
-              label="Spouse"
-            />
-            <FormControlLabel
-              value="parent"
-              control={<Radio />}
-              label="Parent"
-            />
-          </RadioGroup>
-        </FormControl>
-
-        <FormControl component="fieldset">
-          <FormLabel component="legend">Relation Type</FormLabel>
-          <RadioGroup
-            row
-            value={selectedRelType}
-            onChange={(e) => setSelectedRelType(e.target.value as RelType)}
-          >
-            {relTypes.map((type) => (
+        {!isFirstNode && (
+          <FormControl component="fieldset">
+            <FormLabel component="legend">Relation</FormLabel>
+            <RadioGroup
+              row
+              value={relation}
+              onChange={(e) => setRelation(e.target.value as any)}
+            >
               <FormControlLabel
-                key={type}
-                value={type}
+                value="child"
                 control={<Radio />}
-                label={type}
+                label="Child"
               />
-            ))}
-          </RadioGroup>
-        </FormControl>
+              <FormControlLabel
+                value="spouse"
+                control={<Radio />}
+                label="Spouse"
+              />
+              <FormControlLabel
+                value="parent"
+                control={<Radio />}
+                label="Parent"
+              />
+            </RadioGroup>
+          </FormControl>
+        )}
 
-        {relation === "child" && (
+        {!isFirstNode && (
+          <FormControl component="fieldset">
+            <FormLabel component="legend">Relation Type</FormLabel>
+            <RadioGroup
+              row
+              value={selectedRelType}
+              onChange={(e) => setSelectedRelType(e.target.value as RelType)}
+            >
+              {relTypes.map((type) => (
+                <FormControlLabel
+                  key={type}
+                  value={type}
+                  control={<Radio />}
+                  label={type}
+                />
+              ))}
+            </RadioGroup>
+          </FormControl>
+        )}
+
+        {!isFirstNode && relation === "child" && (
           <FormControl fullWidth>
             <InputLabel>Other parent</InputLabel>
             <Select
@@ -253,7 +276,8 @@ const AddNode: React.FC<AddNodeProps> = ({
               <MenuItem value="">None</MenuItem>
               {spouseOptions.map((s) => (
                 <MenuItem key={s.id} value={s.id}>
-                  {s.name || s.id}
+                  {s.name ||
+                    (targetNode?.name ? `${targetNode.name}'s Spouse` : s.id)}
                 </MenuItem>
               ))}
             </Select>

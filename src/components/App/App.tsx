@@ -7,8 +7,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
-import { AuthProvider } from "../context/AuthContext";
-import { VillageProvider } from "../context/VillageContext";
+import { AuthInitializer } from "../AuthInitializer";
+import { VillageInitializer } from "../VillageInitializer";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 import { FamiliesPage } from "../FamiliesPage/FamiliesPage";
@@ -34,6 +34,7 @@ const theme = createTheme({
 });
 
 function AppContent() {
+  console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
   const [treeId, setTreeId] = useState<string>(() => {
     return searchParams.get("tree") || "";
@@ -49,9 +50,10 @@ function AppContent() {
         setSearchParams({});
       }
     },
-    [setSearchParams]
+    [setSearchParams],
   );
 
+  console.log("AppContent: About to return JSX");
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
       <Header />
@@ -66,7 +68,10 @@ function AppContent() {
                 treeId={treeId}
                 setTreeId={setTreeId}
                 onSourceChange={onChange}
-                onCreate={(id) => setTreeId(id)}
+                onCreate={(id) => {
+                  setTreeId(id);
+                  onChange(id);
+                }}
               />
             }
           />
@@ -83,20 +88,26 @@ function AppContent() {
 }
 
 export default React.memo(function App() {
-  return (
-    <HelmetProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <AuthProvider>
-          <VillageProvider>
-            <LoginModalProvider>
-              <BrowserRouter>
-                <AppContent />
-              </BrowserRouter>
-            </LoginModalProvider>
-          </VillageProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </HelmetProvider>
-  );
+  console.log("App component: Starting to render");
+  try {
+    return (
+      <HelmetProvider>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <AuthInitializer>
+            <VillageInitializer>
+              <LoginModalProvider>
+                <BrowserRouter>
+                  <AppContent />
+                </BrowserRouter>
+              </LoginModalProvider>
+            </VillageInitializer>
+          </AuthInitializer>
+        </ThemeProvider>
+      </HelmetProvider>
+    );
+  } catch (error) {
+    console.error("App component error:", error);
+    throw error;
+  }
 });

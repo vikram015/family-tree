@@ -19,8 +19,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import WarningIcon from "@mui/icons-material/Warning";
 import ErrorIcon from "@mui/icons-material/Error";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import { db } from "../../firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { supabase } from "../../supabase";
 import { FNode } from "../model/FNode";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
@@ -62,16 +61,22 @@ export const DiagnosticPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // Get all people for this tree
-      const peopleQuery = query(
-        collection(db, "people"),
-        where("treeId", "==", treeId)
+      // Get all people for this tree from Supabase
+      const { data: peopleData, error } = await supabase
+        .from("people")
+        .select("*")
+        .eq("treeId", treeId);
+
+      if (error) {
+        throw new Error(`Failed to fetch people: ${error.message}`);
+      }
+
+      const nodes: Array<FNode & { id: string }> = (peopleData || []).map(
+        (doc) => ({
+          id: doc.id,
+          ...doc,
+        }),
       );
-      const snapshot = await getDocs(peopleQuery);
-      const nodes: Array<FNode & { id: string }> = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as FNode),
-      }));
 
       // Create a map of existing node IDs
       const existingIds = new Set(nodes.map((n) => n.id));
@@ -192,7 +197,7 @@ export const DiagnosticPage: React.FC = () => {
 
       // Convert missing nodes map to array
       const missingNodes: DiagnosticResult["missingNodes"] = Array.from(
-        missingNodesMap.entries()
+        missingNodesMap.entries(),
       ).map(([id, referencedBy]) => ({
         id,
         referencedBy,
@@ -319,7 +324,7 @@ export const DiagnosticPage: React.FC = () => {
                       <ListItemText
                         primary={`Node ID: ${missing.id}`}
                         secondary={`Referenced by: ${missing.referencedBy.join(
-                          ", "
+                          ", ",
                         )}`}
                       />
                     </ListItem>

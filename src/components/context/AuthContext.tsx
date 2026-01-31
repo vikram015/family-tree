@@ -1,28 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { auth, db } from "../../firebase";
-import {
-  signOut,
-  onAuthStateChanged,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  ConfirmationResult,
-} from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { supabase } from "../../supabase";
 import { AppUser, UserRole } from "../model/User";
 
 interface AuthContextType {
   currentUser: any;
   userProfile: AppUser | null;
   loading: boolean;
-  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
-  signInWithPhone: (
-    phoneNumber: string,
-    recaptchaVerifier: RecaptchaVerifier
-  ) => Promise<ConfirmationResult>;
-  verifyOtp: (
-    confirmationResult: ConfirmationResult,
-    otp: string
-  ) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (requiredRole?: UserRole, villageId?: string) => boolean;
   isSuperAdmin: () => boolean;
@@ -41,72 +26,122 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Setup reCAPTCHA for phone authentication (singleton per page)
-  function setupRecaptcha(containerId: string): RecaptchaVerifier {
-    // Reuse existing verifier if present
-    const existing = (window as any).recaptchaVerifier as
-      | RecaptchaVerifier
-      | undefined;
-    if (existing) return existing;
+  console.log("AuthProvider: Initializing, loading:", loading);
 
-    const container = document.getElementById(containerId);
-    if (!container) {
-      throw new Error(`reCAPTCHA container '${containerId}' not found`);
-    }
-
-    const verifier = new RecaptchaVerifier(auth, containerId, {
-      size: "invisible",
-      callback: () => {
-        console.log("reCAPTCHA solved");
-      },
+  // Sign up with email and password
+  async function signUpWithEmail(
+    email: string,
+    password: string,
+  ): Promise<void> {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
     });
 
-    (window as any).recaptchaVerifier = verifier;
-    return verifier;
-  }
+    if (error) {
+      throw new Error(error.message);
+    }
 
-  // Sign in with phone number
-  async function signInWithPhone(
-    phoneNumber: string,
-    recaptchaVerifier: RecaptchaVerifier
-  ): Promise<ConfirmationResult> {
-    return signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-  }
-
-  // Verify OTP and complete sign in
-  async function verifyOtp(
-    confirmationResult: ConfirmationResult,
-    otp: string
-  ): Promise<void> {
-    const result = await confirmationResult.confirm(otp);
-    const user = result.user;
+    const user = data.user;
+    if (!user) {
+      throw new Error("No user returned from signup");
+    }
 
     // Check if user profile exists, if not create one with default admin role
-    const userRef = doc(db, "users", user.uid);
-    const userSnap = await getDoc(userRef);
+    const { data: existingUser, error: fetchError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    if (!userSnap.exists()) {
+    if (fetchError) {
+      console.error("Error fetching user profile:", fetchError);
+    }
+
+    if (!existingUser) {
       // Create new user profile with admin role by default
-      // SuperAdmin needs to be set manually in Firestore or by another SuperAdmin
-      const newUserProfile: Omit<AppUser, "uid"> = {
-        phoneNumber: user.phoneNumber || "",
+      const newUserProfile: Omit<AppUser, "id"> = {
+        email: user.email || "",
         role: "admin",
-        villages: [], // Empty by default, SuperAdmin will assign villages
-        displayName: user.phoneNumber || "",
+        villages: [],
+        displayName: user.email?.split("@")[0] || "",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      await setDoc(userRef, newUserProfile);
-      setUserProfile({ ...newUserProfile, uid: user.uid });
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert([{ id: user.id, ...newUserProfile }]);
+
+      if (insertError) {
+        throw new Error(insertError.message);
+      }
+
+      setUserProfile({ ...newUserProfile, id: user.id });
     } else {
-      setUserProfile({ uid: user.uid, ...userSnap.data() } as AppUser);
+      setUserProfile({ id: user.id, ...existingUser } as AppUser);
+    }
+  }
+
+  // Sign in with email and password
+  async function signInWithEmail(
+    email: string,
+    password: string,
+  ): Promise<void> {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    const user = data.user;
+    if (!user) {
+      throw new Error("No user returned from login");
+    }
+
+    // Fetch user profile from Supabase
+    const { data: userProfileData, error: profileError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error("Error fetching user profile:", profileError);
+    }
+
+    if (userProfileData) {
+      setUserProfile({ id: user.id, ...userProfileData } as AppUser);
+    } else {
+      // If no profile exists, create one
+      const newUserProfile: Omit<AppUser, "id"> = {
+        email: user.email || "",
+        role: "admin",
+        villages: [],
+        displayName: user.email?.split("@")[0] || "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert([{ id: user.id, ...newUserProfile }]);
+
+      if (!insertError) {
+        setUserProfile({ ...newUserProfile, id: user.id });
+      }
     }
   }
 
   async function logout() {
     setUserProfile(null);
-    return signOut(auth);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      throw new Error(error.message);
+    }
   }
 
   // Permission checks
@@ -144,34 +179,117 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
+    let isMounted = true;
+
+    // Check initial auth state
+    const initAuth = async () => {
+      try {
+        if (!isMounted) return;
+
+        console.log("AuthProvider: Checking initial auth state");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+        console.log("AuthProvider: Initial session:", session?.user?.id);
+
+        const user = session?.user;
+        setCurrentUser(user || null);
+
+        if (user) {
+          // Fetch user profile from Supabase
+          const { data: userProfile, error: profileError } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          if (!isMounted) return;
+
+          if (profileError) {
+            console.error(
+              "AuthProvider: Error fetching user profile:",
+              profileError,
+            );
+          } else if (userProfile) {
+            console.log("AuthProvider: User profile loaded:", user.id);
+            setUserProfile({ id: user.id, ...userProfile } as AppUser);
+          } else {
+            console.log("AuthProvider: No user profile found for:", user.id);
+          }
+        } else {
+          console.log("AuthProvider: No session found");
+        }
+      } catch (error) {
+        console.error("AuthProvider: Error initializing auth:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          console.log(
+            "AuthProvider: Auth initialization complete, loading: false",
+          );
+        }
+      }
+    };
+
+    initAuth();
+
+    // Subscribe to auth state changes
+    console.log("AuthProvider: Setting up auth state listener");
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      console.log(
+        "AuthProvider: Auth state changed, event:",
+        event,
+        "session user:",
+        session?.user?.id,
+      );
+      const user = session?.user;
+      setCurrentUser(user || null);
 
       if (user) {
-        // Fetch user profile from Firestore
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
+        // Fetch user profile from Supabase
+        const { data: userProfile, error: profileError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", user.id)
+          .maybeSingle();
 
-        if (userSnap.exists()) {
-          setUserProfile({ uid: user.uid, ...userSnap.data() } as AppUser);
+        if (!isMounted) return;
+
+        if (profileError) {
+          console.error(
+            "AuthProvider: Error fetching user profile:",
+            profileError,
+          );
+        } else if (userProfile) {
+          setUserProfile({ id: user.id, ...userProfile } as AppUser);
         }
       } else {
         setUserProfile(null);
       }
 
-      setLoading(false);
+      if (isMounted) {
+        setLoading(false);
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const value: AuthContextType = {
     currentUser,
     userProfile,
     loading,
-    setupRecaptcha,
-    signInWithPhone,
-    verifyOtp,
+    signUpWithEmail,
+    signInWithEmail,
     logout,
     hasPermission,
     isSuperAdmin,
@@ -179,9 +297,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     canManageVillage,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
+  console.log(
+    "AuthProvider: About to return context provider, loading:",
+    loading,
   );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -18,9 +18,8 @@ import PublicIcon from "@mui/icons-material/Public";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
-import { useVillage } from "../context/VillageContext";
-import { db } from "../../firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { useVillage } from "../hooks/useVillage";
+import { supabase } from "../../supabase";
 
 interface HeritageData {
   villageOrigin: string;
@@ -52,30 +51,35 @@ export const HeritagePage: React.FC = () => {
     console.log("Loading heritage for village ID:", selectedVillage);
     setLoading(true);
 
-    // Query heritage collection where villageId matches selectedVillage
-    const heritageRef = collection(db, "heritage");
-    const q = query(heritageRef, where("villageId", "==", selectedVillage));
+    const loadHeritageData = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("heritage")
+          .select("*")
+          .eq("villageId", selectedVillage)
+          .single();
 
-    getDocs(q)
-      .then((snapshot) => {
-        console.log("Heritage query results:", snapshot.docs.length);
-        if (snapshot.docs.length > 0) {
-          const data = snapshot.docs[0].data();
+        if (error) {
+          console.warn(
+            `No heritage document found with villageId: ${selectedVillage}`,
+            error,
+          );
+          setHeritageData(null);
+        } else if (data) {
           console.log("Heritage data found:", data);
           setHeritageData(data as HeritageData);
         } else {
-          console.warn(
-            `No heritage document found with villageId: ${selectedVillage}`
-          );
           setHeritageData(null);
         }
-        setLoading(false);
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error("Error loading heritage data:", error);
         setHeritageData(null);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    loadHeritageData();
   }, [selectedVillage]);
 
   if (!selectedVillage) {

@@ -21,10 +21,11 @@ import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useVillage } from "../context/VillageContext";
-import { useAuth } from "../context/AuthContext";
+import { useVillage } from "../hooks/useVillage";
+import { useAuth } from "../hooks/useAuth";
 
 export const Header: React.FC = () => {
+  console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
