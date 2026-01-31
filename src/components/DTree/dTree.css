@@ -92,3 +92,10 @@
   border-width: 3px;
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
 }
+
+.hidden-node {
+  display: none;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+}

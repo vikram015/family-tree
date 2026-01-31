@@ -18,6 +18,7 @@ interface DTreeNode {
     };
     children?: DTreeNode[];
   }>;
+  children?: DTreeNode[];
   extra?: any;
 }
 
@@ -118,7 +119,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         });
       });
     }
-    // If no spouses but has children, create a dummy marriage
+    // If no spouses but has children, add them directly
     else if (person.children && person.children.length > 0) {
       const children: DTreeNode[] = [];
 
@@ -130,17 +131,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       });
 
       if (children.length > 0) {
-        treeNode.marriages = [
-          {
-            spouse: {
-              name: "Unknown",
-              class: "woman",
-              textClass: "nodeText",
-              extra: {},
-            },
-            children: children,
-          },
-        ];
+        treeNode.children = children;
       }
     }
 
