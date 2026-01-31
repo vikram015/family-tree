@@ -193,7 +193,9 @@ const dTree = {
         reconstructTree(child, node);
       });
 
-      parent.children.push(node);
+      // Prepare Left and Right neighbor arrays for spouses
+      var leftNeighbors: any[] = [];
+      var rightNeighbors: any[] = [];
 
       //sort marriages
       dTree._sortMarriages(person.marriages, opts);
@@ -225,7 +227,18 @@ const dTree = {
           marriageNode: m
         };
 
-        parent.children.push(m, spouse);
+        // Distribute to Left or Right based on index
+        // Index 0, 2, 4... -> Right
+        // Index 1, 3, 5... -> Left
+        if (index % 2 === 0) {
+          rightNeighbors.push(m, spouse);
+        } else {
+          // For left side, we prepend to keep the "Spouse -> MarriageNode -> MainNode" order correct visually
+          // Unshift adds to the beginning. 
+          // We want the sequence in the array to be [Spouse, MarriageNode] (far left), ... [Spouse, MarriageNode] (near left)
+          // So we unshift the pair [Spouse, MarriageNode].
+          leftNeighbors.unshift(spouse, m);
+        }
 
         dTree._sortPersons(marriage.children, opts);
         _.forEach(marriage.children, function (child: any) {
@@ -242,6 +255,21 @@ const dTree = {
           number: index
         });
       });
+
+      // Assemble the final array for the parent.
+      // Order: Left Spouses -> Main Node -> Right Spouses
+      if (!parent.children) {
+        parent.children = [];
+      }
+      
+      // Push left neighbors
+      leftNeighbors.forEach((n) => parent.children.push(n));
+      
+      // Push main node
+      parent.children.push(node);
+      
+      // Push right neighbors
+      rightNeighbors.forEach((n) => parent.children.push(n));
     };
 
     _.forEach(data, function (person: any) {

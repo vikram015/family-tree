@@ -290,19 +290,26 @@ class TreeBuilder {
     let nodeWidth = this.nodeSize[0];
     let nodeHeight = this.nodeSize[1];
 
-    // For multiple marriages, alternate positioning to avoid overlaps
-    // Even numbered marriages go up, odd numbered go down more
-    if (d.number > 0) {
-      if (d.number % 2 === 0) {
-        ny -= Math.round((nodeHeight * 12) / 10);
-      } else {
-        ny -= Math.round((nodeHeight * 6) / 10);
-      }
+    // Determine direction of the spouse relative to the node
+    let isRight = d.target.x > d.source.x;
+
+    // For multiple marriages, alternate height to avoid overlaps
+    // d.number 0 (Right) and 1 (Left) are "Inner" marriages (close to node)
+    // d.number 2 (Right) and 3 (Left) are "Outer" marriages (farther)
+    // We lift the connection line for outer marriages
+    if (d.number > 1) {
+      ny -= Math.round((nodeHeight * 6) / 10);
     }
 
-    // Create path that goes around to avoid intersection with child links
-    let offsetX = d.number > 0 ? (nodeWidth * 8) / 10 : (nodeWidth * 6) / 10;
+    // Determine horizontal offset from the node
+    // Inner marriages (0, 1) get smaller offset, Outer (2, 3...) get larger offset
+    let offsetX = d.number > 1 ? (nodeWidth * 8) / 10 : (nodeWidth * 6) / 10;
     
+    // Apply direction to offset
+    if (!isRight) {
+      offsetX *= -1;
+    }
+
     let linedata = [
       {
         x: d.source.x,
