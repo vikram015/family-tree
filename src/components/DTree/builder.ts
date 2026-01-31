@@ -58,7 +58,7 @@ class TreeBuilder {
       .zoom()
       .scaleExtent([0.1, 10])
       .on('zoom', function () {
-        g.attr('transform', (d3.event as any).transform);
+        g.attr('transform', ((d3 as any).event as any).transform);
       }));
 
     // make a svg
@@ -182,11 +182,11 @@ class TreeBuilder {
       .on('dblclick', function () {
         // do not propagate a double click on a node
         // to prevent the zoom from being triggered
-        (d3.event as any).stopPropagation();
+        ((d3 as any).event as any).stopPropagation();
       })
       .on('click', function (d: any) {
         // ignore double-clicks and clicks on hidden nodes
-        if ((d3.event as any).detail === 2 || d.data.hidden) {
+        if (((d3 as any).event as any).detail === 2 || d.data.hidden) {
           return;
         }
         if (d.data.isMarriage) {
@@ -199,7 +199,7 @@ class TreeBuilder {
         if (d.data.hidden) {
           return;
         }
-        (d3.event as any).preventDefault();
+        ((d3 as any).event as any).preventDefault();
         if (d.data.isMarriage) {
           opts.callbacks.marriageRightClick.call(this, d.data.extra, d.data.id);
         } else {
