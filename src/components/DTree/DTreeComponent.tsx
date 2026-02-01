@@ -36,6 +36,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const prevRootIdRef = useRef<string | null>(null);
+  const prevZoomRef = useRef<any>(null);
 
   // Convert FNode format to dTree format
   const convertToTreeFormat = (
@@ -62,6 +64,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         id: person.id,
         dob: person.dob,
         gender: person.gender,
+        hierarchy: person.hierarchy,
+        parentsCount: person.parents?.length || 0,
+        childrenCount: person.children?.length || 0,
+        spousesCount: person.spouses?.length || 0,
       },
     };
 
@@ -113,6 +119,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               id: spouseNode.id,
               dob: spouseNode.dob,
               gender: spouseNode.gender,
+              hierarchy: spouseNode.hierarchy,
+              parentsCount: spouseNode.parents?.length || 0,
+              childrenCount: spouseNode.children?.length || 0,
+              spousesCount: spouseNode.spouses?.length || 0,
             },
           },
           children: marriageChildren.length > 0 ? marriageChildren : undefined,
@@ -141,7 +151,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   useEffect(() => {
     if (!containerRef.current || nodes.length === 0) return;
 
-    // Clear previous tree
+    // Clear previous tree (safeguard, though cleanup handles it)
     d3.select(containerRef.current).selectAll("*").remove();
 
     const rootNode = convertToTreeFormat(rootId);
@@ -172,7 +182,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         height: 800,
         debug: true,
         margin: {
-          top: 20,
+          top: 80,
           right: 90,
           bottom: 20,
           left: 90,
@@ -189,13 +199,40 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       });
 
       console.log("dTree initialized:", treeRef.current);
+
+      // Restore zoom state if root hasn't changed
+      if (
+        rootId === prevRootIdRef.current &&
+        prevZoomRef.current &&
+        treeRef.current
+      ) {
+        try {
+          if (typeof treeRef.current.getBuilder === "function") {
+            const builder = treeRef.current.getBuilder();
+            if (builder && builder.zoom && builder.svg) {
+              console.log("Restoring zoom state:", prevZoomRef.current);
+              builder.svg.call(builder.zoom.transform, prevZoomRef.current);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to restore zoom state:", e);
+        }
+      }
+
+      // Update ref to current root
+      prevRootIdRef.current = rootId;
     } catch (error) {
       console.error("Error rendering dTree:", error);
       setError("Error rendering family tree. Please try refreshing the page.");
     }
 
+    // Cleanup function: Capture zoom state BEFORE removing elements
     return () => {
       if (containerRef.current) {
+        const svgElement = containerRef.current.querySelector("svg");
+        if (svgElement) {
+          prevZoomRef.current = d3.zoomTransform(svgElement);
+        }
         d3.select(containerRef.current).selectAll("*").remove();
       }
     };

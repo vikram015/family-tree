@@ -16,7 +16,6 @@ import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
-import AddNode from "../AddNode/AddNode";
 import { useAuth } from "../hooks/useAuth";
 
 interface FamiliesPageProps {
@@ -131,35 +130,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     }
   }, [treeId]);
 
-  // Load additional details when a node is selected
-  useEffect(() => {
-    console.log("Selected node ID changed to:", selectId);
-    if (selectId && nodes.length > 0) {
-      const selectedNode = nodes.find((item) => item.id === selectId);
-      if (selectedNode) {
-        const loadAdditionalDetails = async () => {
-          console.log("Loading additional details for node:", selectId);
-          try {
-            const additionalDetails =
-              await SupabaseService.getPersonAdditionalDetails(selectId);
-            // Update the selected node with additional details
-            setNodes((prevNodes) =>
-              prevNodes.map((node) =>
-                node.id === selectId
-                  ? { ...node, customFields: additionalDetails }
-                  : node,
-              ),
-            );
-          } catch (error) {
-            console.error("Failed to load additional details:", error);
-          }
-        };
-
-        loadAdditionalDetails();
-      }
-    }
-  }, [selectId, nodes]);
-
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
     [nodes, selectId],
@@ -168,7 +138,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
       console.log("Updating node:", nodeId, "with updates:", updates);
-      // Check permission before updating
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to edit this family tree.");
         return;
@@ -389,8 +358,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const onDelete = useCallback(
     async (nodeId: string) => {
-      console.log("Deleting node1:", nodeId);
-      // Check permission before deleting
+      console.log("Deleting node:", nodeId);
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to delete from this family tree.");
         return;
@@ -513,7 +481,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         "with other parent:",
         otherParentId,
       );
-      // Check permission before adding
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to add to this family tree.");
         return;
@@ -738,7 +705,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       {nodes.length > 0 && !isLoading && (
         <Box
           sx={{
-            display: "flex",
+            display: { xs: "none", sm: "flex" },
             gap: 2,
             p: 1.5,
             px: 2,
@@ -895,43 +862,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           </Container>
         )
       )}
-      {showAddStartingNode && (
-        <Box
-          sx={{
-            position: "fixed",
-            right: 0,
-            top: 0,
-            height: "100%",
-            width: { xs: "100%", sm: "400px" },
-            backgroundColor: "background.paper",
-            boxShadow: "-2px 0 8px rgba(0, 0, 0, 0.1)",
-            zIndex: 1000,
-            overflow: "auto",
-            p: 3,
-          }}
-        >
-          <AddNode
-            onAdd={(node) => {
-              onAdd(node, "child");
-              setShowAddStartingNode(false);
-            }}
-            onCancel={() => setShowAddStartingNode(false)}
-            nodes={nodes}
-            noCard={true}
-            isFirstNode={true}
-          />
-        </Box>
+      {selected && (
+        <NodeDetails
+          node={selected}
+          nodes={nodes}
+          onSelect={setSelectId}
+          onHover={setHoverId}
+          onClear={() => setSelectId(undefined)}
+          onAdd={onAdd}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+        />
       )}
-      <NodeDetails
-        node={selected || null}
-        nodes={nodes}
-        onAdd={onAdd}
-        onUpdate={onUpdate}
-        onDelete={onDelete}
-        onSelect={setSelectId}
-        onHover={setHoverId}
-        onClear={() => setHoverId(undefined)}
-      />
     </>
   );
 };
