@@ -140,6 +140,9 @@ const dTree = {
               )
               .scale(scale)
           );
+      },
+      getBuilder: function() {
+        return treeBuilder;
       }
     };
   },

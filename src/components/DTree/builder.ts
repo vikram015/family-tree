@@ -66,6 +66,7 @@ class TreeBuilder {
       .select(opts.target)
       .append('svg')
       .attr('viewBox', [0, 0, width, height] as any)
+      .style('overflow', 'visible')
       .call(zoom as any));
 
     // create svg group that holds all nodes
@@ -148,6 +149,7 @@ class TreeBuilder {
       .attr('height', function (d: any) {
         return d.cHeight + 'px';
       })
+      .style('overflow', 'visible')
       .attr('id', function (d: any) {
         return d.id;
       })
@@ -407,22 +409,61 @@ class TreeBuilder {
     textClass: string,
     textRenderer: Function
   ) {
+    // Create tooltip content
+    let tooltip = '<div class="node-tooltip">';
+    tooltip += '<div class="tooltip-name">' + name + '</div>';
+    if (extra?.dob) {
+      tooltip += '<div class="tooltip-dob">DOB: ' + extra.dob + '</div>';
+    }
+    
+    const parents = extra?.parentsCount || 0;
+    const children = extra?.childrenCount || 0;
+    const spouses = extra?.spousesCount || 0;
+    tooltip += '<div class="tooltip-stats">Parents: ' + parents + ' • Children: ' + children + ' • Spouses: ' + spouses + '</div>';
+
+    if (extra?.hierarchy && extra.hierarchy.length > 0) {
+      tooltip += '<div class="tooltip-ancestry-title">Ancestry:</div>';
+      tooltip += '<div class="tooltip-ancestry">';
+      for (let i = 0; i < extra.hierarchy.length; i++) {
+        const h = extra.hierarchy[i];
+        const arrow = "↑ ".repeat(extra.hierarchy.length - i);
+        const mb = i < extra.hierarchy.length - 1 ? 'margin-bottom: 2px;' : '';
+        tooltip += '<div style="font-size: 0.7rem; opacity: 0.85; ' + mb + '">' + arrow + ' ' + h.name + '</div>';
+      }
+      tooltip += '</div>';
+    }
+
+    tooltip += '<div class="tooltip-meta">Click to view details</div>';
+    tooltip += '</div>';
+    
     let node = '';
     node += '<div ';
-    node += 'style="height:100%;width:100%;" ';
+    node += 'style="height:100%;width:100%;position:relative;overflow:visible;" ';
     node += 'class="' + nodeClass + '" ';
     node += 'id="node' + id + '">\n';
     node += textRenderer(name, extra, textClass);
+    node += tooltip;
     node += '</div>';
     return node;
   }
 
   static _textRenderer(name: string, extra: any, textClass: string) {
+    const gender = extra?.gender || '';
+    const genderClass = gender === 'male' ? 'male' : gender === 'female' ? 'female' : 'person';
+    
+    let genderIcon = '';
+    if (gender === 'male') {
+      genderIcon = '<svg class="gender-icon male" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 7c2.67 0 8 1.34 8 4v3H4v-3c0-2.66 5.33-4 8-4z"/></svg>';
+    } else if (gender === 'female') {
+      genderIcon = '<svg class="gender-icon female" viewBox="0 0 24 24" fill="currentColor"><path d="M13.94 8.31C13.62 7.52 12.85 7 12 7s-1.62.52-1.94 1.31L7 16h2l1.25-3h3.5L15 16h2l-3.06-7.69zM11.5 11l.5-1.5.5 1.5h-1z"/><circle cx="12" cy="4" r="2"/></svg>';
+    }
+    
     let node = '';
     node += '<p ';
     node += 'align="center" ';
-    node += 'class="' + textClass + '">\n';
-    node += name;
+    node += 'class="' + textClass + ' ' + genderClass + '">\n';
+    node += genderIcon;
+    node += '<span>' + name + '</span>';
     node += '</p>\n';
     return node;
   }
