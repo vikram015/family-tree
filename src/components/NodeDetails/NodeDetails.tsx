@@ -1,6 +1,9 @@
 import React, { memo, useCallback, useState, useEffect } from "react";
 import {
-  Drawer,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Box,
   Typography,
   IconButton,
@@ -14,12 +17,17 @@ import {
   Radio,
   Stack,
   Tooltip,
+  useTheme,
+  useMediaQuery,
+  AppBar,
+  Toolbar,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
@@ -27,26 +35,27 @@ import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
+import { SupabaseService } from "../../services/supabaseService";
 
 interface NodeDetailsProps {
   node: Readonly<FNode> | null;
   nodes: Readonly<FNode>[];
-  className?: string;
+  className?: string; // Kept for compatibility but unused
   onSelect: (nodeId: string | undefined) => void;
   onHover: (nodeId: string) => void;
   onClear: () => void;
-  // new callback to receive created node + relation
   onAdd?: (
     node: Partial<FNode>,
     relation: "child" | "spouse" | "parent",
     targetId?: string,
     type?: RelType,
+    otherParentId?: string,
   ) => void;
-  // callback to update node details
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
-  // callback to delete node and its relations
   onDelete?: (nodeId: string) => void;
 }
+
+const EXCLUDED_FIELDS = ["Gotra", "Village"];
 
 export const NodeDetails = memo(function NodeDetails({
   node,
@@ -54,145 +63,129 @@ export const NodeDetails = memo(function NodeDetails({
   className,
   ...props
 }: NodeDetailsProps) {
-  const [isEditMode, setIsEditMode] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const [view, setView] = useState<"details" | "edit" | "add" | "delete">(
+    "details",
+  );
+
+  // Edit State
   const [editedName, setEditedName] = useState("");
   const [editedDob, setEditedDob] = useState("");
-  const [editedDod, setEditedDod] = useState("");
-  const [editedPlace, setEditedPlace] = useState("");
   const [editedNotes, setEditedNotes] = useState("");
-  const [editedPhoto, setEditedPhoto] = useState("");
   const [editedGender, setEditedGender] = useState<Gender>(Gender.male);
+  const [editedGotra, setEditedGotra] = useState("");
+  const [editedVillage, setEditedVillage] = useState("");
   const [editedCustomFields, setEditedCustomFields] = useState<
     Record<string, string>
   >({});
+
+  // Display State (for when not editing)
+  const [displayCustomFields, setDisplayCustomFields] = useState<
+    Record<string, string>
+  >({});
+
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
 
-  // Reset edit mode when node changes
+  // Reset view and values when node changes
   useEffect(() => {
     if (node) {
+      setView("details");
       setEditedName(node.name || "");
       setEditedDob(node.dob || "");
-      setEditedDod(node.dod || "");
-      setEditedPlace(node.place || "");
       setEditedNotes(node.notes || "");
-      setEditedPhoto(node.photo || "");
       setEditedGender(node.gender || Gender.male);
+
+      // Initial values from node (will be updated by fetch)
+      setEditedGotra(node.customFields?.["Gotra"] || "");
+      setEditedVillage(node.customFields?.["Village"] || "");
       setEditedCustomFields(node.customFields || {});
-      setIsEditMode(false);
+      setDisplayCustomFields(node.customFields || {});
+
+      // Fetch latest custom fields separately
+      SupabaseService.getPersonCustomFields(node.id).then((fields) => {
+        setEditedCustomFields(fields);
+        setEditedGotra(fields["Gotra"] || "");
+        setEditedVillage(fields["Village"] || "");
+        setDisplayCustomFields(fields);
+      });
     }
   }, [node]);
 
-  // Handle back button to close drawer on mobile
-  useEffect(() => {
-    if (!node) return;
-
-    // Push a new history state when drawer opens
-    window.history.pushState({ drawerOpen: true }, "");
-
-    const handlePopState = (event: PopStateEvent) => {
-      // Close the drawer when back button is pressed
-      props.onSelect(undefined);
-      setIsEditMode(false);
-    };
-
-    window.addEventListener("popstate", handlePopState);
-
-    return () => {
-      window.removeEventListener("popstate", handlePopState);
-    };
-  }, [node, props]);
-
   const closeHandler = useCallback(() => {
     props.onSelect(undefined);
-    setIsEditMode(false);
+    setView("details");
   }, [props]);
 
   const handleEditClick = useCallback(() => {
     if (!currentUser) {
       openLoginModal(() => {
-        // After successful login, enter edit mode
-        setIsEditMode(true);
+        setView("edit");
       });
       return;
     }
-    setIsEditMode(true);
+    setView("edit");
   }, [currentUser, openLoginModal]);
 
-  const handleSaveClick = useCallback(async () => {
+  const handleAddClick = useCallback(() => {
+    if (!currentUser) {
+      openLoginModal(() => {
+        setView("add");
+      });
+      return;
+    }
+    setView("add");
+  }, [currentUser, openLoginModal]);
+
+  const handleDeleteClick = useCallback(() => {
+    if (!currentUser) {
+      openLoginModal(() => {
+        setView("delete");
+      });
+      return;
+    }
+    setView("delete");
+  }, [currentUser, openLoginModal]);
+
+  const handleSaveEdit = useCallback(async () => {
     if (node && props.onUpdate) {
       try {
-        const updates = {
+        const updates: Partial<FNode> = {
           name: editedName.trim(),
           dob: editedDob.trim(),
-          dod: editedDod.trim() || undefined,
-          place: editedPlace.trim() || undefined,
           notes: editedNotes.trim() || undefined,
-          photo: editedPhoto.trim() || undefined,
           gender: editedGender,
-          customFields: editedCustomFields, // Always include, even if empty
+          customFields: {
+            ...editedCustomFields,
+            Gotra: editedGotra.trim(),
+            Village: editedVillage.trim(),
+          },
         };
-        console.log("NodeDetails: Calling onUpdate with:", updates);
         await props.onUpdate(node.id, updates);
-        console.log("NodeDetails: Update completed");
+        setView("details");
       } catch (err) {
         console.error("NodeDetails: Error during update:", err);
       }
     }
-    setIsEditMode(false);
   }, [
     node,
     editedName,
     editedDob,
-    editedDod,
-    editedPlace,
     editedNotes,
-    editedPhoto,
     editedGender,
     editedCustomFields,
+    editedGotra,
+    editedVillage,
     props,
   ]);
 
-  const handleCancelEdit = useCallback(() => {
-    if (node) {
-      setEditedName(node.name || "");
-      setEditedDob(node.dob || "");
-      setEditedDod(node.dod || "");
-      setEditedPlace(node.place || "");
-      setEditedNotes(node.notes || "");
-      setEditedPhoto(node.photo || "");
-      setEditedGender(node.gender || Gender.male);
-      setEditedCustomFields(node.customFields || {});
-    }
-    setIsEditMode(false);
-  }, [node]);
-
-  const handleDeleteClick = useCallback(() => {
-    if (!node) return;
-
-    if (!currentUser) {
-      openLoginModal(() => {
-        // After successful login, prompt for delete confirmation
-        const confirmDelete = window.confirm(
-          `Are you sure you want to delete ${node.name}? This will remove them from the tree and unlink all their relationships.`,
-        );
-        if (confirmDelete && props.onDelete) {
-          props.onDelete(node.id);
-          closeHandler();
-        }
-      });
-      return;
-    }
-
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${node.name}? This will remove them from the tree and unlink all their relationships.`,
-    );
-
-    if (confirmDelete && props.onDelete) {
+  const handleConfirmDelete = useCallback(() => {
+    if (node && props.onDelete) {
       props.onDelete(node.id);
       closeHandler();
     }
-  }, [node, props, closeHandler, currentUser, openLoginModal]);
+  }, [node, props, closeHandler]);
 
   const relNodeMapper = useCallback(
     (rel: any) => {
@@ -208,145 +201,245 @@ export const NodeDetails = memo(function NodeDetails({
 
   if (!node) return null;
 
-  // Filter and map relations, removing any null entries
   const parents = node.parents?.map(relNodeMapper).filter(Boolean) || [];
   const children = node.children?.map(relNodeMapper).filter(Boolean) || [];
   const siblings = node.siblings?.map(relNodeMapper).filter(Boolean) || [];
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
 
   return (
-    <Drawer
-      anchor="right"
+    <Dialog
       open={!!node}
       onClose={closeHandler}
-      sx={{
-        "& .MuiDrawer-paper": {
-          width: { xs: "100%", sm: 400 },
-          boxSizing: "border-box",
-          top: "64px",
-          height: "calc(100% - 64px)",
+      fullScreen={isMobile}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          height: isMobile ? "100%" : "auto",
+          maxHeight: isMobile ? "100%" : "90vh",
+          display: "flex",
+          flexDirection: "column",
         },
       }}
-      ModalProps={{
-        keepMounted: true,
-      }}
     >
-      <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            p: 2,
-            borderBottom: 1,
-            borderColor: "divider",
-          }}
-        >
-          <Typography variant="h5" component="h3">
-            {node.name}
-          </Typography>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            {!isEditMode ? (
-              <>
-                <Tooltip title="Delete this person (relationships will be unlinked)">
-                  <IconButton
-                    onClick={handleDeleteClick}
-                    edge="end"
-                    color="error"
+      {view === "details" && (
+        <>
+          <AppBar
+            position="relative"
+            color="default"
+            elevation={0}
+            sx={{ borderBottom: 1, borderColor: "divider" }}
+          >
+            <Toolbar sx={{ justifyContent: "space-between" }}>
+              <Typography variant="h6" noWrap sx={{ flex: 1 }}>
+                {node.name}
+              </Typography>
+              <IconButton edge="end" color="inherit" onClick={closeHandler}>
+                <CloseIcon />
+              </IconButton>
+            </Toolbar>
+          </AppBar>
+          <DialogContent>
+            <Stack spacing={2}>
+              {/* Photo & Basic Info */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  mb: 2,
+                }}
+              >
+                {node.photo ? (
+                  <img
+                    src={node.photo}
+                    alt={node.name}
+                    style={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      marginBottom: 16,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      width: 120,
+                      height: 120,
+                      borderRadius: "50%",
+                      bgcolor: "action.hover",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      mb: 2,
+                      fontSize: 48,
+                      fontWeight: "bold",
+                      color: "text.secondary",
+                    }}
                   >
-                    <DeleteIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Edit details">
-                  <IconButton onClick={handleEditClick} edge="end">
-                    <EditIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Close panel">
-                  <IconButton onClick={closeHandler}>
-                    <CloseIcon />
-                  </IconButton>
-                </Tooltip>
-              </>
-            ) : (
-              <>
-                <Tooltip title="Save changes">
-                  <IconButton
-                    onClick={handleSaveClick}
-                    color="primary"
-                    edge="end"
-                  >
-                    <SaveIcon />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Cancel editing">
-                  <IconButton onClick={handleCancelEdit} edge="end">
-                    <CancelIcon />
-                  </IconButton>
-                </Tooltip>
-              </>
-            )}
-          </Box>
-        </Box>
+                    {node.name.charAt(0)}
+                  </Box>
+                )}
+                <Typography variant="subtitle1" color="text.secondary">
+                  {node.gender === Gender.male
+                    ? "Male"
+                    : node.gender === Gender.female
+                      ? "Female"
+                      : "Other"}
+                  {node.dob && ` • Born ${node.dob}`}
+                </Typography>
+              </Box>
 
-        <Box sx={{ flexGrow: 1, overflowY: "auto", p: 2 }}>
-          {!node ? (
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                textAlign: "center",
-              }}
-            >
-              <Typography variant="h6" color="text.secondary" gutterBottom>
-                No family member selected
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Click on a family member in the tree to view their details, edit
-                information, or add new family members as parents, spouses, or
-                children.
-              </Typography>
-            </Box>
-          ) : isEditMode ? (
-            <Stack spacing={3}>
+              {/* Action Buttons */}
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  gap: 1,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Button
+                  variant="outlined"
+                  startIcon={<EditIcon />}
+                  onClick={handleEditClick}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={handleAddClick}
+                >
+                  Add Relative
+                </Button>
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={handleDeleteClick}
+                >
+                  Delete
+                </Button>
+              </Box>
+
+              <Divider />
+
+              {/* Details List */}
+              <Stack spacing={1}>
+                {node.dod && (
+                  <Typography variant="body2">
+                    <strong>Died:</strong> {node.dod}
+                  </Typography>
+                )}
+                {node.place && (
+                  <Typography variant="body2">
+                    <strong>Place:</strong> {node.place}
+                  </Typography>
+                )}
+                {node.notes && (
+                  <Box>
+                    <Typography variant="body2" fontWeight="bold">
+                      Notes:
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{ whiteSpace: "pre-wrap", color: "text.secondary" }}
+                    >
+                      {node.notes}
+                    </Typography>
+                  </Box>
+                )}
+                {displayCustomFields &&
+                  Object.keys(displayCustomFields).length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography
+                        variant="subtitle2"
+                        color="text.secondary"
+                        sx={{ mb: 1 }}
+                      >
+                        Additional Details
+                      </Typography>
+                      {Object.entries(displayCustomFields || {}).map(
+                        ([key, value]) => (
+                          <Typography key={key} variant="body2">
+                            <strong>{key}:</strong> {value}
+                          </Typography>
+                        ),
+                      )}
+                    </Box>
+                  )}
+              </Stack>
+
+              {/* Ancestry */}
+              {node.hierarchy && node.hierarchy.length > 0 && (
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ mb: 1, color: "primary.main" }}
+                  >
+                    Ancestry
+                  </Typography>
+                  <Box sx={{ pl: 1, borderLeft: 2, borderColor: "divider" }}>
+                    {node.hierarchy.map((ancestor, i) => (
+                      <Typography
+                        key={ancestor.id}
+                        variant="caption"
+                        display="block"
+                        sx={{ ml: i * 1 }}
+                      >
+                        {i > 0 && "↳ "} {ancestor.name}
+                      </Typography>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              <Divider />
+
+              {/* Relations */}
+              <Relations {...props} title="Parents" items={parents} />
+              <Relations {...props} title="Spouses" items={spouses} />
+              <Relations {...props} title="Children" items={children} />
+              <Relations {...props} title="Siblings" items={siblings} />
+            </Stack>
+          </DialogContent>
+        </>
+      )}
+
+      {view === "edit" && (
+        <>
+          <DialogTitle>Edit {node.name}</DialogTitle>
+          <DialogContent dividers>
+            <Stack spacing={3} sx={{ pt: 1 }}>
               <TextField
                 label="Name"
                 value={editedName}
                 onChange={(e) => setEditedName(e.target.value)}
                 fullWidth
                 required
-                autoFocus
               />
               <TextField
                 label="Date of Birth"
+                type="date"
                 value={editedDob}
                 onChange={(e) => setEditedDob(e.target.value)}
                 fullWidth
-                placeholder="e.g., 1990-05-15 or 15 May 1990"
+                InputLabelProps={{ shrink: true }}
               />
               <TextField
-                label="Date of Death"
-                value={editedDod}
-                onChange={(e) => setEditedDod(e.target.value)}
+                label="Gotra"
+                value={editedGotra}
+                onChange={(e) => setEditedGotra(e.target.value)}
                 fullWidth
-                placeholder="e.g., 2020-12-31 (optional)"
               />
               <TextField
-                label="Place"
-                value={editedPlace}
-                onChange={(e) => setEditedPlace(e.target.value)}
+                label="Village"
+                value={editedVillage}
+                onChange={(e) => setEditedVillage(e.target.value)}
                 fullWidth
-                placeholder="e.g., Birthplace or Current Location (optional)"
-              />
-              <TextField
-                label="Photo URL"
-                value={editedPhoto}
-                onChange={(e) => setEditedPhoto(e.target.value)}
-                fullWidth
-                placeholder="e.g., https://example.com/photo.jpg (optional)"
               />
               <TextField
                 label="Notes"
@@ -354,12 +447,12 @@ export const NodeDetails = memo(function NodeDetails({
                 onChange={(e) => setEditedNotes(e.target.value)}
                 fullWidth
                 multiline
-                rows={4}
-                placeholder="Additional notes or information (optional)"
+                rows={3}
               />
-              <FormControl component="fieldset">
-                <FormLabel component="legend">Gender</FormLabel>
+              <FormControl>
+                <FormLabel>Gender</FormLabel>
                 <RadioGroup
+                  row
                   value={editedGender}
                   onChange={(e) => setEditedGender(e.target.value as Gender)}
                 >
@@ -379,183 +472,96 @@ export const NodeDetails = memo(function NodeDetails({
               <AdditionalDetails
                 value={editedCustomFields}
                 onChange={setEditedCustomFields}
+                excludeFields={EXCLUDED_FIELDS}
               />
-              <Divider />
-              <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-                <Button
-                  variant="outlined"
-                  onClick={handleCancelEdit}
-                  startIcon={<CancelIcon />}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleSaveClick}
-                  startIcon={<SaveIcon />}
-                  disabled={!editedName.trim()}
-                >
-                  Save Changes
-                </Button>
-              </Box>
             </Stack>
-          ) : (
-            <>
-              {node.photo && (
-                <Box sx={{ mb: 3, textAlign: "center" }}>
-                  <img
-                    src={node.photo}
-                    alt={node.name}
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "200px",
-                      borderRadius: "8px",
-                      objectFit: "cover",
-                    }}
-                  />
-                </Box>
-              )}
-              {node.dob && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Date of Birth
-                  </Typography>
-                  <Typography variant="body1">{node.dob}</Typography>
-                </Box>
-              )}
-              {node.dod && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Date of Death
-                  </Typography>
-                  <Typography variant="body1">{node.dod}</Typography>
-                </Box>
-              )}
-              {node.place && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Place
-                  </Typography>
-                  <Typography variant="body1">{node.place}</Typography>
-                </Box>
-              )}
-              {node.notes && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="subtitle2" color="text.secondary">
-                    Notes
-                  </Typography>
-                  <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>
-                    {node.notes}
-                  </Typography>
-                </Box>
-              )}
-              {node.customFields &&
-                Object.keys(node.customFields).length > 0 && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="subtitle2"
-                      color="text.secondary"
-                      sx={{ mb: 1 }}
-                    >
-                      Additional Details
-                    </Typography>
-                    {Object.entries(node.customFields).map(([key, value]) => (
-                      <Box key={key} sx={{ mb: 1, pl: 1 }}>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          component="span"
-                        >
-                          {key}:
-                        </Typography>
-                        <Typography
-                          variant="body1"
-                          component="span"
-                          sx={{ ml: 1 }}
-                        >
-                          {value}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setView("details")}>Cancel</Button>
+            <Button
+              onClick={handleSaveEdit}
+              variant="contained"
+              disabled={!editedName.trim()}
+            >
+              Save Changes
+            </Button>
+          </DialogActions>
+        </>
+      )}
 
-              {node.hierarchy && node.hierarchy.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography
-                    variant="subtitle2"
-                    color="text.secondary"
-                    sx={{ mb: 1 }}
-                  >
-                    Ancestry Hierarchy
-                  </Typography>
-                  <Stack spacing={0.5}>
-                    {node.hierarchy.map((ancestor, index) => (
-                      <Box
-                        key={ancestor.id}
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          pl: index * 1.5,
-                          py: 0.5,
-                        }}
-                      >
-                        <Typography variant="body2">
-                          {Array(index).fill("↑ ").join("")}
-                          {ancestor.name}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                </Box>
-              )}
-              {(parents.length > 0 ||
-                children.length > 0 ||
-                siblings.length > 0 ||
-                spouses.length > 0) && <Divider sx={{ my: 2 }} />}
-            </>
-          )}
-          {!isEditMode && parents.length > 0 && (
-            <Relations {...props} title="Parents" items={parents} />
-          )}
-          {!isEditMode &&
-            parents.length > 0 &&
-            (children.length > 0 ||
-              siblings.length > 0 ||
-              spouses.length > 0) && <Divider sx={{ my: 2 }} />}
-          {!isEditMode && children.length > 0 && (
-            <Relations {...props} title="Children" items={children} />
-          )}
-          {!isEditMode &&
-            children.length > 0 &&
-            (siblings.length > 0 || spouses.length > 0) && (
-              <Divider sx={{ my: 2 }} />
-            )}
-          {!isEditMode && siblings.length > 0 && (
-            <Relations {...props} title="Siblings" items={siblings} />
-          )}
-          {!isEditMode && siblings.length > 0 && spouses.length > 0 && (
-            <Divider sx={{ my: 2 }} />
-          )}
-          {!isEditMode && spouses.length > 0 && (
-            <Relations {...props} title="Spouses" items={spouses} />
-          )}
-          {!isEditMode &&
-            (parents.length > 0 ||
-              children.length > 0 ||
-              siblings.length > 0 ||
-              spouses.length > 0) && <Divider sx={{ my: 2 }} />}
-          {!isEditMode && (
+      {view === "add" && (
+        <>
+          <DialogTitle>Add Relative</DialogTitle>
+          <DialogContent dividers>
             <AddNode
               targetId={node.id}
               nodes={nodes}
-              onAdd={props.onAdd}
-              onCancel={props.onClear}
+              onAdd={(n, r, t, type, op) => {
+                if (props.onAdd) {
+                  props.onAdd(n, r, t, type, op);
+                  // We might want to switch back to details after adding
+                  setView("details");
+                }
+              }}
+              onCancel={() => setView("details")}
               noCard
             />
-          )}
-        </Box>
-      </Box>
-    </Drawer>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setView("details")}>Cancel</Button>
+          </DialogActions>
+        </>
+      )}
+
+      {view === "delete" && (
+        <>
+          <DialogTitle sx={{ color: "error.main" }}>
+            Confirm Delete
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="h6" color="text.primary">
+                {node.name}
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                display="block"
+                sx={{
+                  mt: 0.5,
+                  fontStyle: "italic",
+                  bgcolor: "rgba(0,0,0,0.03)",
+                  p: 0.5,
+                  borderRadius: 1,
+                }}
+              >
+                {node.hierarchy && node.hierarchy.length > 0
+                  ? `Hierarchy: ${node.hierarchy
+                      .map((h) => h.name)
+                      .join(" > ")} > ${node.name}`
+                  : "Hierarchy: (Root Node)"}
+              </Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to delete this person?
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              This action cannot be undone. All relationships to this person
+              will be removed.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setView("details")}>Cancel</Button>
+            <Button
+              onClick={handleConfirmDelete}
+              color="error"
+              variant="contained"
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </>
+      )}
+    </Dialog>
   );
 });

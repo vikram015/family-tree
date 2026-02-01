@@ -225,7 +225,28 @@ export const SupabaseService = {
   /**
    * Create a new person in the family tree
    */
-  async createPerson(person: Partial<FNode>): Promise<PersonWithRelations> {
+  async getPersonCustomFields(personId: string): Promise<Record<string, string>> {
+     const { data, error } = await supabase
+      .from('people_additional_detail')
+      .select('field_value, people_field!inner(field_name)')
+      .eq('people_id', personId);
+      
+      if (error) {
+        console.error('Error fetching custom fields:', error);
+        return {};
+      }
+
+      const result: Record<string, string> = {};
+      data?.forEach((item: any) => {
+        if (item.people_field?.field_name) {
+          result[item.people_field.field_name] = item.field_value;
+        }
+      });
+      return result;
+  },
+
+  /**
+   * Create a new person in the family tree
     const personData = {
       name: person.name,
       gender: person.gender || null,

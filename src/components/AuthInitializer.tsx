@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAppDispatch } from "../store/hooks";
-import { initializeAuth, updateAuthState } from "../store/slices/authSlice";
+import { updateAuthState } from "../store/slices/authSlice";
 import { supabase } from "../supabase";
 
 /**
@@ -13,14 +13,22 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     console.log("AuthInitializer: Setting up auth");
 
-    // Initialize auth state
-    dispatch(initializeAuth());
-
     // Subscribe to auth state changes
+    // This fires immediately with the current session (INITIAL_SESSION),
+    // and whenever the token is refreshed (TOKEN_REFRESHED) or user signs in/out.
+    // We rely on this single source of truth instead of manually calling initializeAuth()
+    // to avoid race conditions and double-fetching.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("AuthInitializer: Auth state changed, event:", event);
+
+      if (event === "SIGNED_OUT") {
+        dispatch(updateAuthState({ user: null }));
+        return;
+      }
+
+      // For INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, PASSWORD_RECOVERY, USER_UPDATED
       const user = session?.user || null;
       dispatch(updateAuthState({ user }));
     });

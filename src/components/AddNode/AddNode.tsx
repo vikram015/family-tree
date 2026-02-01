@@ -37,6 +37,8 @@ interface AddNodeProps {
   isFirstNode?: boolean; // if true, hides relation selection fields
 }
 
+const EXCLUDED_FIELDS = ["Gotra", "Village"];
+
 const AddNode: React.FC<AddNodeProps> = ({
   targetId,
   onAdd,
@@ -50,6 +52,8 @@ const AddNode: React.FC<AddNodeProps> = ({
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
     "male",
   );
+  const [gotra, setGotra] = useState("");
+  const [village, setVillage] = useState("");
   const [relation, setRelation] = useState<"child" | "spouse" | "parent">(
     "child",
   );
@@ -120,6 +124,8 @@ const AddNode: React.FC<AddNodeProps> = ({
     setName("");
     setDob("");
     setGender("");
+    setGotra("");
+    setVillage("");
     setRelation("child");
     setCustomFields({});
   }, [onCancel]);
@@ -129,6 +135,12 @@ const AddNode: React.FC<AddNodeProps> = ({
       // minimal validation
       return;
     }
+
+    const mergedFields = {
+      ...customFields,
+      Gotra: gotra.trim(),
+      Village: village.trim(),
+    };
 
     if (!currentUser) {
       openLoginModal(() => {
@@ -150,7 +162,7 @@ const AddNode: React.FC<AddNodeProps> = ({
           parents: parents.length ? parents : undefined,
           spouses: [],
           customFields:
-            Object.keys(customFields).length > 0 ? customFields : undefined,
+            Object.keys(mergedFields).length > 0 ? mergedFields : undefined,
         };
 
         onAdd?.(
@@ -182,7 +194,7 @@ const AddNode: React.FC<AddNodeProps> = ({
       parents: parents.length ? parents : undefined,
       spouses: [],
       customFields:
-        Object.keys(customFields).length > 0 ? customFields : undefined,
+        Object.keys(mergedFields).length > 0 ? mergedFields : undefined,
     };
 
     onAdd?.(
@@ -199,6 +211,8 @@ const AddNode: React.FC<AddNodeProps> = ({
     name,
     dob,
     gender,
+    gotra,
+    village,
     customFields,
     relation,
     targetId,
@@ -302,6 +316,20 @@ const AddNode: React.FC<AddNodeProps> = ({
           InputLabelProps={{ shrink: true }}
         />
 
+        <TextField
+          label="Gotra"
+          value={gotra}
+          onChange={(e) => setGotra(e.target.value)}
+          fullWidth
+        />
+
+        <TextField
+          label="Village"
+          value={village}
+          onChange={(e) => setVillage(e.target.value)}
+          fullWidth
+        />
+
         <FormControl fullWidth>
           <InputLabel>Gender</InputLabel>
           <Select
@@ -318,7 +346,11 @@ const AddNode: React.FC<AddNodeProps> = ({
 
         <Divider />
 
-        <AdditionalDetails value={customFields} onChange={setCustomFields} />
+        <AdditionalDetails
+          value={customFields}
+          onChange={setCustomFields}
+          excludeFields={EXCLUDED_FIELDS}
+        />
 
         <Box
           sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 2 }}

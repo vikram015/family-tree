@@ -6,9 +6,13 @@ import {
   Typography,
   Container,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
 } from "@mui/material";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
+import AddNode from "../AddNode/AddNode";
 import { NODE_WIDTH, NODE_HEIGHT, getNodeHierarchy } from "../const";
 import { getNodeStyle } from "../App/utils";
 import { SupabaseService } from "../../services/supabaseService";
@@ -862,13 +866,38 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           </Container>
         )
       )}
+      <Dialog
+        open={showAddStartingNode}
+        onClose={() => setShowAddStartingNode(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create First Person</DialogTitle>
+        <DialogContent>
+          <AddNode
+            isFirstNode={true}
+            onAdd={(node) => {
+              // Pass as 'child' with no target - the onAdd handler will handle default case if we modify it,
+              // OR we just pass appropriate dummy values that onAdd understands.
+              // Looking at onAdd, it doesn't handle "no relation". I should update onAdd or pass dummy.
+              // Actually, better to check onAdd logic.
+              // If I pass relation="child" and targetId=undefined, it skips all if/else blocks and goes to default addPersonToTree.
+              // addPersonToTree procedure handles null relations as root node.
+              onAdd(node, "child", undefined); // "child" is just a placeholder type, won't be used logic-wise if targetId is missing
+              setShowAddStartingNode(false);
+            }}
+            onCancel={() => setShowAddStartingNode(false)}
+            noCard
+          />
+        </DialogContent>
+      </Dialog>
       {selected && (
         <NodeDetails
           node={selected}
           nodes={nodes}
           onSelect={setSelectId}
           onHover={setHoverId}
-          onClear={() => setSelectId(undefined)}
+          onClear={() => setHoverId(undefined)}
           onAdd={onAdd}
           onUpdate={onUpdate}
           onDelete={onDelete}

@@ -49,8 +49,20 @@ BEGIN
     FOR v_field_key, v_field_value IN
     SELECT key, value FROM jsonb_each_text(p_additional_fields)
     LOOP
-      -- Get the field ID (must already exist in people_field)
+      v_field_id := NULL;
+      
+      -- 1. Try exact match
       SELECT id INTO v_field_id FROM people_field WHERE field_name = v_field_key LIMIT 1;
+      
+      -- 2. Try case-insensitive match
+      IF v_field_id IS NULL THEN
+        SELECT id INTO v_field_id FROM people_field WHERE LOWER(field_name) = LOWER(v_field_key) LIMIT 1;
+      END IF;
+
+      -- 3. If missing AND is standard field (Gotra/Village), auto-create
+      IF v_field_id IS NULL AND (LOWER(v_field_key) = 'gotra' OR LOWER(v_field_key) = 'village') THEN
+         INSERT INTO people_field (field_name) VALUES (v_field_key) RETURNING id INTO v_field_id;
+      END IF;
       
       -- Only insert if field exists
       IF v_field_id IS NOT NULL THEN

@@ -171,11 +171,15 @@ export const logout = createAsyncThunk(
 
 export const updateAuthState = createAsyncThunk(
   'auth/updateState',
-  async ({ user }: { user: any }, { rejectWithValue }) => {
+  async ({ user }: { user: any }, { rejectWithValue, getState }) => {
     try {
       if (!user) {
         return { currentUser: null, userProfile: null };
       }
+
+      // Check current state to see if we already have this user's profile
+      const state = getState() as any;
+      const currentProfile = state.auth?.userProfile;
 
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
@@ -185,16 +189,24 @@ export const updateAuthState = createAsyncThunk(
 
       if (profileError) {
         console.error('Error fetching user profile:', profileError);
+        // Fallback to existing profile if IDs match to prevent "logout" on transient errors
+        if (currentProfile && currentProfile.id === user.id) {
+          return { currentUser: user, userProfile: currentProfile };
+        }
       }
 
       return {
         currentUser: user,
-        userProfile: userProfile ? { id: user.id, ...userProfile } as AppUser : null,
+        userProfile: userProfile
+          ? ({ id: user.id, ...userProfile } as AppUser)
+          : currentProfile && currentProfile.id === user.id
+            ? currentProfile
+            : null,
       };
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
-  }
+  },
 );
 
 const authSlice = createSlice({
