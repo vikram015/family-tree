@@ -7,6 +7,7 @@ interface AuthState {
   userProfile: AppUser | null;
   loading: boolean;
   error: string | null;
+  resetPasswordMode: boolean;
 }
 
 const initialState: AuthState = {
@@ -14,6 +15,7 @@ const initialState: AuthState = {
   userProfile: null,
   loading: true,
   error: null,
+  resetPasswordMode: false,
 };
 
 // Async thunks
@@ -50,51 +52,40 @@ export const initializeAuth = createAsyncThunk(
 
 export const signUpWithEmail = createAsyncThunk(
   'auth/signUp',
-  async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
+  async ({ email, password, name, phone }: { email: string; password: string; name: string; phone: string }, { rejectWithValue }) => {
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name,
+            phone
+          }
+        }
+      });
 
       if (error) throw new Error(error.message);
       if (!data.user) throw new Error('No user returned from signup');
 
-      const user = data.user;
-
-      // Check if user profile exists
-      const { data: existingUser, error: fetchError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error('Error fetching user profile:', fetchError);
-      }
-
-      if (!existingUser) {
-        const newUserProfile: Omit<AppUser, 'id'> = {
-          email: user.email || '',
-          role: 'admin',
-          villages: [],
-          displayName: user.email?.split('@')[0] || '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        const { error: insertError } = await supabase
-          .from('users')
-          .insert([{ id: user.id, ...newUserProfile }]);
-
-        if (insertError) throw new Error(insertError.message);
-
+      // If session is missing, it means email verification is required (or manual approval).
+      // The user is NOT logged in yet.
+      if (!data.session) {
         return {
-          currentUser: user,
-          userProfile: { ...newUserProfile, id: user.id } as AppUser,
+          currentUser: null,
+          userProfile: null,
         };
       }
+
+      const user = data.user;
+      
+      // We do NOT create the user profile here anymore.
+      // It will be created when they login for the first time.
+      // The name and phone are stored in user_metadata which will be accessible then.
 
       return {
         currentUser: user,
-        userProfile: { id: user.id, ...existingUser } as AppUser,
+        userProfile: null, // Profile not created yet
       };
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -124,31 +115,61 @@ export const signInWithEmail = createAsyncThunk(
       }
 
       if (userProfileData) {
+        // Map snake_case DB fields to camelCase app fields
+        const existingUserProfile: AppUser = {
+          id: userProfileData.id,
+          email: userProfileData.email,
+          role: userProfileData.role,
+          villages: userProfileData.villages || [],
+          displayName: userProfileData.name,
+          name: userProfileData.name,
+          phone: userProfileData.phone,
+          isVerified: userProfileData.is_verified,
+          createdAt: userProfileData.created_at,
+          updatedAt: userProfileData.modified_at,
+        };
+
         return {
           currentUser: user,
-          userProfile: { id: user.id, ...userProfileData } as AppUser,
+          userProfile: existingUserProfile,
         };
       }
 
       // Create profile if doesn't exist
-      const newUserProfile: Omit<AppUser, 'id'> = {
+      const metadata = user.user_metadata || {};
+      
+      const dbUser = {
+        id: user.id,
         email: user.email || '',
         role: 'admin',
         villages: [],
-        displayName: user.email?.split('@')[0] || '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        name: metadata.name || user.email?.split('@')[0] || '',
+        phone: metadata.phone || '',
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
       };
 
       const { error: insertError } = await supabase
         .from('users')
-        .insert([{ id: user.id, ...newUserProfile }]);
+        .insert([dbUser]);
 
       if (insertError) throw new Error(insertError.message);
 
+      const newUserProfile: AppUser = {
+        id: user.id,
+        email: dbUser.email,
+        role: dbUser.role as UserRole,
+        villages: [],
+        displayName: dbUser.name,
+        name: dbUser.name,
+        phone: dbUser.phone,
+        createdAt: dbUser.created_at,
+        updatedAt: dbUser.modified_at,
+      };
+
       return {
         currentUser: user,
-        userProfile: { ...newUserProfile, id: user.id } as AppUser,
+        userProfile: newUserProfile,
       };
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -163,6 +184,34 @@ export const logout = createAsyncThunk(
       const { error } = await supabase.auth.signOut();
       if (error) throw new Error(error.message);
       return null;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const sendPasswordResetEmail = createAsyncThunk(
+  'auth/sendPasswordResetEmail',
+  async (email: string, { rejectWithValue }) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw new Error(error.message);
+      return true;
+    } catch (error: any) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const updatePassword = createAsyncThunk(
+  'auth/updatePassword',
+  async (password: string, { rejectWithValue }) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw new Error(error.message);
+      return true;
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -195,13 +244,69 @@ export const updateAuthState = createAsyncThunk(
         }
       }
 
+      if (userProfile) {
+        // Map snake_case DB fields to camelCase app fields
+        const existingUserProfile: AppUser = {
+          id: userProfile.id,
+          email: userProfile.email,
+          role: userProfile.role,
+          villages: userProfile.villages || [],
+          displayName: userProfile.name,
+          name: userProfile.name,
+          phone: userProfile.phone,
+          isVerified: userProfile.is_verified,
+          createdAt: userProfile.created_at,
+          updatedAt: userProfile.modified_at,
+        };
+        return {
+          currentUser: user,
+          userProfile: existingUserProfile
+        };
+      }
+
+      // If no profile exists (first login via email link or otherwise), create it now
+      
+      // Refetch user to ensure we have the latest metadata (sometimes session user is stale)
+      const { data: { user: freshUser } } = await supabase.auth.getUser();
+      const metadata = freshUser?.user_metadata || user.user_metadata || {};
+      
+      console.log('Creating user profile with metadata:', metadata);
+      
+      const dbUser = {
+        id: user.id,
+        email: user.email || '',
+        role: 'admin',
+        villages: [],
+        name: metadata.name || user.email?.split('@')[0] || '',
+        phone: metadata.phone || '',
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
+      };
+
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([dbUser]);
+
+      if (insertError) {
+        console.error('Error creating user profile:', insertError);
+        throw new Error(insertError.message);
+      }
+
+      const newUserProfile: AppUser = {
+        id: user.id,
+        email: dbUser.email,
+        role: dbUser.role as UserRole,
+        villages: [],
+        displayName: dbUser.name,
+        name: dbUser.name,
+        phone: dbUser.phone,
+        createdAt: dbUser.created_at,
+        updatedAt: dbUser.modified_at,
+      };
+
       return {
         currentUser: user,
-        userProfile: userProfile
-          ? ({ id: user.id, ...userProfile } as AppUser)
-          : currentProfile && currentProfile.id === user.id
-            ? currentProfile
-            : null,
+        userProfile: newUserProfile,
       };
     } catch (error: any) {
       return rejectWithValue(error.message);
@@ -218,6 +323,9 @@ const authSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null;
+    },
+    setResetPasswordMode: (state, action: PayloadAction<boolean>) => {
+      state.resetPasswordMode = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -279,13 +387,14 @@ const authSlice = createSlice({
   },
 });
 
-export const { setCurrentUser, clearError } = authSlice.actions;
+export const { setCurrentUser, clearError, setResetPasswordMode } = authSlice.actions;
 
 // Selectors
 export const selectCurrentUser = (state: any) => state.auth.currentUser;
 export const selectUserProfile = (state: any) => state.auth.userProfile;
 export const selectAuthLoading = (state: any) => state.auth.loading;
 export const selectAuthError = (state: any) => state.auth.error;
+export const selectResetPasswordMode = (state: any) => state.auth.resetPasswordMode;
 
 // Permission helper selectors
 export const selectIsSuperAdmin = (state: any) =>

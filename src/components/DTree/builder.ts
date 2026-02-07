@@ -57,6 +57,12 @@ class TreeBuilder {
     const zoom = (this.zoom = d3
       .zoom()
       .scaleExtent([0.1, 10])
+      // Standard filter that allows touch inputs
+      .filter(function() {
+        // Only ignore secondary buttons (right click)
+        // (d3 as any).event is compatible with v4
+        return !(d3 as any).event.button || (d3 as any).event.type === 'touchstart' || (d3 as any).event.type === 'wheel';
+      })
       .on('zoom', function () {
         g.attr('transform', ((d3 as any).event as any).transform);
       }));
@@ -67,7 +73,12 @@ class TreeBuilder {
       .append('svg')
       .attr('viewBox', [0, 0, width, height] as any)
       .style('overflow', 'visible')
-      .call(zoom as any));
+      .style('touch-action', 'none')
+      .style('user-select', 'none')
+      .style('-webkit-user-select', 'none')
+      .style('cursor', 'grab')
+      .call(zoom as any)
+    );
 
     // create svg group that holds all nodes
     const g = (this.g = svg.append('g'));

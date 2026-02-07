@@ -59,8 +59,8 @@ BEGIN
         SELECT id INTO v_field_id FROM people_field WHERE LOWER(field_name) = LOWER(v_field_key) LIMIT 1;
       END IF;
 
-      -- 3. If missing AND is standard field (Gotra/Village), auto-create
-      IF v_field_id IS NULL AND (LOWER(v_field_key) = 'gotra' OR LOWER(v_field_key) = 'village') THEN
+      -- 3. If missing AND is standard field (Gotra/Village/Note), auto-create
+      IF v_field_id IS NULL AND (LOWER(v_field_key) = 'gotra' OR LOWER(v_field_key) = 'village' OR LOWER(v_field_key) = 'note') THEN
          INSERT INTO people_field (field_name) VALUES (v_field_key) RETURNING id INTO v_field_id;
       END IF;
       

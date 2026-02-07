@@ -16,16 +16,20 @@ import {
   Paper,
   Stack,
   Divider,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
+import { SupabaseService } from "../../services/supabaseService";
+import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 
 interface AddNodeProps {
   targetId?: string; // id of node in relation to which we add (e.g. parent/child/spouse)
   onAdd?: (
-    node: Partial<Node>,
+    node: Partial<FNode>,
     relation: "child" | "spouse" | "parent",
     targetId?: string,
     type?: RelType,
@@ -68,7 +72,26 @@ const AddNode: React.FC<AddNodeProps> = ({
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
 
-  // Get the target node to determine opposite gender for spouse
+  // Mode state: 'create' or 'link' (only relevant for spouse currently)
+  const [mode, setMode] = useState<"create" | "link">("create");
+  const [villages, setVillages] = useState<any[]>([]);
+  const [searchVillageId, setSearchVillageId] = useState("");
+  const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  const [personSearchValue, setPersonSearchValue] = useState("");
+
+  // Load villages for the search dropdown
+  useEffect(() => {
+    SupabaseService.getVillages().then((data) => {
+      setVillages(data || []);
+    });
+  }, []);
+
+  // Update mode defaults when relation changes
+  useEffect(() => {
+    if (relation !== "spouse") {
+      setMode("create");
+    }
+  }, [relation]);
   const targetNode = useMemo(() => {
     if (!nodes || !targetId) return null;
     return nodes.find((n) => n.id === targetId);
@@ -128,9 +151,31 @@ const AddNode: React.FC<AddNodeProps> = ({
     setVillage("");
     setRelation("child");
     setCustomFields({});
+    setMode("create");
+    setSelectedPerson(null);
+    setSearchVillageId("");
+    setPersonSearchValue("");
   }, [onCancel]);
 
   const handleSave = useCallback(() => {
+    // If linking existing person
+    if (mode === "link") {
+      if (!selectedPerson) return;
+
+      onAdd?.(
+        {
+          id: selectedPerson.id,
+          name: selectedPerson.name,
+        } as unknown as Partial<FNode>, // Pass existing ID
+        relation,
+        targetId,
+        selectedRelType,
+        selectedOtherParentId,
+      );
+      handleCancel();
+      return;
+    }
+
     if (!name.trim()) {
       // minimal validation
       return;
@@ -220,6 +265,8 @@ const AddNode: React.FC<AddNodeProps> = ({
     handleCancel,
     selectedOtherParentId,
     selectedRelType,
+    mode,
+    selectedPerson,
   ]);
 
   return (
@@ -279,78 +326,159 @@ const AddNode: React.FC<AddNodeProps> = ({
           </FormControl>
         )}
 
-        {!isFirstNode && relation === "child" && (
-          <FormControl fullWidth>
-            <InputLabel>Other parent</InputLabel>
-            <Select
-              value={selectedOtherParentId}
-              onChange={(e) => setSelectedOtherParentId(e.target.value)}
-              label="Other parent"
+        {!isFirstNode && relation === "spouse" && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Action
+            </Typography>
+            <ToggleButtonGroup
+              color="primary"
+              value={mode}
+              exclusive
+              onChange={(_, newMode) => newMode && setMode(newMode)}
+              size="small"
+              fullWidth
             >
-              <MenuItem value="">None</MenuItem>
-              {spouseOptions.map((s) => (
-                <MenuItem key={s.id} value={s.id}>
-                  {s.name ||
-                    (targetNode?.name ? `${targetNode.name}'s Spouse` : s.id)}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <ToggleButton value="create">Create New Profile</ToggleButton>
+              <ToggleButton value="link">Link Existing Profile</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
         )}
 
-        <TextField
-          label="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth
-          required
-          autoFocus
-        />
+        {mode === "link" && relation === "spouse" ? (
+          <Stack spacing={2}>
+            <FormControl fullWidth>
+              <InputLabel>Select Village (Required)</InputLabel>
+              <Select
+                value={searchVillageId}
+                onChange={(e) => {
+                  setSearchVillageId(e.target.value);
+                  setPersonSearchValue("");
+                  setSelectedPerson(null);
+                }}
+                label="Select Village (Required)"
+              >
+                <MenuItem value="">-- Select Village --</MenuItem>
+                {villages.map((v) => (
+                  <MenuItem key={v.id} value={v.id}>
+                    {v.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
-        <TextField
-          label="Date of birth (optional)"
-          type="date"
-          value={dob}
-          onChange={(e) => setDob(e.target.value)}
-          fullWidth
-          InputLabelProps={{ shrink: true }}
-        />
+            {searchVillageId ? (
+              <PersonSearchField
+                villageId={searchVillageId}
+                searchValue={personSearchValue}
+                onSearchValueChange={setPersonSearchValue}
+                onPersonSelect={setSelectedPerson}
+                selectedPerson={selectedPerson}
+                label="Search Person"
+                placeholder="Type name to search..."
+              />
+            ) : (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontStyle: "italic", display: "block", my: 1 }}
+              >
+                Please select a village first to search for people.
+              </Typography>
+            )}
 
-        <TextField
-          label="Gotra"
-          value={gotra}
-          onChange={(e) => setGotra(e.target.value)}
-          fullWidth
-        />
+            {selectedPerson && (
+              <Paper variant="outlined" sx={{ p: 2, bgcolor: "action.hover" }}>
+                <Typography variant="subtitle2">Selected Spouse:</Typography>
+                <Typography variant="body1" fontWeight="bold">
+                  {selectedPerson.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {[selectedPerson.villageName, selectedPerson.casteName]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </Typography>
+              </Paper>
+            )}
+          </Stack>
+        ) : (
+          <>
+            {!isFirstNode && relation === "child" && (
+              <FormControl fullWidth>
+                <InputLabel>Other parent</InputLabel>
+                <Select
+                  value={selectedOtherParentId}
+                  onChange={(e) => setSelectedOtherParentId(e.target.value)}
+                  label="Other parent"
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {spouseOptions.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      {s.name ||
+                        (targetNode?.name
+                          ? `${targetNode.name}'s Spouse`
+                          : s.id)}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
 
-        <TextField
-          label="Village"
-          value={village}
-          onChange={(e) => setVillage(e.target.value)}
-          fullWidth
-        />
+            <TextField
+              label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              required
+              autoFocus
+            />
 
-        <FormControl fullWidth>
-          <InputLabel>Gender</InputLabel>
-          <Select
-            value={gender}
-            onChange={(e) => setGender(e.target.value as any)}
-            label="Gender"
-          >
-            <MenuItem value="">— select —</MenuItem>
-            <MenuItem value="male">Male</MenuItem>
-            <MenuItem value="female">Female</MenuItem>
-            <MenuItem value="other">Other</MenuItem>
-          </Select>
-        </FormControl>
+            <TextField
+              label="Date of birth (optional)"
+              type="date"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
 
-        <Divider />
+            <TextField
+              label="Gotra"
+              value={gotra}
+              onChange={(e) => setGotra(e.target.value)}
+              fullWidth
+            />
 
-        <AdditionalDetails
-          value={customFields}
-          onChange={setCustomFields}
-          excludeFields={EXCLUDED_FIELDS}
-        />
+            <TextField
+              label="Village"
+              value={village}
+              onChange={(e) => setVillage(e.target.value)}
+              fullWidth
+            />
+
+            <FormControl fullWidth>
+              <InputLabel>Gender</InputLabel>
+              <Select
+                value={gender}
+                onChange={(e) => setGender(e.target.value as any)}
+                label="Gender"
+              >
+                <MenuItem value="">— select —</MenuItem>
+                <MenuItem value="male">Male</MenuItem>
+                <MenuItem value="female">Female</MenuItem>
+                <MenuItem value="other">Other</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Divider />
+
+            <AdditionalDetails
+              value={customFields}
+              onChange={setCustomFields}
+              excludeFields={EXCLUDED_FIELDS}
+            />
+          </>
+        )}
 
         <Box
           sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 2 }}
@@ -361,9 +489,9 @@ const AddNode: React.FC<AddNodeProps> = ({
           <Button
             onClick={handleSave}
             variant="contained"
-            disabled={!name.trim()}
+            disabled={mode === "create" ? !name.trim() : !selectedPerson}
           >
-            Save
+            {mode === "link" ? "Link" : "Save"}
           </Button>
         </Box>
       </Stack>

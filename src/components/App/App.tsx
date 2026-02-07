@@ -21,6 +21,7 @@ import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
+import { ResetPasswordModal } from "../ResetPasswordModal/ResetPasswordModal";
 
 const theme = createTheme({
   palette: {
@@ -56,6 +57,7 @@ function AppContent() {
   console.log("AppContent: About to return JSX");
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+      <ResetPasswordModal />
       <Header />
       <ErrorBoundary>
         <Routes>

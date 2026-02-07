@@ -14,6 +14,10 @@ import {
   signUpWithEmail as signUpAction,
   signInWithEmail as signInAction,
   logout as logoutAction,
+  sendPasswordResetEmail as sendPasswordResetEmailAction,
+  updatePassword as updatePasswordAction,
+  selectResetPasswordMode,
+  setResetPasswordMode,
 } from '../../store/slices/authSlice';
 import { UserRole } from '../model/User';
 
@@ -28,14 +32,21 @@ export function useAuth() {
   const loading = useAppSelector(selectAuthLoading);
   const isSuperAdminValue = useAppSelector(selectIsSuperAdmin);
   const isAdminValue = useAppSelector(selectIsAdmin);
+  const resetPasswordMode = useAppSelector(selectResetPasswordMode);
 
-  const signUpWithEmail = useCallback((email: string, password: string) => 
-      dispatch(signUpAction({ email, password })).unwrap(), [dispatch]);
+  const signUpWithEmail = useCallback((email: string, password: string, name: string, phone: string) => 
+      dispatch(signUpAction({ email, password, name, phone })).unwrap(), [dispatch]);
 
   const signInWithEmail = useCallback((email: string, password: string) => 
       dispatch(signInAction({ email, password })).unwrap(), [dispatch]);
 
   const logout = useCallback(() => dispatch(logoutAction()).unwrap(), [dispatch]);
+
+  const sendPasswordResetEmail = useCallback((email: string) =>
+      dispatch(sendPasswordResetEmailAction(email)).unwrap(), [dispatch]);
+
+  const updatePassword = useCallback((password: string) =>
+      dispatch(updatePasswordAction(password)).unwrap(), [dispatch]);
 
   const isSuperAdmin = useCallback(() => isSuperAdminValue, [isSuperAdminValue]);
   const isAdmin = useCallback(() => isAdminValue, [isAdminValue]);
@@ -69,6 +80,9 @@ export function useAuth() {
     isSuperAdmin,
     isAdmin,
     canManageVillage,
+    sendPasswordResetEmail,
+    updatePassword,
+    resetPasswordMode,
   }), [
     currentUser,
     userProfile,
@@ -79,6 +93,9 @@ export function useAuth() {
     hasPermission,
     isSuperAdmin,
     isAdmin,
-    canManageVillage
+    canManageVillage,
+    sendPasswordResetEmail,
+    updatePassword,
+    resetPasswordMode,
   ]);
 }

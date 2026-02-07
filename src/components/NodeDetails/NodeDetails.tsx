@@ -21,6 +21,9 @@ import {
   useMediaQuery,
   AppBar,
   Toolbar,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
@@ -36,6 +39,7 @@ import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { SupabaseService } from "../../services/supabaseService";
+import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 
 interface NodeDetailsProps {
   node: Readonly<FNode> | null;
@@ -53,9 +57,10 @@ interface NodeDetailsProps {
   ) => void;
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
   onDelete?: (nodeId: string) => void;
+  treeId?: string;
 }
 
-const EXCLUDED_FIELDS = ["Gotra", "Village"];
+const EXCLUDED_FIELDS = ["Gotra", "Village", "Note"];
 
 export const NodeDetails = memo(function NodeDetails({
   node,
@@ -65,9 +70,16 @@ export const NodeDetails = memo(function NodeDetails({
 }: NodeDetailsProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const [view, setView] = useState<"details" | "edit" | "add" | "delete">(
-    "details",
-  );
+  const [view, setView] = useState<
+    "details" | "edit" | "add" | "delete" | "link-external"
+  >("details");
+
+  // Link External State
+  const [villages, setVillages] = useState<any[]>([]);
+  const [linkExternalVillageId, setLinkExternalVillageId] = useState("");
+  const [selectedExternalPerson, setSelectedExternalPerson] =
+    useState<any>(null);
+  const [externalSearchValue, setExternalSearchValue] = useState("");
 
   // Edit State
   const [editedName, setEditedName] = useState("");
@@ -87,6 +99,12 @@ export const NodeDetails = memo(function NodeDetails({
 
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
+
+  useEffect(() => {
+    if (view === "link-external" && villages.length === 0) {
+      SupabaseService.getVillages().then((data) => setVillages(data));
+    }
+  }, [view, villages.length]);
 
   // Reset view and values when node changes
   useEffect(() => {
@@ -108,14 +126,38 @@ export const NodeDetails = memo(function NodeDetails({
         setEditedCustomFields(fields);
         setEditedGotra(fields["Gotra"] || "");
         setEditedVillage(fields["Village"] || "");
+        // Check local property first, then fallback to custom field "Note"
+        setEditedNotes(node.notes || fields["Note"] || "");
         setDisplayCustomFields(fields);
       });
     }
   }, [node]);
 
+  const isOpen = !!node;
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ nodeDetailsOpen: true }, "");
+
+      const handlePopState = () => {
+        props.onSelect(undefined);
+        setView("details");
+      };
+
+      window.addEventListener("popstate", handlePopState);
+
+      return () => {
+        window.removeEventListener("popstate", handlePopState);
+      };
+    }
+  }, [isOpen, props]);
+
   const closeHandler = useCallback(() => {
-    props.onSelect(undefined);
-    setView("details");
+    if (window.history.state?.nodeDetailsOpen) {
+      window.history.back();
+    } else {
+      props.onSelect(undefined);
+      setView("details");
+    }
   }, [props]);
 
   const handleEditClick = useCallback(() => {
@@ -154,12 +196,13 @@ export const NodeDetails = memo(function NodeDetails({
         const updates: Partial<FNode> = {
           name: editedName.trim(),
           dob: editedDob.trim(),
-          notes: editedNotes.trim() || undefined,
           gender: editedGender,
+          // We save notes into customFields under "Note" now, not as a core property
           customFields: {
             ...editedCustomFields,
             Gotra: editedGotra.trim(),
             Village: editedVillage.trim(),
+            Note: editedNotes.trim(),
           },
         };
         await props.onUpdate(node.id, updates);
@@ -186,6 +229,61 @@ export const NodeDetails = memo(function NodeDetails({
       closeHandler();
     }
   }, [node, props, closeHandler]);
+
+  const handleLinkExternalClick = useCallback(() => {
+    if (!currentUser) {
+      openLoginModal(() => {
+        setView("link-external");
+      });
+      return;
+    }
+    setView("link-external");
+  }, [currentUser, openLoginModal]);
+
+  const handleConfirmLinkExternal = async () => {
+    if (!node || !selectedExternalPerson) return;
+
+    // Find spouse of current node
+    const spouse =
+      node.spouses && node.spouses.length > 0 ? node.spouses[0] : null;
+
+    if (!spouse) {
+      alert(
+        "This person must have a spouse in the current tree to use this replacement feature.",
+      );
+      return;
+    }
+
+    // Logic: Node (Placeholder) <-> Spouse (Target)
+    // We want: New Person <-> Spouse (Target)
+    // And delete Node (Placeholder)
+
+    if (
+      !window.confirm(
+        `Are you sure you want to replace "${node.name}" with "${selectedExternalPerson.name}" from the other tree? This will delete "${node.name}" and transfer children.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      // addSpouse(targetId, spouseId, placeholderId)
+      // targetId = spouse.id (The person staying in the tree)
+      // spouseId = selectedExternalPerson.id (The new person coming in)
+      // placeholderId = node.id (The person leaving)
+      await SupabaseService.addSpouse(
+        spouse.id,
+        selectedExternalPerson.id,
+        node.id,
+      );
+
+      alert("Successfully linked. The page will reload to reflect changes.");
+      window.location.reload();
+    } catch (error: any) {
+      console.error("Link external error:", error);
+      alert("Failed to link: " + (error.message || error));
+    }
+  };
 
   const relNodeMapper = useCallback(
     (rel: any) => {
@@ -323,9 +421,18 @@ export const NodeDetails = memo(function NodeDetails({
                 >
                   Delete
                 </Button>
+                {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder) */}
+                {(!props.treeId || node.treeId === props.treeId) && (
+                  <Button
+                    variant="outlined"
+                    color="info"
+                    onClick={handleLinkExternalClick}
+                    sx={{ mt: 1 }}
+                  >
+                    Link & Replace
+                  </Button>
+                )}
               </Box>
-
-              <Divider />
 
               {/* Details List */}
               <Stack spacing={1}>
@@ -414,6 +521,57 @@ export const NodeDetails = memo(function NodeDetails({
           <DialogTitle>Edit {node.name}</DialogTitle>
           <DialogContent dividers>
             <Stack spacing={3} sx={{ pt: 1 }}>
+              {/* Photo & Basic Info Display (Read-only context) */}
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  mb: 1,
+                  p: 1,
+                  bgcolor: "action.hover",
+                  borderRadius: 2,
+                }}
+              >
+                {node.photo ? (
+                  <img
+                    src={node.photo}
+                    alt={node.name}
+                    style={{
+                      width: 60,
+                      height: 60,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      marginBottom: 8,
+                    }}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      width: 60,
+                      height: 60,
+                      borderRadius: "50%",
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      mb: 1,
+                      fontSize: 24,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {node.name.charAt(0)}
+                  </Box>
+                )}
+                <Typography variant="subtitle2" color="text.primary">
+                  Editing: {node.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {node.gender} • {node.dob || "Unknown DOB"}
+                </Typography>
+              </Box>
+
               <TextField
                 label="Name"
                 value={editedName}
@@ -558,6 +716,56 @@ export const NodeDetails = memo(function NodeDetails({
               variant="contained"
             >
               Delete
+            </Button>
+          </DialogActions>
+        </>
+      )}
+
+      {view === "link-external" && (
+        <>
+          <DialogTitle>Link to External Tree</DialogTitle>
+          <DialogContent dividers>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              Use this to replace the current placeholder person with a detailed
+              profile from another tree. This handles merging and child
+              reassignment automatically.
+            </Typography>
+
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Village</InputLabel>
+              <Select
+                value={linkExternalVillageId}
+                onChange={(e) => setLinkExternalVillageId(e.target.value)}
+                label="Village"
+              >
+                {villages.map((v) => (
+                  <MenuItem key={v.id} value={v.id}>
+                    {v.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <PersonSearchField
+              searchValue={externalSearchValue}
+              onSearchValueChange={setExternalSearchValue}
+              onPersonSelect={(p) => setSelectedExternalPerson(p)}
+              selectedPerson={selectedExternalPerson}
+              villageId={linkExternalVillageId}
+              disabled={!linkExternalVillageId}
+              placeholder="Search for waiting spouse..."
+              label="Select Real Person"
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setView("details")}>Cancel</Button>
+            <Button
+              onClick={handleConfirmLinkExternal}
+              disabled={!selectedExternalPerson}
+              variant="contained"
+              color="primary"
+            >
+              Link & Replace
             </Button>
           </DialogActions>
         </>

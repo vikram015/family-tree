@@ -44,95 +44,95 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [hoverId, setHoverId] = useState<string>();
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
 
-  useEffect(() => {
-    // Only load data if a specific tree ID is selected
-    if (treeId && treeId !== "") {
-      const loadTreeData = async () => {
-        try {
-          console.log(
-            "FamiliesPage: Starting to load tree data for treeId:",
-            treeId,
-          );
-          setIsLoading(true);
-          // Fetch complete tree from Supabase using the PostgreSQL function
-          const treeData = await SupabaseService.getCompleteTreeById(treeId);
-          console.log("FamiliesPage: Tree data loaded:", treeData);
-          // Convert tree data to FNode format
-          const items: Readonly<FNode>[] = (treeData.members || []).map(
-            (person: any) =>
-              ({
-                id: person.id,
-                name: person.name,
-                gender: person.gender as Gender,
-                parents:
-                  person.parents?.map((p: any) => ({
-                    id: p.id,
-                    type: RelType.blood,
-                  })) || [],
-                children:
-                  person.children?.map((c: any) => ({
-                    id: c.id,
-                    type: RelType.blood,
-                  })) || [],
-                spouses:
-                  person.spouses?.map((s: any) => ({
-                    id: s.id,
-                    type: RelType.married,
-                  })) || [],
-                siblings:
-                  person.siblings?.map((s: any) => ({
-                    id: s.id,
-                    type: RelType.blood,
-                  })) || [],
-                treeId: treeId,
-              }) as FNode,
-          );
-          console.log(
-            "FamiliesPage: Converted tree data to FNode format, items count:",
-            items.length,
-          );
-          // Populate hierarchy for all nodes
-          const itemsWithHierarchy = items.map((node) => ({
-            ...node,
-            hierarchy: getNodeHierarchy(node.id, items),
-          }));
-
-          setNodes(itemsWithHierarchy);
-          setSelectId(undefined);
-          setHoverId(undefined);
-
-          if (items.length === 0) {
-            console.log("FamiliesPage: No items in tree");
-            setIsLoading(false);
-            return;
-          }
-          const rootCandidate = items.find(
-            (item) =>
-              (item.parents?.length ?? 0) === 0 &&
-              (item.spouses?.length ?? 0) === 0,
-          );
-          if (rootCandidate) {
-            setRootId(rootCandidate.id);
-          } else {
-            setRootId(items[0].id);
-          }
-          setIsLoading(false);
-          console.log("FamiliesPage: Tree data loaded and state updated.");
-        } catch (error) {
-          console.error("FamiliesPage: Failed to load tree data:", error);
-          setNodes([]);
-          setIsLoading(false);
-        }
-      };
-
-      loadTreeData();
-    } else {
+  const loadTreeData = useCallback(async () => {
+    if (!treeId || treeId === "") {
       setNodes([]);
       setSelectId(undefined);
       setHoverId(undefined);
       setIsLoading(false);
+      return;
+    }
+
+    try {
+      console.log(
+        "FamiliesPage: Starting to load tree data for treeId:",
+        treeId,
+      );
+      setIsLoading(true);
+      // Fetch complete tree from Supabase using the PostgreSQL function
+      const treeData = await SupabaseService.getCompleteTreeById(treeId);
+      console.log("FamiliesPage: Tree data loaded:", treeData);
+      // Convert tree data to FNode format
+      const items: Readonly<FNode>[] = (treeData.members || []).map(
+        (person: any) =>
+          ({
+            id: person.id,
+            name: person.name,
+            gender: person.gender as Gender,
+            parents:
+              person.parents?.map((p: any) => ({
+                id: p.id,
+                type: RelType.blood,
+              })) || [],
+            children:
+              person.children?.map((c: any) => ({
+                id: c.id,
+                type: RelType.blood,
+              })) || [],
+            spouses:
+              person.spouses?.map((s: any) => ({
+                id: s.id,
+                type: RelType.married,
+              })) || [],
+            siblings:
+              person.siblings?.map((s: any) => ({
+                id: s.id,
+                type: RelType.blood,
+              })) || [],
+            treeId: person.tree_id || treeId,
+          }) as FNode,
+      );
+      console.log(
+        "FamiliesPage: Converted tree data to FNode format, items count:",
+        items.length,
+      );
+      // Populate hierarchy for all nodes
+      const itemsWithHierarchy = items.map((node) => ({
+        ...node,
+        hierarchy: getNodeHierarchy(node.id, items),
+      }));
+
+      setNodes(itemsWithHierarchy);
+      setSelectId(undefined);
+      setHoverId(undefined);
+
+      if (items.length === 0) {
+        console.log("FamiliesPage: No items in tree");
+        setIsLoading(false);
+        return;
+      }
+      const rootCandidate = items.find(
+        (item) =>
+          (item.parents?.length ?? 0) === 0 &&
+          (item.spouses?.length ?? 0) === 0,
+      );
+      if (rootCandidate) {
+        setRootId(rootCandidate.id);
+      } else {
+        setRootId(items[0].id);
+      }
+      setIsLoading(false);
+      console.log("FamiliesPage: Tree data loaded and state updated.");
+    } catch (error) {
+      console.error("FamiliesPage: Failed to load tree data:", error);
+      setNodes([]);
+      setIsLoading(false);
     }
   }, [treeId]);
+
+  useEffect(() => {
+    loadTreeData();
+  }, [loadTreeData]);
 
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
@@ -490,6 +490,25 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         return;
       }
 
+      // Special handling for linking existing spouse
+      if (node.id && relation === "spouse" && targetId) {
+        try {
+          setIsLoading(true);
+          console.log("Linking existing spouse:", node.id, "to", targetId);
+          await SupabaseService.addSpouse(targetId, node.id);
+          await loadTreeData();
+        } catch (err) {
+          console.error("Failed to link spouse:", err);
+          alert(
+            `Failed to link spouse: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
         // Separate custom fields from the node data
         const { customFields, ...coreNode } = node;
@@ -542,54 +561,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         // Reload tree data to ensure all relationships are accurately reflected
         // This is important for auto-created spouses and multiple parent relationships
         if (newPerson?.success && newPerson?.person_id) {
-          // Close the sidebar after successfully adding a node
-          setSelectId(undefined);
-
-          try {
-            if (treeId) {
-              const result = await SupabaseService.getCompleteTreeById(treeId);
-              if (result?.members) {
-                // Convert CompleteTreeNode[] to FNode[]
-                // Map PersonWithRelations to the FNode relationship format { id: string; type: RelType }
-                const convertedNodes: FNode[] = result.members.map(
-                  (member) => ({
-                    id: member.id,
-                    name: member.name,
-                    dob: member.dob || "",
-                    created_at: member.created_at,
-                    gender: (member.gender as unknown as Gender) || Gender.male,
-                    customFields: {},
-                    treeId: treeId,
-                    // Position properties (used for visualization)
-                    top: 0,
-                    left: 0,
-                    hasSubTree: false,
-                    // Transform relationship arrays to include type
-                    parents: (member.parents || []).map((p) => ({
-                      id: p.id,
-                      type: RelType.blood, // Default to blood for parents
-                    })),
-                    children: (member.children || []).map((c) => ({
-                      id: c.id,
-                      type: RelType.blood, // Default to blood for children
-                    })),
-                    spouses: (member.spouses || []).map((s) => ({
-                      id: s.id,
-                      type: RelType.married, // Spouses are always married
-                    })),
-                    siblings: (member.siblings || []).map((sib) => ({
-                      id: sib.id,
-                      type: RelType.blood, // Default to blood for siblings
-                    })),
-                  }),
-                );
-                setNodes(convertedNodes);
-              }
-            }
-          } catch (reloadErr) {
-            console.warn("Failed to reload tree data:", reloadErr);
-            // Continue even if reload fails - operation was successful
-          }
+          await loadTreeData();
         }
       } catch (err) {
         console.error("Failed to add node:", err);
@@ -600,7 +572,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId],
+    [hasPermission, treeId, loadTreeData],
   );
 
   // Update rootId when nodes change
@@ -825,6 +797,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               nodes={nodes}
               rootId={rootId}
               onNodeClick={setSelectId}
+              currentTreeId={treeId}
+              onExternalTreeClick={(tid) => {
+                if (
+                  window.confirm(
+                    "This person belongs to another family tree. Navigate to that tree?",
+                  )
+                ) {
+                  onSourceChange(tid, []);
+                }
+              }}
             />
           ) : (
             <Box
@@ -901,6 +883,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           onAdd={onAdd}
           onUpdate={onUpdate}
           onDelete={onDelete}
+          treeId={treeId}
         />
       )}
     </>

@@ -59,12 +59,34 @@ BEGIN
   END IF;
 
   -- Get all members with their complete relationships
+  WITH RECURSIVE hierarchy AS (
+    -- 1. Base Case: All members of the current tree
+    SELECT * FROM people WHERE tree_id = p_tree_id
+    
+    UNION
+    
+    -- 2. Include Spouses of current tree members (who might be in other trees)
+    SELECT spouse.*
+    FROM people member
+    JOIN people_relations pr ON member.id = pr.person_id AND pr.relation_type = 'spouse'
+    JOIN people spouse ON pr.related_person_id = spouse.id
+    WHERE member.tree_id = p_tree_id
+    
+    UNION
+    
+    -- 3. Recursive Step: Get children of anyone currently in the hierarchy
+    SELECT child.*
+    FROM hierarchy parent
+    JOIN people_relations pr ON parent.id = pr.related_person_id AND pr.relation_type = 'parent'
+    JOIN people child ON pr.person_id = child.id
+  )
   SELECT json_agg(
     json_build_object(
       'id', p.id,
       'name', p.name,
       'gender', p.gender,
       'dob', p.dob,
+      'tree_id', p.tree_id,
       'created_at', p.created_at,
       'parents', COALESCE(
         (SELECT json_agg(json_build_object(
@@ -132,8 +154,7 @@ BEGIN
     )
     ORDER BY p.name
   ) INTO v_members
-  FROM people p
-  WHERE p.tree_id = p_tree_id;
+  FROM hierarchy p;
 
   -- Build final result with statistics
   v_result := json_build_object(

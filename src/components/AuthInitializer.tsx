@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useAppDispatch } from "../store/hooks";
-import { updateAuthState } from "../store/slices/authSlice";
+import {
+  updateAuthState,
+  setResetPasswordMode,
+} from "../store/slices/authSlice";
 import { supabase } from "../supabase";
 
 /**
@@ -22,6 +25,10 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("AuthInitializer: Auth state changed, event:", event);
+
+      if (event === "PASSWORD_RECOVERY") {
+        dispatch(setResetPasswordMode(true));
+      }
 
       if (event === "SIGNED_OUT") {
         dispatch(updateAuthState({ user: null }));

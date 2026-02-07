@@ -27,7 +27,7 @@ import {
   Tab,
   TextField,
 } from "@mui/material";
-import { Edit, Delete, Add } from "@mui/icons-material";
+import { Edit, Delete, Add, CheckCircle } from "@mui/icons-material";
 import { supabase } from "../../supabase";
 import { SupabaseService } from "../../services/supabaseService";
 import { AppUser, UserRole } from "../model/User";
@@ -72,7 +72,7 @@ function TabPanel(props: TabPanelProps) {
 
 export const AdminManagement: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isSuperAdmin, userProfile } = useAuth();
+  const { isSuperAdmin, userProfile, loading: authLoading } = useAuth();
 
   // Redux state
   const states = useAppSelector(selectStates);
@@ -118,6 +118,7 @@ export const AdminManagement: React.FC = () => {
         (usersData || []).map((user) => ({
           ...user,
           id: user.id,
+          isVerified: user.is_verified,
         })) as AppUser[],
       );
 
@@ -139,6 +140,8 @@ export const AdminManagement: React.FC = () => {
 
   useEffect(() => {
     const checkAccessAndLoad = async () => {
+      if (authLoading) return;
+
       if (!isSuperAdmin()) {
         setError("Access denied. Only superadmin can access this page.");
         setLoading(false);
@@ -149,7 +152,7 @@ export const AdminManagement: React.FC = () => {
     };
 
     checkAccessAndLoad();
-  }, [isSuperAdmin, loadData]);
+  }, [isSuperAdmin, loadData, authLoading]);
 
   const loadHierarchyData = async () => {
     try {
@@ -233,6 +236,26 @@ export const AdminManagement: React.FC = () => {
     }
   };
 
+  const handleVerifyUser = async (userId: string) => {
+    try {
+      // Use the RPC function to verify both Auth email and Public status
+      const { data, error } = await supabase.rpc("verify_user_email", {
+        target_user_id: userId,
+      });
+
+      if (error) throw error;
+      if (data && !data.success) throw new Error(data.error);
+
+      setSuccessMessage("User verified successfully");
+      await loadData();
+
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err: any) {
+      console.error("Error verifying user:", err);
+      setError(err.message || "Failed to verify user");
+    }
+  };
+
   const handleEditClick = (user: AppUser) => {
     setEditUser(user);
     setSelectedRole(user.role);
@@ -250,8 +273,8 @@ export const AdminManagement: React.FC = () => {
         .update({
           role: selectedRole,
           villages: selectedRole === "superadmin" ? [] : selectedVillages,
-          updatedAt: new Date().toISOString(),
-          updatedBy: userProfile?.id,
+          modified_at: new Date().toISOString(),
+          modified_by: userProfile?.id,
         })
         .eq("id", editUser.id);
 
@@ -296,20 +319,20 @@ export const AdminManagement: React.FC = () => {
     );
   };
 
+  if (authLoading || loading) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Typography>Loading...</Typography>
+      </Container>
+    );
+  }
+
   if (!isSuperAdmin()) {
     return (
       <Container sx={{ mt: 4 }}>
         <Alert severity="error">
           Access denied. Only superadmin can access this page.
         </Alert>
-      </Container>
-    );
-  }
-
-  if (loading) {
-    return (
-      <Container sx={{ mt: 4 }}>
-        <Typography>Loading...</Typography>
       </Container>
     );
   }
@@ -380,6 +403,7 @@ export const AdminManagement: React.FC = () => {
                   <TableCell>Role</TableCell>
                   <TableCell>Villages</TableCell>
                   <TableCell>Created At</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -416,6 +440,30 @@ export const AdminManagement: React.FC = () => {
                     </TableCell>
                     <TableCell>{formatDate(user.createdAt)}</TableCell>
                     <TableCell>
+                      {user.isVerified ? (
+                        <Chip
+                          icon={<CheckCircle />}
+                          label="Verified"
+                          color="success"
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Chip label="Pending" color="warning" size="small" />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {!user.isVerified && (
+                        <Tooltip title="Verify User">
+                          <IconButton
+                            size="small"
+                            color="success"
+                            onClick={() => handleVerifyUser(user.id)}
+                          >
+                            <CheckCircle />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <Tooltip title="Edit">
                         <IconButton
                           size="small"

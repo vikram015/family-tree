@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import * as d3 from "d3";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
+import TreeBuilder from "./builder";
 import "./dTree.css";
 
 interface DTreeNode {
@@ -26,18 +27,38 @@ interface DTreeComponentProps {
   nodes: FNode[];
   rootId: string;
   onNodeClick: (nodeId: string) => void;
+  onExternalTreeClick?: (treeId: string) => void;
+  currentTreeId?: string;
 }
 
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
   rootId,
   onNodeClick,
+  onExternalTreeClick,
+  currentTreeId,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
   const prevRootIdRef = useRef<string | null>(null);
   const prevZoomRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleExternalLink = (e: any) => {
+      const tid = e.detail;
+      if (onExternalTreeClick) {
+        onExternalTreeClick(tid);
+      }
+    };
+    window.addEventListener("external-tree-link-click", handleExternalLink);
+    return () => {
+      window.removeEventListener(
+        "external-tree-link-click",
+        handleExternalLink,
+      );
+    };
+  }, [onExternalTreeClick]);
 
   // Convert FNode format to dTree format
   const convertToTreeFormat = (
@@ -65,6 +86,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         dob: person.dob,
         gender: person.gender,
         hierarchy: person.hierarchy,
+        treeId: person.treeId, // Add treeId
         parentsCount: person.parents?.length || 0,
         childrenCount: person.children?.length || 0,
         spousesCount: person.spouses?.length || 0,
@@ -120,6 +142,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               dob: spouseNode.dob,
               gender: spouseNode.gender,
               hierarchy: spouseNode.hierarchy,
+              treeId: spouseNode.treeId, // Add treeId
               parentsCount: spouseNode.parents?.length || 0,
               childrenCount: spouseNode.children?.length || 0,
               spousesCount: spouseNode.spouses?.length || 0,
@@ -195,6 +218,68 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               onNodeClick(extra.id);
             }
           },
+          nodeRenderer: (
+            name: string,
+            x: number,
+            y: number,
+            height: number,
+            width: number,
+            extra: any,
+            id: string,
+            nodeClass: string,
+            textClass: string,
+            textRenderer: Function,
+          ) => {
+            let html = TreeBuilder._nodeRenderer(
+              name,
+              x,
+              y,
+              height,
+              width,
+              extra,
+              id,
+              nodeClass,
+              textClass,
+              textRenderer,
+            );
+
+            // Debugging log
+            if (extra && extra.treeId !== currentTreeId) {
+              console.log(
+                `Node ${name} has treeId ${extra.treeId}, current is ${currentTreeId}. Match? ${extra.treeId === currentTreeId}`,
+              );
+            }
+
+            if (
+              currentTreeId &&
+              extra &&
+              extra.treeId &&
+              extra.treeId !== currentTreeId
+            ) {
+              const btnHtml = `
+                  <div 
+                    class="external-tree-icon" 
+                    title="Go to linked Family Tree"
+                    onclick="event.stopPropagation(); window.dispatchEvent(new CustomEvent('external-tree-link-click', { detail: '${extra.treeId}' }));"
+                    style="position: absolute; top: -10px; right: -10px; width: 24px; height: 24px; background: white; border-radius: 50%; border: 2px solid #1976d2; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 100; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
+                  >
+                    🔗
+                  </div>
+                `;
+
+              // We need to inject this button inside the main container div, but at the end.
+              // structure is <div ...> ...content... </div>
+              // We want <div ...> ...content... btn </div>
+              const lastDivIndex = html.lastIndexOf("</div>");
+              if (lastDivIndex !== -1) {
+                html =
+                  html.substring(0, lastDivIndex) +
+                  btnHtml +
+                  html.substring(lastDivIndex);
+              }
+            }
+            return html;
+          },
         },
       });
 
@@ -253,7 +338,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       style={{
         width: "100%",
         height: "100%",
-        overflow: "auto",
+        overflow: "hidden",
+        touchAction: "none",
+        cursor: "grab",
       }}
     />
   );

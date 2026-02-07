@@ -341,32 +341,20 @@ export const SupabaseService = {
   },
 
   /**
-   * Add a spouse relationship (bidirectional)
+   * Add a spouse relationship (bidirectional) and link children
    */
-  async addSpouse(personId: string, spouseId: string): Promise<void> {
-    // Add relationship from person to spouse
-    const relation1 = {
-      person_id: personId,
-      related_person_id: spouseId,
-      relation_type: 'spouse',
-      created_at: new Date(),
-      modified_at: new Date(),
-    };
+  async addSpouse(personId: string, spouseId: string, placeholderId?: string): Promise<void> {
+    const { data, error } = await supabase.rpc('link_spouse_in_tree', {
+      p_person_id_1: personId,
+      p_person_id_2: spouseId,
+      p_replace_person_id: placeholderId || null
+    });
 
-    // Add relationship from spouse to person
-    const relation2 = {
-      person_id: spouseId,
-      related_person_id: personId,
-      relation_type: 'spouse',
-      created_at: new Date(),
-      modified_at: new Date(),
-    };
-
-    const { error } = await supabase
-      .from('people_relations')
-      .insert([relation1, relation2]);
-
-    if (error) throw error;
+    if (error) throw new Error(`Failed to link spouse: ${error.message}`);
+    
+    if (data?.success === false) {
+      throw new Error(`Failed to link spouse: ${data.error}`);
+    }
   },
 
   /**
