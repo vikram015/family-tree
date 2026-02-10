@@ -59,8 +59,9 @@ class TreeBuilder {
     const zoom = (this.zoom = d3
       .zoom()
       .scaleExtent([0.1, 10])
+      // Optimize filter: Only allow left mouse button or touch (ignore right-click)
       .filter(function(event) {
-        return true;
+        return !event.button || event.button === 0;
       })
       .on('zoom', function (event) {
         g.attr('transform', event.transform);
@@ -78,6 +79,7 @@ class TreeBuilder {
       .style('user-select', 'none')
       .style('-webkit-user-select', 'none')
       .style('cursor', 'grab')
+      .style('transform', 'translateZ(0)') // Force hardware acceleration
       .call(zoom as any)
       .on("dblclick.zoom", null)
     );
@@ -104,8 +106,8 @@ class TreeBuilder {
         .attr('stroke-width', 1);
 
     // Add a rectangle with the grid pattern as background
-    // This also captures zoom events on empty spaces
-    // Use large negative coordinates and huge dimensions to ensure coverage even on zoom out or small screens
+    // Restored large dimensions to cover "gutters" (outside viewBox) when overflow is visible
+    // This ensures the grid covers the full screen even if aspect ratio causes letterboxing
     svg.append('rect')
        .attr('width', '500%')
        .attr('height', '500%')
@@ -113,11 +115,11 @@ class TreeBuilder {
        .attr('y', '-200%')
        .style('fill', 'url(#grid-line-pattern)')
        .style('pointer-events', 'all')
-       .style('touch-action', 'none') // Ensure it captures events
-       .call(zoom as any); // Explicitly attach zoom to the background rect for robustness
+       .style('touch-action', 'none'); // Ensure it captures events
 
     // create svg group that holds all nodes
-    const g = (this.g = svg.append('g'));
+    const g = (this.g = svg.append('g')
+      .style('will-change', 'transform')); // Optimize for transform changes
 
     // set zoom identity
     svg.call(
@@ -334,29 +336,28 @@ class TreeBuilder {
   }
 
   _linkSiblings() {
-    let allNodes = this.allNodes;
+    const nodeMap = new Map(this.allNodes.map((n: any) => [n.data.id, n]));
 
     _.forEach(this.siblings, function (d: any) {
-      let start = allNodes.filter(function (v: any) {
-        return d.source.id == v.data.id;
-      });
-      let end = allNodes.filter(function (v: any) {
-        return d.target.id == v.data.id;
-      });
-      d.source.x = start[0].x;
-      d.source.y = start[0].y;
-      d.target.x = end[0].x;
-      d.target.y = end[0].y;
+      const start = nodeMap.get(d.source.id);
+      const end = nodeMap.get(d.target.id);
 
-      let marriageId =
-        start[0].data.marriageNode != null
-          ? start[0].data.marriageNode.id
-          : end[0].data.marriageNode.id;
-      let marriageNode = allNodes.find(function (n: any) {
-        return n.data.id == marriageId;
-      });
-      d.source.marriageNode = marriageNode;
-      d.target.marriageNode = marriageNode;
+      if (start && end) {
+        d.source.x = start.x;
+        d.source.y = start.y;
+        d.target.x = end.x;
+        d.target.y = end.y;
+
+        const marriageId =
+          start.data.marriageNode != null
+            ? start.data.marriageNode.id
+            : end.data.marriageNode.id;
+            
+        const marriageNode = nodeMap.get(marriageId);
+        
+        d.source.marriageNode = marriageNode;
+        d.target.marriageNode = marriageNode;
+      }
     });
   }
 
@@ -430,22 +431,35 @@ class TreeBuilder {
 
   static _nodeSize(nodes: any[], width: number, textRenderer: Function) {
     let maxHeight = 0;
-    let tmpSvg = document.createElement('svg');
-    document.body.appendChild(tmpSvg);
+    
+    // Create a container div primarily off-screen
+    const containerDiv = document.createElement('div');
+    containerDiv.style.position = 'absolute';
+    containerDiv.style.visibility = 'hidden';
+    containerDiv.style.top = '-9999px';
+    containerDiv.style.left = '-9999px';
+    // Ensure width roughly matches so max-width interactions are similar
+    containerDiv.style.width = width * 2 + 'px'; 
+    document.body.appendChild(containerDiv);
 
-    _.map(nodes, function (n: any) {
-      let container = document.createElement('div');
-      container.setAttribute('class', n.data.class);
-      container.style.visibility = 'hidden';
-      container.style.maxWidth = width + 'px';
+    // Phase 1: Write (Create all elements)
+    const elements = nodes.map((n: any) => {
+      let wrapper = document.createElement('div');
+      wrapper.setAttribute('class', n.data.class);
+      wrapper.style.maxWidth = width + 'px';
+      // Important: Ensure we emulate the foreignObject constraints if needed
+      // but usually specific styles on .class will handle local layout.
 
       let text = textRenderer(n.data.name, n.data.extra, n.data.textClass);
-      container.innerHTML = text;
+      wrapper.innerHTML = text;
 
-      tmpSvg.appendChild(container);
-      let height = container.offsetHeight;
-      tmpSvg.removeChild(container);
+      containerDiv.appendChild(wrapper);
+      return { n, wrapper };
+    });
 
+    // Phase 2: Read (Measure all elements - causes one Reflow)
+    elements.forEach(({ n, wrapper }) => {
+      const height = wrapper.offsetHeight;
       maxHeight = Math.max(maxHeight, height);
       n.cHeight = height;
       if (n.data.hidden) {
@@ -454,7 +468,9 @@ class TreeBuilder {
         n.cWidth = width;
       }
     });
-    document.body.removeChild(tmpSvg);
+
+    // Cleanup
+    document.body.removeChild(containerDiv);
 
     return [width, maxHeight];
   }
@@ -482,42 +498,9 @@ class TreeBuilder {
     textClass: string,
     textRenderer: Function
   ) {
-    // Create tooltip content
-    let tooltip = '<div class="node-tooltip">';
-    tooltip += '<div class="tooltip-name">' + name + '</div>';
-    if (extra?.dob) {
-      tooltip += '<div class="tooltip-dob">DOB: ' + extra.dob + '</div>';
-    }
-    
-    const parents = extra?.parentsCount || 0;
-    const children = extra?.childrenCount || 0;
-    const spouses = extra?.spousesCount || 0;
-    tooltip += '<div class="tooltip-stats">Parents: ' + parents + ' • Children: ' + children + ' • Spouses: ' + spouses + '</div>';
-
-    if (extra?.hierarchy && extra.hierarchy.length > 0) {
-      tooltip += '<div class="tooltip-ancestry-title">Ancestry:</div>';
-      tooltip += '<div class="tooltip-ancestry">';
-      for (let i = 0; i < extra.hierarchy.length; i++) {
-        const h = extra.hierarchy[i];
-        const arrow = "↑ ".repeat(extra.hierarchy.length - i);
-        const mb = i < extra.hierarchy.length - 1 ? 'margin-bottom: 2px;' : '';
-        tooltip += '<div style="font-size: 0.7rem; opacity: 0.85; ' + mb + '">' + arrow + ' ' + h.name + '</div>';
-      }
-      tooltip += '</div>';
-    }
-
-    tooltip += '<div class="tooltip-meta">Click to view details</div>';
-    tooltip += '</div>';
-    
-    let node = '';
-    node += '<div ';
-    node += 'style="height:100%;width:100%;position:relative;overflow:visible;" ';
-    node += 'class="' + nodeClass + '" ';
-    node += 'id="node' + id + '">\n';
-    node += textRenderer(name, extra, textClass);
-    node += tooltip;
-    node += '</div>';
-    return node;
+    // Logic moved to NodeCard.tsx. 
+    // This method is only a fallback if the custom callbacks.nodeRenderer is not provided.
+    return `<div class="${nodeClass}" id="node${id}">${name}</div>`;
   }
 
   static _textRenderer(name: string, extra: any, textClass: string) {
