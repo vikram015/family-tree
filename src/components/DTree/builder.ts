@@ -59,11 +59,11 @@ class TreeBuilder {
     const zoom = (this.zoom = d3
       .zoom()
       .scaleExtent([0.1, 10])
-      .filter(function() {
+      .filter(function(event) {
         return true;
       })
-      .on('zoom', function () {
-        g.attr('transform', ((d3 as any).event as any).transform);
+      .on('zoom', function (event) {
+        g.attr('transform', event.transform);
       }));
 
     // make a svg
@@ -83,8 +83,9 @@ class TreeBuilder {
     );
 
     // Standard D3v4 Fix for Windows Touch devices sending PointerEvents
-    svg.on("pointerdown", function() {
-      const e = (d3 as any).event;
+    // Updated for D3v7 (event passed as argument)
+    svg.on("pointerdown", function(event) {
+      const e = event;
       if (e && e.pointerType === 'touch') {
           // Synthetic mousedown to trigger D3 zoom
           const event = new MouseEvent('mousedown', {
@@ -187,7 +188,11 @@ class TreeBuilder {
       })
       .append('path')
       .attr('class', opts.styles.linage)
-      .attr('d', this._elbow.bind(this));
+      .attr('d', this._elbow.bind(this))
+      .style('opacity', 0)
+      .transition()
+      .duration(750)
+      .style('opacity', 1);
 
     let nodes = this.g.selectAll('.node').data(treenodes.descendants()).enter();
 
@@ -200,7 +205,12 @@ class TreeBuilder {
       .enter()
       .append('path')
       .attr('class', opts.styles.marriage)
-      .attr('d', this._siblingLine.bind(this));
+      .attr('d', this._siblingLine.bind(this))
+      .style('opacity', 0)
+      .transition()
+      .duration(750)
+      .delay(200)
+      .style('opacity', 1);
 
     // Create the node groups.
     let nodeGroups = nodes
@@ -210,8 +220,17 @@ class TreeBuilder {
       })
       .attr('class', 'node')
       .attr('transform', function (d: any) {
-        return 'translate(' + d.x + ',' + d.y + ')';
-      });
+        return 'translate(' + d.x + ',' + d.y + ') scale(0)';
+      })
+      .style('opacity', 0);
+
+    // Animate nodes entering
+    nodeGroups.transition()
+      .duration(750)
+      .attr('transform', function (d: any) {
+        return 'translate(' + d.x + ',' + d.y + ') scale(1)';
+      })
+      .style('opacity', 1);
 
     // Append foreignObject to the groups
     nodeGroups
@@ -260,14 +279,14 @@ class TreeBuilder {
           );
         }
       })
-      .on('dblclick', function () {
+      .on('dblclick', function (event) {
         // do not propagate a double click on a node
         // to prevent the zoom from being triggered
-        ((d3 as any).event as any).stopPropagation();
+        event.stopPropagation();
       })
-      .on('click', function (d: any) {
+      .on('click', function (event, d: any) {
         // ignore double-clicks and clicks on hidden nodes
-        if (((d3 as any).event as any).detail === 2 || d.data.hidden) {
+        if (event.detail === 2 || d.data.hidden) {
           return;
         }
         if (d.data.isMarriage) {
@@ -276,11 +295,11 @@ class TreeBuilder {
           opts.callbacks.nodeClick.call(this, d.data.name, d.data.extra, d.data.id);
         }
       })
-      .on('contextmenu', function (d: any) {
+      .on('contextmenu', function (event, d: any) {
         if (d.data.hidden) {
           return;
         }
-        ((d3 as any).event as any).preventDefault();
+        event.preventDefault();
         if (d.data.isMarriage) {
           opts.callbacks.marriageRightClick.call(this, d.data.extra, d.data.id);
         } else {
