@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogContent,
 } from "@mui/material";
-import { DTreeComponent } from "../DTree/DTreeComponent";
+import { FamilyChartWrapper } from "../FamilyChart/FamilyChartWrapper";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
 import { getNodeHierarchy } from "../const";
@@ -849,21 +849,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }}
         >
           {rootId && nodes.find((n) => n.id === rootId) ? (
-            <DTreeComponent
-              nodes={nodes}
-              rootId={rootId}
-              onNodeClick={setSelectId}
-              currentTreeId={treeId}
-              onExternalTreeClick={(tid) => {
-                if (
-                  window.confirm(
-                    "This person belongs to another family tree. Navigate to that tree?",
-                  )
-                ) {
-                  onSourceChange(tid, []);
-                }
-              }}
-            />
+            <FamilyChartWrapper nodes={nodes} rootId={rootId} />
           ) : (
             <Box
               sx={{
