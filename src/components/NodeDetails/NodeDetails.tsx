@@ -31,6 +31,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
+import LinkIcon from "@mui/icons-material/Link";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
@@ -421,17 +423,21 @@ export const NodeDetails = memo(function NodeDetails({
                 >
                   Delete
                 </Button>
-                {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder) */}
-                {(!props.treeId || node.treeId === props.treeId) && (
-                  <Button
-                    variant="outlined"
-                    color="info"
-                    onClick={handleLinkExternalClick}
-                    sx={{ mt: 1 }}
-                  >
-                    Link & Replace
-                  </Button>
-                )}
+                {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder) 
+                    AND is a spouse (has accumulated no parents in this tree, but has a spouse) */}
+                {(!props.treeId || node.treeId === props.treeId) &&
+                  (!node.parents || node.parents.length === 0) &&
+                  node.spouses &&
+                  node.spouses.length > 0 && (
+                    <Button
+                      variant="outlined"
+                      color="info"
+                      startIcon={<LinkIcon />}
+                      onClick={handleLinkExternalClick}
+                    >
+                      Link & Replace
+                    </Button>
+                  )}
               </Box>
 
               {/* Details List */}
@@ -518,7 +524,12 @@ export const NodeDetails = memo(function NodeDetails({
 
       {view === "edit" && (
         <>
-          <DialogTitle>Edit {node.name}</DialogTitle>
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <IconButton onClick={() => setView("details")} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            Edit {node.name}
+          </DialogTitle>
           <DialogContent dividers>
             <Stack spacing={3} sx={{ pt: 1 }}>
               {/* Photo & Basic Info Display (Read-only context) */}
@@ -649,7 +660,12 @@ export const NodeDetails = memo(function NodeDetails({
 
       {view === "add" && (
         <>
-          <DialogTitle>Add Relative</DialogTitle>
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <IconButton onClick={() => setView("details")} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            Add Relative to {node.name}
+          </DialogTitle>
           <DialogContent dividers>
             <AddNode
               targetId={node.id}
@@ -665,38 +681,51 @@ export const NodeDetails = memo(function NodeDetails({
               noCard
             />
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setView("details")}>Cancel</Button>
-          </DialogActions>
         </>
       )}
 
       {view === "delete" && (
         <>
-          <DialogTitle sx={{ color: "error.main" }}>
-            Confirm Delete
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="h6" color="text.primary">
-                {node.name}
-              </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                display="block"
-                sx={{
-                  mt: 0.5,
-                  fontStyle: "italic",
-                  bgcolor: "rgba(0,0,0,0.03)",
-                  p: 0.5,
-                  borderRadius: 1,
-                }}
-              >
-                {node.hierarchy && node.hierarchy.length > 0
-                  ? `Hierarchy: ${node.hierarchy
-                      .map((h) => h.name)
-                      .join(" > ")} > ${node.name}`
-                  : "Hierarchy: (Root Node)"}
-              </Typography>
+          <DialogTitle
+            sx={{
+              color: "error.main",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 1,
+            }}
+          >
+            <IconButton
+              onClick={() => setView("details")}
+              size="small"
+              sx={{ mt: 0.5 }}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+            <Box>
+              Confirm Delete
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="h6" color="text.primary">
+                  {node.name}
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  display="block"
+                  sx={{
+                    mt: 0.5,
+                    fontStyle: "italic",
+                    bgcolor: "rgba(0,0,0,0.03)",
+                    p: 0.5,
+                    borderRadius: 1,
+                  }}
+                >
+                  {node.hierarchy && node.hierarchy.length > 0
+                    ? `Hierarchy: ${node.hierarchy
+                        .map((h) => h.name)
+                        .join(" > ")} > ${node.name}`
+                    : "Hierarchy: (Root Node)"}
+                </Typography>
+              </Box>
             </Box>
           </DialogTitle>
           <DialogContent>
@@ -723,7 +752,12 @@ export const NodeDetails = memo(function NodeDetails({
 
       {view === "link-external" && (
         <>
-          <DialogTitle>Link to External Tree</DialogTitle>
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <IconButton onClick={() => setView("details")} size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            Link {node.name} to External Tree
+          </DialogTitle>
           <DialogContent dividers>
             <Typography variant="body2" sx={{ mb: 2 }}>
               Use this to replace the current placeholder person with a detailed

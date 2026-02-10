@@ -274,9 +274,13 @@ const AddNode: React.FC<AddNodeProps> = ({
       component={noCard ? "div" : Paper}
       sx={noCard ? {} : { p: 3, elevation: 2 }}
     >
-      <Typography variant="h6" gutterBottom>
-        {isFirstNode ? "Add First Family Member" : "Add Family Member"}
-      </Typography>
+      {!noCard && (
+        <Typography variant="h6" gutterBottom>
+          {isFirstNode
+            ? "Add First Family Member"
+            : `Add Family Member to ${targetNode ? targetNode.name : "Tree"}`}
+        </Typography>
+      )}
 
       <Stack spacing={3}>
         {!isFirstNode && (
@@ -456,18 +460,31 @@ const AddNode: React.FC<AddNodeProps> = ({
               fullWidth
             />
 
-            <FormControl fullWidth>
-              <InputLabel>Gender</InputLabel>
-              <Select
+            <FormControl>
+              <FormLabel>Gender</FormLabel>
+              <RadioGroup
+                row
                 value={gender}
-                onChange={(e) => setGender(e.target.value as any)}
-                label="Gender"
+                onChange={(e) =>
+                  setGender(e.target.value as "male" | "female" | "other")
+                }
               >
-                <MenuItem value="">— select —</MenuItem>
-                <MenuItem value="male">Male</MenuItem>
-                <MenuItem value="female">Female</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
-              </Select>
+                <FormControlLabel
+                  value="male"
+                  control={<Radio />}
+                  label="Male"
+                />
+                <FormControlLabel
+                  value="female"
+                  control={<Radio />}
+                  label="Female"
+                />
+                <FormControlLabel
+                  value="other"
+                  control={<Radio />}
+                  label="Other"
+                />
+              </RadioGroup>
             </FormControl>
 
             <Divider />

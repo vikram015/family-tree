@@ -135,7 +135,7 @@ BEGIN
     pd.tree_name,
     COALESCE(pd.parent_hierarchy, '[]'::JSONB) as parent_hierarchy
   FROM business b
-  LEFT JOIN parent_data pd ON b.people_id = pd.person_id
+  JOIN parent_data pd ON b.people_id = pd.person_id
   WHERE b.is_deleted = FALSE;
 
 END;

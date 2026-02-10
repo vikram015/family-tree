@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import * as d3 from "d3";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
 import "./dTree.css";
+import { NodeCard } from "./NodeCard";
 
 interface DTreeNode {
   name: string;
@@ -45,20 +47,33 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const prevZoomRef = useRef<any>(null);
 
   useEffect(() => {
-    const handleExternalLink = (e: any) => {
-      const tid = e.detail;
-      if (onExternalTreeClick) {
-        onExternalTreeClick(tid);
+    // Event delegation for external tree links rendered by NodeCard
+    const handleContainerClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Search up the DOM tree for the .external-tree-icon class
+      const linkButton = target.closest(".external-tree-icon");
+
+      if (linkButton) {
+        e.preventDefault();
+        e.stopPropagation();
+        const tid = linkButton.getAttribute("data-tree-id");
+        if (tid && onExternalTreeClick) {
+          onExternalTreeClick(tid);
+        }
       }
     };
-    window.addEventListener("external-tree-link-click", handleExternalLink);
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener("click", handleContainerClick);
+    }
+
     return () => {
-      window.removeEventListener(
-        "external-tree-link-click",
-        handleExternalLink,
-      );
+      if (container) {
+        container.removeEventListener("click", handleContainerClick);
+      }
     };
-  }, [onExternalTreeClick]);
+  }, [onExternalTreeClick, containerRef]); // Removed window listener for 'external-tree-link-click' as it's no longer used
 
   // Convert FNode format to dTree format
   const convertToTreeFormat = (
@@ -174,7 +189,17 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   useEffect(() => {
     if (!containerRef.current || nodes.length === 0) return;
 
-    // Clear previous tree (safeguard, though cleanup handles it)
+    // Capture zoom state explicitly before clearing
+    let currentZoom: any = null;
+    const existingSvg = containerRef.current.querySelector("svg");
+    if (existingSvg) {
+      currentZoom = d3.zoomTransform(existingSvg);
+    } else {
+      // Fallback to cleanup ref if DOM is already empty
+      currentZoom = prevZoomRef.current;
+    }
+
+    // Clear previous tree
     d3.select(containerRef.current).selectAll("*").remove();
 
     const rootNode = convertToTreeFormat(rootId);
@@ -230,55 +255,16 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             textClass: string,
             textRenderer: Function,
           ) => {
-            let html = TreeBuilder._nodeRenderer(
-              name,
-              x,
-              y,
-              height,
-              width,
-              extra,
-              id,
-              nodeClass,
-              textClass,
-              textRenderer,
+            return renderToStaticMarkup(
+              <NodeCard
+                name={name}
+                extra={extra}
+                nodeClass={nodeClass}
+                textClass={textClass}
+                currentTreeId={currentTreeId}
+                id={id}
+              />,
             );
-
-            // Debugging log
-            if (extra && extra.treeId !== currentTreeId) {
-              console.log(
-                `Node ${name} has treeId ${extra.treeId}, current is ${currentTreeId}. Match? ${extra.treeId === currentTreeId}`,
-              );
-            }
-
-            if (
-              currentTreeId &&
-              extra &&
-              extra.treeId &&
-              extra.treeId !== currentTreeId
-            ) {
-              const btnHtml = `
-                  <div 
-                    class="external-tree-icon" 
-                    title="Go to linked Family Tree"
-                    onclick="event.stopPropagation(); window.dispatchEvent(new CustomEvent('external-tree-link-click', { detail: '${extra.treeId}' }));"
-                    style="position: absolute; top: -10px; right: -10px; width: 24px; height: 24px; background: white; border-radius: 50%; border: 2px solid #1976d2; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 100; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"
-                  >
-                    🔗
-                  </div>
-                `;
-
-              // We need to inject this button inside the main container div, but at the end.
-              // structure is <div ...> ...content... </div>
-              // We want <div ...> ...content... btn </div>
-              const lastDivIndex = html.lastIndexOf("</div>");
-              if (lastDivIndex !== -1) {
-                html =
-                  html.substring(0, lastDivIndex) +
-                  btnHtml +
-                  html.substring(lastDivIndex);
-              }
-            }
-            return html;
           },
         },
       });
@@ -286,17 +272,13 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       console.log("dTree initialized:", treeRef.current);
 
       // Restore zoom state if root hasn't changed
-      if (
-        rootId === prevRootIdRef.current &&
-        prevZoomRef.current &&
-        treeRef.current
-      ) {
+      if (rootId === prevRootIdRef.current && currentZoom && treeRef.current) {
         try {
           if (typeof treeRef.current.getBuilder === "function") {
             const builder = treeRef.current.getBuilder();
             if (builder && builder.zoom && builder.svg) {
-              console.log("Restoring zoom state:", prevZoomRef.current);
-              builder.svg.call(builder.zoom.transform, prevZoomRef.current);
+              console.log("Restoring zoom state:", currentZoom);
+              builder.svg.call(builder.zoom.transform, currentZoom);
             }
           }
         } catch (e) {

@@ -54,14 +54,13 @@ class TreeBuilder {
     let height = opts.height + opts.margin.top + opts.margin.bottom;
 
     // create zoom handler
+    // ... inside create() method ...
+
     const zoom = (this.zoom = d3
       .zoom()
       .scaleExtent([0.1, 10])
-      // Standard filter that allows touch inputs
       .filter(function() {
-        // Only ignore secondary buttons (right click)
-        // (d3 as any).event is compatible with v4
-        return !(d3 as any).event.button || (d3 as any).event.type === 'touchstart' || (d3 as any).event.type === 'wheel';
+        return true;
       })
       .on('zoom', function () {
         g.attr('transform', ((d3 as any).event as any).transform);
@@ -71,6 +70,8 @@ class TreeBuilder {
     const svg = (this.svg = d3
       .select(opts.target)
       .append('svg')
+      .style('width', '100%')      // Force width to fill container
+      .style('height', '100%')     // Force height to fill container
       .attr('viewBox', [0, 0, width, height] as any)
       .style('overflow', 'visible')
       .style('touch-action', 'none')
@@ -78,7 +79,66 @@ class TreeBuilder {
       .style('-webkit-user-select', 'none')
       .style('cursor', 'grab')
       .call(zoom as any)
+      .on("dblclick.zoom", null)
     );
+
+    // Standard D3v4 Fix for Windows Touch devices sending PointerEvents
+    svg.on("pointerdown", function() {
+      const e = (d3 as any).event;
+      if (e && e.pointerType === 'touch') {
+          // Synthetic mousedown to trigger D3 zoom
+          const event = new MouseEvent('mousedown', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              detail: 1,
+              screenX: e.screenX,
+              screenY: e.screenY,
+              clientX: e.clientX,
+              clientY: e.clientY,
+              ctrlKey: e.ctrlKey,
+              altKey: e.altKey,
+              shiftKey: e.shiftKey,
+              metaKey: e.metaKey,
+              button: 0,
+              buttons: 1
+          });
+          
+          // Dispatch immediately to the target (this node)
+          (this as Element).dispatchEvent(event);
+      }
+    });
+
+    // Add grid pattern definitions
+    const defs = svg.append('defs');
+    const gridSize = 30; // Distance between dots
+    const dotSize = 1.5; // Radius of dots
+    
+    // Grid line pattern
+    const pattern = defs.append('pattern')
+        .attr('id', 'grid-line-pattern')
+        .attr('width', gridSize)
+        .attr('height', gridSize)
+        .attr('patternUnits', 'userSpaceOnUse');
+        
+    pattern.append('path')
+        .attr('d', `M ${gridSize} 0 L 0 0 0 ${gridSize}`)
+        .attr('fill', 'none')
+        .attr('stroke', '#e0e0e0')
+        .attr('stroke-width', 1);
+
+    // Add a rectangle with the grid pattern as background
+    // This also captures zoom events on empty spaces
+    // Use large negative coordinates and huge dimensions to ensure coverage even on zoom out or small screens
+    svg.append('rect')
+       .attr('width', '500%')
+       .attr('height', '500%')
+       .attr('x', '-200%')
+       .attr('y', '-200%')
+       .style('fill', 'url(#grid-line-pattern)')
+       .style('pointer-events', 'all')
+       .style('touch-action', 'none') // Ensure it captures events
+       .call(zoom as any); // Explicitly attach zoom to the background rect for robustness
 
     // create svg group that holds all nodes
     const g = (this.g = svg.append('g'));
@@ -142,23 +202,31 @@ class TreeBuilder {
       .attr('class', opts.styles.marriage)
       .attr('d', this._siblingLine.bind(this));
 
-    // Create the node rectangles.
-    nodes
-      .append('foreignObject')
+    // Create the node groups.
+    let nodeGroups = nodes
+      .append('g')
       .filter(function (d: any) {
         return d.data.hidden ? false : true;
       })
-      .attr('x', function (d: any) {
-        return Math.round(d.x - d.cWidth / 2) + 'px';
-      })
-      .attr('y', function (d: any) {
-        return Math.round(d.y - d.cHeight / 2) + 'px';
-      })
+      .attr('class', 'node')
+      .attr('transform', function (d: any) {
+        return 'translate(' + d.x + ',' + d.y + ')';
+      });
+
+    // Append foreignObject to the groups
+    nodeGroups
+      .append('foreignObject')
       .attr('width', function (d: any) {
-        return d.cWidth + 'px';
+        return d.cWidth;
       })
       .attr('height', function (d: any) {
-        return d.cHeight + 'px';
+        return d.cHeight;
+      })
+      .attr('x', function (d: any) {
+        return -Math.round(d.cWidth / 2);
+      })
+      .attr('y', function (d: any) {
+        return -Math.round(d.cHeight / 2);
       })
       .style('overflow', 'visible')
       .attr('id', function (d: any) {

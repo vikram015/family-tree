@@ -13,8 +13,7 @@ import {
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
-import { NODE_WIDTH, NODE_HEIGHT, getNodeHierarchy } from "../const";
-import { getNodeStyle } from "../App/utils";
+import { getNodeHierarchy } from "../const";
 import { SupabaseService } from "../../services/supabaseService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
@@ -111,16 +110,103 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setIsLoading(false);
         return;
       }
-      const rootCandidate = items.find(
-        (item) =>
-          (item.parents?.length ?? 0) === 0 &&
-          (item.spouses?.length ?? 0) === 0,
-      );
-      if (rootCandidate) {
-        setRootId(rootCandidate.id);
-      } else {
+
+      // -------------------------------------------------------------
+      // Root Selection Logic Refined
+      // 1. Candidate must belong to the current tree.
+      // 2. Candidate must have NO parents.
+      // 3. If Candidate has a spouse in the SAME tree, that spouse must NOT have parents.
+      //    (If the spouse has parents, then the spouse's lineage is the true root, and Candidate is just an in-law).
+      // -------------------------------------------------------------
+
+      const currentTreeId = treeId;
+      const rawMembers = treeData.members || [];
+      const memberMap = new Map(rawMembers.map((m: any) => [m.id, m]));
+
+      // Step 1 & 2: Filter by Tree ID and No Parents
+      const baseCandidates = rawMembers.filter((m: any) => {
+        const isInCurrentTree = m.tree_id === currentTreeId;
+        const hasNoParents = !m.parents || m.parents.length === 0;
+        return isInCurrentTree && hasNoParents;
+      });
+
+      // Step 3: Filter out "In-Laws" (whose spouses are in-tree and have parents)
+      const validCandidates = baseCandidates.filter((candidate: any) => {
+        const spouses = candidate.spouses || [];
+
+        // Check if ANY spouse disqualifies this candidate
+        const isDisqualified = spouses.some((s: any) => {
+          const spouseNode = memberMap.get(s.id);
+
+          if (!spouseNode) return false; // Spouse data missing, ignore
+
+          // Condition: Spouse is in the SAME tree
+          if (spouseNode.tree_id === currentTreeId) {
+            // Check if this spouse has parents (meaning the root is higher up on their side)
+            if (spouseNode.parents && spouseNode.parents.length > 0) {
+              return true; // Disqualify Candidate
+            }
+          }
+          return false;
+        });
+
+        return !isDisqualified;
+      });
+
+      // Tie-Breaking: Use Descendant Count and Age
+      const countDescendants = (
+        nodeId: string,
+        depth = 0,
+        memo = new Map<string, number>(),
+      ): number => {
+        if (depth > 50) return 0;
+        if (memo.has(nodeId)) return memo.get(nodeId)!;
+
+        const node = memberMap.get(nodeId);
+        if (!node || !node.children || node.children.length === 0) {
+          memo.set(nodeId, 0);
+          return 0;
+        }
+
+        let count = 0;
+        node.children.forEach((child: any) => {
+          count += 1 + countDescendants(child.id, depth + 1, memo);
+        });
+
+        memo.set(nodeId, count);
+        return count;
+      };
+
+      const finalCandidates =
+        validCandidates.length > 0 ? validCandidates : baseCandidates;
+
+      // Sort candidates
+      finalCandidates.sort((a: any, b: any) => {
+        // Priority 1: Descendant Count
+        const aDesc = countDescendants(a.id);
+        const bDesc = countDescendants(b.id);
+        if (aDesc !== bDesc) return bDesc - aDesc;
+
+        // Priority 2: Creation Date (Oldest First)
+        const aTime = new Date(a.created_at).getTime() || 0;
+        const bTime = new Date(b.created_at).getTime() || 0;
+        return aTime - bTime;
+      });
+
+      if (finalCandidates.length > 0) {
+        console.log(
+          `FamiliesPage: Selected Root ${finalCandidates[0].name} (ID: ${finalCandidates[0].id})`,
+        );
+        setRootId(finalCandidates[0].id);
+      } else if (items.length > 0) {
+        console.warn(
+          "FamiliesPage: No valid root candidates found, defaulting to first item.",
+        );
         setRootId(items[0].id);
+      } else {
+        console.warn("FamiliesPage: Tree is empty.");
       }
+
       setIsLoading(false);
       console.log("FamiliesPage: Tree data loaded and state updated.");
     } catch (error) {
@@ -575,46 +661,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     [hasPermission, treeId, loadTreeData],
   );
 
-  // Update rootId when nodes change
+  // Update rootId when nodes change - Removed to prevent overriding smart selection from loadTreeData
+  // If the current root is deleted, we might validly end up with a blank screen until manual selection or reload,
+  // but that's better than aggressive auto-jumping.
   useEffect(() => {
-    if (nodes.length > 0) {
-      // First, try to find a male with no parents and no spouses
-      let rootCandidate = nodes.find(
-        (item) =>
-          item.gender === Gender.male &&
-          (item.parents?.length ?? 0) === 0 &&
-          (item.spouses?.length ?? 0) === 0,
-      );
-
-      // If not found, try to find any male with no parents
-      if (!rootCandidate) {
-        rootCandidate = nodes.find(
-          (item) =>
-            item.gender === Gender.male && (item.parents?.length ?? 0) === 0,
-        );
-      }
-
-      // If still not found, use the first male node
-      if (!rootCandidate) {
-        rootCandidate = nodes.find((item) => item.gender === Gender.male);
-      }
-
-      // If no males found, fall back to original logic
-      if (!rootCandidate) {
-        rootCandidate = nodes.find(
-          (item) =>
-            (item.parents?.length ?? 0) === 0 &&
-            (item.spouses?.length ?? 0) === 0,
-        );
-      }
-
-      if (rootCandidate) {
-        setRootId(rootCandidate.id);
-      } else {
-        setRootId(nodes[0].id);
-      }
+    if (nodes.length > 0 && !nodes.find((n) => n.id === rootId)) {
+      // Only reset if strict root is missing
+      // But really, loadTreeData should handle this on refresh.
+      // For now, let's trust the loadTreeData implementation.
     }
-  }, [nodes]);
+  }, [nodes, rootId]);
 
   // Calculate tree statistics
   const statistics = useMemo(() => {

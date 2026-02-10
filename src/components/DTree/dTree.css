@@ -8,8 +8,7 @@
 .marriage {
   fill: none;
   stroke: #e91e63;
-  stroke-width: 2.5px;
-  stroke-dasharray: 5, 3;
+  stroke-width: 2px;
 }
 
 .node {

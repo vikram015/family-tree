@@ -53,19 +53,6 @@ BEGIN
         AND pr2.related_person_id = p_person_id_2
         AND pr2.relation_type = 'parent'
     );
-    
-  -- Map children of Person 2 to Person 1 (Symmetric logic, just in case the linked person already brings children into the marriage)
-  INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
-  SELECT child_relations.person_id, p_person_id_1, 'parent', 'blood', now(), now()
-  FROM people_relations AS child_relations
-  WHERE child_relations.related_person_id = p_person_id_2
-    AND child_relations.relation_type = 'parent' -- person_id is child of p_person_id_2
-    AND NOT EXISTS (
-      SELECT 1 FROM people_relations pr2
-      WHERE pr2.person_id = child_relations.person_id
-        AND pr2.related_person_id = p_person_id_1
-        AND pr2.relation_type = 'parent'
-    );
 
   -- 3. Replace Placeholder (if provided)
   IF p_replace_person_id IS NOT NULL THEN
