@@ -9,6 +9,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
+  DialogContentText,
 } from "@mui/material";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
@@ -40,6 +42,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [rootId, setRootId] = useState("");
   const [selectId, setSelectId] = useState<string>();
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    open: boolean;
+    personId: string | null;
+    childrenCount: number;
+    personName?: string;
+  }>({
+    open: false,
+    personId: null,
+    childrenCount: 0,
+  });
 
   const loadTreeData = useCallback(
     async (keepRoot = false) => {
@@ -51,7 +63,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
 
       try {
-        setIsLoading(true);
+        if (!keepRoot) {
+          setIsLoading(true);
+        }
         // Fetch complete tree from Supabase using the PostgreSQL function
         const treeData = await SupabaseService.getCompleteTreeById(treeId);
         // Convert tree data to FNode format
@@ -256,7 +270,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   );
 
   const onDelete = useCallback(
-    async (nodeId: string) => {
+    async (nodeId: string, force: boolean = false) => {
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to delete from this family tree.");
         return;
@@ -264,11 +278,24 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
       try {
         // Delete person using Supabase
-        await SupabaseService.deletePerson(nodeId);
+        const result = await SupabaseService.deletePerson(nodeId, force);
+
+        if (result?.requires_confirmation) {
+          const person = nodes.find((n) => n.id === nodeId);
+          setDeleteConfirmation({
+            open: true,
+            personId: nodeId,
+            childrenCount: result.children_count,
+            personName: person?.name,
+          });
+          return;
+        }
+
         // Refresh tree data but keep current root if valid
         await loadTreeData(true);
         // Clear selection
         setSelectId(undefined);
+        setDeleteConfirmation((prev) => ({ ...prev, open: false }));
       } catch (err) {
         console.error("Failed to delete node:", err);
         alert(
@@ -278,7 +305,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId, loadTreeData],
+    [hasPermission, treeId, loadTreeData, nodes],
   );
 
   const onAdd = useCallback(
@@ -635,6 +662,52 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           />
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={deleteConfirmation.open}
+        onClose={() =>
+          setDeleteConfirmation((prev) => ({ ...prev, open: false }))
+        }
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {deleteConfirmation.personName || "This person"} has{" "}
+            <strong>{deleteConfirmation.childrenCount} children</strong> in the
+            tree.
+            <br />
+            <br />
+            Deleting them will leave these children as <strong>
+              orphans
+            </strong>{" "}
+            (disconnected from the main lineage).
+            <br />
+            <br />
+            Are you sure you want to proceed?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setDeleteConfirmation((prev) => ({ ...prev, open: false }))
+            }
+          >
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              if (deleteConfirmation.personId) {
+                onDelete(deleteConfirmation.personId, true);
+              }
+            }}
+          >
+            Force Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {selected && (
         <NodeDetails
           node={selected}

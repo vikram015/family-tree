@@ -45,6 +45,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const prevRootIdRef = useRef<string | null>(null);
   const prevZoomRef = useRef<any>(null);
+  const prevTreeIdRef = useRef<string | undefined>(currentTreeId);
 
   useEffect(() => {
     // Event delegation for external tree links rendered by NodeCard
@@ -189,14 +190,26 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   useEffect(() => {
     if (!containerRef.current || nodes.length === 0) return;
 
-    // Capture zoom state explicitly before clearing
+    // Check if user has switched to a completely different tree
+    const isNewTree = prevTreeIdRef.current !== currentTreeId;
+    const hasRendered = containerRef.current.querySelector("svg") !== null;
+    const shouldAnimate = isNewTree || !hasRendered;
+
+    // Capture zoom state explicitly before clearing, ONLY if it's the same tree context
     let currentZoom: any = null;
-    const existingSvg = containerRef.current.querySelector("svg");
-    if (existingSvg) {
-      currentZoom = d3.zoomTransform(existingSvg);
+
+    if (!isNewTree) {
+      const existingSvg = containerRef.current.querySelector("svg");
+      if (existingSvg) {
+        currentZoom = d3.zoomTransform(existingSvg);
+      } else {
+        // Fallback to cleanup ref if DOM is already empty
+        currentZoom = prevZoomRef.current;
+      }
     } else {
-      // Fallback to cleanup ref if DOM is already empty
-      currentZoom = prevZoomRef.current;
+      // Reset zoom for new tree so it centers correctly
+      currentZoom = null;
+      prevZoomRef.current = null;
     }
 
     // Clear previous tree
@@ -213,17 +226,30 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       const containerId = "dtree-container";
       containerRef.current.id = containerId;
 
+      const containerWidth = containerRef.current.clientWidth || 1200;
+      const containerHeight = containerRef.current.clientHeight || 800;
+
+      // dynamic sizing calculation
+      const margin = {
+        top: 80,
+        right: 90,
+        bottom: 20,
+        left: 90,
+      };
+
+      const width = Math.max(containerWidth - margin.left - margin.right, 300);
+      const height = Math.max(
+        containerHeight - margin.top - margin.bottom,
+        300,
+      );
+
       treeRef.current = dTree.init([rootNode], {
         target: `#${containerId}`,
-        width: 1200,
-        height: 800,
+        width: width,
+        height: height,
         debug: true,
-        margin: {
-          top: 80,
-          right: 90,
-          bottom: 20,
-          left: 90,
-        },
+        duration: 0,
+        margin: margin,
         nodeWidth: 120,
         callbacks: {
           nodeClick: (name: string, extra: any, id: string) => {
@@ -258,7 +284,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       });
 
       // Restore zoom state if root hasn't changed
-      if (rootId === prevRootIdRef.current && currentZoom && treeRef.current) {
+      // Also restore zoom even if root changes to prevent "jumps" if keeping continuity is desired,
+      // but strictly speaking, new root might be elsewhere. For add/delete, rootId is usually stable.
+      // If we have a zoomed state, prioritized that over the default init zoom.
+      if (currentZoom && treeRef.current) {
         try {
           if (typeof treeRef.current.getBuilder === "function") {
             const builder = treeRef.current.getBuilder();
@@ -273,6 +302,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // Update ref to current root
       prevRootIdRef.current = rootId;
+      prevTreeIdRef.current = currentTreeId;
     } catch (error) {
       console.error("Error rendering dTree:", error);
       setError("Error rendering family tree. Please try refreshing the page.");

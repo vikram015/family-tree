@@ -49,6 +49,8 @@ class TreeBuilder {
   create() {
     let opts = this.opts;
     let nodeSize = this.nodeSize;
+    let duration = opts.duration ?? 750;
+    let siblingDelay = duration > 0 ? 200 : 0;
 
     let width = opts.width + opts.margin.left + opts.margin.right;
     let height = opts.height + opts.margin.top + opts.margin.bottom;
@@ -90,7 +92,6 @@ class TreeBuilder {
     // Add grid pattern definitions
     const defs = svg.append('defs');
     const gridSize = 30; // Distance between dots
-    const dotSize = 1.5; // Radius of dots
     
     // Grid line pattern
     const pattern = defs.append('pattern')
@@ -150,12 +151,14 @@ class TreeBuilder {
     let opts = this.opts;
     let nodeSize = this.nodeSize;
     let marriageSize = this.marriageSize;
+    let duration = opts.duration ?? 750;
+    let siblingDelay = duration > 0 ? 200 : 0;
 
     let treenodes = this.tree(source);
     let links = treenodes.links();
 
     // Create the link lines.
-    this.g
+    let linkPaths = this.g
       .selectAll('.link')
       .data(links)
       .enter()
@@ -166,29 +169,40 @@ class TreeBuilder {
       .append('path')
       .attr('class', opts.styles.linage)
       .attr('d', this._elbow.bind(this))
-      .style('opacity', 0)
-      .transition()
-      .duration(750)
-      .style('opacity', 1);
+      .style('opacity', duration === 0 ? 1 : 0);
+
+    if (duration > 0) {
+      linkPaths
+        .transition()
+        .duration(duration)
+        .style('opacity', 1);
+    }
 
     let nodes = this.g.selectAll('.node').data(treenodes.descendants()).enter();
 
     this._linkSiblings();
 
     // Draw siblings (marriage)
-    this.g
+    let siblingPaths = this.g
       .selectAll('.sibling')
       .data(this.siblings)
       .enter()
       .append('path')
       .attr('class', opts.styles.marriage)
       .attr('d', this._siblingLine.bind(this))
-      .style('opacity', 0)
-      .transition()
-      .duration(750)
-      .delay(200)
-      .style('opacity', 1);
+      .style('opacity', duration === 0 ? 1 : 0);
 
+    if (duration > 0) {
+      siblingPaths
+        .transition()
+        .duration(duration)
+        .delay(siblingDelay)
+        .style('opacity', 1);
+    }
+
+    // Set opacity to 1 immediately if logic suggests a refresh, but transition is nice.
+    // However, for existing nodes, we want to update position.
+    
     // Create the node groups.
     let nodeGroups = nodes
       .append('g')
@@ -196,18 +210,25 @@ class TreeBuilder {
         return d.data.hidden ? false : true;
       })
       .attr('class', 'node')
+      // Initial position - if we have a way to know previous position, that's better.
+      // For now, scale(0) is the "enter" animation.
       .attr('transform', function (d: any) {
+         if (duration === 0) {
+           return 'translate(' + d.x + ',' + d.y + ') scale(1)';
+         }
         return 'translate(' + d.x + ',' + d.y + ') scale(0)';
       })
-      .style('opacity', 0);
+      .style('opacity', duration === 0 ? 1 : 0);
 
     // Animate nodes entering
-    nodeGroups.transition()
-      .duration(750)
-      .attr('transform', function (d: any) {
-        return 'translate(' + d.x + ',' + d.y + ') scale(1)';
-      })
-      .style('opacity', 1);
+    if (duration > 0) {
+      nodeGroups.transition()
+        .duration(duration)
+        .attr('transform', function (d: any) {
+          return 'translate(' + d.x + ',' + d.y + ') scale(1)';
+        })
+        .style('opacity', 1);
+    }
 
     // Append foreignObject to the groups
     nodeGroups

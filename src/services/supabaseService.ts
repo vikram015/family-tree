@@ -309,18 +309,20 @@ export const SupabaseService = {
    * Delete a person from a tree using SQL procedure
    * Handles deletion of person, relationships, and additional details atomically
    */
-  async deletePerson(personId: string): Promise<void> {
+  async deletePerson(personId: string, force: boolean = false): Promise<any> {
     const { data, error } = await supabase.rpc('delete_person_from_tree', {
       p_person_id: personId,
+      p_force: force
     });
 
     if (error) throw new Error(`Failed to delete person: ${error.message}`);
     
-    if (data?.success === false) {
+    // If explicit error (not confirmation request), throw it
+    if (data?.success === false && !data?.requires_confirmation) {
       throw new Error(`Failed to delete person: ${data.error}`);
     }
 
-    console.log('Person deleted successfully:', data.deleted_person_name);
+    return data;
   },
 
   /**

@@ -89,6 +89,9 @@ export const NodeDetails = memo(function NodeDetails({
     Record<string, string>
   >({});
 
+  // Delete Dialog State
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   // Display State (for when not editing)
   const [displayCustomFields, setDisplayCustomFields] = useState<
     Record<string, string>
@@ -180,11 +183,11 @@ export const NodeDetails = memo(function NodeDetails({
   const handleDeleteClick = useCallback(() => {
     if (!currentUser) {
       openLoginModal(() => {
-        setView("delete");
+        setDeleteDialogOpen(true);
       });
       return;
     }
-    setView("delete");
+    setDeleteDialogOpen(true);
   }, [currentUser, openLoginModal]);
 
   const handleSaveEdit = useCallback(async () => {
@@ -302,503 +305,506 @@ export const NodeDetails = memo(function NodeDetails({
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
 
   return (
-    <Dialog
-      open={!!node}
-      onClose={closeHandler}
-      fullScreen={isMobile}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          height: isMobile ? "100%" : "auto",
-          maxHeight: isMobile ? "100%" : "90vh",
-          display: "flex",
-          flexDirection: "column",
-        },
-      }}
-    >
-      {view === "details" && (
-        <>
-          <AppBar
-            position="relative"
-            color="default"
-            elevation={0}
-            sx={{ borderBottom: 1, borderColor: "divider" }}
-          >
-            <Toolbar sx={{ justifyContent: "space-between" }}>
-              <Typography variant="h6" noWrap sx={{ flex: 1 }}>
-                {node.name}
-              </Typography>
-              <IconButton edge="end" color="inherit" onClick={closeHandler}>
-                <CloseIcon />
-              </IconButton>
-            </Toolbar>
-          </AppBar>
-          <DialogContent>
-            <Stack spacing={2}>
-              {/* Photo & Basic Info */}
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  mb: 2,
-                }}
-              >
-                {node.photo ? (
-                  <img
-                    src={node.photo}
-                    alt={node.name}
-                    style={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                      marginBottom: 16,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                    }}
-                  />
-                ) : (
-                  <Box
-                    sx={{
-                      width: 120,
-                      height: 120,
-                      borderRadius: "50%",
-                      bgcolor: "action.hover",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      mb: 2,
-                      fontSize: 48,
-                      fontWeight: "bold",
-                      color: "text.secondary",
-                    }}
-                  >
-                    {node.name.charAt(0)}
-                  </Box>
-                )}
-                <Typography variant="subtitle1" color="text.secondary">
-                  {node.gender === Gender.male
-                    ? "Male"
-                    : node.gender === Gender.female
-                      ? "Female"
-                      : "Other"}
-                  {node.dob && ` • Born ${node.dob}`}
-                </Typography>
-              </Box>
-
-              {/* Action Buttons */}
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: 1,
-                  flexWrap: "wrap",
-                }}
-              >
-                <Button
-                  variant="outlined"
-                  startIcon={<EditIcon />}
-                  onClick={handleEditClick}
-                >
-                  Edit
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={handleAddClick}
-                >
-                  Add Relative
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<DeleteIcon />}
-                  onClick={handleDeleteClick}
-                >
-                  Delete
-                </Button>
-                {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder) 
-                    AND is a spouse (has accumulated no parents in this tree, but has a spouse) */}
-                {(!props.treeId || node.treeId === props.treeId) &&
-                  (!node.parents || node.parents.length === 0) &&
-                  node.spouses &&
-                  node.spouses.length > 0 && (
-                    <Button
-                      variant="outlined"
-                      color="info"
-                      startIcon={<LinkIcon />}
-                      onClick={handleLinkExternalClick}
-                    >
-                      Link & Replace
-                    </Button>
-                  )}
-              </Box>
-
-              {/* Details List */}
-              <Stack spacing={1}>
-                {node.dod && (
-                  <Typography variant="body2">
-                    <strong>Died:</strong> {node.dod}
-                  </Typography>
-                )}
-                {node.place && (
-                  <Typography variant="body2">
-                    <strong>Place:</strong> {node.place}
-                  </Typography>
-                )}
-                {node.notes && (
-                  <Box>
-                    <Typography variant="body2" fontWeight="bold">
-                      Notes:
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{ whiteSpace: "pre-wrap", color: "text.secondary" }}
-                    >
-                      {node.notes}
-                    </Typography>
-                  </Box>
-                )}
-                {displayCustomFields &&
-                  Object.keys(displayCustomFields).length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography
-                        variant="subtitle2"
-                        color="text.secondary"
-                        sx={{ mb: 1 }}
-                      >
-                        Additional Details
-                      </Typography>
-                      {Object.entries(displayCustomFields || {}).map(
-                        ([key, value]) => (
-                          <Typography key={key} variant="body2">
-                            <strong>{key}:</strong> {value}
-                          </Typography>
-                        ),
-                      )}
-                    </Box>
-                  )}
-              </Stack>
-
-              {/* Ancestry */}
-              {node.hierarchy && node.hierarchy.length > 0 && (
-                <Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{ mb: 1, color: "primary.main" }}
-                  >
-                    Ancestry
-                  </Typography>
-                  <Box sx={{ pl: 1, borderLeft: 2, borderColor: "divider" }}>
-                    {node.hierarchy.map((ancestor, i) => (
-                      <Typography
-                        key={ancestor.id}
-                        variant="caption"
-                        display="block"
-                        sx={{ ml: i * 1 }}
-                      >
-                        {i > 0 && "↳ "} {ancestor.name}
-                      </Typography>
-                    ))}
-                  </Box>
-                </Box>
-              )}
-
-              <Divider />
-
-              {/* Relations */}
-              <Relations {...props} title="Parents" items={parents} />
-              <Relations {...props} title="Spouses" items={spouses} />
-              <Relations {...props} title="Children" items={children} />
-              <Relations {...props} title="Siblings" items={siblings} />
-            </Stack>
-          </DialogContent>
-        </>
-      )}
-
-      {view === "edit" && (
-        <>
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <IconButton onClick={() => setView("details")} size="small">
-              <ArrowBackIcon />
-            </IconButton>
-            Edit {node.name}
-          </DialogTitle>
-          <DialogContent dividers>
-            <Stack spacing={3} sx={{ pt: 1 }}>
-              {/* Photo & Basic Info Display (Read-only context) */}
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  mb: 1,
-                  p: 1,
-                  bgcolor: "action.hover",
-                  borderRadius: 2,
-                }}
-              >
-                {node.photo ? (
-                  <img
-                    src={node.photo}
-                    alt={node.name}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                      marginBottom: 8,
-                    }}
-                  />
-                ) : (
-                  <Box
-                    sx={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: "50%",
-                      bgcolor: "primary.main",
-                      color: "primary.contrastText",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      mb: 1,
-                      fontSize: 24,
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {node.name.charAt(0)}
-                  </Box>
-                )}
-                <Typography variant="subtitle2" color="text.primary">
-                  Editing: {node.name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {node.gender} • {node.dob || "Unknown DOB"}
-                </Typography>
-              </Box>
-
-              <TextField
-                label="Name"
-                value={editedName}
-                onChange={(e) => setEditedName(e.target.value)}
-                fullWidth
-                required
-              />
-              <TextField
-                label="Date of Birth"
-                type="date"
-                value={editedDob}
-                onChange={(e) => setEditedDob(e.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-              <TextField
-                label="Gotra"
-                value={editedGotra}
-                onChange={(e) => setEditedGotra(e.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Village"
-                value={editedVillage}
-                onChange={(e) => setEditedVillage(e.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Notes"
-                value={editedNotes}
-                onChange={(e) => setEditedNotes(e.target.value)}
-                fullWidth
-                multiline
-                rows={3}
-              />
-              <FormControl>
-                <FormLabel>Gender</FormLabel>
-                <RadioGroup
-                  row
-                  value={editedGender}
-                  onChange={(e) => setEditedGender(e.target.value as Gender)}
-                >
-                  <FormControlLabel
-                    value={Gender.male}
-                    control={<Radio />}
-                    label="Male"
-                  />
-                  <FormControlLabel
-                    value={Gender.female}
-                    control={<Radio />}
-                    label="Female"
-                  />
-                </RadioGroup>
-              </FormControl>
-              <Divider />
-              <AdditionalDetails
-                value={editedCustomFields}
-                onChange={setEditedCustomFields}
-                excludeFields={EXCLUDED_FIELDS}
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setView("details")}>Cancel</Button>
-            <Button
-              onClick={handleSaveEdit}
-              variant="contained"
-              disabled={!editedName.trim()}
+    <>
+      <Dialog
+        open={!!node}
+        onClose={closeHandler}
+        fullScreen={isMobile}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            height: isMobile ? "100%" : "auto",
+            maxHeight: isMobile ? "100%" : "90vh",
+            display: "flex",
+            flexDirection: "column",
+          },
+        }}
+      >
+        {view === "details" && (
+          <>
+            <AppBar
+              position="relative"
+              color="default"
+              elevation={0}
+              sx={{ borderBottom: 1, borderColor: "divider" }}
             >
-              Save Changes
-            </Button>
-          </DialogActions>
-        </>
-      )}
-
-      {view === "add" && (
-        <>
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <IconButton onClick={() => setView("details")} size="small">
-              <ArrowBackIcon />
-            </IconButton>
-            Add Relative to {node.name}
-          </DialogTitle>
-          <DialogContent dividers>
-            <AddNode
-              targetId={node.id}
-              nodes={nodes}
-              onAdd={(n, r, t, type, op) => {
-                if (props.onAdd) {
-                  props.onAdd(n, r, t, type, op);
-                  // We might want to switch back to details after adding
-                  setView("details");
-                }
-              }}
-              onCancel={() => setView("details")}
-              noCard
-            />
-          </DialogContent>
-        </>
-      )}
-
-      {view === "delete" && (
-        <>
-          <DialogTitle
-            sx={{
-              color: "error.main",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 1,
-            }}
-          >
-            <IconButton
-              onClick={() => setView("details")}
-              size="small"
-              sx={{ mt: 0.5 }}
-            >
-              <ArrowBackIcon />
-            </IconButton>
-            <Box>
-              Confirm Delete
-              <Box sx={{ mt: 1 }}>
-                <Typography variant="h6" color="text.primary">
+              <Toolbar sx={{ justifyContent: "space-between" }}>
+                <Typography variant="h6" noWrap sx={{ flex: 1 }}>
                   {node.name}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  display="block"
+                <IconButton edge="end" color="inherit" onClick={closeHandler}>
+                  <CloseIcon />
+                </IconButton>
+              </Toolbar>
+            </AppBar>
+            <DialogContent>
+              <Stack spacing={2}>
+                {/* Photo & Basic Info */}
+                <Box
                   sx={{
-                    mt: 0.5,
-                    fontStyle: "italic",
-                    bgcolor: "rgba(0,0,0,0.03)",
-                    p: 0.5,
-                    borderRadius: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    mb: 2,
                   }}
                 >
-                  {node.hierarchy && node.hierarchy.length > 0
-                    ? `Hierarchy: ${node.hierarchy
-                        .map((h) => h.name)
-                        .join(" > ")} > ${node.name}`
-                    : "Hierarchy: (Root Node)"}
-                </Typography>
-              </Box>
-            </Box>
-          </DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to delete this person?
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              This action cannot be undone. All relationships to this person
-              will be removed.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setView("details")}>Cancel</Button>
-            <Button
-              onClick={handleConfirmDelete}
-              color="error"
-              variant="contained"
-            >
-              Delete
-            </Button>
-          </DialogActions>
-        </>
-      )}
+                  {node.photo ? (
+                    <img
+                      src={node.photo}
+                      alt={node.name}
+                      style={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        marginBottom: 16,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: 120,
+                        height: 120,
+                        borderRadius: "50%",
+                        bgcolor: "action.hover",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        mb: 2,
+                        fontSize: 48,
+                        fontWeight: "bold",
+                        color: "text.secondary",
+                      }}
+                    >
+                      {node.name.charAt(0)}
+                    </Box>
+                  )}
+                  <Typography variant="subtitle1" color="text.secondary">
+                    {node.gender === Gender.male
+                      ? "Male"
+                      : node.gender === Gender.female
+                        ? "Female"
+                        : "Other"}
+                    {node.dob && ` • Born ${node.dob}`}
+                  </Typography>
+                </Box>
 
-      {view === "link-external" && (
-        <>
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <IconButton onClick={() => setView("details")} size="small">
-              <ArrowBackIcon />
-            </IconButton>
-            Link {node.name} to External Tree
-          </DialogTitle>
-          <DialogContent dividers>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              Use this to replace the current placeholder person with a detailed
-              profile from another tree. This handles merging and child
-              reassignment automatically.
-            </Typography>
+                {/* Action Buttons */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "center",
+                    gap: 1,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    startIcon={<EditIcon />}
+                    onClick={handleEditClick}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddClick}
+                  >
+                    Add Relative
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteIcon />}
+                    onClick={handleDeleteClick}
+                  >
+                    Delete
+                  </Button>
+                  {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder) 
+                    AND is a spouse (has accumulated no parents in this tree, but has a spouse) */}
+                  {(!props.treeId || node.treeId === props.treeId) &&
+                    (!node.parents || node.parents.length === 0) &&
+                    node.spouses &&
+                    node.spouses.length > 0 && (
+                      <Button
+                        variant="outlined"
+                        color="info"
+                        startIcon={<LinkIcon />}
+                        onClick={handleLinkExternalClick}
+                      >
+                        Link & Replace
+                      </Button>
+                    )}
+                </Box>
 
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Village</InputLabel>
-              <Select
-                value={linkExternalVillageId}
-                onChange={(e) => setLinkExternalVillageId(e.target.value)}
-                label="Village"
+                {/* Details List */}
+                <Stack spacing={1}>
+                  {node.dod && (
+                    <Typography variant="body2">
+                      <strong>Died:</strong> {node.dod}
+                    </Typography>
+                  )}
+                  {node.place && (
+                    <Typography variant="body2">
+                      <strong>Place:</strong> {node.place}
+                    </Typography>
+                  )}
+                  {node.notes && (
+                    <Box>
+                      <Typography variant="body2" fontWeight="bold">
+                        Notes:
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{ whiteSpace: "pre-wrap", color: "text.secondary" }}
+                      >
+                        {node.notes}
+                      </Typography>
+                    </Box>
+                  )}
+                  {displayCustomFields &&
+                    Object.keys(displayCustomFields).length > 0 && (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography
+                          variant="subtitle2"
+                          color="text.secondary"
+                          sx={{ mb: 1 }}
+                        >
+                          Additional Details
+                        </Typography>
+                        {Object.entries(displayCustomFields || {}).map(
+                          ([key, value]) => (
+                            <Typography key={key} variant="body2">
+                              <strong>{key}:</strong> {value}
+                            </Typography>
+                          ),
+                        )}
+                      </Box>
+                    )}
+                </Stack>
+
+                {/* Ancestry */}
+                {node.hierarchy && node.hierarchy.length > 0 && (
+                  <Box>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ mb: 1, color: "primary.main" }}
+                    >
+                      Ancestry
+                    </Typography>
+                    <Box sx={{ pl: 1, borderLeft: 2, borderColor: "divider" }}>
+                      {node.hierarchy.map((ancestor, i) => (
+                        <Typography
+                          key={ancestor.id}
+                          variant="caption"
+                          display="block"
+                          sx={{ ml: i * 1 }}
+                        >
+                          {i > 0 && "↳ "} {ancestor.name}
+                        </Typography>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+
+                <Divider />
+
+                {/* Relations */}
+                <Relations {...props} title="Parents" items={parents} />
+                <Relations {...props} title="Spouses" items={spouses} />
+                <Relations {...props} title="Children" items={children} />
+                <Relations {...props} title="Siblings" items={siblings} />
+              </Stack>
+            </DialogContent>
+          </>
+        )}
+
+        {view === "edit" && (
+          <>
+            <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <IconButton onClick={() => setView("details")} size="small">
+                <ArrowBackIcon />
+              </IconButton>
+              Edit {node.name}
+            </DialogTitle>
+            <DialogContent dividers>
+              <Stack spacing={3} sx={{ pt: 1 }}>
+                {/* Photo & Basic Info Display (Read-only context) */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    mb: 1,
+                    p: 1,
+                    bgcolor: "action.hover",
+                    borderRadius: 2,
+                  }}
+                >
+                  {node.photo ? (
+                    <img
+                      src={node.photo}
+                      alt={node.name}
+                      style={{
+                        width: 60,
+                        height: 60,
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        marginBottom: 8,
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      sx={{
+                        width: 60,
+                        height: 60,
+                        borderRadius: "50%",
+                        bgcolor: "primary.main",
+                        color: "primary.contrastText",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        mb: 1,
+                        fontSize: 24,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {node.name.charAt(0)}
+                    </Box>
+                  )}
+                  <Typography variant="subtitle2" color="text.primary">
+                    Editing: {node.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {node.gender} • {node.dob || "Unknown DOB"}
+                  </Typography>
+                </Box>
+
+                <TextField
+                  label="Name"
+                  value={editedName}
+                  onChange={(e) => setEditedName(e.target.value)}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Date of Birth"
+                  type="date"
+                  value={editedDob}
+                  onChange={(e) => setEditedDob(e.target.value)}
+                  fullWidth
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  label="Gotra"
+                  value={editedGotra}
+                  onChange={(e) => setEditedGotra(e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Village"
+                  value={editedVillage}
+                  onChange={(e) => setEditedVillage(e.target.value)}
+                  fullWidth
+                />
+                <TextField
+                  label="Notes"
+                  value={editedNotes}
+                  onChange={(e) => setEditedNotes(e.target.value)}
+                  fullWidth
+                  multiline
+                  rows={3}
+                />
+                <FormControl>
+                  <FormLabel>Gender</FormLabel>
+                  <RadioGroup
+                    row
+                    value={editedGender}
+                    onChange={(e) => setEditedGender(e.target.value as Gender)}
+                  >
+                    <FormControlLabel
+                      value={Gender.male}
+                      control={<Radio />}
+                      label="Male"
+                    />
+                    <FormControlLabel
+                      value={Gender.female}
+                      control={<Radio />}
+                      label="Female"
+                    />
+                  </RadioGroup>
+                </FormControl>
+                <Divider />
+                <AdditionalDetails
+                  value={editedCustomFields}
+                  onChange={setEditedCustomFields}
+                  excludeFields={EXCLUDED_FIELDS}
+                />
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setView("details")}>Cancel</Button>
+              <Button
+                onClick={handleSaveEdit}
+                variant="contained"
+                disabled={!editedName.trim()}
               >
-                {villages.map((v) => (
-                  <MenuItem key={v.id} value={v.id}>
-                    {v.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                Save Changes
+              </Button>
+            </DialogActions>
+          </>
+        )}
 
-            <PersonSearchField
-              searchValue={externalSearchValue}
-              onSearchValueChange={setExternalSearchValue}
-              onPersonSelect={(p) => setSelectedExternalPerson(p)}
-              selectedPerson={selectedExternalPerson}
-              villageId={linkExternalVillageId}
-              disabled={!linkExternalVillageId}
-              placeholder="Search for waiting spouse..."
-              label="Select Real Person"
-            />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setView("details")}>Cancel</Button>
-            <Button
-              onClick={handleConfirmLinkExternal}
-              disabled={!selectedExternalPerson}
-              variant="contained"
-              color="primary"
+        {view === "add" && (
+          <>
+            <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                Add Relative to {node.name}
+              </Typography>
+              <IconButton onClick={() => setView("details")} size="small">
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent dividers>
+              <AddNode
+                targetId={node.id}
+                nodes={nodes}
+                onAdd={(n, r, t, type, op) => {
+                  if (props.onAdd) {
+                    props.onAdd(n, r, t, type, op);
+                    // We might want to switch back to details after adding
+                    setView("details");
+                  }
+                }}
+                onCancel={() => setView("details")}
+                noCard
+              />
+            </DialogContent>
+          </>
+        )}
+
+        {/* View delete block moved to separate Dialog */}
+
+        {view === "link-external" && (
+          <>
+            <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <IconButton onClick={() => setView("details")} size="small">
+                <ArrowBackIcon />
+              </IconButton>
+              Link {node.name} to External Tree
+            </DialogTitle>
+            <DialogContent dividers>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Use this to replace the current placeholder person with a
+                detailed profile from another tree. This handles merging and
+                child reassignment automatically.
+              </Typography>
+
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Village</InputLabel>
+                <Select
+                  value={linkExternalVillageId}
+                  onChange={(e) => setLinkExternalVillageId(e.target.value)}
+                  label="Village"
+                >
+                  {villages.map((v) => (
+                    <MenuItem key={v.id} value={v.id}>
+                      {v.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <PersonSearchField
+                searchValue={externalSearchValue}
+                onSearchValueChange={setExternalSearchValue}
+                onPersonSelect={(p) => setSelectedExternalPerson(p)}
+                selectedPerson={selectedExternalPerson}
+                villageId={linkExternalVillageId}
+                disabled={!linkExternalVillageId}
+                placeholder="Search for waiting spouse..."
+                label="Select Real Person"
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setView("details")}>Cancel</Button>
+              <Button
+                onClick={handleConfirmLinkExternal}
+                disabled={!selectedExternalPerson}
+                variant="contained"
+                color="primary"
+              >
+                Link & Replace
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            color: "error.main",
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+          }}
+        >
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Confirm Delete
+          </Typography>
+          <IconButton onClick={() => setDeleteDialogOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 1, mb: 2 }}>
+            <Typography variant="h6" color="text.primary">
+              {node.name}
+            </Typography>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              display="block"
+              sx={{
+                mt: 0.5,
+                fontStyle: "italic",
+                bgcolor: "rgba(0,0,0,0.03)",
+                p: 0.5,
+                borderRadius: 1,
+              }}
             >
-              Link & Replace
-            </Button>
-          </DialogActions>
-        </>
-      )}
-    </Dialog>
+              {node.hierarchy && node.hierarchy.length > 0
+                ? `Hierarchy: ${node.hierarchy.map((h) => h.name).join(" > ")} > ${
+                    node.name
+                  }`
+                : "Hierarchy: (Root Node)"}
+            </Typography>
+          </Box>
+          <Typography>Are you sure you want to delete this person?</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action cannot be undone. All relationships to this person will
+            be removed.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 });

@@ -1,13 +1,14 @@
 -- =====================================================
 -- FUNCTION: delete_person_from_tree
 -- Deletes a person from a family tree with all their relationships and additional details
--- Input: p_person_id (UUID of the person to delete)
+-- Input: p_person_id (UUID), p_force (BOOLEAN) - set to true to delete even if children exist
 -- Output: JSON with success status and deleted person info
 -- =====================================================
-CREATE OR REPLACE FUNCTION delete_person_from_tree(p_person_id UUID)
+CREATE OR REPLACE FUNCTION delete_person_from_tree(p_person_id UUID, p_force BOOLEAN DEFAULT false)
 RETURNS JSON AS $$
 DECLARE
   v_person_record RECORD;
+  v_child_count INTEGER;
   v_result JSON;
 BEGIN
   
@@ -22,6 +23,23 @@ BEGIN
     RETURN json_build_object(
       'success', false,
       'error', 'Person not found'
+    );
+  END IF;
+
+  -- SAFETY CHECK: Check for children (dependents)
+  -- In people_relations: person_id is CHILD, related_person_id is PARENT
+  SELECT COUNT(*) INTO v_child_count
+  FROM people_relations
+  WHERE related_person_id = p_person_id 
+  AND relation_type = 'parent';
+
+  -- If person has children and force is not true, block deletion
+  IF v_child_count > 0 AND p_force = false THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Cannot delete person with children. They would become orphans.',
+      'children_count', v_child_count,
+      'requires_confirmation', true
     );
   END IF;
   
