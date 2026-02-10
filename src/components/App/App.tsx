@@ -1,5 +1,11 @@
-import React, { useState, useCallback } from "react";
-import { ThemeProvider, createTheme, CssBaseline, Box } from "@mui/material";
+import React, { useState, useCallback, useEffect, Suspense } from "react";
+import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Box,
+  CircularProgress,
+} from "@mui/material";
 import {
   BrowserRouter,
   Routes,
@@ -11,7 +17,7 @@ import { AuthInitializer } from "../AuthInitializer";
 import { VillageInitializer } from "../VillageInitializer";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
-import { FamiliesPage } from "../FamiliesPage/FamiliesPage";
+// import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
 import { HeritagePage } from "../HeritagePage/HeritagePage";
 import { BusinessPage } from "../BusinessPage/BusinessPage";
 import { FamousPage } from "../FamousPage/FamousPage";
@@ -22,6 +28,13 @@ import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
 import { ResetPasswordModal } from "../ResetPasswordModal/ResetPasswordModal";
+
+// Lazy load FamiliesPage
+const FamiliesPage = React.lazy(() =>
+  import("../FamiliesPage/FamiliesPage").then((module) => ({
+    default: module.FamiliesPage,
+  })),
+);
 
 const theme = createTheme({
   palette: {
@@ -40,6 +53,14 @@ function AppContent() {
   const [treeId, setTreeId] = useState<string>(() => {
     return searchParams.get("tree") || "";
   });
+
+  useEffect(() => {
+    // Prefetch FamiliesPage code in background after initial load
+    const timer = setTimeout(() => {
+      import("../FamiliesPage/FamiliesPage");
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const onChange = useCallback(
     (value: string) => {
@@ -66,15 +87,30 @@ function AppContent() {
           <Route
             path="/families"
             element={
-              <FamiliesPage
-                treeId={treeId}
-                setTreeId={setTreeId}
-                onSourceChange={onChange}
-                onCreate={(id) => {
-                  setTreeId(id);
-                  onChange(id);
-                }}
-              />
+              <Suspense
+                fallback={
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      height: "100vh",
+                    }}
+                  >
+                    <CircularProgress />
+                  </Box>
+                }
+              >
+                <FamiliesPage
+                  treeId={treeId}
+                  setTreeId={setTreeId}
+                  onSourceChange={onChange}
+                  onCreate={(id) => {
+                    setTreeId(id);
+                    onChange(id);
+                  }}
+                />
+              </Suspense>
             }
           />
           <Route path="/heritage" element={<HeritagePage />} />
