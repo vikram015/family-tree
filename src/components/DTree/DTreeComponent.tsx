@@ -205,24 +205,13 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     const rootNode = convertToTreeFormat(rootId);
     if (!rootNode) {
       console.error("Could not find root node with ID:", rootId);
-      console.error(
-        "Available nodes:",
-        nodes.map((n) => ({ id: n.id, name: n.name })),
-      );
       return;
     }
-
-    console.log("Root node structure:", JSON.stringify(rootNode, null, 2));
 
     try {
       // Set a unique ID for the container
       const containerId = "dtree-container";
       containerRef.current.id = containerId;
-
-      console.log(
-        "Initializing dTree with data:",
-        JSON.stringify(rootNode, null, 2),
-      );
 
       treeRef.current = dTree.init([rootNode], {
         target: `#${containerId}`,
@@ -238,7 +227,6 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         nodeWidth: 120,
         callbacks: {
           nodeClick: (name: string, extra: any, id: string) => {
-            console.log("Node clicked:", { name, extra, id });
             if (extra && extra.id) {
               onNodeClick(extra.id);
             }
@@ -269,15 +257,12 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         },
       });
 
-      console.log("dTree initialized:", treeRef.current);
-
       // Restore zoom state if root hasn't changed
       if (rootId === prevRootIdRef.current && currentZoom && treeRef.current) {
         try {
           if (typeof treeRef.current.getBuilder === "function") {
             const builder = treeRef.current.getBuilder();
             if (builder && builder.zoom && builder.svg) {
-              console.log("Restoring zoom state:", currentZoom);
               builder.svg.call(builder.zoom.transform, currentZoom);
             }
           }

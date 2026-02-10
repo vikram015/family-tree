@@ -82,33 +82,8 @@ class TreeBuilder {
       .on("dblclick.zoom", null)
     );
 
-    // Standard D3v4 Fix for Windows Touch devices sending PointerEvents
-    // Updated for D3v7 (event passed as argument)
-    svg.on("pointerdown", function(event) {
-      const e = event;
-      if (e && e.pointerType === 'touch') {
-          // Synthetic mousedown to trigger D3 zoom
-          const event = new MouseEvent('mousedown', {
-              bubbles: true,
-              cancelable: true,
-              view: window,
-              detail: 1,
-              screenX: e.screenX,
-              screenY: e.screenY,
-              clientX: e.clientX,
-              clientY: e.clientY,
-              ctrlKey: e.ctrlKey,
-              altKey: e.altKey,
-              shiftKey: e.shiftKey,
-              metaKey: e.metaKey,
-              button: 0,
-              buttons: 1
-          });
-          
-          // Dispatch immediately to the target (this node)
-          (this as Element).dispatchEvent(event);
-      }
-    });
+    // Windows Touch Fix removed: D3 v7 handles touch events natively.
+    // Preserving comment for history: Was previously needed for D3v4.
 
     // Add grid pattern definitions
     const defs = svg.append('defs');

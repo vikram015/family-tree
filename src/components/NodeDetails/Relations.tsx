@@ -16,26 +16,17 @@ interface RelationsProps {
   title: string;
   items: readonly any[];
   onSelect: (nodeId: string) => void;
-  onHover: (nodeId: string) => void;
-  onClear: () => void;
 }
 
 export const Relations = memo(function Relations({
   title,
   items,
   onSelect,
-  onHover,
-  onClear,
 }: RelationsProps) {
   const selectHandler = useCallback(
     (id: string) => () => onSelect(id),
-    [onSelect]
+    [onSelect],
   );
-  const hoverHandler = useCallback(
-    (id: string) => () => onHover(id),
-    [onHover]
-  );
-  const clearHandler = useCallback(() => onClear(), [onClear]);
 
   return (
     <Accordion>
@@ -52,11 +43,7 @@ export const Relations = memo(function Relations({
           <List>
             {items.map((item, idx) => (
               <ListItem key={idx} disablePadding>
-                <ListItemButton
-                  onClick={selectHandler(item.id)}
-                  onMouseEnter={hoverHandler(item.id)}
-                  onMouseLeave={clearHandler}
-                >
+                <ListItemButton onClick={selectHandler(item.id)}>
                   <ListItemText primary={item.name} secondary={item.type} />
                 </ListItemButton>
               </ListItem>

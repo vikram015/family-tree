@@ -37,184 +37,188 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const { hasPermission } = useAuth();
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const firstNodeId = useMemo(() => nodes[0]?.id ?? "", [nodes]);
-  const [rootId, setRootId] = useState(firstNodeId);
+  const [rootId, setRootId] = useState("");
   const [selectId, setSelectId] = useState<string>();
-  const [hoverId, setHoverId] = useState<string>();
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
 
-  const loadTreeData = useCallback(async () => {
-    if (!treeId || treeId === "") {
-      setNodes([]);
-      setSelectId(undefined);
-      setHoverId(undefined);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      console.log(
-        "FamiliesPage: Starting to load tree data for treeId:",
-        treeId,
-      );
-      setIsLoading(true);
-      // Fetch complete tree from Supabase using the PostgreSQL function
-      const treeData = await SupabaseService.getCompleteTreeById(treeId);
-      console.log("FamiliesPage: Tree data loaded:", treeData);
-      // Convert tree data to FNode format
-      const items: Readonly<FNode>[] = (treeData.members || []).map(
-        (person: any) =>
-          ({
-            id: person.id,
-            name: person.name,
-            gender: person.gender as Gender,
-            parents:
-              person.parents?.map((p: any) => ({
-                id: p.id,
-                type: RelType.blood,
-              })) || [],
-            children:
-              person.children?.map((c: any) => ({
-                id: c.id,
-                type: RelType.blood,
-              })) || [],
-            spouses:
-              person.spouses?.map((s: any) => ({
-                id: s.id,
-                type: RelType.married,
-              })) || [],
-            siblings:
-              person.siblings?.map((s: any) => ({
-                id: s.id,
-                type: RelType.blood,
-              })) || [],
-            treeId: person.tree_id || treeId,
-          }) as FNode,
-      );
-      console.log(
-        "FamiliesPage: Converted tree data to FNode format, items count:",
-        items.length,
-      );
-      // Populate hierarchy for all nodes
-      const itemsWithHierarchy = items.map((node) => ({
-        ...node,
-        hierarchy: getNodeHierarchy(node.id, items),
-      }));
-
-      setNodes(itemsWithHierarchy);
-      setSelectId(undefined);
-      setHoverId(undefined);
-
-      if (items.length === 0) {
-        console.log("FamiliesPage: No items in tree");
+  const loadTreeData = useCallback(
+    async (keepRoot = false) => {
+      if (!treeId || treeId === "") {
+        setNodes([]);
+        setSelectId(undefined);
         setIsLoading(false);
         return;
       }
 
-      // -------------------------------------------------------------
-      // Root Selection Logic Refined
-      // 1. Candidate must belong to the current tree.
-      // 2. Candidate must have NO parents.
-      // 3. If Candidate has a spouse in the SAME tree, that spouse must NOT have parents.
-      //    (If the spouse has parents, then the spouse's lineage is the true root, and Candidate is just an in-law).
-      // -------------------------------------------------------------
+      try {
+        setIsLoading(true);
+        // Fetch complete tree from Supabase using the PostgreSQL function
+        const treeData = await SupabaseService.getCompleteTreeById(treeId);
+        // Convert tree data to FNode format
+        const items: Readonly<FNode>[] = (treeData.members || []).map(
+          (person: any) =>
+            ({
+              id: person.id,
+              name: person.name,
+              gender: person.gender as Gender,
+              parents:
+                person.parents?.map((p: any) => ({
+                  id: p.id,
+                  type: RelType.blood,
+                })) || [],
+              children:
+                person.children?.map((c: any) => ({
+                  id: c.id,
+                  type: RelType.blood,
+                })) || [],
+              spouses:
+                person.spouses?.map((s: any) => ({
+                  id: s.id,
+                  type: RelType.married,
+                })) || [],
+              siblings:
+                person.siblings?.map((s: any) => ({
+                  id: s.id,
+                  type: RelType.blood,
+                })) || [],
+              treeId: person.tree_id || treeId,
+            }) as FNode,
+        );
 
-      const currentTreeId = treeId;
-      const rawMembers = treeData.members || [];
-      const memberMap = new Map(rawMembers.map((m: any) => [m.id, m]));
+        // Populate hierarchy for all nodes
+        const itemsWithHierarchy = items.map((node) => ({
+          ...node,
+          hierarchy: getNodeHierarchy(node.id, items),
+        }));
 
-      // Step 1 & 2: Filter by Tree ID and No Parents
-      const baseCandidates = rawMembers.filter((m: any) => {
-        const isInCurrentTree = m.tree_id === currentTreeId;
-        const hasNoParents = !m.parents || m.parents.length === 0;
-        return isInCurrentTree && hasNoParents;
-      });
+        setNodes(itemsWithHierarchy);
+        setSelectId(undefined);
 
-      // Step 3: Filter out "In-Laws" (whose spouses are in-tree and have parents)
-      const validCandidates = baseCandidates.filter((candidate: any) => {
-        const spouses = candidate.spouses || [];
-
-        // Check if ANY spouse disqualifies this candidate
-        const isDisqualified = spouses.some((s: any) => {
-          const spouseNode = memberMap.get(s.id);
-
-          if (!spouseNode) return false; // Spouse data missing, ignore
-
-          // Condition: Spouse is in the SAME tree
-          if (spouseNode.tree_id === currentTreeId) {
-            // Check if this spouse has parents (meaning the root is higher up on their side)
-            if (spouseNode.parents && spouseNode.parents.length > 0) {
-              return true; // Disqualify Candidate
-            }
-          }
-          return false;
-        });
-
-        return !isDisqualified;
-      });
-
-      // Tie-Breaking: Use Descendant Count and Age
-      const countDescendants = (
-        nodeId: string,
-        depth = 0,
-        memo = new Map<string, number>(),
-      ): number => {
-        if (depth > 50) return 0;
-        if (memo.has(nodeId)) return memo.get(nodeId)!;
-
-        const node = memberMap.get(nodeId);
-        if (!node || !node.children || node.children.length === 0) {
-          memo.set(nodeId, 0);
-          return 0;
+        if (items.length === 0) {
+          setIsLoading(false);
+          return;
         }
 
-        let count = 0;
-        node.children.forEach((child: any) => {
-          count += 1 + countDescendants(child.id, depth + 1, memo);
+        // If keepRoot is true, we want to see if the current root ID is still valid in the new data.
+        // We can access the current rootId via the state setter to make a decision,
+        // OR we can just allow the caller to handle the root preservation logic?
+        // No, the caller just says "reload data".
+
+        // Let's use a functional state update to determine if we need to CHANGE the root.
+        // But we need to calculate the *new potential root* first.
+
+        // -------------------------------------------------------------
+        // Root Selection Logic Refined
+
+        // -------------------------------------------------------------
+        // Root Selection Logic Refined
+        // 1. Candidate must belong to the current tree.
+        // 2. Candidate must have NO parents.
+        // 3. If Candidate has a spouse in the SAME tree, that spouse must NOT have parents.
+        //    (If the spouse has parents, then the spouse's lineage is the true root, and Candidate is just an in-law).
+        // -------------------------------------------------------------
+
+        const currentTreeId = treeId;
+        const rawMembers = treeData.members || [];
+        const memberMap = new Map(rawMembers.map((m: any) => [m.id, m]));
+
+        // Step 1 & 2: Filter by Tree ID and No Parents
+        const baseCandidates = rawMembers.filter((m: any) => {
+          const isInCurrentTree = m.tree_id === currentTreeId;
+          const hasNoParents = !m.parents || m.parents.length === 0;
+          return isInCurrentTree && hasNoParents;
         });
 
-        memo.set(nodeId, count);
-        return count;
-      };
+        // Step 3: Filter out "In-Laws" (whose spouses are in-tree and have parents)
+        const validCandidates = baseCandidates.filter((candidate: any) => {
+          const spouses = candidate.spouses || [];
 
-      const finalCandidates =
-        validCandidates.length > 0 ? validCandidates : baseCandidates;
+          // Check if ANY spouse disqualifies this candidate
+          const isDisqualified = spouses.some((s: any) => {
+            const spouseNode = memberMap.get(s.id);
 
-      // Sort candidates
-      finalCandidates.sort((a: any, b: any) => {
-        // Priority 1: Descendant Count
-        const aDesc = countDescendants(a.id);
-        const bDesc = countDescendants(b.id);
-        if (aDesc !== bDesc) return bDesc - aDesc;
+            if (!spouseNode) return false; // Spouse data missing, ignore
 
-        // Priority 2: Creation Date (Oldest First)
-        const aTime = new Date(a.created_at).getTime() || 0;
-        const bTime = new Date(b.created_at).getTime() || 0;
-        return aTime - bTime;
-      });
+            // Condition: Spouse is in the SAME tree
+            if (spouseNode.tree_id === currentTreeId) {
+              // Check if this spouse has parents (meaning the root is higher up on their side)
+              if (spouseNode.parents && spouseNode.parents.length > 0) {
+                return true; // Disqualify Candidate
+              }
+            }
+            return false;
+          });
 
-      if (finalCandidates.length > 0) {
-        console.log(
-          `FamiliesPage: Selected Root ${finalCandidates[0].name} (ID: ${finalCandidates[0].id})`,
-        );
-        setRootId(finalCandidates[0].id);
-      } else if (items.length > 0) {
-        console.warn(
-          "FamiliesPage: No valid root candidates found, defaulting to first item.",
-        );
-        setRootId(items[0].id);
-      } else {
-        console.warn("FamiliesPage: Tree is empty.");
+          return !isDisqualified;
+        });
+
+        // Tie-Breaking: Use Descendant Count and Age
+        const countDescendants = (
+          nodeId: string,
+          depth = 0,
+          memo = new Map<string, number>(),
+        ): number => {
+          if (depth > 50) return 0;
+          if (memo.has(nodeId)) return memo.get(nodeId)!;
+
+          const node = memberMap.get(nodeId);
+          if (!node || !node.children || node.children.length === 0) {
+            memo.set(nodeId, 0);
+            return 0;
+          }
+
+          let count = 0;
+          node.children.forEach((child: any) => {
+            count += 1 + countDescendants(child.id, depth + 1, memo);
+          });
+
+          memo.set(nodeId, count);
+          return count;
+        };
+
+        const finalCandidates =
+          validCandidates.length > 0 ? validCandidates : baseCandidates;
+
+        // Sort candidates
+        finalCandidates.sort((a: any, b: any) => {
+          // Priority 1: Descendant Count
+          const aDesc = countDescendants(a.id);
+          const bDesc = countDescendants(b.id);
+          if (aDesc !== bDesc) return bDesc - aDesc;
+
+          // Priority 2: Creation Date (Oldest First)
+          const aTime = new Date(a.created_at).getTime() || 0;
+          const bTime = new Date(b.created_at).getTime() || 0;
+          return aTime - bTime;
+        });
+
+        if (finalCandidates.length > 0) {
+          const bestRootId = finalCandidates[0].id;
+          setRootId((prevRoot) => {
+            if (keepRoot && prevRoot && items.find((n) => n.id === prevRoot)) {
+              return prevRoot;
+            }
+            return bestRootId;
+          });
+        } else if (items.length > 0) {
+          const firstItemId = items[0].id;
+          setRootId((prevRoot) => {
+            if (keepRoot && prevRoot && items.find((n) => n.id === prevRoot)) {
+              return prevRoot;
+            }
+            return firstItemId;
+          });
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("FamiliesPage: Failed to load tree data:", error);
+        setNodes([]);
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
-      console.log("FamiliesPage: Tree data loaded and state updated.");
-    } catch (error) {
-      console.error("FamiliesPage: Failed to load tree data:", error);
-      setNodes([]);
-      setIsLoading(false);
-    }
-  }, [treeId]);
+    },
+    [treeId],
+  );
 
   useEffect(() => {
     loadTreeData();
@@ -227,7 +231,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
-      console.log("Updating node:", nodeId, "with updates:", updates);
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to edit this family tree.");
         return;
@@ -236,202 +239,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       try {
         // Update person with both core properties and additional details in one call
         await SupabaseService.updatePerson(nodeId, updates);
-
-        // Update local state instead of fetching from database
-        setNodes((prevNodes) => {
-          const nodeIndex = prevNodes.findIndex((n) => n.id === nodeId);
-          if (nodeIndex === -1) return prevNodes;
-
-          const currentNode = prevNodes[nodeIndex];
-          const updatedNodes = [...prevNodes];
-
-          // Update the current node's core properties
-          const updatedNode = { ...currentNode };
-          if (updates.name) updatedNode.name = updates.name;
-          if (updates.gender) updatedNode.gender = updates.gender;
-          if (updates.dob) updatedNode.dob = updates.dob;
-          if (updates.customFields)
-            updatedNode.customFields = updates.customFields;
-
-          // Handle parent relationship changes
-          if (updates.parents) {
-            const oldParentIds = (currentNode.parents || []).map((p) => p.id);
-            const newParentIds = (updates.parents || []).map((p) => p.id);
-
-            // Remove from old parents' children arrays
-            oldParentIds.forEach((parentId) => {
-              if (!newParentIds.includes(parentId)) {
-                const parentIndex = updatedNodes.findIndex(
-                  (n) => n.id === parentId,
-                );
-                if (parentIndex !== -1) {
-                  updatedNodes[parentIndex] = {
-                    ...updatedNodes[parentIndex],
-                    children: (updatedNodes[parentIndex].children || []).filter(
-                      (c) => c.id !== nodeId,
-                    ),
-                  };
-                }
-              }
-            });
-
-            // Add to new parents' children arrays
-            newParentIds.forEach((parentId) => {
-              if (!oldParentIds.includes(parentId)) {
-                const parentIndex = updatedNodes.findIndex(
-                  (n) => n.id === parentId,
-                );
-                if (parentIndex !== -1) {
-                  updatedNodes[parentIndex] = {
-                    ...updatedNodes[parentIndex],
-                    children: [
-                      ...(updatedNodes[parentIndex].children || []),
-                      { id: nodeId, type: RelType.blood },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.parents = updates.parents;
-          }
-
-          // Handle children relationship changes
-          if (updates.children) {
-            const oldChildIds = (currentNode.children || []).map((c) => c.id);
-            const newChildIds = (updates.children || []).map((c) => c.id);
-
-            // Remove from old children's parents arrays
-            oldChildIds.forEach((childId) => {
-              if (!newChildIds.includes(childId)) {
-                const childIndex = updatedNodes.findIndex(
-                  (n) => n.id === childId,
-                );
-                if (childIndex !== -1) {
-                  updatedNodes[childIndex] = {
-                    ...updatedNodes[childIndex],
-                    parents: (updatedNodes[childIndex].parents || []).filter(
-                      (p) => p.id !== nodeId,
-                    ),
-                  };
-                }
-              }
-            });
-
-            // Add to new children's parents arrays
-            newChildIds.forEach((childId) => {
-              if (!oldChildIds.includes(childId)) {
-                const childIndex = updatedNodes.findIndex(
-                  (n) => n.id === childId,
-                );
-                if (childIndex !== -1) {
-                  updatedNodes[childIndex] = {
-                    ...updatedNodes[childIndex],
-                    parents: [
-                      ...(updatedNodes[childIndex].parents || []),
-                      { id: nodeId, type: RelType.blood },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.children = updates.children;
-          }
-
-          // Handle spouse relationship changes
-          if (updates.spouses) {
-            const oldSpouseIds = (currentNode.spouses || []).map((s) => s.id);
-            const newSpouseIds = (updates.spouses || []).map((s) => s.id);
-
-            // Remove from old spouses' spouses arrays
-            oldSpouseIds.forEach((spouseId) => {
-              if (!newSpouseIds.includes(spouseId)) {
-                const spouseIndex = updatedNodes.findIndex(
-                  (n) => n.id === spouseId,
-                );
-                if (spouseIndex !== -1) {
-                  updatedNodes[spouseIndex] = {
-                    ...updatedNodes[spouseIndex],
-                    spouses: (updatedNodes[spouseIndex].spouses || []).filter(
-                      (s) => s.id !== nodeId,
-                    ),
-                  };
-                }
-              }
-            });
-
-            // Add to new spouses' spouses arrays
-            newSpouseIds.forEach((spouseId) => {
-              if (!oldSpouseIds.includes(spouseId)) {
-                const spouseIndex = updatedNodes.findIndex(
-                  (n) => n.id === spouseId,
-                );
-                if (spouseIndex !== -1) {
-                  updatedNodes[spouseIndex] = {
-                    ...updatedNodes[spouseIndex],
-                    spouses: [
-                      ...(updatedNodes[spouseIndex].spouses || []),
-                      { id: nodeId, type: RelType.married },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.spouses = updates.spouses;
-          }
-
-          // Handle sibling relationship changes
-          if (updates.siblings) {
-            const oldSiblingIds = (currentNode.siblings || []).map((s) => s.id);
-            const newSiblingIds = (updates.siblings || []).map((s) => s.id);
-
-            // Remove from old siblings' siblings arrays
-            oldSiblingIds.forEach((siblingId) => {
-              if (!newSiblingIds.includes(siblingId)) {
-                const siblingIndex = updatedNodes.findIndex(
-                  (n) => n.id === siblingId,
-                );
-                if (siblingIndex !== -1) {
-                  updatedNodes[siblingIndex] = {
-                    ...updatedNodes[siblingIndex],
-                    siblings: (
-                      updatedNodes[siblingIndex].siblings || []
-                    ).filter((s) => s.id !== nodeId),
-                  };
-                }
-              }
-            });
-
-            // Add to new siblings' siblings arrays
-            newSiblingIds.forEach((siblingId) => {
-              if (!oldSiblingIds.includes(siblingId)) {
-                const siblingIndex = updatedNodes.findIndex(
-                  (n) => n.id === siblingId,
-                );
-                if (siblingIndex !== -1) {
-                  updatedNodes[siblingIndex] = {
-                    ...updatedNodes[siblingIndex],
-                    siblings: [
-                      ...(updatedNodes[siblingIndex].siblings || []),
-                      { id: nodeId, type: RelType.blood },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.siblings = updates.siblings;
-          }
-
-          // Recalculate hierarchy after update
-          updatedNode.hierarchy = getNodeHierarchy(nodeId, updatedNodes);
-          updatedNodes[nodeIndex] = updatedNode;
-
-          return updatedNodes;
-        });
-
+        // Refresh tree data but keep current root if valid
+        await loadTreeData(true);
         // Clear selection to refresh the detail panel
         setSelectId(undefined);
       } catch (err) {
@@ -443,102 +252,21 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId],
+    [hasPermission, treeId, loadTreeData],
   );
 
   const onDelete = useCallback(
     async (nodeId: string) => {
-      console.log("Deleting node:", nodeId);
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to delete from this family tree.");
         return;
       }
 
       try {
-        console.log("Deleting node:", nodeId);
-
         // Delete person using Supabase
         await SupabaseService.deletePerson(nodeId);
-
-        // Update local state instead of fetching from database
-        setNodes((prevNodes) => {
-          const nodeToDelete = prevNodes.find((n) => n.id === nodeId);
-          if (!nodeToDelete) return prevNodes;
-
-          // Remove the node
-          const updatedNodes = prevNodes.filter((n) => n.id !== nodeId);
-
-          // Update all parents to remove this node from their children array
-          if (nodeToDelete.parents) {
-            for (const parent of nodeToDelete.parents) {
-              const parentIndex = updatedNodes.findIndex(
-                (n) => n.id === parent.id,
-              );
-              if (parentIndex !== -1) {
-                updatedNodes[parentIndex] = {
-                  ...updatedNodes[parentIndex],
-                  children: (updatedNodes[parentIndex].children || []).filter(
-                    (c) => c.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          // Update all children to remove this node from their parents array
-          if (nodeToDelete.children) {
-            for (const child of nodeToDelete.children) {
-              const childIndex = updatedNodes.findIndex(
-                (n) => n.id === child.id,
-              );
-              if (childIndex !== -1) {
-                updatedNodes[childIndex] = {
-                  ...updatedNodes[childIndex],
-                  parents: (updatedNodes[childIndex].parents || []).filter(
-                    (p) => p.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          // Update all spouses to remove this node from their spouses array
-          if (nodeToDelete.spouses) {
-            for (const spouse of nodeToDelete.spouses) {
-              const spouseIndex = updatedNodes.findIndex(
-                (n) => n.id === spouse.id,
-              );
-              if (spouseIndex !== -1) {
-                updatedNodes[spouseIndex] = {
-                  ...updatedNodes[spouseIndex],
-                  spouses: (updatedNodes[spouseIndex].spouses || []).filter(
-                    (s) => s.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          // Update all siblings to remove this node from their siblings array
-          if (nodeToDelete.siblings) {
-            for (const sibling of nodeToDelete.siblings) {
-              const siblingIndex = updatedNodes.findIndex(
-                (n) => n.id === sibling.id,
-              );
-              if (siblingIndex !== -1) {
-                updatedNodes[siblingIndex] = {
-                  ...updatedNodes[siblingIndex],
-                  siblings: (updatedNodes[siblingIndex].siblings || []).filter(
-                    (s) => s.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          return updatedNodes;
-        });
-
+        // Refresh tree data but keep current root if valid
+        await loadTreeData(true);
         // Clear selection
         setSelectId(undefined);
       } catch (err) {
@@ -550,7 +278,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId],
+    [hasPermission, treeId, loadTreeData],
   );
 
   const onAdd = useCallback(
@@ -561,16 +289,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       type?: RelType,
       otherParentId?: string,
     ) => {
-      console.log(
-        "Adding node:",
-        node,
-        "as",
-        relation,
-        "to",
-        targetId,
-        "with other parent:",
-        otherParentId,
-      );
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to add to this family tree.");
         return;
@@ -580,9 +298,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (node.id && relation === "spouse" && targetId) {
         try {
           setIsLoading(true);
-          console.log("Linking existing spouse:", node.id, "to", targetId);
           await SupabaseService.addSpouse(targetId, node.id);
-          await loadTreeData();
+          await loadTreeData(true);
         } catch (err) {
           console.error("Failed to link spouse:", err);
           alert(
@@ -647,7 +364,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         // Reload tree data to ensure all relationships are accurately reflected
         // This is important for auto-created spouses and multiple parent relationships
         if (newPerson?.success && newPerson?.person_id) {
-          await loadTreeData();
+          await loadTreeData(true);
         }
       } catch (err) {
         console.error("Failed to add node:", err);
@@ -660,17 +377,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     },
     [hasPermission, treeId, loadTreeData],
   );
-
-  // Update rootId when nodes change - Removed to prevent overriding smart selection from loadTreeData
-  // If the current root is deleted, we might validly end up with a blank screen until manual selection or reload,
-  // but that's better than aggressive auto-jumping.
-  useEffect(() => {
-    if (nodes.length > 0 && !nodes.find((n) => n.id === rootId)) {
-      // Only reset if strict root is missing
-      // But really, loadTreeData should handle this on refresh.
-      // For now, let's trust the loadTreeData implementation.
-    }
-  }, [nodes, rootId]);
 
   // Calculate tree statistics
   const statistics = useMemo(() => {
@@ -934,8 +640,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           node={selected}
           nodes={nodes}
           onSelect={setSelectId}
-          onHover={setHoverId}
-          onClear={() => setHoverId(undefined)}
           onAdd={onAdd}
           onUpdate={onUpdate}
           onDelete={onDelete}

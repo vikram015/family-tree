@@ -16,7 +16,6 @@ import {
   FormControlLabel,
   Radio,
   Stack,
-  Tooltip,
   useTheme,
   useMediaQuery,
   AppBar,
@@ -27,8 +26,6 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
-import SaveIcon from "@mui/icons-material/Save";
-import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import LinkIcon from "@mui/icons-material/Link";
@@ -48,8 +45,6 @@ interface NodeDetailsProps {
   nodes: Readonly<FNode>[];
   className?: string; // Kept for compatibility but unused
   onSelect: (nodeId: string | undefined) => void;
-  onHover: (nodeId: string) => void;
-  onClear: () => void;
   onAdd?: (
     node: Partial<FNode>,
     relation: "child" | "spouse" | "parent",
