@@ -119,8 +119,8 @@ class TreeBuilder {
        .style('touch-action', 'none'); // Ensure it captures events
 
     // create svg group that holds all nodes
-    const g = (this.g = svg.append('g')
-      .style('will-change', 'transform')); // Optimize for transform changes
+    const g = (this.g = svg.append('g'));
+      // .style('will-change', 'transform')); // REMOVED: Causes Safari rendering desync with foreignObject
 
     // set zoom identity
     svg.call(
@@ -246,6 +246,9 @@ class TreeBuilder {
         return -Math.round(d.cHeight / 2);
       })
       .style('overflow', 'visible')
+      // Safari fix: force hardware acceleration for foreignObject
+      // .style('transform', 'translate3d(0,0,0)')
+      // .style('-webkit-transform', 'translate3d(0,0,0)')
       .attr('id', function (d: any) {
         return d.id;
       })
