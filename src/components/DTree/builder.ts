@@ -81,7 +81,7 @@ class TreeBuilder {
       .style('user-select', 'none')
       .style('-webkit-user-select', 'none')
       .style('cursor', 'grab')
-      .style('transform', 'translateZ(0)') // Force hardware acceleration
+      // .style('transform', 'translateZ(0)') // Removed: Can cause conflicts on iOS
       .call(zoom as any)
       .on("dblclick.zoom", null)
     );
@@ -119,8 +119,9 @@ class TreeBuilder {
        .style('touch-action', 'none'); // Ensure it captures events
 
     // create svg group that holds all nodes
-    const g = (this.g = svg.append('g'));
-      // .style('will-change', 'transform')); // REMOVED: Causes Safari rendering desync with foreignObject
+    const g = (this.g = svg.append('g')
+      .attr('cursor', 'grab'));
+      // .style('will-change', 'transform')); // REMOVED: Partial rendering issues on Safari
 
     // set zoom identity
     svg.call(
@@ -209,12 +210,17 @@ class TreeBuilder {
       .filter(function (d: any) {
         return d.data.hidden ? false : true;
       })
-      .attr('class', 'node')
+      .attr('class', function (d: any) {
+        // Add gender-based class to the SVG group for hover styling
+        const baseClass = 'node';
+        const nodeClass = d.data.class || '';
+        return `${baseClass} ${nodeClass}`.trim();
+      })
       // Initial position - if we have a way to know previous position, that's better.
       // For now, scale(0) is the "enter" animation.
       .attr('transform', function (d: any) {
          if (duration === 0) {
-           return 'translate(' + d.x + ',' + d.y + ') scale(1)';
+           return 'translate(' + d.x + ',' + d.y + ')';
          }
         return 'translate(' + d.x + ',' + d.y + ') scale(0)';
       })
@@ -225,30 +231,19 @@ class TreeBuilder {
       nodeGroups.transition()
         .duration(duration)
         .attr('transform', function (d: any) {
-          return 'translate(' + d.x + ',' + d.y + ') scale(1)';
+          return 'translate(' + d.x + ',' + d.y + ')';
         })
         .style('opacity', 1);
     }
 
-    // Append foreignObject to the groups
+    // Append pure SVG card content to each node group (NO foreignObject!)
     nodeGroups
-      .append('foreignObject')
-      .attr('width', function (d: any) {
-        return d.cWidth;
+      .append('g')
+      .attr('class', 'card-content')
+      .attr('transform', function (d: any) {
+        // Offset so card is centered on the node position
+        return 'translate(' + (-Math.round(d.cWidth / 2)) + ',' + (-Math.round(d.cHeight / 2)) + ')';
       })
-      .attr('height', function (d: any) {
-        return d.cHeight;
-      })
-      .attr('x', function (d: any) {
-        return -Math.round(d.cWidth / 2);
-      })
-      .attr('y', function (d: any) {
-        return -Math.round(d.cHeight / 2);
-      })
-      .style('overflow', 'visible')
-      // Safari fix: force hardware acceleration for foreignObject
-      // .style('transform', 'translate3d(0,0,0)')
-      // .style('-webkit-transform', 'translate3d(0,0,0)')
       .attr('id', function (d: any) {
         return d.id;
       })
@@ -455,46 +450,39 @@ class TreeBuilder {
 
   static _nodeSize(nodes: any[], width: number, textRenderer: Function) {
     let maxHeight = 0;
-    
-    // Create a container div primarily off-screen
-    const containerDiv = document.createElement('div');
-    containerDiv.style.position = 'absolute';
-    containerDiv.style.visibility = 'hidden';
-    containerDiv.style.top = '-9999px';
-    containerDiv.style.left = '-9999px';
-    // Ensure width roughly matches so max-width interactions are similar
-    containerDiv.style.width = width * 2 + 'px'; 
-    document.body.appendChild(containerDiv);
 
-    // Phase 1: Write (Create all elements)
-    const elements = nodes.map((n: any) => {
-      let wrapper = document.createElement('div');
-      wrapper.setAttribute('class', n.data.class);
-      wrapper.style.maxWidth = width + 'px';
-      // Important: Ensure we emulate the foreignObject constraints if needed
-      // but usually specific styles on .class will handle local layout.
+    // Pure SVG approach: Calculate size based on text length estimation.
+    // No need for DOM measurement since we're not using HTML/foreignObject.
+    // Font: 14px, weight 600, 'Segoe UI' → approx 7.5px per character
+    const charWidth = 7.5;
+    const fontSize = 14;
+    const paddingX = 24; // 12px padding each side
+    const paddingY = 16; // 8px padding each side
+    const iconWidth = 20; // gender icon width + gap
+    const minHeight = 36;
 
-      let text = textRenderer(n.data.name, n.data.extra, n.data.textClass);
-      wrapper.innerHTML = text;
-
-      containerDiv.appendChild(wrapper);
-      return { n, wrapper };
-    });
-
-    // Phase 2: Read (Measure all elements - causes one Reflow)
-    elements.forEach(({ n, wrapper }) => {
-      const height = wrapper.offsetHeight;
+    nodes.forEach((n: any) => {
+      const name = n.data.name || '';
+      const gender = n.data.extra?.gender || '';
+      const hasIcon = gender === 'male' || gender === 'female';
+      
+      // Calculate text width
+      const textWidth = name.length * charWidth;
+      const contentWidth = textWidth + (hasIcon ? iconWidth : 0) + paddingX;
+      
+      // Height is fixed (single line text with padding)
+      const height = Math.max(minHeight, fontSize + paddingY);
+      
       maxHeight = Math.max(maxHeight, height);
       n.cHeight = height;
+
       if (n.data.hidden) {
         n.cWidth = 0;
       } else {
+        // Use the configured width (capped at node width)
         n.cWidth = width;
       }
     });
-
-    // Cleanup
-    document.body.removeChild(containerDiv);
 
     return [width, maxHeight];
   }
@@ -522,30 +510,15 @@ class TreeBuilder {
     textClass: string,
     textRenderer: Function
   ) {
-    // Logic moved to NodeCard.tsx. 
-    // This method is only a fallback if the custom callbacks.nodeRenderer is not provided.
-    return `<div class="${nodeClass}" id="node${id}">${name}</div>`;
+    // Fallback SVG renderer (the real one is in NodeCard.tsx)
+    return `<rect x="0" y="0" width="${width}" height="36" rx="10" ry="0" fill="#e0e0e0" stroke="rgba(97,97,97,0.3)" stroke-width="2"/>` +
+           `<text x="${width/2}" y="18" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="600">${name}</text>`;
   }
 
   static _textRenderer(name: string, extra: any, textClass: string) {
-    const gender = extra?.gender || '';
-    const genderClass = gender === 'male' ? 'male' : gender === 'female' ? 'female' : 'person';
-    
-    let genderIcon = '';
-    if (gender === 'male') {
-      genderIcon = '<svg class="gender-icon male" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4 1.79-4 4-4zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 7c2.67 0 8 1.34 8 4v3H4v-3c0-2.66 5.33-4 8-4z"/></svg>';
-    } else if (gender === 'female') {
-      genderIcon = '<svg class="gender-icon female" viewBox="0 0 24 24" fill="currentColor"><path d="M13.94 8.31C13.62 7.52 12.85 7 12 7s-1.62.52-1.94 1.31L7 16h2l1.25-3h3.5L15 16h2l-3.06-7.69zM11.5 11l.5-1.5.5 1.5h-1z"/><circle cx="12" cy="4" r="2"/></svg>';
-    }
-    
-    let node = '';
-    node += '<p ';
-    node += 'align="center" ';
-    node += 'class="' + textClass + ' ' + genderClass + '">\n';
-    node += genderIcon;
-    node += '<span>' + name + '</span>';
-    node += '</p>\n';
-    return node;
+    // No longer used for HTML rendering - kept for compatibility
+    // The SVG rendering is handled directly in renderNodeCardSvg
+    return name;
   }
 
   static _marriageRenderer(
@@ -557,7 +530,8 @@ class TreeBuilder {
     id: string,
     nodeClass: string
   ) {
-    return `<div style="height:100%" class="${nodeClass}" id="node${id}"></div>`;
+    const r = Math.min(height, width) / 2;
+    return `<circle cx="${r}" cy="${r}" r="${r}" fill="black" class="${nodeClass}" id="node${id}"/>`;
   }
 
   static _debug(msg: string) {

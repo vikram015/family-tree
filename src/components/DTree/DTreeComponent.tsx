@@ -1,11 +1,10 @@
 import React, { useEffect, useRef } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import * as d3 from "d3";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
 import "./dTree.css";
-import { NodeCard } from "./NodeCard";
+import { renderNodeCardSvg, renderMarriageNodeSvg } from "./NodeCard";
 
 interface DTreeNode {
   name: string;
@@ -261,23 +260,41 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             name: string,
             x: number,
             y: number,
-            height: number,
-            width: number,
+            height: number, // actually nodeSize[0] = nodeWidth
+            width: number, // actually nodeSize[1] = maxHeight
             extra: any,
             id: string,
             nodeClass: string,
             textClass: string,
             textRenderer: Function,
           ) => {
-            return renderToStaticMarkup(
-              <NodeCard
-                name={name}
-                extra={extra}
-                nodeClass={nodeClass}
-                textClass={textClass}
-                currentTreeId={currentTreeId}
-                id={id}
-              />,
+            // Note: dTree passes nodeSize[0] as 'height' and nodeSize[1] as 'width' (confusing names)
+            // nodeSize[0] = configured nodeWidth (120), nodeSize[1] = computed maxHeight
+            const cardWidth = height; // nodeSize[0] = actual width
+            const cardHeight = width; // nodeSize[1] = max height
+            return renderNodeCardSvg(
+              name,
+              cardWidth,
+              cardHeight,
+              extra,
+              id,
+              nodeClass,
+              currentTreeId,
+            );
+          },
+          marriageRenderer: (
+            x: number,
+            y: number,
+            height: number,
+            width: number,
+            extra: any,
+            id: string,
+            nodeClass: string,
+          ) => {
+            return renderMarriageNodeSvg(
+              Math.min(height, width),
+              id,
+              nodeClass,
             );
           },
         },
