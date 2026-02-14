@@ -9,7 +9,11 @@ CREATE OR REPLACE FUNCTION update_person_in_tree(
   p_name VARCHAR DEFAULT NULL,
   p_gender VARCHAR DEFAULT NULL,
   p_dob DATE DEFAULT NULL,
-  p_additional_fields JSONB DEFAULT NULL
+  p_additional_fields JSONB DEFAULT NULL,
+  p_blood_group VARCHAR DEFAULT NULL,
+  p_is_alive BOOLEAN DEFAULT NULL,
+  p_deceased_date DATE DEFAULT NULL,
+  p_photo_url TEXT DEFAULT NULL
 )
 RETURNS JSON AS $$
 DECLARE
@@ -26,9 +30,13 @@ BEGIN
     name = COALESCE(p_name, name),
     gender = COALESCE(p_gender, gender),
     dob = COALESCE(p_dob, dob),
+    blood_group = COALESCE(p_blood_group, blood_group),
+    is_alive = COALESCE(p_is_alive, is_alive),
+    deceased_date = COALESCE(p_deceased_date, deceased_date),
+    photo_url = COALESCE(p_photo_url, photo_url),
     modified_at = now()
   WHERE id = p_person_id
-  RETURNING id, name, gender, dob, tree_id, created_at, modified_at
+  RETURNING id, name, gender, dob, blood_group, is_alive, deceased_date, photo_url, tree_id, created_at, modified_at
   INTO v_person_record;
   
   -- If person not found, return error
@@ -79,6 +87,10 @@ BEGIN
     'name', v_person_record.name,
     'gender', v_person_record.gender,
     'dob', v_person_record.dob,
+    'blood_group', v_person_record.blood_group,
+    'is_alive', v_person_record.is_alive,
+    'deceased_date', v_person_record.deceased_date,
+    'photo_url', v_person_record.photo_url,
     'tree_id', v_person_record.tree_id,
     'fields_updated', CASE WHEN p_additional_fields IS NOT NULL THEN (SELECT count(*) FROM jsonb_object_keys(p_additional_fields)) ELSE 0 END
   );

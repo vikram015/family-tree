@@ -86,6 +86,10 @@ BEGIN
       'name', p.name,
       'gender', p.gender,
       'dob', p.dob,
+      'blood_group', p.blood_group,
+      'is_alive', p.is_alive,
+      'deceased_date', p.deceased_date,
+      'photo_url', p.photo_url,
       'tree_id', p.tree_id,
       'created_at', p.created_at,
       'parents', COALESCE(

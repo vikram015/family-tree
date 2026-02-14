@@ -255,7 +255,8 @@ const dTree = {
           target: {
             id: spouse.id
           },
-          number: index
+          number: index,
+          isPlaceholder: !!(sp.extra && sp.extra._placeholder)
         });
       });
 

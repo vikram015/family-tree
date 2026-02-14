@@ -28,15 +28,10 @@ g.node:hover .card-outline {
   stroke-width: 2.5;
 }
 
-/* === Tooltip Styles (Pure SVG) === */
-.node-tooltip-svg {
-  opacity: 0;
-  transition: opacity 200ms ease;
+/* === Focused Node Glow Effect === */
+g.node .node-glow {
+  filter: blur(4px);
   pointer-events: none;
-}
-
-g.node:hover .node-tooltip-svg {
-  opacity: 1;
 }
 
 /* === Marriage Node === */
@@ -48,4 +43,46 @@ g.node:hover .node-tooltip-svg {
 .hidden-node {
   display: none;
   visibility: hidden;
+}
+/* === Placeholder "Add Relative" Node Cards === */
+g.node:hover .placeholder-card-bg {
+  opacity: 1;
+  filter: brightness(0.95);
+}
+
+g.node .placeholder-click-target:hover ~ .placeholder-card-bg,
+g.node .placeholder-card-bg:hover {
+  stroke-dasharray: none;
+}
+
+/* Action icons (edit / add) — always visible inside card */
+.node-action-icon {
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+g.node:hover .node-action-icon,
+.node-action-icon:hover {
+  opacity: 1;
+}
+
+.node-action-icon:hover circle {
+  filter: brightness(0.92);
+}
+
+/* Hide action icons on small screens — mobile uses bottom sheet instead */
+@media (max-width: 767px) {
+  .node-action-icon {
+    display: none !important;
+  }
+}
+
+/* Mobile bottom sheet animation */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }

@@ -288,7 +288,8 @@ class TreeBuilder {
         if (d.data.isMarriage) {
           opts.callbacks.marriageClick.call(this, d.data.extra, d.data.id);
         } else {
-          opts.callbacks.nodeClick.call(this, d.data.name, d.data.extra, d.data.id);
+          // Pass event so the callback can inspect the click target
+          opts.callbacks.nodeClick.call(this, d.data.name, d.data.extra, d.data.id, event);
         }
       })
       .on('contextmenu', function (event, d: any) {
@@ -385,6 +386,20 @@ class TreeBuilder {
     let nodeWidth = this.nodeSize[0];
     let nodeHeight = this.nodeSize[1];
 
+    // For placeholder spouses ("Add Spouse"), draw a simple straight line
+    // from person to spouse via the marriage node — no offset routing that
+    // could overlap real spouse cards.
+    if (d.isPlaceholder) {
+      let linedata = [
+        { x: d.source.x, y: d.source.y },
+        { x: d.target.marriageNode.x, y: d.source.y },
+        { x: d.target.x, y: d.target.y }
+      ];
+      return d3.line()
+        .x(function (p: any) { return p.x; })
+        .y(function (p: any) { return p.y; })(linedata as any);
+    }
+
     // Determine direction of the spouse relative to the node
     let isRight = d.target.x > d.source.x;
 
@@ -445,46 +460,25 @@ class TreeBuilder {
   }
 
   static _nodeHeightSeperation(nodeWidth: number, nodeMaxHeight: number) {
-    return nodeMaxHeight + 25;
+    return nodeMaxHeight + 45;
   }
 
   static _nodeSize(nodes: any[], width: number, textRenderer: Function) {
-    let maxHeight = 0;
-
-    // Pure SVG approach: Calculate size based on text length estimation.
-    // No need for DOM measurement since we're not using HTML/foreignObject.
-    // Font: 14px, weight 600, 'Segoe UI' → approx 7.5px per character
-    const charWidth = 7.5;
-    const fontSize = 14;
-    const paddingX = 24; // 12px padding each side
-    const paddingY = 16; // 8px padding each side
-    const iconWidth = 20; // gender icon width + gap
-    const minHeight = 36;
+    // Fixed card dimensions from NodeCard CARD_DIM
+    // width param = configured nodeWidth (CARD_DIM.w = 180)
+    const cardHeight = 50; // CARD_DIM.h
 
     nodes.forEach((n: any) => {
-      const name = n.data.name || '';
-      const gender = n.data.extra?.gender || '';
-      const hasIcon = gender === 'male' || gender === 'female';
-      
-      // Calculate text width
-      const textWidth = name.length * charWidth;
-      const contentWidth = textWidth + (hasIcon ? iconWidth : 0) + paddingX;
-      
-      // Height is fixed (single line text with padding)
-      const height = Math.max(minHeight, fontSize + paddingY);
-      
-      maxHeight = Math.max(maxHeight, height);
-      n.cHeight = height;
+      n.cHeight = cardHeight;
 
       if (n.data.hidden) {
         n.cWidth = 0;
       } else {
-        // Use the configured width (capped at node width)
         n.cWidth = width;
       }
     });
 
-    return [width, maxHeight];
+    return [width, cardHeight];
   }
 
   static _marriageSize(nodes: any[], size: number) {

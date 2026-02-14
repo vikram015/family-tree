@@ -23,7 +23,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Switch,
 } from "@mui/material";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import dayjs from "dayjs";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -39,6 +42,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { SupabaseService } from "../../services/supabaseService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import ImageCropper from "../ImageCropper/ImageCropper";
 
 interface NodeDetailsProps {
   node: Readonly<FNode> | null;
@@ -51,10 +55,17 @@ interface NodeDetailsProps {
     targetId?: string,
     type?: RelType,
     otherParentId?: string,
-  ) => void;
+  ) => Promise<string | undefined> | Promise<void> | void;
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
   onDelete?: (nodeId: string) => void;
   treeId?: string;
+  /** Open directly in a specific view (e.g. "add" when clicking a placeholder) */
+  initialView?: "details" | "edit" | "add";
+  /** Pre-selected relation info when opening in "add" view from a placeholder */
+  initialAddInfo?: {
+    relation: "child" | "spouse" | "parent";
+    gender?: string;
+  };
 }
 
 const EXCLUDED_FIELDS = ["Gotra", "Village", "Note"];
@@ -63,13 +74,15 @@ export const NodeDetails = memo(function NodeDetails({
   node,
   nodes,
   className,
+  initialView,
+  initialAddInfo,
   ...props
 }: NodeDetailsProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [view, setView] = useState<
     "details" | "edit" | "add" | "delete" | "link-external"
-  >("details");
+  >(initialView || "details");
 
   // Link External State
   const [villages, setVillages] = useState<any[]>([]);
@@ -88,6 +101,17 @@ export const NodeDetails = memo(function NodeDetails({
   const [editedCustomFields, setEditedCustomFields] = useState<
     Record<string, string>
   >({});
+
+  // New fields state
+  const [editedBloodGroup, setEditedBloodGroup] = useState("");
+  const [editedIsAlive, setEditedIsAlive] = useState(true);
+  const [editedDeceasedDate, setEditedDeceasedDate] = useState("");
+
+  // Photo edit state
+  const [editedPhotoPreview, setEditedPhotoPreview] = useState<
+    string | undefined
+  >(undefined);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   // Delete Dialog State
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -109,7 +133,7 @@ export const NodeDetails = memo(function NodeDetails({
   // Reset view and values when node changes
   useEffect(() => {
     if (node) {
-      setView("details");
+      setView(initialView || "details");
       setEditedName(node.name || "");
       setEditedDob(node.dob || "");
       setEditedNotes(node.notes || "");
@@ -120,6 +144,10 @@ export const NodeDetails = memo(function NodeDetails({
       setEditedVillage(node.customFields?.["Village"] || "");
       setEditedCustomFields(node.customFields || {});
       setDisplayCustomFields(node.customFields || {});
+      setEditedBloodGroup(node.bloodGroup || "");
+      setEditedIsAlive(node.isAlive !== false);
+      setEditedDeceasedDate(node.deceasedDate || "");
+      setEditedPhotoPreview(node.photo || undefined);
 
       // Fetch latest custom fields separately
       SupabaseService.getPersonCustomFields(node.id).then((fields) => {
@@ -131,7 +159,7 @@ export const NodeDetails = memo(function NodeDetails({
         setDisplayCustomFields(fields);
       });
     }
-  }, [node]);
+  }, [node, initialView]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -197,6 +225,12 @@ export const NodeDetails = memo(function NodeDetails({
           name: editedName.trim(),
           dob: editedDob.trim(),
           gender: editedGender,
+          bloodGroup: editedBloodGroup || undefined,
+          isAlive: editedIsAlive,
+          deceasedDate:
+            !editedIsAlive && editedDeceasedDate
+              ? editedDeceasedDate
+              : undefined,
           // We save notes into customFields under "Note" now, not as a core property
           customFields: {
             ...editedCustomFields,
@@ -220,6 +254,9 @@ export const NodeDetails = memo(function NodeDetails({
     editedCustomFields,
     editedGotra,
     editedVillage,
+    editedBloodGroup,
+    editedIsAlive,
+    editedDeceasedDate,
     props,
   ]);
 
@@ -388,7 +425,16 @@ export const NodeDetails = memo(function NodeDetails({
                         ? "Female"
                         : "Other"}
                     {node.dob && ` • Born ${node.dob}`}
+                    {node.isAlive === false && ` • Deceased`}
+                    {node.isAlive === false &&
+                      node.deceasedDate &&
+                      ` (${node.deceasedDate})`}
                   </Typography>
+                  {node.bloodGroup && (
+                    <Typography variant="body2" color="text.secondary">
+                      🩸 Blood Group: <strong>{node.bloodGroup}</strong>
+                    </Typography>
+                  )}
                 </Box>
 
                 {/* Action Buttons */}
@@ -531,56 +577,40 @@ export const NodeDetails = memo(function NodeDetails({
             </DialogTitle>
             <DialogContent dividers>
               <Stack spacing={3} sx={{ pt: 1 }}>
-                {/* Photo & Basic Info Display (Read-only context) */}
-                <Box
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    mb: 1,
-                    p: 1,
-                    bgcolor: "action.hover",
-                    borderRadius: 2,
+                {/* Photo Upload with Cropper */}
+                <ImageCropper
+                  currentPhoto={editedPhotoPreview}
+                  onCropped={async (blob) => {
+                    if (!node) return;
+                    try {
+                      setPhotoUploading(true);
+                      const url = await SupabaseService.uploadPersonPhoto(
+                        node.id,
+                        blob,
+                      );
+                      setEditedPhotoPreview(url);
+                    } catch (err) {
+                      console.error("Photo upload failed:", err);
+                      alert("Failed to upload photo. Please try again.");
+                    } finally {
+                      setPhotoUploading(false);
+                    }
                   }}
-                >
-                  {node.photo ? (
-                    <img
-                      src={node.photo}
-                      alt={node.name}
-                      style={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: "50%",
-                        objectFit: "cover",
-                        marginBottom: 8,
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      sx={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: "50%",
-                        bgcolor: "primary.main",
-                        color: "primary.contrastText",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        mb: 1,
-                        fontSize: 24,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {node.name.charAt(0)}
-                    </Box>
-                  )}
-                  <Typography variant="subtitle2" color="text.primary">
-                    Editing: {node.name}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {node.gender} • {node.dob || "Unknown DOB"}
-                  </Typography>
-                </Box>
+                  onRemove={async () => {
+                    if (!node) return;
+                    try {
+                      setPhotoUploading(true);
+                      await SupabaseService.removePersonPhoto(node.id);
+                      setEditedPhotoPreview(undefined);
+                    } catch (err) {
+                      console.error("Photo remove failed:", err);
+                    } finally {
+                      setPhotoUploading(false);
+                    }
+                  }}
+                  uploading={photoUploading}
+                  previewSize={80}
+                />
 
                 <TextField
                   label="Name"
@@ -589,13 +619,14 @@ export const NodeDetails = memo(function NodeDetails({
                   fullWidth
                   required
                 />
-                <TextField
+                <DatePicker
                   label="Date of Birth"
-                  type="date"
-                  value={editedDob}
-                  onChange={(e) => setEditedDob(e.target.value)}
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
+                  value={editedDob ? dayjs(editedDob) : null}
+                  onChange={(val) =>
+                    setEditedDob(val ? val.format("YYYY-MM-DD") : "")
+                  }
+                  slotProps={{ textField: { fullWidth: true } }}
+                  format="DD/MM/YYYY"
                 />
                 <TextField
                   label="Gotra"
@@ -617,6 +648,49 @@ export const NodeDetails = memo(function NodeDetails({
                   multiline
                   rows={3}
                 />
+                <FormControl fullWidth>
+                  <InputLabel>Blood Group</InputLabel>
+                  <Select
+                    value={editedBloodGroup}
+                    onChange={(e) => setEditedBloodGroup(e.target.value)}
+                    label="Blood Group"
+                  >
+                    <MenuItem value="">Unknown</MenuItem>
+                    <MenuItem value="A+">A+</MenuItem>
+                    <MenuItem value="A-">A−</MenuItem>
+                    <MenuItem value="B+">B+</MenuItem>
+                    <MenuItem value="B-">B−</MenuItem>
+                    <MenuItem value="AB+">AB+</MenuItem>
+                    <MenuItem value="AB-">AB−</MenuItem>
+                    <MenuItem value="O+">O+</MenuItem>
+                    <MenuItem value="O-">O−</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={editedIsAlive}
+                      onChange={(e) => {
+                        setEditedIsAlive(e.target.checked);
+                        if (e.target.checked) setEditedDeceasedDate("");
+                      }}
+                    />
+                  }
+                  label="Is Alive"
+                />
+                {!editedIsAlive && (
+                  <DatePicker
+                    label="Deceased Date"
+                    value={
+                      editedDeceasedDate ? dayjs(editedDeceasedDate) : null
+                    }
+                    onChange={(val) =>
+                      setEditedDeceasedDate(val ? val.format("YYYY-MM-DD") : "")
+                    }
+                    slotProps={{ textField: { fullWidth: true } }}
+                    format="DD/MM/YYYY"
+                  />
+                )}
                 <FormControl>
                   <FormLabel>Gender</FormLabel>
                   <RadioGroup
@@ -671,14 +745,23 @@ export const NodeDetails = memo(function NodeDetails({
               <AddNode
                 targetId={node.id}
                 nodes={nodes}
-                onAdd={(n, r, t, type, op) => {
+                initialRelation={initialAddInfo?.relation}
+                initialGender={initialAddInfo?.gender as any}
+                onAdd={async (
+                  n,
+                  r,
+                  t,
+                  type,
+                  op,
+                ): Promise<string | undefined> => {
                   if (props.onAdd) {
-                    props.onAdd(n, r, t, type, op);
-                    // We might want to switch back to details after adding
-                    setView("details");
+                    const result = await props.onAdd(n, r, t, type, op);
+                    return typeof result === "string" ? result : undefined;
                   }
+                  return undefined;
                 }}
                 onCancel={() => setView("details")}
+                onComplete={() => props.onSelect(undefined)}
                 noCard
               />
             </DialogContent>

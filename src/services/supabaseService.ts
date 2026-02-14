@@ -34,6 +34,37 @@ interface CompleteTreeNode {
   siblings: PersonWithRelations[];
 }
 
+/** Shape of a single member node returned by the procedure */
+interface AffectedNode {
+  id: string;
+  name: string;
+  gender?: string;
+  dob?: string;
+  tree_id: string;
+  created_at?: string;
+  parents: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+  children: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+  spouses: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+  siblings: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+}
+
+/** Result from add_person_to_tree procedure */
+export interface AddPersonResult {
+  success: boolean;
+  person_id: string;
+  auto_created_spouse_id?: string | null;
+  name: string;
+  gender?: string;
+  dob?: string;
+  tree_id: string;
+  relation_type?: string;
+  relation_subtype?: string;
+  related_person_id?: string;
+  fields_added: number;
+  affected_nodes: AffectedNode[];
+  error?: string;
+}
+
 interface CompleteTreeResponse {
   success: boolean;
   tree: {
@@ -290,6 +321,10 @@ export const SupabaseService = {
       p_gender: coreUpdates.gender || null,
       p_dob: coreUpdates.dob || null,
       p_additional_fields: fieldsJsonb,
+      p_blood_group: coreUpdates.bloodGroup || null,
+      p_is_alive: coreUpdates.isAlive !== undefined ? coreUpdates.isAlive : null,
+      p_deceased_date: coreUpdates.deceasedDate || null,
+      p_photo_url: coreUpdates.photo || null,
     });
 
     if (error) throw new Error(`Failed to update person: ${error.message}`);
@@ -384,6 +419,7 @@ export const SupabaseService = {
    * Add a new person to a tree using SQL procedure
    * Handles person creation, relationships, and additional details in one call
    * Supports adding child with two parents or creating spouse with multiple targets
+   * Returns affected_nodes with full relationship data for efficient UI merge
    */
   async addPersonToTree(
     treeId: string,
@@ -395,8 +431,12 @@ export const SupabaseService = {
     relationSubtype?: string,
     additionalFields?: Record<string, string>,
     isReverseRelation?: boolean,
-    relatedPersonId2?: string
-  ): Promise<any> {
+    relatedPersonId2?: string,
+    bloodGroup?: string,
+    isAlive?: boolean,
+    deceasedDate?: string,
+    photoUrl?: string
+  ): Promise<AddPersonResult> {
     // Pass additional fields as object (Supabase will convert to JSONB)
     const fieldsJsonb = additionalFields && Object.keys(additionalFields).length > 0 
       ? additionalFields
@@ -413,6 +453,10 @@ export const SupabaseService = {
       p_is_reverse_relation: isReverseRelation || false,
       p_additional_fields: fieldsJsonb,
       p_related_person_id_2: relatedPersonId2 || null,
+      p_blood_group: bloodGroup || null,
+      p_is_alive: isAlive !== undefined ? isAlive : true,
+      p_deceased_date: deceasedDate || null,
+      p_photo_url: photoUrl || null,
     });
 
     if (error) throw new Error(`Failed to add person: ${error.message}`);
@@ -421,7 +465,7 @@ export const SupabaseService = {
       throw new Error(`Failed to add person: ${data.error}`);
     }
 
-    return data;
+    return data as AddPersonResult;
   },
 
   /**
@@ -1192,5 +1236,65 @@ export const SupabaseService = {
       console.error("SupabaseService: getDashboardStatistics error:", error);
       throw error;
     }
+  },
+
+  // =====================================================
+  // PHOTO UPLOAD (Supabase Storage)
+  // =====================================================
+
+  /**
+   * Upload a person's cropped photo to Supabase Storage.
+   * Returns the public URL of the uploaded image.
+   */
+  async uploadPersonPhoto(personId: string, blob: Blob): Promise<string> {
+    const filePath = `people/${personId}.jpg`;
+
+    // Upload (upsert so re-uploads overwrite)
+    const { error: uploadError } = await supabase.storage
+      .from('photos')
+      .upload(filePath, blob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadError) throw new Error(`Failed to upload photo: ${uploadError.message}`);
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('photos')
+      .getPublicUrl(filePath);
+
+    if (!urlData?.publicUrl) throw new Error('Failed to get public URL for photo');
+
+    // Add cache-busting timestamp so the browser fetches the new image
+    const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+    // Update the person's photo_url in the database
+    const { error: updateError } = await supabase
+      .from('people')
+      .update({ photo_url: publicUrl, modified_at: new Date() })
+      .eq('id', personId);
+
+    if (updateError) throw new Error(`Failed to update photo URL: ${updateError.message}`);
+
+    return publicUrl;
+  },
+
+  /**
+   * Remove a person's photo from Supabase Storage and clear the column.
+   */
+  async removePersonPhoto(personId: string): Promise<void> {
+    const filePath = `people/${personId}.jpg`;
+
+    // Remove from storage (ignore error if file doesn't exist)
+    await supabase.storage.from('photos').remove([filePath]);
+
+    // Clear the photo_url column
+    const { error } = await supabase
+      .from('people')
+      .update({ photo_url: null, modified_at: new Date() })
+      .eq('id', personId);
+
+    if (error) throw new Error(`Failed to clear photo URL: ${error.message}`);
   },
 };

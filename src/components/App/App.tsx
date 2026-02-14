@@ -13,6 +13,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { AuthInitializer } from "../AuthInitializer";
 import { VillageInitializer } from "../VillageInitializer";
 import Header from "../Header/Header";
@@ -77,7 +79,18 @@ function AppContent() {
 
   console.log("AppContent: About to return JSX");
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        // dynamic viewport height for mobile browsers
+        minHeight: "-webkit-fill-available",
+        "@media (min-height: 0)": {
+          height: "100dvh",
+        },
+      }}
+    >
       <ResetPasswordModal />
       <Header />
       <ErrorBoundary>
@@ -132,15 +145,17 @@ export default React.memo(function App() {
       <HelmetProvider>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <AuthInitializer>
-            <VillageInitializer>
-              <LoginModalProvider>
-                <BrowserRouter>
-                  <AppContent />
-                </BrowserRouter>
-              </LoginModalProvider>
-            </VillageInitializer>
-          </AuthInitializer>
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <AuthInitializer>
+              <VillageInitializer>
+                <LoginModalProvider>
+                  <BrowserRouter>
+                    <AppContent />
+                  </BrowserRouter>
+                </LoginModalProvider>
+              </VillageInitializer>
+            </AuthInitializer>
+          </LocalizationProvider>
         </ThemeProvider>
       </HelmetProvider>
     );

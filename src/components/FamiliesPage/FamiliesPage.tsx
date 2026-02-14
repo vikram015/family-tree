@@ -42,6 +42,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [rootId, setRootId] = useState("");
   const [selectId, setSelectId] = useState<string>();
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
+  // Track initial view & add info for NodeDetails (when opening from placeholder nodes)
+  const [nodeDetailsInitialView, setNodeDetailsInitialView] = useState<
+    "details" | "edit" | "add" | undefined
+  >(undefined);
+  const [nodeDetailsAddInfo, setNodeDetailsAddInfo] = useState<
+    { relation: "child" | "spouse" | "parent"; gender?: string } | undefined
+  >(undefined);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     open: boolean;
     personId: string | null;
@@ -96,6 +103,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                   type: RelType.blood,
                 })) || [],
               treeId: person.tree_id || treeId,
+              photo: person.photo_url || undefined,
+              bloodGroup: person.blood_group || undefined,
+              isAlive: person.is_alive !== false,
+              deceasedDate: person.deceased_date || undefined,
             }) as FNode,
         );
 
@@ -238,6 +249,95 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     loadTreeData();
   }, [loadTreeData]);
 
+  /**
+   * Merges affected nodes from add_person_to_tree into the current state.
+   * - New nodes (not in current state) are added.
+   * - Existing nodes (already in state) have their relationship arrays updated.
+   * - Hierarchy is recalculated for all nodes that changed.
+   * This avoids a full tree reload.
+   */
+  const mergeAffectedNodes = useCallback(
+    (affectedRaw: any[], newPersonId?: string) => {
+      setNodes((prevNodes) => {
+        const nodeMap = new Map(prevNodes.map((n) => [n.id, { ...n }]));
+
+        for (const raw of affectedRaw) {
+          const fnode: FNode = {
+            id: raw.id,
+            name: raw.name,
+            gender: (raw.gender as Gender) || ("" as any),
+            dob: raw.dob || "",
+            parents:
+              raw.parents?.map((p: any) => ({
+                id: p.id,
+                type: RelType.blood,
+              })) || [],
+            children:
+              raw.children?.map((c: any) => ({
+                id: c.id,
+                type: RelType.blood,
+              })) || [],
+            spouses:
+              raw.spouses?.map((s: any) => ({
+                id: s.id,
+                type: RelType.married,
+              })) || [],
+            siblings:
+              raw.siblings?.map((s: any) => ({
+                id: s.id,
+                type: RelType.blood,
+              })) || [],
+            treeId: raw.tree_id || treeId,
+            photo: raw.photo_url || undefined,
+            bloodGroup: raw.blood_group || undefined,
+            isAlive: raw.is_alive !== false,
+            deceasedDate: raw.deceased_date || undefined,
+          } as FNode;
+
+          nodeMap.set(raw.id, fnode);
+        }
+
+        // Rebuild hierarchy for all nodes (cheap — just walks parent pointers)
+        const allNodes = Array.from(nodeMap.values());
+        const result = allNodes.map((node) => ({
+          ...node,
+          hierarchy: getNodeHierarchy(node.id, allNodes),
+        }));
+
+        // Update rootId if needed:
+        // - Tree was empty (prevNodes was []) → set root to the new person
+        // - A new parent was added (reverse relation) → new person has no parents, should be root
+        setRootId((prevRoot) => {
+          // If we already have a valid root in the updated data, keep it
+          if (prevRoot && result.find((n) => n.id === prevRoot)) {
+            // But if the new person is a parent (has no parents, and the old root
+            // now has parents), switch to the new root
+            if (newPersonId) {
+              const newNode = result.find((n) => n.id === newPersonId);
+              const oldRootNode = result.find((n) => n.id === prevRoot);
+              if (
+                newNode &&
+                oldRootNode &&
+                newNode.parents.length === 0 &&
+                oldRootNode.parents.length > 0
+              ) {
+                return newPersonId;
+              }
+            }
+            return prevRoot;
+          }
+          // No valid root — pick the new person or first parentless node
+          if (newPersonId) return newPersonId;
+          const parentless = result.find((n) => n.parents.length === 0);
+          return parentless?.id || (result.length > 0 ? result[0].id : "");
+        });
+
+        return result;
+      });
+    },
+    [treeId],
+  );
+
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
     [nodes, selectId],
@@ -315,10 +415,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       targetId?: string,
       type?: RelType,
       otherParentId?: string,
-    ) => {
+    ): Promise<string | undefined> => {
       if (!hasPermission("admin", treeId)) {
         alert("You don't have permission to add to this family tree.");
-        return;
+        return undefined;
       }
 
       // Special handling for linking existing spouse
@@ -327,6 +427,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           setIsLoading(true);
           await SupabaseService.addSpouse(targetId, node.id);
           await loadTreeData(true);
+          return node.id; // Return the linked person ID
         } catch (err) {
           console.error("Failed to link spouse:", err);
           alert(
@@ -335,8 +436,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             }`,
           );
           setIsLoading(false);
+          return undefined;
         }
-        return;
       }
 
       try {
@@ -386,12 +487,21 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           customFields, // Pass additional details
           isReverseRelation,
           relatedPersonId2,
+          coreNode.bloodGroup,
+          coreNode.isAlive,
+          coreNode.deceasedDate,
         );
 
-        // Reload tree data to ensure all relationships are accurately reflected
-        // This is important for auto-created spouses and multiple parent relationships
+        // Efficiently merge affected_nodes into existing state instead of full reload
         if (newPerson?.success && newPerson?.person_id) {
-          await loadTreeData(true);
+          const affectedNodes = newPerson.affected_nodes || [];
+          if (affectedNodes.length > 0) {
+            mergeAffectedNodes(affectedNodes, newPerson.person_id);
+          } else {
+            // Fallback: full reload if procedure didn't return affected_nodes (old DB version)
+            await loadTreeData(true);
+          }
+          return newPerson.person_id;
         }
       } catch (err) {
         console.error("Failed to add node:", err);
@@ -401,8 +511,56 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }`,
         );
       }
+      return undefined;
     },
     [hasPermission, treeId, loadTreeData],
+  );
+
+  // Handler for edit icon on tree nodes — opens NodeDetails in details view
+  const handleEditNode = useCallback((nodeId: string) => {
+    setNodeDetailsInitialView("edit");
+    setNodeDetailsAddInfo(undefined);
+    setSelectId(nodeId);
+  }, []);
+
+  // Handler for placeholder "add relative" nodes in the tree
+  const handleAddRelative = useCallback(
+    (
+      nodeId: string,
+      relType: "father" | "mother" | "spouse" | "son" | "daughter",
+    ) => {
+      // Map family-chart relTypes to onAdd's relation + gender
+      let relation: "child" | "spouse" | "parent";
+      let gender: string | undefined;
+
+      switch (relType) {
+        case "father":
+          relation = "parent";
+          gender = "male";
+          break;
+        case "mother":
+          relation = "parent";
+          gender = "female";
+          break;
+        case "spouse":
+          relation = "spouse";
+          gender = undefined;
+          break;
+        case "son":
+          relation = "child";
+          gender = "male";
+          break;
+        case "daughter":
+          relation = "child";
+          gender = "female";
+          break;
+      }
+
+      setNodeDetailsInitialView("add");
+      setNodeDetailsAddInfo({ relation, gender });
+      setSelectId(nodeId);
+    },
+    [],
   );
 
   // Calculate tree statistics
@@ -579,13 +737,21 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             flex: 1,
             position: "relative",
             overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
           {rootId && nodes.find((n) => n.id === rootId) ? (
             <DTreeComponent
               nodes={nodes}
               rootId={rootId}
-              onNodeClick={setSelectId}
+              onNodeClick={(id) => {
+                setNodeDetailsInitialView(undefined);
+                setNodeDetailsAddInfo(undefined);
+                setSelectId(id);
+              }}
+              onEditNode={handleEditNode}
+              onAddRelative={handleAddRelative}
               currentTreeId={treeId}
               onExternalTreeClick={(tid) => {
                 if (
@@ -647,18 +813,19 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         <DialogContent>
           <AddNode
             isFirstNode={true}
-            onAdd={(node) => {
+            onAdd={async (node) => {
               // Pass as 'child' with no target - the onAdd handler will handle default case if we modify it,
               // OR we just pass appropriate dummy values that onAdd understands.
               // Looking at onAdd, it doesn't handle "no relation". I should update onAdd or pass dummy.
               // Actually, better to check onAdd logic.
               // If I pass relation="child" and targetId=undefined, it skips all if/else blocks and goes to default addPersonToTree.
               // addPersonToTree procedure handles null relations as root node.
-              onAdd(node, "child", undefined); // "child" is just a placeholder type, won't be used logic-wise if targetId is missing
-              setShowAddStartingNode(false);
+              return await onAdd(node, "child", undefined); // "child" is just a placeholder type, won't be used logic-wise if targetId is missing
             }}
             onCancel={() => setShowAddStartingNode(false)}
+            onComplete={() => setShowAddStartingNode(false)}
             noCard
+            // Pass the callback to handle completion
           />
         </DialogContent>
       </Dialog>
@@ -712,11 +879,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         <NodeDetails
           node={selected}
           nodes={nodes}
-          onSelect={setSelectId}
+          onSelect={(id) => {
+            setNodeDetailsInitialView(undefined);
+            setNodeDetailsAddInfo(undefined);
+            setSelectId(id);
+          }}
           onAdd={onAdd}
           onUpdate={onUpdate}
           onDelete={onDelete}
           treeId={treeId}
+          initialView={nodeDetailsInitialView}
+          initialAddInfo={nodeDetailsAddInfo}
         />
       )}
     </>
