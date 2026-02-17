@@ -77,7 +77,10 @@ const locationSlice = createSlice({
     });
     builder.addCase(fetchStates.fulfilled, (state, action: PayloadAction<State[]>) => {
       state.statesLoading = false;
-      state.states = action.payload;
+      // Sort states alphabetically by name (case-insensitive)
+      state.states = (action.payload || []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
     });
     builder.addCase(fetchStates.rejected, (state, action) => {
       state.statesLoading = false;
@@ -91,7 +94,9 @@ const locationSlice = createSlice({
     });
     builder.addCase(fetchDistricts.fulfilled, (state, action: PayloadAction<District[]>) => {
       state.districtsLoading = false;
-      state.districts = action.payload;
+      state.districts = (action.payload || []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
     });
     builder.addCase(fetchDistricts.rejected, (state, action) => {
       state.districtsLoading = false;
@@ -105,7 +110,9 @@ const locationSlice = createSlice({
     });
     builder.addCase(fetchAllDistricts.fulfilled, (state, action: PayloadAction<District[]>) => {
       state.districtsLoading = false;
-      state.districts = action.payload;
+      state.districts = (action.payload || []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
     });
     builder.addCase(fetchAllDistricts.rejected, (state, action) => {
       state.districtsLoading = false;

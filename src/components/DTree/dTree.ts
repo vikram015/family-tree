@@ -14,6 +14,7 @@ const dTree = {
       hideMarriageNodes: true,
       callbacks: {
         nodeClick: function (name: string, extra: any, id: string) {},
+        nodeDblClick: function (name: string, extra: any, id: string) {},
         nodeRightClick: function (name: string, extra: any, id: string) {},
         marriageClick: function (extra: any, id: string) {},
         marriageRightClick: function (extra: any, id: string) {},

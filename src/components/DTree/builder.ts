@@ -275,10 +275,10 @@ class TreeBuilder {
           );
         }
       })
-      .on('dblclick', function (event) {
-        // do not propagate a double click on a node
-        // to prevent the zoom from being triggered
+      .on('dblclick', function (event, d: any) {
         event.stopPropagation();
+        if (d.data.hidden || d.data.isMarriage) return;
+        opts.callbacks.nodeDblClick.call(this, d.data.name, d.data.extra, d.data.id);
       })
       .on('click', function (event, d: any) {
         // ignore double-clicks and clicks on hidden nodes

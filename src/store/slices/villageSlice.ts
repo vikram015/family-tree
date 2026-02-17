@@ -66,14 +66,17 @@ const villageSlice = createSlice({
         state.loading = true;
       })
       .addCase(fetchVillages.fulfilled, (state, action) => {
-        state.villages = action.payload;
+        // Sort villages alphabetically by name
+        state.villages = (action.payload || []).slice().sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+        );
         state.loading = false;
         state.error = null;
-        
+
         // Auto-select first village if none selected
-        if (action.payload.length > 0 && !state.selectedVillage) {
-          state.selectedVillage = action.payload[0].id;
-          localStorage.setItem('selectedVillage', action.payload[0].id);
+        if (state.villages.length > 0 && !state.selectedVillage) {
+          state.selectedVillage = state.villages[0].id;
+          localStorage.setItem('selectedVillage', state.villages[0].id);
         }
       })
       .addCase(fetchVillages.rejected, (state, action) => {

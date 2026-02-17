@@ -40,6 +40,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
+  const [villageId, setVillageId] = useState<string | undefined>(undefined);
   const [selectId, setSelectId] = useState<string>();
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
   // Track initial view & add info for NodeDetails (when opening from placeholder nodes)
@@ -75,6 +76,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }
         // Fetch complete tree from Supabase using the PostgreSQL function
         const treeData = await SupabaseService.getCompleteTreeById(treeId);
+        setVillageId(treeData.tree?.village?.id);
+
         // Convert tree data to FNode format
         const items: Readonly<FNode>[] = (treeData.members || []).map(
           (person: any) =>
@@ -345,7 +348,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
-      if (!hasPermission("admin", treeId)) {
+      if (!hasPermission("admin", villageId)) {
         alert("You don't have permission to edit this family tree.");
         return;
       }
@@ -366,12 +369,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId, loadTreeData],
+    [hasPermission, treeId, loadTreeData, villageId],
   );
 
   const onDelete = useCallback(
     async (nodeId: string, force: boolean = false) => {
-      if (!hasPermission("admin", treeId)) {
+      if (!hasPermission("admin", villageId)) {
         alert("You don't have permission to delete from this family tree.");
         return;
       }
@@ -405,7 +408,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId, loadTreeData, nodes],
+    [hasPermission, treeId, loadTreeData, nodes, villageId],
   );
 
   const onAdd = useCallback(
@@ -416,7 +419,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       type?: RelType,
       otherParentId?: string,
     ): Promise<string | undefined> => {
-      if (!hasPermission("admin", treeId)) {
+      if (!hasPermission("admin", villageId)) {
         alert("You don't have permission to add to this family tree.");
         return undefined;
       }
@@ -513,10 +516,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
       return undefined;
     },
-    [hasPermission, treeId, loadTreeData],
+    [hasPermission, treeId, loadTreeData, villageId],
   );
 
-  // Handler for edit icon on tree nodes — opens NodeDetails in details view
+  // Handler for "View Details" — opens NodeDetails in details view
+  const handleViewDetails = useCallback((nodeId: string) => {
+    setNodeDetailsInitialView("details");
+    setNodeDetailsAddInfo(undefined);
+    setSelectId(nodeId);
+  }, []);
+
+  // Handler for edit icon on tree nodes — opens NodeDetails in edit view
   const handleEditNode = useCallback((nodeId: string) => {
     setNodeDetailsInitialView("edit");
     setNodeDetailsAddInfo(undefined);
@@ -752,6 +762,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               }}
               onEditNode={handleEditNode}
               onAddRelative={handleAddRelative}
+              onViewDetails={handleViewDetails}
               currentTreeId={treeId}
               onExternalTreeClick={(tid) => {
                 if (

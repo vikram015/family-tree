@@ -38,6 +38,7 @@ interface DTreeComponentProps {
     nodeId: string,
     relType: "father" | "mother" | "spouse" | "son" | "daughter",
   ) => void;
+  onViewDetails?: (nodeId: string) => void;
   onExternalTreeClick?: (treeId: string) => void;
   currentTreeId?: string;
 }
@@ -48,6 +49,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   onNodeClick,
   onEditNode,
   onAddRelative,
+  onViewDetails,
   onExternalTreeClick,
   currentTreeId,
 }) => {
@@ -680,6 +682,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               isMain,
               isMobileRef.current,
             );
+          },
+          nodeDblClick: (name: string, extra: any, id: string) => {
+            if (extra?.id && onViewDetails) {
+              onViewDetails(extra.id);
+            }
           },
           marriageRenderer: (
             x: number,
