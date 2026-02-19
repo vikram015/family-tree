@@ -75,6 +75,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   // Mobile detection — narrow viewport
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const isMobileRef = useRef(isMobile);
+  // Timestamp of last tap handled by the touchend handler.
+  // Used to suppress the synthetic click that the browser fires after touch,
+  // which would otherwise hit a different node (the tree is rebuilt between
+  // the touchend and the click because expand/collapse changes the layout).
+  const lastTouchTapRef = useRef(0);
 
   // Bottom sheet state for mobile (shows Edit / Add Relative actions)
   const [mobileSheetNodeId, setMobileSheetNodeId] = useState<string | null>(
@@ -245,6 +250,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           !d.data?.extra?._placeholder &&
           !d.data?.isMarriage
         ) {
+          // Mark the time so the upcoming synthetic click is suppressed
+          lastTouchTapRef.current = Date.now();
           handleNodeTapRef.current(d.data.extra.id);
         }
       }
@@ -636,6 +643,12 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             id: string,
             event?: MouseEvent,
           ) => {
+            // If the touchend handler already processed this tap, skip the
+            // synthetic click — the tree may have been rebuilt in between,
+            // so the node under the pointer can be a completely different person.
+            if (Date.now() - lastTouchTapRef.current < 600) {
+              return;
+            }
             // Skip expand/collapse if the click was on an action icon or placeholder
             if (event) {
               const target = event.target as Element;
