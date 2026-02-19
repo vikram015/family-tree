@@ -271,7 +271,7 @@ export function renderNodeCardSvg(
 
   // --- Subtitle (DOB or children count) ---
   const subtitleParts: string[] = [];
-  if (isDeceased) subtitleParts.push("✝ Deceased");
+  if (isDeceased) subtitleParts.push("🕉 Deceased");
   if (extra?.dob) subtitleParts.push(extra.dob);
   else if (extra?.childrenCount)
     subtitleParts.push(`${extra.childrenCount} children`);

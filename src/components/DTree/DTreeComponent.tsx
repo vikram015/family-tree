@@ -107,6 +107,53 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Center viewport on a person node (by their UUID, not dTree internal id).
+  // Preserves the current zoom level and only pans.
+  const centerOnNode = useCallback((personId: string) => {
+    if (!containerRef.current || !treeRef.current) return;
+    try {
+      const svg = containerRef.current.querySelector("svg");
+      if (!svg) return;
+      const allGs = svg.querySelectorAll("g.node");
+      let targetG: SVGGElement | null = null;
+      allGs.forEach((g) => {
+        const d = (g as any).__data__;
+        if (d?.data?.extra?.id === personId) {
+          targetG = g as SVGGElement;
+        }
+      });
+      if (!targetG) return;
+      const builder =
+        typeof treeRef.current.getBuilder === "function"
+          ? treeRef.current.getBuilder()
+          : null;
+      if (!builder?.zoom || !builder?.svg) return;
+      const transform = (targetG as SVGGElement).getAttribute("transform");
+      const match = transform?.match(/translate\(([^,]+),([^)]+)\)/);
+      if (!match) return;
+      const nodeX = parseFloat(match[1]);
+      const nodeY = parseFloat(match[2]);
+      const cw = containerRef.current.clientWidth;
+      const ch = containerRef.current.clientHeight;
+      // Keep current zoom scale so we only pan
+      const currentTransform = d3.zoomTransform(svg);
+      const scale = currentTransform.k;
+      const tx = cw / 2 - nodeX * scale;
+      const ty = ch / 2 - nodeY * scale;
+      const newTransform = d3.zoomIdentity.translate(tx, ty).scale(scale);
+      builder.svg
+        .transition()
+        .duration(300)
+        .call(builder.zoom.transform, newTransform);
+    } catch (e) {
+      // silent
+    }
+  }, []);
+  const centerOnNodeRef = useRef(centerOnNode);
+  useEffect(() => {
+    centerOnNodeRef.current = centerOnNode;
+  }, [centerOnNode]);
+
   const handleNodeTap = useCallback(
     (nodeId: string) => {
       // Check window width directly to ensure mobile check is always fresh
@@ -119,6 +166,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         // On larger screens, ensure we clear any mobile sheet state
         setMobileSheetNodeId(null);
       }
+
+      // Center the tapped node in the viewport (works in both full-tree and
+      // expand/collapse modes).  In expand/collapse mode the useEffect will
+      // rebuild the tree and re-center after, but this gives immediate feedback.
+      centerOnNodeRef.current(nodeId);
 
       // When full tree mode is on, skip expand/collapse
       if (showFullTree) return;
