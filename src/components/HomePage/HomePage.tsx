@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   Container,
@@ -12,8 +12,15 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
+  Paper,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Chip,
+  ClickAwayListener,
 } from "@mui/material";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import SchoolIcon from "@mui/icons-material/School";
 import WorkIcon from "@mui/icons-material/Work";
@@ -23,19 +30,108 @@ import PeopleIcon from "@mui/icons-material/People";
 import BusinessIcon from "@mui/icons-material/Business";
 import SettingsIcon from "@mui/icons-material/Settings";
 import LocationCityIcon from "@mui/icons-material/LocationCity";
+import PersonIcon from "@mui/icons-material/Person";
+import StoreIcon from "@mui/icons-material/Store";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchDashboardStatistics,
   selectStatistics,
   selectStatisticsLoading,
 } from "../../store/slices/statisticsSlice";
+import { SupabaseService } from "../../services/supabaseService";
+
+interface SearchResult {
+  id: string;
+  name: string;
+  type: "person" | "business";
+  treeId?: string;
+  villageName?: string;
+  extra?: string; // e.g. business category or person's father name
+}
 
 export const HomePage: React.FC = () => {
   console.log("HomePage: Rendering");
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
+
+  // Debounced search
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 2) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+    setIsSearching(true);
+    setShowResults(true);
+    try {
+      const [people, businesses] = await Promise.all([
+        SupabaseService.searchPeople(query.trim()),
+        SupabaseService.searchBusinesses(query.trim()),
+      ]);
+
+      const results: SearchResult[] = [];
+
+      // Map people results
+      people.slice(0, 10).forEach((person: any) => {
+        results.push({
+          id: person.id,
+          name: person.name || "Unknown",
+          type: "person",
+          treeId: person.tree_id,
+          extra:
+            person.gender === "male"
+              ? "Male"
+              : person.gender === "female"
+                ? "Female"
+                : undefined,
+        });
+      });
+
+      // Map business results
+      businesses.slice(0, 5).forEach((biz: any) => {
+        const ownerName = biz.people?.name;
+        results.push({
+          id: biz.id,
+          name: biz.name,
+          type: "business",
+          treeId: biz.people?.tree_id,
+          extra: [biz.category, ownerName ? `Owner: ${ownerName}` : null]
+            .filter(Boolean)
+            .join(" • "),
+        });
+      });
+
+      setSearchResults(results);
+    } catch (err) {
+      console.error("Search error:", err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => performSearch(value), 300);
+  };
+
+  const handleResultClick = (result: SearchResult) => {
+    setShowResults(false);
+    setSearchQuery("");
+    if (result.treeId) {
+      navigate(`/families?tree=${result.treeId}`);
+    } else if (result.type === "business") {
+      navigate("/business");
+    }
+  };
 
   // Dispatch Redux action to fetch statistics - no isMounted needed!
   useEffect(() => {
@@ -134,34 +230,110 @@ export const HomePage: React.FC = () => {
           </Typography>
 
           {/* Search Bar */}
-          <Box sx={{ mb: 4, maxWidth: 600, mx: "auto" }}>
-            <TextField
-              fullWidth
-              placeholder="Search family members, heritage, businesses..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === "Enter" && searchQuery.trim()) {
-                  // You can add search functionality here
-                  console.log("Search query:", searchQuery);
-                }
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ color: "#0066cc", mr: 1 }} />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{
-                backgroundColor: "white",
-                borderRadius: 1,
-                "& .MuiOutlinedInput-root": {
-                  fontSize: "1rem",
-                },
-              }}
-            />
-          </Box>
+          <ClickAwayListener onClickAway={() => setShowResults(false)}>
+            <Box
+              sx={{ mb: 4, maxWidth: 600, mx: "auto", position: "relative" }}
+            >
+              <TextField
+                fullWidth
+                placeholder="Search family members, businesses..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => {
+                  if (searchResults.length > 0) setShowResults(true);
+                }}
+                onKeyPress={(e) => {
+                  if (e.key === "Enter" && searchQuery.trim()) {
+                    performSearch(searchQuery);
+                  }
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: "#0066cc", mr: 1 }} />
+                    </InputAdornment>
+                  ),
+                  endAdornment: isSearching ? (
+                    <InputAdornment position="end">
+                      <CircularProgress size={20} />
+                    </InputAdornment>
+                  ) : null,
+                }}
+                sx={{
+                  backgroundColor: "white",
+                  borderRadius: 1,
+                  "& .MuiOutlinedInput-root": {
+                    fontSize: "1rem",
+                  },
+                }}
+              />
+              {showResults && (
+                <Paper
+                  elevation={8}
+                  sx={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    zIndex: 1300,
+                    maxHeight: 400,
+                    overflow: "auto",
+                    mt: 0.5,
+                    borderRadius: 2,
+                  }}
+                >
+                  {searchResults.length > 0 ? (
+                    <List dense disablePadding>
+                      {searchResults.map((result) => (
+                        <ListItem
+                          key={`${result.type}-${result.id}`}
+                          component="div"
+                          onClick={() => handleResultClick(result)}
+                          sx={{
+                            cursor: "pointer",
+                            "&:hover": { bgcolor: "action.hover" },
+                            borderBottom: "1px solid",
+                            borderColor: "divider",
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 36 }}>
+                            {result.type === "person" ? (
+                              <PersonIcon color="primary" />
+                            ) : (
+                              <StoreIcon color="secondary" />
+                            )}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={result.name}
+                            secondary={result.extra || undefined}
+                            primaryTypographyProps={{ fontWeight: 500 }}
+                            secondaryTypographyProps={{ fontSize: "0.75rem" }}
+                          />
+                          <Chip
+                            label={
+                              result.type === "person" ? "Person" : "Business"
+                            }
+                            size="small"
+                            color={
+                              result.type === "person" ? "primary" : "secondary"
+                            }
+                            variant="outlined"
+                            sx={{ ml: 1 }}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  ) : !isSearching ? (
+                    <Box sx={{ p: 2, textAlign: "center" }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No results found for "{searchQuery}"
+                      </Typography>
+                    </Box>
+                  ) : null}
+                </Paper>
+              )}
+            </Box>
+          </ClickAwayListener>
 
           <Stack
             direction={{ xs: "column", sm: "row" }}

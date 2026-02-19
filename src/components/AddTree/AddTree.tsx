@@ -14,6 +14,7 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Autocomplete,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useVillage } from "../hooks/useVillage";
@@ -47,7 +48,8 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const { selectedVillage } = useVillage();
+  const [selectedVillageId, setSelectedVillageId] = useState<string>("");
+  const { villages, selectedVillage, setSelectedVillage } = useVillage();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
 
@@ -73,7 +75,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
       // Create tree in Supabase - store caste and sub_caste as UUIDs
       const treeData = {
         name: name || "Default Tree",
-        village_id: selectedVillage || null,
+        village_id: selectedVillageId || selectedVillage || null,
         description: description || null,
         caste: selectedCaste || null,
         sub_caste: selectedSubCaste || null,
@@ -111,6 +113,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
     setDescription("");
     setSelectedCaste("");
     setSelectedSubCaste("");
+    setSelectedVillageId(selectedVillage || "");
     setShowModal(true);
   };
 
@@ -119,7 +122,11 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
     setShowModal(false);
   };
 
-  const isValid = name.trim().length >= 4 && name.trim().length <= 64;
+  const isValid =
+    name.trim().length >= 4 &&
+    name.trim().length <= 64 &&
+    !!selectedCaste &&
+    !!selectedSubCaste;
 
   return (
     <Box>
@@ -135,6 +142,30 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
       <Dialog open={showModal} onClose={closeModal} maxWidth="sm" fullWidth>
         <DialogTitle>Create a new tree</DialogTitle>
         <DialogContent>
+          <Autocomplete
+            options={villages}
+            getOptionLabel={(option) => option.name}
+            value={villages.find((v) => v.id === selectedVillageId) || null}
+            onChange={(_e, newValue) => {
+              const id = newValue?.id || "";
+              setSelectedVillageId(id);
+              if (id) {
+                setSelectedVillage(id);
+              }
+            }}
+            disabled={loading}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                margin="dense"
+                label="Village"
+                placeholder="Search village..."
+                variant="outlined"
+              />
+            )}
+            sx={{ mt: 1, mb: 2 }}
+          />
+
           <TextField
             autoFocus
             margin="dense"
@@ -147,6 +178,42 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
             disabled={loading}
             sx={{ mt: 1, mb: 2 }}
           />
+
+          <FormControl fullWidth sx={{ mb: 2 }} required>
+            <InputLabel id="caste-select-label">Caste</InputLabel>
+            <Select
+              labelId="caste-select-label"
+              id="caste-select"
+              value={selectedCaste}
+              label="Caste"
+              onChange={(e) => setSelectedCaste(e.target.value)}
+              disabled={loading}
+            >
+              {castes.map((caste) => (
+                <MenuItem key={caste.id} value={caste.id}>
+                  {caste.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth sx={{ mb: 2 }} required>
+            <InputLabel id="subcaste-select-label">Sub-Caste</InputLabel>
+            <Select
+              labelId="subcaste-select-label"
+              id="subcaste-select"
+              value={selectedSubCaste}
+              label="Sub-Caste"
+              onChange={(e) => setSelectedSubCaste(e.target.value)}
+              disabled={loading || !selectedCaste}
+            >
+              {subCastes.map((subCaste) => (
+                <MenuItem key={subCaste.id} value={subCaste.id}>
+                  {subCaste.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <TextField
             margin="dense"
@@ -161,48 +228,6 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
             disabled={loading}
             sx={{ mb: 2 }}
           />
-
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="caste-select-label">Caste (Optional)</InputLabel>
-            <Select
-              labelId="caste-select-label"
-              id="caste-select"
-              value={selectedCaste}
-              label="Caste (Optional)"
-              onChange={(e) => setSelectedCaste(e.target.value)}
-              disabled={loading}
-            >
-              <MenuItem value="">— None —</MenuItem>
-              {castes.map((caste) => (
-                <MenuItem key={caste.id} value={caste.id}>
-                  {caste.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          {selectedCaste && (
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel id="subcaste-select-label">
-                Sub-Caste (Optional)
-              </InputLabel>
-              <Select
-                labelId="subcaste-select-label"
-                id="subcaste-select"
-                value={selectedSubCaste}
-                label="Sub-Caste (Optional)"
-                onChange={(e) => setSelectedSubCaste(e.target.value)}
-                disabled={loading}
-              >
-                <MenuItem value="">— None —</MenuItem>
-                {subCastes.map((subCaste) => (
-                  <MenuItem key={subCaste.id} value={subCaste.id}>
-                    {subCaste.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
 
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>

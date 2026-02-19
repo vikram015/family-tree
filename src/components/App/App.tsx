@@ -30,6 +30,8 @@ import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
 import { ResetPasswordModal } from "../ResetPasswordModal/ResetPasswordModal";
+import { LinkNodeDialog } from "../LinkNodeDialog/LinkNodeDialog";
+import { ProfilePage } from "../ProfilePage/ProfilePage";
 
 // Lazy load FamiliesPage
 const FamiliesPage = React.lazy(() =>
@@ -92,6 +94,7 @@ function AppContent() {
       }}
     >
       <ResetPasswordModal />
+      <LinkNodeDialog />
       <Header />
       <ErrorBoundary>
         <Routes>
@@ -132,6 +135,7 @@ function AppContent() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/admin" element={<AdminManagement />} />
           <Route path="/debug" element={<DebugPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Routes>
       </ErrorBoundary>
     </Box>

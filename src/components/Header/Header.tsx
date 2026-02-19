@@ -70,24 +70,24 @@ export const Header: React.FC = () => {
       </Box>
 
       {/* Village Selector for Mobile */}
-      {villages.length > 0 && (
-        <Box sx={{ mb: 2, px: 2 }}>
-          <FormControl fullWidth size="small">
-            <Select
-              value={selectedVillage}
-              onChange={(e) => setSelectedVillage(e.target.value)}
-              displayEmpty
-            >
-              <MenuItem value="">Select Village</MenuItem>
-              {villages.map((village) => (
-                <MenuItem key={village.id} value={village.id}>
-                  {village.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-      )}
+      <Box sx={{ mb: 2, px: 2 }}>
+        <FormControl fullWidth size="small">
+          <Select
+            value={selectedVillage}
+            onChange={(e) => setSelectedVillage(e.target.value)}
+            displayEmpty
+          >
+            <MenuItem value="">
+              {villages.length === 0 ? "Loading villages..." : "Select Village"}
+            </MenuItem>
+            {villages.map((village) => (
+              <MenuItem key={village.id} value={village.id}>
+                {village.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
       <List>
         {allNavLinks.map((link) => (
@@ -109,7 +109,22 @@ export const Header: React.FC = () => {
       <Box sx={{ px: 2, pt: 2, borderTop: 1, borderColor: "divider", mt: 2 }}>
         {currentUser ? (
           <>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+            <Box
+              component={Link}
+              to="/profile"
+              onClick={() => setDrawerOpen(false)}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                mb: 2,
+                textDecoration: "none",
+                color: "inherit",
+                "&:hover": {
+                  textDecoration: "underline",
+                },
+              }}
+            >
               <AccountCircleIcon />
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
@@ -235,7 +250,7 @@ export const Header: React.FC = () => {
           )}
 
           {/* Village Selector */}
-          {!isMobile && villages.length > 0 && (
+          {!isMobile && (
             <FormControl
               size="small"
               sx={{
@@ -263,7 +278,9 @@ export const Header: React.FC = () => {
                 onChange={(e) => setSelectedVillage(e.target.value)}
                 displayEmpty
               >
-                <MenuItem value="">Select Village</MenuItem>
+                <MenuItem value="">
+                  {villages.length === 0 ? "Loading..." : "Select Village"}
+                </MenuItem>
                 {villages.map((village) => (
                   <MenuItem key={village.id} value={village.id}>
                     {village.name}
@@ -278,24 +295,37 @@ export const Header: React.FC = () => {
             <Box sx={{ ml: 2 }}>
               {currentUser ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <AccountCircleIcon />
-                  <Box sx={{ mr: 1 }}>
-                    <Typography variant="body2" fontWeight={600}>
-                      {userProfile?.displayName || "User"}
-                    </Typography>
-                    {userProfile?.role && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        display="block"
-                        sx={{ fontWeight: 600, mt: 0.25 }}
-                      >
-                        {userProfile.role === "superadmin"
-                          ? "Super Admin"
-                          : "Admin"}
+                  <Button
+                    component={Link}
+                    to="/profile"
+                    color="inherit"
+                    sx={{
+                      textTransform: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      mr: 1,
+                    }}
+                  >
+                    <AccountCircleIcon />
+                    <Box sx={{ textAlign: "left" }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {userProfile?.displayName || "User"}
                       </Typography>
-                    )}
-                  </Box>
+                      {userProfile?.role && (
+                        <Typography
+                          variant="caption"
+                          color="rgba(255, 255, 255, 0.7)"
+                          display="block"
+                          sx={{ fontWeight: 600, mt: 0.25 }}
+                        >
+                          {userProfile.role === "superadmin"
+                            ? "Super Admin"
+                            : "Admin"}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Button>
                   <Button
                     color="inherit"
                     startIcon={<LogoutIcon />}

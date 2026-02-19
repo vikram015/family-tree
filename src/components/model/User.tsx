@@ -5,7 +5,8 @@ export interface AppUser {
   email: string;
   role: UserRole;
   villages: string[]; // Village IDs that this admin can manage
-  isVerified?: boolean;
+  peopleId?: string; // Linked person node ID
+  isVerified?: boolean; // Superadmin approval flag
   displayName?: string;
   name?: string; // Aligning with DB column
   phone?: string;

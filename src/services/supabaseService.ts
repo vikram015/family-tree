@@ -732,14 +732,35 @@ export const SupabaseService = {
    * Get tree with village details
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
-    const { data, error } = await supabase
+    const { data: tree, error } = await supabase
       .from('tree')
       .select('*, village(*)')
       .eq('id', treeId)
       .single();
 
     if (error) throw error;
-    return data;
+    
+    if (tree) {
+      if (tree.caste) {
+        const { data: casteData } = await supabase
+          .from('caste')
+          .select('name')
+          .eq('id', tree.caste)
+          .single();
+        if (casteData) tree.caste = casteData.name;
+      }
+      
+      if (tree.sub_caste) {
+        const { data: subCasteData } = await supabase
+          .from('sub_caste')
+          .select('name')
+          .eq('id', tree.sub_caste)
+          .single();
+        if (subCasteData) tree.sub_caste = subCasteData.name;
+      }
+    }
+
+    return tree;
   },
 
   /**
@@ -876,7 +897,8 @@ export const SupabaseService = {
     const { data, error } = await supabase
       .from('business')
       .select('*')
-      .eq('people_id', peopleId);
+      .eq('people_id', peopleId)
+      .eq('is_deleted', false); // Ensure this filters by default
 
     if (error) throw error;
     return data || [];
@@ -917,6 +939,7 @@ export const SupabaseService = {
     if (updates.category) updateData.category = updates.category;
     if (updates.description) updateData.description = updates.description;
     if (updates.people_id) updateData.people_id = updates.people_id;
+    if (updates.is_deleted !== undefined) updateData.is_deleted = updates.is_deleted;
 
     const { data, error } = await supabase
       .from('business')
@@ -1068,7 +1091,7 @@ export const SupabaseService = {
   /**
    * Get professions for a person
    */
-  async getPeopleProfileasons(peopleId: string): Promise<any[]> {
+  async getProfessionsByPerson(peopleId: string): Promise<any[]> {
     const { data, error } = await supabase
       .from('people_professions')
       .select('profession:professions(*)')
@@ -1083,27 +1106,61 @@ export const SupabaseService = {
    * Add profession to a person
    */
   async addProfessionToPerson(peopleId: string, professionId: string): Promise<any> {
-    const { data, error } = await supabase
+    // Check if the relation already exists (including soft-deleted)
+    const { data: existing, error: fetchError } = await supabase
       .from('people_professions')
-      .insert([{ people_id: peopleId, profession_id: professionId, is_deleted: false }])
-      .select()
-      .single();
+      .select('id')
+      .eq('people_id', peopleId)
+      .eq('profession_id', professionId)
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (fetchError) throw fetchError;
+
+    if (existing) {
+      // If exists, update it to be active
+      const { data, error } = await supabase
+        .from('people_professions')
+        .update({ is_deleted: false, modified_at: new Date() })
+        .eq('id', existing.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    } else {
+      // If not exists, insert new
+      const { data, error } = await supabase
+        .from('people_professions')
+        .insert([{ people_id: peopleId, profession_id: professionId, is_deleted: false }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
   },
 
   /**
    * Remove profession from a person
    */
   async removeProfessionFromPerson(peopleId: string, professionId: string): Promise<void> {
+    // Try update is_deleted first as per convention
     const { error } = await supabase
       .from('people_professions')
-      .update({ is_deleted: true })
+      .update({ is_deleted: true }) 
       .eq('people_id', peopleId)
       .eq('profession_id', professionId);
-
+      
     if (error) throw error;
+    
+    // Also try hard delete just in case checks constraints
+    /*
+    const { error: delError } = await supabase
+      .from('people_professions')
+      .delete()
+      .eq('people_id', peopleId)
+      .eq('profession_id', professionId);
+    */
   },
 
   /**

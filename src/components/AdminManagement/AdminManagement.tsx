@@ -398,11 +398,11 @@ export const AdminManagement: React.FC = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Phone Number</TableCell>
-                  <TableCell>Display Name</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Name</TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Villages</TableCell>
-                  <TableCell>Created At</TableCell>
+                  <TableCell>Linked Node</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
@@ -411,7 +411,9 @@ export const AdminManagement: React.FC = () => {
                 {users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.displayName || "-"}</TableCell>
+                    <TableCell>
+                      {user.name || user.displayName || "-"}
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={
@@ -428,9 +430,13 @@ export const AdminManagement: React.FC = () => {
                         <Box
                           sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}
                         >
-                          {user.villages.map((v) => (
-                            <Chip key={v} label={v} size="small" />
-                          ))}
+                          {user.villages.map((v) => {
+                            const villageName =
+                              villagesList.find((vl) => vl.id === v)?.name || v;
+                            return (
+                              <Chip key={v} label={villageName} size="small" />
+                            );
+                          })}
                         </Box>
                       ) : (
                         <Typography variant="caption" color="text.secondary">
@@ -438,23 +444,40 @@ export const AdminManagement: React.FC = () => {
                         </Typography>
                       )}
                     </TableCell>
-                    <TableCell>{formatDate(user.createdAt)}</TableCell>
+                    <TableCell>
+                      {(user as any).people_id ? (
+                        <Chip
+                          label="Linked"
+                          color="info"
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Not linked
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {user.isVerified ? (
                         <Chip
                           icon={<CheckCircle />}
-                          label="Verified"
+                          label="Approved"
                           color="success"
                           size="small"
                           variant="outlined"
                         />
                       ) : (
-                        <Chip label="Pending" color="warning" size="small" />
+                        <Chip
+                          label="Pending Approval"
+                          color="warning"
+                          size="small"
+                        />
                       )}
                     </TableCell>
                     <TableCell>
                       {!user.isVerified && (
-                        <Tooltip title="Verify User">
+                        <Tooltip title="Approve User">
                           <IconButton
                             size="small"
                             color="success"

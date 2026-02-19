@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  Alert,
 } from "@mui/material";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
@@ -22,6 +23,8 @@ import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../hooks/useAuth";
+import { useVillage } from "../hooks/useVillage";
+import { useLoginModal } from "../context/LoginModalContext";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -36,7 +39,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   onSourceChange,
   onCreate,
 }) => {
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission, isApproved, isAdmin, isSuperAdmin } =
+    useAuth();
+  const { setSelectedVillage } = useVillage();
+  const { openLoginModal } = useLoginModal();
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
@@ -59,6 +65,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     open: false,
     personId: null,
     childrenCount: 0,
+  });
+  const [externalTreeConfirm, setExternalTreeConfirm] = useState<{
+    open: boolean;
+    targetTreeId: string | null;
+  }>({
+    open: false,
+    targetTreeId: null,
   });
 
   const loadTreeData = useCallback(
@@ -527,11 +540,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   }, []);
 
   // Handler for edit icon on tree nodes — opens NodeDetails in edit view
-  const handleEditNode = useCallback((nodeId: string) => {
-    setNodeDetailsInitialView("edit");
-    setNodeDetailsAddInfo(undefined);
-    setSelectId(nodeId);
-  }, []);
+  const handleEditNode = useCallback(
+    (nodeId: string) => {
+      if (!currentUser) {
+        openLoginModal(() => {
+          setNodeDetailsInitialView("edit");
+          setNodeDetailsAddInfo(undefined);
+          setSelectId(nodeId);
+        });
+        return;
+      }
+      setNodeDetailsInitialView("edit");
+      setNodeDetailsAddInfo(undefined);
+      setSelectId(nodeId);
+    },
+    [currentUser, openLoginModal],
+  );
 
   // Handler for placeholder "add relative" nodes in the tree
   const handleAddRelative = useCallback(
@@ -566,11 +590,20 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           break;
       }
 
+      if (!currentUser) {
+        openLoginModal(() => {
+          setNodeDetailsInitialView("add");
+          setNodeDetailsAddInfo({ relation, gender });
+          setSelectId(nodeId);
+        });
+        return;
+      }
+
       setNodeDetailsInitialView("add");
       setNodeDetailsAddInfo({ relation, gender });
       setSelectId(nodeId);
     },
-    [],
+    [currentUser, openLoginModal],
   );
 
   // Calculate tree statistics
@@ -626,15 +659,23 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }}
       >
         <SourceSelect onChange={onSourceChange} />
-        <AddTree
-          onCreate={(createdTreeId) => {
-            // Move to the newly created tree
-            setTreeId(createdTreeId);
-            // Call parent onCreate callback if provided
-            onCreate?.(createdTreeId);
-          }}
-        />
+        {(isSuperAdmin() || isApproved) && (
+          <AddTree
+            onCreate={(createdTreeId) => {
+              // Move to the newly created tree
+              setTreeId(createdTreeId);
+              // Call parent onCreate callback if provided
+              onCreate?.(createdTreeId);
+            }}
+          />
+        )}
       </Box>
+      {isAdmin() && !isApproved && (
+        <Alert severity="info" sx={{ mx: 2, mt: 1 }}>
+          Your account is pending approval. You can view trees but cannot make
+          changes until a Super Admin approves your account.
+        </Alert>
+      )}
       {nodes.length > 0 && !isLoading && (
         <Box
           sx={{
@@ -765,13 +806,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               onViewDetails={handleViewDetails}
               currentTreeId={treeId}
               onExternalTreeClick={(tid) => {
-                if (
-                  window.confirm(
-                    "This person belongs to another family tree. Navigate to that tree?",
-                  )
-                ) {
-                  onSourceChange(tid, []);
-                }
+                setExternalTreeConfirm({ open: true, targetTreeId: tid });
               }}
             />
           ) : (
@@ -882,6 +917,51 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             }}
           >
             Force Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* External tree navigation confirmation */}
+      <Dialog
+        open={externalTreeConfirm.open}
+        onClose={() =>
+          setExternalTreeConfirm({ open: false, targetTreeId: null })
+        }
+      >
+        <DialogTitle>Navigate to Another Tree</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This person belongs to another family tree. Would you like to
+            navigate to that tree?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setExternalTreeConfirm({ open: false, targetTreeId: null })
+            }
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              const tid = externalTreeConfirm.targetTreeId;
+              setExternalTreeConfirm({ open: false, targetTreeId: null });
+              if (tid) {
+                try {
+                  const tree = await SupabaseService.getTreeWithDetails(tid);
+                  if (tree?.village_id) {
+                    setSelectedVillage(tree.village_id);
+                  }
+                } catch (e) {
+                  console.warn("Could not fetch target tree village:", e);
+                }
+                onSourceChange(tid, []);
+              }
+            }}
+          >
+            Navigate
           </Button>
         </DialogActions>
       </Dialog>
