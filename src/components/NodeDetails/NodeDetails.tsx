@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useState, useEffect } from "react";
+import React, { memo, useCallback, useState, useEffect, Suspense } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -25,7 +25,6 @@ import {
   MenuItem,
   Switch,
 } from "@mui/material";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
@@ -42,7 +41,12 @@ import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { SupabaseService } from "../../services/supabaseService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
-import ImageCropper from "../ImageCropper/ImageCropper";
+const DatePicker = React.lazy(() =>
+  import("@mui/x-date-pickers/DatePicker").then((m) => ({
+    default: m.DatePicker,
+  })),
+);
+const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
 
 interface NodeDetailsProps {
   node: Readonly<FNode> | null;
@@ -578,39 +582,41 @@ export const NodeDetails = memo(function NodeDetails({
             <DialogContent dividers>
               <Stack spacing={3} sx={{ pt: 1 }}>
                 {/* Photo Upload with Cropper */}
-                <ImageCropper
-                  currentPhoto={editedPhotoPreview}
-                  onCropped={async (blob) => {
-                    if (!node) return;
-                    try {
-                      setPhotoUploading(true);
-                      const url = await SupabaseService.uploadPersonPhoto(
-                        node.id,
-                        blob,
-                      );
-                      setEditedPhotoPreview(url);
-                    } catch (err) {
-                      console.error("Photo upload failed:", err);
-                      alert("Failed to upload photo. Please try again.");
-                    } finally {
-                      setPhotoUploading(false);
-                    }
-                  }}
-                  onRemove={async () => {
-                    if (!node) return;
-                    try {
-                      setPhotoUploading(true);
-                      await SupabaseService.removePersonPhoto(node.id);
-                      setEditedPhotoPreview(undefined);
-                    } catch (err) {
-                      console.error("Photo remove failed:", err);
-                    } finally {
-                      setPhotoUploading(false);
-                    }
-                  }}
-                  uploading={photoUploading}
-                  previewSize={80}
-                />
+                <Suspense fallback={<Box sx={{ height: 96 }} />}>
+                  <ImageCropper
+                    currentPhoto={editedPhotoPreview}
+                    onCropped={async (blob) => {
+                      if (!node) return;
+                      try {
+                        setPhotoUploading(true);
+                        const url = await SupabaseService.uploadPersonPhoto(
+                          node.id,
+                          blob,
+                        );
+                        setEditedPhotoPreview(url);
+                      } catch (err) {
+                        console.error("Photo upload failed:", err);
+                        alert("Failed to upload photo. Please try again.");
+                      } finally {
+                        setPhotoUploading(false);
+                      }
+                    }}
+                    onRemove={async () => {
+                      if (!node) return;
+                      try {
+                        setPhotoUploading(true);
+                        await SupabaseService.removePersonPhoto(node.id);
+                        setEditedPhotoPreview(undefined);
+                      } catch (err) {
+                        console.error("Photo remove failed:", err);
+                      } finally {
+                        setPhotoUploading(false);
+                      }
+                    }}
+                    uploading={photoUploading}
+                    previewSize={80}
+                  />
+                </Suspense>
 
                 <TextField
                   label="Name"
@@ -619,15 +625,19 @@ export const NodeDetails = memo(function NodeDetails({
                   fullWidth
                   required
                 />
-                <DatePicker
-                  label="Date of Birth"
-                  value={editedDob ? dayjs(editedDob) : null}
-                  onChange={(val) =>
-                    setEditedDob(val ? val.format("YYYY-MM-DD") : "")
-                  }
-                  slotProps={{ textField: { fullWidth: true } }}
-                  format="DD/MM/YYYY"
-                />
+                <Suspense
+                  fallback={<TextField fullWidth label="Date of Birth" />}
+                >
+                  <DatePicker
+                    label="Date of Birth"
+                    value={editedDob ? dayjs(editedDob) : null}
+                    onChange={(val) =>
+                      setEditedDob(val ? val.format("YYYY-MM-DD") : "")
+                    }
+                    slotProps={{ textField: { fullWidth: true } }}
+                    format="DD/MM/YYYY"
+                  />
+                </Suspense>
                 <TextField
                   label="Gotra"
                   value={editedGotra}
@@ -679,17 +689,23 @@ export const NodeDetails = memo(function NodeDetails({
                   label="Is Alive"
                 />
                 {!editedIsAlive && (
-                  <DatePicker
-                    label="Deceased Date"
-                    value={
-                      editedDeceasedDate ? dayjs(editedDeceasedDate) : null
-                    }
-                    onChange={(val) =>
-                      setEditedDeceasedDate(val ? val.format("YYYY-MM-DD") : "")
-                    }
-                    slotProps={{ textField: { fullWidth: true } }}
-                    format="DD/MM/YYYY"
-                  />
+                  <Suspense
+                    fallback={<TextField fullWidth label="Deceased Date" />}
+                  >
+                    <DatePicker
+                      label="Deceased Date"
+                      value={
+                        editedDeceasedDate ? dayjs(editedDeceasedDate) : null
+                      }
+                      onChange={(val) =>
+                        setEditedDeceasedDate(
+                          val ? val.format("YYYY-MM-DD") : "",
+                        )
+                      }
+                      slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY"
+                    />
+                  </Suspense>
                 )}
                 <FormControl>
                   <FormLabel>Gender</FormLabel>
@@ -737,7 +753,7 @@ export const NodeDetails = memo(function NodeDetails({
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                 Add Relative to {node.name}
               </Typography>
-              <IconButton onClick={() => setView("details")} size="small">
+              <IconButton onClick={closeHandler} size="small">
                 <CloseIcon />
               </IconButton>
             </DialogTitle>
@@ -760,7 +776,7 @@ export const NodeDetails = memo(function NodeDetails({
                   }
                   return undefined;
                 }}
-                onCancel={() => setView("details")}
+                onCancel={closeHandler}
                 onComplete={() => props.onSelect(undefined)}
                 noCard
               />

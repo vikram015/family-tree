@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from "react";
-import * as d3 from "d3";
+import { select } from "d3-selection";
+import { zoomIdentity, zoomTransform } from "d3-zoom";
+import "d3-transition";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
@@ -39,8 +41,10 @@ interface DTreeComponentProps {
     relType: "father" | "mother" | "spouse" | "son" | "daughter",
   ) => void;
   onViewDetails?: (nodeId: string) => void;
+  onDelete?: (nodeId: string) => void;
   onExternalTreeClick?: (treeId: string) => void;
   currentTreeId?: string;
+  onMobileSheetChange?: (open: boolean) => void;
 }
 
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
@@ -50,8 +54,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   onEditNode,
   onAddRelative,
   onViewDetails,
+  onDelete,
   onExternalTreeClick,
   currentTreeId,
+  onMobileSheetChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<any>(null);
@@ -88,6 +94,80 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const mobileSheetNode = mobileSheetNodeId
     ? nodes.find((n) => n.id === mobileSheetNodeId) || null
     : null;
+  const parentNodes = mobileSheetNode
+    ? mobileSheetNode.parents
+        .map((p) => nodes.find((n) => n.id === p.id))
+        .filter(Boolean)
+    : [];
+  const hasFather = parentNodes.some((p) => p?.gender === "male");
+  const hasMother = parentNodes.some((p) => p?.gender === "female");
+  const showFatherButton = !hasFather;
+  const showMotherButton = !hasMother;
+  const parentActionCount =
+    (showFatherButton ? 1 : 0) + (showMotherButton ? 1 : 0) + 1;
+  const parentActionColumns = `repeat(${parentActionCount}, 1fr)`;
+  const isExternalNode = Boolean(
+    currentTreeId &&
+    mobileSheetNode?.treeId &&
+    mobileSheetNode.treeId !== currentTreeId,
+  );
+
+  const insertPlaceholdersNearMiddle = (
+    list: DTreeNode[],
+    placeholders: DTreeNode[],
+  ) => {
+    if (placeholders.length === 0) return;
+    const insertIndex = Math.max(0, Math.floor(list.length / 2));
+    list.splice(insertIndex, 0, ...placeholders);
+  };
+
+  const getParentFlags = (targetId: string) => {
+    const targetNode = nodes.find((n) => n.id === targetId);
+    const parentNodes = targetNode
+      ? targetNode.parents
+          .map((p) => nodes.find((n) => n.id === p.id))
+          .filter(Boolean)
+      : [];
+    return {
+      hasFather: parentNodes.some((p) => p?.gender === "male"),
+      hasMother: parentNodes.some((p) => p?.gender === "female"),
+    };
+  };
+
+  const buildParentPlaceholders = (targetId: string): DTreeNode[] => {
+    const { hasFather, hasMother } = getParentFlags(targetId);
+    const placeholders: DTreeNode[] = [];
+    if (!hasFather) {
+      placeholders.push({
+        name: "Add Father",
+        class: "man",
+        textClass: "nodeText",
+        extra: {
+          _placeholder: true,
+          _placeholderType: "father",
+          _targetNodeId: targetId,
+        },
+      });
+    }
+    if (!hasMother) {
+      placeholders.push({
+        name: "Add Mother",
+        class: "woman",
+        textClass: "nodeText",
+        extra: {
+          _placeholder: true,
+          _placeholderType: "mother",
+          _targetNodeId: targetId,
+        },
+      });
+    }
+    return placeholders;
+  };
+
+  useEffect(() => {
+    if (!onMobileSheetChange) return;
+    onMobileSheetChange(Boolean(mobileSheetNodeId) && isMobileRef.current);
+  }, [mobileSheetNodeId, onMobileSheetChange]);
 
   // Keep refs in sync
   useEffect(() => {
@@ -136,11 +216,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       const cw = containerRef.current.clientWidth;
       const ch = containerRef.current.clientHeight;
       // Keep current zoom scale so we only pan
-      const currentTransform = d3.zoomTransform(svg);
+      const currentTransform = zoomTransform(svg);
       const scale = currentTransform.k;
       const tx = cw / 2 - nodeX * scale;
       const ty = ch / 2 - nodeY * scale;
-      const newTransform = d3.zoomIdentity.translate(tx, ty).scale(scale);
+      const newTransform = zoomIdentity.translate(tx, ty).scale(scale);
       builder.svg
         .transition()
         .duration(300)
@@ -418,6 +498,18 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     // On mobile, placeholders are skipped — the bottom sheet handles add-relative actions directly
     const showPlaceholders =
       !isMobileRef.current && addMenuNodeIdRef.current === personId;
+    const shouldWrapWithParentPlaceholders =
+      showPlaceholders && (!person.parents || person.parents.length === 0);
+    const addMenuChildId = addMenuNodeIdRef.current;
+    const addMenuChild = addMenuChildId
+      ? nodes.find((n) => n.id === addMenuChildId)
+      : null;
+    const addMissingParentForChild = Boolean(
+      addMenuChild &&
+      addMenuChild.parents?.length === 1 &&
+      addMenuChild.parents.some((p) => p.id === personId) &&
+      !isMobileRef.current,
+    );
 
     // If person has spouses, create marriages with children
     if (person.spouses && person.spouses.length > 0) {
@@ -433,6 +525,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         if (shouldExpandChildren) {
           person.children?.forEach((child) => {
             if (visited.has(child.id)) return;
+            if (addMissingParentForChild && child.id === addMenuChildId) {
+              return;
+            }
 
             const childNode = nodes.find((n) => n.id === child.id);
             if (!childNode) return;
@@ -468,26 +563,34 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           const placeholderTarget = showSpousePlaceholders
             ? spouseNode.id
             : personId;
-          marriageChildren.push({
-            name: "Add Son",
-            class: "man",
-            textClass: "nodeText",
-            extra: {
-              _placeholder: true,
-              _placeholderType: "son",
-              _targetNodeId: placeholderTarget,
+          const parentPlaceholders =
+            showPlaceholders && shouldWrapWithParentPlaceholders
+              ? []
+              : buildParentPlaceholders(placeholderTarget);
+          const childPlaceholders: DTreeNode[] = [
+            {
+              name: "Add Son",
+              class: "man",
+              textClass: "nodeText",
+              extra: {
+                _placeholder: true,
+                _placeholderType: "son",
+                _targetNodeId: placeholderTarget,
+              },
             },
-          });
-          marriageChildren.push({
-            name: "Add Daughter",
-            class: "woman",
-            textClass: "nodeText",
-            extra: {
-              _placeholder: true,
-              _placeholderType: "daughter",
-              _targetNodeId: placeholderTarget,
+            {
+              name: "Add Daughter",
+              class: "woman",
+              textClass: "nodeText",
+              extra: {
+                _placeholder: true,
+                _placeholderType: "daughter",
+                _targetNodeId: placeholderTarget,
+              },
             },
-          });
+          ];
+          const allPlaceholders = [...parentPlaceholders, ...childPlaceholders];
+          insertPlaceholdersNearMiddle(marriageChildren, allPlaceholders);
         }
 
         treeNode.marriages.push({
@@ -552,29 +655,61 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // Inject child placeholders
       if (showPlaceholders) {
-        children.push({
-          name: "Add Son",
-          class: "man",
-          textClass: "nodeText",
-          extra: {
-            _placeholder: true,
-            _placeholderType: "son",
-            _targetNodeId: personId,
+        const parentPlaceholders = shouldWrapWithParentPlaceholders
+          ? []
+          : buildParentPlaceholders(personId);
+        const childPlaceholders: DTreeNode[] = [
+          {
+            name: "Add Son",
+            class: "man",
+            textClass: "nodeText",
+            extra: {
+              _placeholder: true,
+              _placeholderType: "son",
+              _targetNodeId: personId,
+            },
           },
-        });
-        children.push({
-          name: "Add Daughter",
-          class: "woman",
-          textClass: "nodeText",
-          extra: {
-            _placeholder: true,
-            _placeholderType: "daughter",
-            _targetNodeId: personId,
+          {
+            name: "Add Daughter",
+            class: "woman",
+            textClass: "nodeText",
+            extra: {
+              _placeholder: true,
+              _placeholderType: "daughter",
+              _targetNodeId: personId,
+            },
           },
-        });
+        ];
+        const allPlaceholders = [...parentPlaceholders, ...childPlaceholders];
+        insertPlaceholdersNearMiddle(children, allPlaceholders);
       }
 
-      if (children.length > 0) {
+      if (addMissingParentForChild && addMenuChildId) {
+        const missingParent = buildParentPlaceholders(addMenuChildId)[0];
+        if (missingParent) {
+          const childNode = convertToTreeFormat(
+            addMenuChildId,
+            visited,
+            depth + 1,
+          );
+          if (childNode) {
+            insertPlaceholdersNearMiddle(children, [childNode]);
+          }
+          treeNode.marriages = [
+            {
+              spouse: {
+                name: missingParent.name,
+                class: missingParent.class,
+                textClass: missingParent.textClass,
+                extra: missingParent.extra,
+              },
+              children: children.length > 0 ? children : undefined,
+            },
+          ];
+        } else if (children.length > 0) {
+          treeNode.children = children;
+        }
+      } else if (children.length > 0) {
         treeNode.children = children;
       }
     }
@@ -583,6 +718,31 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     // from having both treeNode.marriages and treeNode.children simultaneously)
     else if (showPlaceholders) {
       const spouseClass = person.gender === "female" ? "man" : "woman";
+      const parentPlaceholders = shouldWrapWithParentPlaceholders
+        ? []
+        : buildParentPlaceholders(personId);
+      const childPlaceholders: DTreeNode[] = [
+        {
+          name: "Add Son",
+          class: "man",
+          textClass: "nodeText",
+          extra: {
+            _placeholder: true,
+            _placeholderType: "son",
+            _targetNodeId: personId,
+          },
+        },
+        {
+          name: "Add Daughter",
+          class: "woman",
+          textClass: "nodeText",
+          extra: {
+            _placeholder: true,
+            _placeholderType: "daughter",
+            _targetNodeId: personId,
+          },
+        },
+      ];
       treeNode.marriages = [
         {
           spouse: {
@@ -595,30 +755,43 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               _targetNodeId: personId,
             },
           },
-          children: [
-            {
-              name: "Add Son",
-              class: "man",
-              textClass: "nodeText",
-              extra: {
-                _placeholder: true,
-                _placeholderType: "son",
-                _targetNodeId: personId,
-              },
-            },
-            {
-              name: "Add Daughter",
-              class: "woman",
-              textClass: "nodeText",
-              extra: {
-                _placeholder: true,
-                _placeholderType: "daughter",
-                _targetNodeId: personId,
-              },
-            },
-          ],
+          children: [...parentPlaceholders, ...childPlaceholders],
         },
       ];
+    }
+
+    // If we used parent placeholders above, do not also add them in child lists
+    if (shouldWrapWithParentPlaceholders) {
+      const parentPlaceholders = buildParentPlaceholders(personId);
+      if (parentPlaceholders.length > 0) {
+        const primaryParent = parentPlaceholders[0];
+        const secondaryParent = parentPlaceholders[1];
+        const wrapper: DTreeNode = {
+          name: primaryParent.name,
+          class: primaryParent.class,
+          textClass: primaryParent.textClass,
+          depthOffset: 0,
+          extra: primaryParent.extra,
+        };
+
+        if (secondaryParent) {
+          wrapper.marriages = [
+            {
+              spouse: {
+                name: secondaryParent.name,
+                class: secondaryParent.class,
+                textClass: secondaryParent.textClass,
+                extra: secondaryParent.extra,
+              },
+              children: [treeNode],
+            },
+          ];
+        } else {
+          wrapper.children = [treeNode];
+        }
+
+        return wrapper;
+      }
     }
 
     return treeNode;
@@ -638,7 +811,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     if (!isNewTree) {
       const existingSvg = containerRef.current.querySelector("svg");
       if (existingSvg) {
-        currentZoom = d3.zoomTransform(existingSvg);
+        currentZoom = zoomTransform(existingSvg);
       } else {
         // Fallback to cleanup ref if DOM is already empty
         currentZoom = prevZoomRef.current;
@@ -650,7 +823,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     }
 
     // Clear previous tree
-    d3.select(containerRef.current).selectAll("*").remove();
+    select(containerRef.current).selectAll("*").remove();
 
     const rootNode = convertToTreeFormat(rootId);
     if (!rootNode) {
@@ -822,7 +995,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                   const scale = 1;
                   const tx = cw / 2 - nodeX * scale;
                   const ty = ch / 2 - nodeY * scale;
-                  const newTransform = d3.zoomIdentity
+                  const newTransform = zoomIdentity
                     .translate(tx, ty)
                     .scale(scale);
                   builder.svg
@@ -852,9 +1025,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       if (containerRef.current) {
         const svgElement = containerRef.current.querySelector("svg");
         if (svgElement) {
-          prevZoomRef.current = d3.zoomTransform(svgElement);
+          prevZoomRef.current = zoomTransform(svgElement);
         }
-        d3.select(containerRef.current).selectAll("*").remove();
+        select(containerRef.current).selectAll("*").remove();
       }
     };
   }, [nodes, rootId, mainId, addMenuNodeId]);
@@ -883,11 +1056,14 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       <label
         style={{
           position: "absolute",
-          top: 10,
-          left: 10,
-          zIndex: 10,
+          top: isMobile ? 76 : 10,
+          right: 10,
+          left: isMobile ? 10 : "auto",
+          width: isMobile ? "calc(100% - 20px)" : "auto",
+          zIndex: 30,
           display: "flex",
           alignItems: "center",
+          justifyContent: isMobile ? "space-between" : "flex-start",
           gap: 6,
           background: "rgba(255,255,255,0.92)",
           padding: "4px 10px",
@@ -929,6 +1105,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       {mobileSheetNode && (
         <div
           style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1300,
             width: "100%",
             background: "#fff",
             borderTop: "1px solid #e0e0e0",
@@ -965,103 +1146,215 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               ✕
             </button>
           </div>
-          {/* Action buttons — single row */}
-          <div style={{ display: "flex", gap: 6 }}>
-            <button
-              onClick={() => {
-                setMobileSheetNodeId(null);
-                onEditNode?.(mobileSheetNode.id);
-              }}
+          {/* Action buttons */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div
               style={{
-                flex: 1,
-                padding: "10px 0",
-                border: "1px solid #1976d2",
-                borderRadius: 8,
-                background: "#e3f2fd",
-                color: "#1565c0",
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
+                display: "grid",
+                gridTemplateColumns: isExternalNode ? "1fr 1fr" : "1fr 1fr 1fr",
+                gap: 6,
               }}
             >
-              ✏️ Edit
-            </button>
-            <button
-              onClick={() => {
-                const nid = mobileSheetNode.id;
-                setMobileSheetNodeId(null);
-                onAddRelative?.(nid, "spouse");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px 0",
-                border: "1px solid #4caf50",
-                borderRadius: 8,
-                background: "#e8f5e9",
-                color: "#2e7d32",
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
-              }}
-            >
-              💍 Spouse
-            </button>
-            <button
-              onClick={() => {
-                const nid = mobileSheetNode.id;
-                setMobileSheetNodeId(null);
-                onAddRelative?.(nid, "son");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px 0",
-                border: "1px solid #1976d2",
-                borderRadius: 8,
-                background: "#e3f2fd",
-                color: "#1565c0",
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
-              }}
-            >
-              👦 Son
-            </button>
-            <button
-              onClick={() => {
-                const nid = mobileSheetNode.id;
-                setMobileSheetNodeId(null);
-                onAddRelative?.(nid, "daughter");
-              }}
-              style={{
-                flex: 1,
-                padding: "10px 0",
-                border: "1px solid #e91e63",
-                borderRadius: 8,
-                background: "#fce4ec",
-                color: "#c2185b",
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 4,
-              }}
-            >
-              👧 Daughter
-            </button>
+              <button
+                onClick={() => {
+                  setMobileSheetNodeId(null);
+                  onViewDetails?.(mobileSheetNode.id);
+                }}
+                style={{
+                  padding: "10px 0",
+                  border: "1px solid #455a64",
+                  borderRadius: 8,
+                  background: "#eceff1",
+                  color: "#263238",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                View
+              </button>
+              {isExternalNode ? (
+                <button
+                  onClick={() => {
+                    const tid = mobileSheetNode.treeId;
+                    setMobileSheetNodeId(null);
+                    if (tid) {
+                      onExternalTreeClick?.(tid);
+                    }
+                  }}
+                  style={{
+                    padding: "10px 0",
+                    border: "1px solid #00796b",
+                    borderRadius: 8,
+                    background: "#e0f2f1",
+                    color: "#00695c",
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  Open Tree
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setMobileSheetNodeId(null);
+                      onEditNode?.(mobileSheetNode.id);
+                    }}
+                    style={{
+                      padding: "10px 0",
+                      border: "1px solid #1976d2",
+                      borderRadius: 8,
+                      background: "#e3f2fd",
+                      color: "#1565c0",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMobileSheetNodeId(null);
+                      onDelete?.(mobileSheetNode.id);
+                    }}
+                    style={{
+                      padding: "10px 0",
+                      border: "1px solid #d32f2f",
+                      borderRadius: 8,
+                      background: "#ffebee",
+                      color: "#c62828",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete
+                  </button>
+                </>
+              )}
+            </div>
+            {!isExternalNode && (
+              <>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: parentActionColumns,
+                    gap: 6,
+                  }}
+                >
+                  {showFatherButton && (
+                    <button
+                      onClick={() => {
+                        const nid = mobileSheetNode.id;
+                        setMobileSheetNodeId(null);
+                        onAddRelative?.(nid, "father");
+                      }}
+                      style={{
+                        padding: "10px 0",
+                        border: "1px solid #6d4c41",
+                        borderRadius: 8,
+                        background: "#efebe9",
+                        color: "#5d4037",
+                        fontWeight: 600,
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Add Father
+                    </button>
+                  )}
+                  {showMotherButton && (
+                    <button
+                      onClick={() => {
+                        const nid = mobileSheetNode.id;
+                        setMobileSheetNodeId(null);
+                        onAddRelative?.(nid, "mother");
+                      }}
+                      style={{
+                        padding: "10px 0",
+                        border: "1px solid #6a1b9a",
+                        borderRadius: 8,
+                        background: "#f3e5f5",
+                        color: "#6a1b9a",
+                        fontWeight: 600,
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      Add Mother
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      const nid = mobileSheetNode.id;
+                      setMobileSheetNodeId(null);
+                      onAddRelative?.(nid, "spouse");
+                    }}
+                    style={{
+                      padding: "10px 0",
+                      border: "1px solid #4caf50",
+                      borderRadius: 8,
+                      background: "#e8f5e9",
+                      color: "#2e7d32",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Add Spouse
+                  </button>
+                </div>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 6,
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      const nid = mobileSheetNode.id;
+                      setMobileSheetNodeId(null);
+                      onAddRelative?.(nid, "son");
+                    }}
+                    style={{
+                      padding: "10px 0",
+                      border: "1px solid #1976d2",
+                      borderRadius: 8,
+                      background: "#e3f2fd",
+                      color: "#1565c0",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Add Son
+                  </button>
+                  <button
+                    onClick={() => {
+                      const nid = mobileSheetNode.id;
+                      setMobileSheetNodeId(null);
+                      onAddRelative?.(nid, "daughter");
+                    }}
+                    style={{
+                      padding: "10px 0",
+                      border: "1px solid #e91e63",
+                      borderRadius: 8,
+                      background: "#fce4ec",
+                      color: "#c2185b",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Add Daughter
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

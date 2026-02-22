@@ -356,7 +356,13 @@ export const AdminManagement: React.FC = () => {
       )}
 
       <Paper>
-        <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
+        <Tabs
+          value={tabValue}
+          onChange={(e, val) => setTabValue(val)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
           <Tab
             label="Users"
             id="admin-tab-0"
@@ -394,8 +400,8 @@ export const AdminManagement: React.FC = () => {
           <Box sx={{ mb: 2 }}>
             <Typography variant="h6">User Management</Typography>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 720 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Email</TableCell>
@@ -528,8 +534,8 @@ export const AdminManagement: React.FC = () => {
           {states.length === 0 && (
             <Typography color="text.secondary">No states found</Typography>
           )}
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 520 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -560,8 +566,8 @@ export const AdminManagement: React.FC = () => {
               Add District
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 640 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -596,8 +602,8 @@ export const AdminManagement: React.FC = () => {
               Add Village
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 760 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -637,8 +643,8 @@ export const AdminManagement: React.FC = () => {
               Add Caste
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 480 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -668,8 +674,8 @@ export const AdminManagement: React.FC = () => {
               Add Sub-Caste
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 640 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>

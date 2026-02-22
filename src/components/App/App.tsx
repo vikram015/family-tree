@@ -20,7 +20,6 @@ import { VillageInitializer } from "../VillageInitializer";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
-import { HeritagePage } from "../HeritagePage/HeritagePage";
 import { BusinessPage } from "../BusinessPage/BusinessPage";
 import { FamousPage } from "../FamousPage/FamousPage";
 import { ContactPage } from "../Contact/ContactPage";
@@ -96,48 +95,51 @@ function AppContent() {
       <ResetPasswordModal />
       <LinkNodeDialog />
       <Header />
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/families"
-            element={
-              <Suspense
-                fallback={
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      height: "100vh",
-                    }}
+      <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
+        <Box sx={{ flex: 1, minHeight: 0, width: "100%" }}>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/families"
+                element={
+                  <Suspense
+                    fallback={
+                      <Box
+                        sx={{
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          height: "100vh",
+                        }}
+                      >
+                        <CircularProgress />
+                      </Box>
+                    }
                   >
-                    <CircularProgress />
-                  </Box>
+                    <FamiliesPage
+                      treeId={treeId}
+                      setTreeId={setTreeId}
+                      onSourceChange={onChange}
+                      onCreate={(id) => {
+                        setTreeId(id);
+                        onChange(id);
+                      }}
+                    />
+                  </Suspense>
                 }
-              >
-                <FamiliesPage
-                  treeId={treeId}
-                  setTreeId={setTreeId}
-                  onSourceChange={onChange}
-                  onCreate={(id) => {
-                    setTreeId(id);
-                    onChange(id);
-                  }}
-                />
-              </Suspense>
-            }
-          />
-          <Route path="/heritage" element={<HeritagePage />} />
-          <Route path="/business" element={<BusinessPage />} />
-          <Route path="/famous" element={<FamousPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/admin" element={<AdminManagement />} />
-          <Route path="/debug" element={<DebugPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Routes>
-      </ErrorBoundary>
+              />
+              <Route path="/business" element={<BusinessPage />} />
+              <Route path="/famous" element={<FamousPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/admin" element={<AdminManagement />} />
+              <Route path="/debug" element={<DebugPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+            </Routes>
+          </ErrorBoundary>
+        </Box>
+      </Box>
     </Box>
   );
 }

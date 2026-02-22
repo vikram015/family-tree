@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { SupabaseService } from "../../services/supabaseService";
 import {
   Button,
@@ -10,11 +10,15 @@ import {
   Alert,
   CircularProgress,
   Box,
+  Fab,
   MenuItem,
   Select,
   FormControl,
   InputLabel,
   Autocomplete,
+  Tooltip,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { useVillage } from "../hooks/useVillage";
@@ -30,10 +34,16 @@ import {
 
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
+  variant?: "button" | "fab";
 }
 
-export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
+export const AddTree: React.FC<AddTreeProps> = ({
+  onCreate,
+  variant = "button",
+}) => {
   const dispatch = useAppDispatch();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   // Redux state
   const castes = useAppSelector(selectCastes);
@@ -48,6 +58,7 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const modalHistoryRef = useRef(false);
   const [selectedVillageId, setSelectedVillageId] = useState<string>("");
   const { villages, selectedVillage, setSelectedVillage } = useVillage();
   const { currentUser } = useAuth() as any;
@@ -67,6 +78,26 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
       setSelectedSubCaste(""); // Reset sub-caste when caste changes
     }
   }, [selectedCaste, dispatch]);
+
+  useEffect(() => {
+    if (!showModal) return;
+
+    if (!modalHistoryRef.current) {
+      window.history.pushState({ modal: "create-tree" }, "");
+      modalHistoryRef.current = true;
+    }
+
+    const handlePopState = () => {
+      if (!modalHistoryRef.current) return;
+      setShowModal(false);
+      modalHistoryRef.current = false;
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [showModal]);
 
   const submit = async () => {
     setError(null);
@@ -120,6 +151,10 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
   const closeModal = () => {
     if (loading) return;
     setShowModal(false);
+    if (modalHistoryRef.current) {
+      modalHistoryRef.current = false;
+      window.history.back();
+    }
   };
 
   const isValid =
@@ -130,16 +165,48 @@ export const AddTree: React.FC<AddTreeProps> = ({ onCreate }) => {
 
   return (
     <Box>
-      <Button
-        variant="contained"
-        color="primary"
-        startIcon={<AddIcon />}
-        onClick={openModal}
-      >
-        Create tree
-      </Button>
+      {variant === "fab" ? (
+        <>
+          <Tooltip title="Create tree" placement="left">
+            <Fab
+              color="primary"
+              aria-label="Create tree"
+              onClick={openModal}
+              sx={{ display: { xs: "inline-flex", sm: "none" } }}
+            >
+              <AddIcon />
+            </Fab>
+          </Tooltip>
+          <Tooltip title="Create tree" placement="left">
+            <Fab
+              variant="extended"
+              color="primary"
+              onClick={openModal}
+              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            >
+              <AddIcon sx={{ mr: 1 }} />
+              Create tree
+            </Fab>
+          </Tooltip>
+        </>
+      ) : (
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={openModal}
+        >
+          Create tree
+        </Button>
+      )}
 
-      <Dialog open={showModal} onClose={closeModal} maxWidth="sm" fullWidth>
+      <Dialog
+        open={showModal}
+        onClose={closeModal}
+        maxWidth="sm"
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Create a new tree</DialogTitle>
         <DialogContent>
           <Autocomplete

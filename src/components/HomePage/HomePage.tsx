@@ -147,14 +147,6 @@ export const HomePage: React.FC = () => {
       label: "Explore",
     },
     {
-      icon: <SchoolIcon sx={{ fontSize: 48, color: "#E6A726" }} />,
-      title: "Explore Heritage",
-      description:
-        "Discover and preserve your family's rich history, cultural heritage, and ancestral stories for future generations.",
-      action: "/heritage",
-      label: "Learn More",
-    },
-    {
       icon: <WorkIcon sx={{ fontSize: 48, color: "#7BC65D" }} />,
       title: "Connect Professionals",
       description:
@@ -184,7 +176,7 @@ export const HomePage: React.FC = () => {
     {
       number: "4",
       title: "Preserve History",
-      description: "Document stories, heritage, and preserve for generations",
+      description: "Document stories and preserve them for generations",
     },
   ];
 
@@ -192,8 +184,7 @@ export const HomePage: React.FC = () => {
     <>
       <Helmet>
         <title>
-          Kinvia - Digital Family Tree Builder | Create Your Family Heritage
-          Online
+          Kinvia - Digital Family Tree Builder | Create Your Family Tree Online
         </title>
         <meta
           name="description"
@@ -201,7 +192,7 @@ export const HomePage: React.FC = () => {
         />
         <meta
           name="keywords"
-          content="family tree, genealogy, family history, family tree maker, Indian family tree, वंशावली, परिवार वृक्ष, family heritage, ancestry, lineage"
+          content="family tree, genealogy, family history, family tree maker, Indian family tree, वंशावली, परिवार वृक्ष, ancestry, lineage"
         />
         <meta
           property="og:title"
@@ -353,20 +344,6 @@ export const HomePage: React.FC = () => {
               }}
             >
               Build Your Tree
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              component={Link}
-              to="/heritage"
-              sx={{
-                borderColor: "white",
-                color: "white",
-                fontWeight: "bold",
-                "&:hover": { bgcolor: "rgba(255,255,255,0.1)" },
-              }}
-            >
-              Explore Heritage
             </Button>
           </Stack>
         </Container>
@@ -705,15 +682,14 @@ export const HomePage: React.FC = () => {
             paragraph
             sx={{ maxWidth: 600, mx: "auto" }}
           >
-            Kinvia is a modern platform dedicated to preserving family heritage
+            Kinvia is a modern platform dedicated to preserving family stories
             and strengthening family connections. We believe that every family
             has a unique story worth preserving for future generations.
           </Typography>
           <Typography variant="body1" sx={{ maxWidth: 600, mx: "auto" }}>
-            Whether you're documenting your lineage, celebrating your cultural
-            heritage, or connecting with family members professionally, Kinvia
-            provides the tools you need to build and maintain your family
-            network.
+            Whether you're documenting your lineage or connecting with family
+            members professionally, Kinvia provides the tools you need to build
+            and maintain your family network.
           </Typography>
         </Box>
 

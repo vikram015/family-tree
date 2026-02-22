@@ -137,7 +137,14 @@ export const SourceSelect = memo(function SourceSelect({
   const selectedItem = getSelectedItem();
 
   return (
-    <FormControl sx={{ minWidth: 350 }} size="small">
+    <FormControl
+      sx={{
+        width: { xs: "100%", sm: "auto" },
+        minWidth: { xs: "100%", sm: 320 },
+        maxWidth: "calc(100vw - 32px)",
+      }}
+      size="small"
+    >
       <InputLabel id="source-select-label">Family Tree</InputLabel>
       <Select
         labelId="source-select-label"

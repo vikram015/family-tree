@@ -1,5 +1,9 @@
-import * as d3 from 'd3';
-import _ from 'lodash';
+import { select } from 'd3-selection';
+import { zoom as d3Zoom, zoomIdentity } from 'd3-zoom';
+import { tree as d3tree } from 'd3-hierarchy';
+import { line, curveStepAfter } from 'd3-shape';
+import 'd3-transition';
+import { filter, forEach, get, map } from 'lodash-es';
 
 class TreeBuilder {
   static DEBUG_LEVEL = 0;
@@ -28,9 +32,9 @@ class TreeBuilder {
     this.nodeSize = opts.callbacks.nodeSize.call(
       this,
       // filter hidden and marriage nodes
-      _.filter(
+      filter(
         this.allNodes,
-        (node: any) => !(node.hidden || _.get(node, 'data.isMarriage'))
+        (node: any) => !(node.hidden || get(node, 'data.isMarriage'))
       ),
       opts.nodeWidth,
       opts.callbacks.textRenderer
@@ -38,9 +42,9 @@ class TreeBuilder {
     this.marriageSize = opts.callbacks.marriageSize.call(
       this,
       // filter hidden and non marriage nodes
-      _.filter(
+      filter(
         this.allNodes,
-        (node: any) => !node.hidden && _.get(node, 'data.isMarriage')
+        (node: any) => !node.hidden && get(node, 'data.isMarriage')
       ),
       this.opts.marriageNodeSize
     );
@@ -58,8 +62,7 @@ class TreeBuilder {
     // create zoom handler
     // ... inside create() method ...
 
-    const zoom = (this.zoom = d3
-      .zoom()
+    const zoom = (this.zoom = d3Zoom()
       .scaleExtent([0.1, 10])
       // Optimize filter: Only allow left mouse button or touch (ignore right-click)
       .filter(function(event) {
@@ -70,8 +73,7 @@ class TreeBuilder {
       }));
 
     // make a svg
-    const svg = (this.svg = d3
-      .select(opts.target)
+    const svg = (this.svg = select(opts.target)
       .append('svg')
       .style('width', '100%')      // Force width to fill container
       .style('height', '100%')     // Force height to fill container
@@ -126,12 +128,11 @@ class TreeBuilder {
     // set zoom identity
     svg.call(
       zoom.transform as any,
-      d3.zoomIdentity.translate(width / 2, opts.margin.top).scale(1)
+      zoomIdentity.translate(width / 2, opts.margin.top).scale(1)
     );
 
     // Compute the layout.
-    this.tree = d3
-      .tree()
+    this.tree = d3tree()
       .nodeSize([
         nodeSize[0] * 2,
         opts.callbacks.nodeHeightSeperation.call(this, nodeSize[0], nodeSize[1])
@@ -343,9 +344,8 @@ class TreeBuilder {
       }
     ];
 
-    let fun = d3
-      .line()
-      .curve(d3.curveStepAfter)
+    let fun = line()
+      .curve(curveStepAfter)
       .x(function (d: any) {
         return d.x;
       })
@@ -358,7 +358,7 @@ class TreeBuilder {
   _linkSiblings() {
     const nodeMap = new Map(this.allNodes.map((n: any) => [n.data.id, n]));
 
-    _.forEach(this.siblings, function (d: any) {
+    forEach(this.siblings, function (d: any) {
       const start = nodeMap.get(d.source.id);
       const end = nodeMap.get(d.target.id);
 
@@ -395,7 +395,7 @@ class TreeBuilder {
         { x: d.target.marriageNode.x, y: d.source.y },
         { x: d.target.x, y: d.target.y }
       ];
-      return d3.line()
+      return line()
         .x(function (p: any) { return p.x; })
         .y(function (p: any) { return p.y; })(linedata as any);
     }
@@ -447,9 +447,8 @@ class TreeBuilder {
       }
     ];
 
-    let fun = d3
-      .line()
-      .curve(d3.curveStepAfter)
+    let fun = line()
+      .curve(curveStepAfter)
       .x(function (d: any) {
         return d.x;
       })
@@ -482,7 +481,7 @@ class TreeBuilder {
   }
 
   static _marriageSize(nodes: any[], size: number) {
-    _.map(nodes, function (n: any) {
+    map(nodes, function (n: any) {
       if (!n.data.hidden) {
         n.cHeight = size;
         n.cWidth = size;

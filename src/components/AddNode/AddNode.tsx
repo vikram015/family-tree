@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Node, RelType } from "relatives-tree/lib/types";
 import {
   Box,
@@ -20,7 +26,6 @@ import {
   ToggleButtonGroup,
   Switch,
 } from "@mui/material";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
@@ -28,7 +33,12 @@ import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { SupabaseService } from "../../services/supabaseService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
-import ImageCropper from "../ImageCropper/ImageCropper";
+const DatePicker = React.lazy(() =>
+  import("@mui/x-date-pickers/DatePicker").then((m) => ({
+    default: m.DatePicker,
+  })),
+);
+const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
 
 interface AddNodeProps {
   targetId?: string; // id of node in relation to which we add (e.g. parent/child/spouse)
@@ -674,19 +684,21 @@ const AddNode: React.FC<AddNodeProps> = ({
                 </FormControl>
               )}
 
-              <ImageCropper
-                currentPhoto={photoPreview}
-                onCropped={(blob) => {
-                  setPhotoBlob(blob);
-                  setPhotoPreview(URL.createObjectURL(blob));
-                }}
-                onRemove={() => {
-                  setPhotoBlob(null);
-                  setPhotoPreview(undefined);
-                }}
-                uploading={photoUploading}
-                previewSize={70}
-              />
+              <Suspense fallback={<Box sx={{ height: 88 }} />}>
+                <ImageCropper
+                  currentPhoto={photoPreview}
+                  onCropped={(blob) => {
+                    setPhotoBlob(blob);
+                    setPhotoPreview(URL.createObjectURL(blob));
+                  }}
+                  onRemove={() => {
+                    setPhotoBlob(null);
+                    setPhotoPreview(undefined);
+                  }}
+                  uploading={photoUploading}
+                  previewSize={70}
+                />
+              </Suspense>
 
               <TextField
                 label="Name"
@@ -697,13 +709,19 @@ const AddNode: React.FC<AddNodeProps> = ({
                 autoFocus
               />
 
-              <DatePicker
-                label="Date of birth (optional)"
-                value={dob ? dayjs(dob) : null}
-                onChange={(val) => setDob(val ? val.format("YYYY-MM-DD") : "")}
-                slotProps={{ textField: { fullWidth: true } }}
-                format="DD/MM/YYYY"
-              />
+              <Suspense
+                fallback={<TextField fullWidth label="Date of birth" />}
+              >
+                <DatePicker
+                  label="Date of birth (optional)"
+                  value={dob ? dayjs(dob) : null}
+                  onChange={(val) =>
+                    setDob(val ? val.format("YYYY-MM-DD") : "")
+                  }
+                  slotProps={{ textField: { fullWidth: true } }}
+                  format="DD/MM/YYYY"
+                />
+              </Suspense>
 
               <TextField
                 label="Gotra"
@@ -752,15 +770,19 @@ const AddNode: React.FC<AddNodeProps> = ({
               />
 
               {!isAlive && (
-                <DatePicker
-                  label="Deceased Date"
-                  value={deceasedDate ? dayjs(deceasedDate) : null}
-                  onChange={(val) =>
-                    setDeceasedDate(val ? val.format("YYYY-MM-DD") : "")
-                  }
-                  slotProps={{ textField: { fullWidth: true } }}
-                  format="DD/MM/YYYY"
-                />
+                <Suspense
+                  fallback={<TextField fullWidth label="Deceased Date" />}
+                >
+                  <DatePicker
+                    label="Deceased Date"
+                    value={deceasedDate ? dayjs(deceasedDate) : null}
+                    onChange={(val) =>
+                      setDeceasedDate(val ? val.format("YYYY-MM-DD") : "")
+                    }
+                    slotProps={{ textField: { fullWidth: true } }}
+                    format="DD/MM/YYYY"
+                  />
+                </Suspense>
               )}
 
               <FormControl>

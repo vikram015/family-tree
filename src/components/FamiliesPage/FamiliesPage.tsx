@@ -73,6 +73,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     open: false,
     targetTreeId: null,
   });
+  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
 
   const loadTreeData = useCallback(
     async (keepRoot = false) => {
@@ -487,6 +488,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           // We store it as: new_person is the related_person, but mark it as reverse
           relationType = "parent";
           relatedPersonId = targetId;
+          // If the child already has another parent, pass it so the backend
+          // can maintain spouse linkage between parents.
+          const targetNode = nodes.find((n) => n.id === targetId);
+          if (targetNode?.parents && targetNode.parents.length > 0) {
+            const preferredParent = targetNode.parents.find((p) => {
+              const parentNode = nodes.find((n) => n.id === p.id);
+              return coreNode.gender
+                ? parentNode?.gender && parentNode.gender !== coreNode.gender
+                : true;
+            });
+            relatedPersonId2 = preferredParent?.id || targetNode.parents[0].id;
+          }
           isReverseRelation = true;
         }
 
@@ -529,7 +542,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
       return undefined;
     },
-    [hasPermission, treeId, loadTreeData, villageId],
+    [hasPermission, treeId, loadTreeData, villageId, nodes],
   );
 
   // Handler for "View Details" — opens NodeDetails in details view
@@ -630,9 +643,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   }, [nodes]);
 
   return (
-    <>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+        width: "100%",
+      }}
+    >
       <Helmet>
-        <title>My Family Tree - Kinvia | Build Your Family Heritage</title>
+        <title>My Family Tree - Kinvia | Build Your Family Tree</title>
         <meta
           name="description"
           content="Create and manage your interactive family tree. Visualize relationships, add family members, and preserve your family history on Kinvia."
@@ -647,20 +668,20 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           content="View and manage your interactive family tree with Kinvia."
         />
       </Helmet>
-      <Box
-        sx={{
-          display: "flex",
-          gap: 2,
-          p: 2,
-          borderBottom: 1,
-          borderColor: "divider",
-          alignItems: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <SourceSelect onChange={onSourceChange} />
-        {(isSuperAdmin() || isApproved) && (
+      {(isSuperAdmin() || isApproved) && (
+        <Box
+          sx={{
+            position: "fixed",
+            right: { xs: 16, sm: 24 },
+            bottom: { xs: 16, sm: 24 },
+            zIndex: 1200,
+            opacity: isMobileSheetOpen ? 0 : 1,
+            pointerEvents: isMobileSheetOpen ? "none" : "auto",
+            transition: "opacity 0.2s ease",
+          }}
+        >
           <AddTree
+            variant="fab"
             onCreate={(createdTreeId) => {
               // Move to the newly created tree
               setTreeId(createdTreeId);
@@ -668,8 +689,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               onCreate?.(createdTreeId);
             }}
           />
-        )}
-      </Box>
+        </Box>
+      )}
       {isAdmin() && !isApproved && (
         <Alert severity="info" sx={{ mx: 2, mt: 1 }}>
           Your account is pending approval. You can view trees but cannot make
@@ -766,89 +787,118 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           </Box>
         </Box>
       )}
-      {isLoading ? (
+      <Box
+        sx={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
         <Box
           sx={{
-            flex: 1,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            flexDirection: "column",
-            gap: 2,
+            position: "absolute",
+            top: 10,
+            left: 10,
+            right: { xs: 10, sm: "auto" },
+            width: { xs: "calc(100% - 20px)", sm: "auto" },
+            zIndex: 20,
+            background: "rgba(255,255,255,0.92)",
+            padding: "4px 8px",
+            borderRadius: 1,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
           }}
         >
-          <CircularProgress />
-          <Typography variant="body1" sx={{ color: "text.secondary" }}>
-            Loading tree...
-          </Typography>
+          <SourceSelect onChange={onSourceChange} />
         </Box>
-      ) : nodes.length > 0 ? (
-        <Box
-          sx={{
-            flex: 1,
-            position: "relative",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          {rootId && nodes.find((n) => n.id === rootId) ? (
-            <DTreeComponent
-              nodes={nodes}
-              rootId={rootId}
-              onNodeClick={(id) => {
-                setNodeDetailsInitialView(undefined);
-                setNodeDetailsAddInfo(undefined);
-                setSelectId(id);
-              }}
-              onEditNode={handleEditNode}
-              onAddRelative={handleAddRelative}
-              onViewDetails={handleViewDetails}
-              currentTreeId={treeId}
-              onExternalTreeClick={(tid) => {
-                setExternalTreeConfirm({ open: true, targetTreeId: tid });
-              }}
-            />
-          ) : (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "100%",
-              }}
-            >
-              <Typography>
-                Unable to find root node. Please check tree data.
-              </Typography>
-            </Box>
-          )}
-        </Box>
-      ) : (
-        treeId &&
-        treeId !== "" && (
-          <Container maxWidth="sm" sx={{ mt: 8, textAlign: "center" }}>
-            <Typography variant="h5" gutterBottom>
-              This tree is empty.
+        {isLoading ? (
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              flexDirection: "column",
+              gap: 2,
+            }}
+          >
+            <CircularProgress />
+            <Typography variant="body1" sx={{ color: "text.secondary" }}>
+              Loading tree...
             </Typography>
-            <Box
-              sx={{
-                mt: 3,
-                display: "flex",
-                gap: 2,
-                justifyContent: "center",
-              }}
-            >
-              <Button
-                variant="contained"
-                onClick={() => setShowAddStartingNode(true)}
+          </Box>
+        ) : nodes.length > 0 ? (
+          <Box
+            sx={{
+              flex: 1,
+              position: "relative",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {rootId && nodes.find((n) => n.id === rootId) ? (
+              <DTreeComponent
+                nodes={nodes}
+                rootId={rootId}
+                onNodeClick={(id) => {
+                  setNodeDetailsInitialView(undefined);
+                  setNodeDetailsAddInfo(undefined);
+                  setSelectId(id);
+                }}
+                onEditNode={handleEditNode}
+                onDelete={onDelete}
+                onAddRelative={handleAddRelative}
+                onViewDetails={handleViewDetails}
+                currentTreeId={treeId}
+                onMobileSheetChange={setIsMobileSheetOpen}
+                onExternalTreeClick={(tid) => {
+                  setExternalTreeConfirm({ open: true, targetTreeId: tid });
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  height: "100%",
+                }}
               >
-                Create First Node
-              </Button>
-            </Box>
-          </Container>
-        )
-      )}
+                <Typography>
+                  Unable to find root node. Please check tree data.
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          treeId &&
+          treeId !== "" && (
+            <Container maxWidth="sm" sx={{ mt: 8, textAlign: "center" }}>
+              <Typography variant="h5" gutterBottom>
+                This tree is empty.
+              </Typography>
+              <Box
+                sx={{
+                  mt: 3,
+                  display: "flex",
+                  gap: 2,
+                  justifyContent: "center",
+                }}
+              >
+                <Button
+                  variant="contained"
+                  onClick={() => setShowAddStartingNode(true)}
+                >
+                  Create First Node
+                </Button>
+              </Box>
+            </Container>
+          )
+        )}
+      </Box>
       <Dialog
         open={showAddStartingNode}
         onClose={() => setShowAddStartingNode(false)}
@@ -983,6 +1033,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           initialAddInfo={nodeDetailsAddInfo}
         />
       )}
-    </>
+    </Box>
   );
 };

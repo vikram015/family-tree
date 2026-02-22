@@ -1,12 +1,14 @@
-import * as d3 from 'd3';
-import _ from 'lodash';
+import { hierarchy } from 'd3-hierarchy';
+import { zoomIdentity } from 'd3-zoom';
+import 'd3-transition';
+import { defaultsDeep, find, forEach } from 'lodash-es';
 import TreeBuilder from './builder';
 
 const dTree = {
   VERSION: '2.4.1',
 
   init: function (data: any[], options: any = {}) {
-    var opts = _.defaultsDeep(options || {}, {
+    var opts = defaultsDeep(options || {}, {
       target: '#graph',
       debug: false,
       width: 600,
@@ -97,7 +99,7 @@ const dTree = {
         .duration(duration)
         .call(
           treeBuilder.zoom.transform,
-          d3.zoomIdentity
+          zoomIdentity
             .translate(opts.width / 2, opts.height / 2)
             .scale(zoom)
             .translate(-x, -y)
@@ -111,12 +113,12 @@ const dTree = {
           .duration(duration)
           .call(
             treeBuilder.zoom.transform,
-            d3.zoomIdentity.translate(opts.width / 2, opts.margin.top).scale(1)
+            zoomIdentity.translate(opts.width / 2, opts.margin.top).scale(1)
           );
       },
       zoomTo: _zoomTo,
       zoomToNode: function (nodeId: string, zoom = 2, duration = 500) {
-        const node = _.find(treeBuilder.allNodes, { data: { id: nodeId } });
+        const node = find(treeBuilder.allNodes, { data: { id: nodeId } });
         if (node) {
           _zoomTo(node.x, node.y, zoom, duration);
         }
@@ -134,7 +136,7 @@ const dTree = {
           .duration(duration)
           .call(
             treeBuilder.zoom.transform,
-            d3.zoomIdentity
+            zoomIdentity
               .translate(
                 fullWidth / 2 - scale * (groupBounds.x + width / 2),
                 fullHeight / 2 - scale * (groupBounds.y + height / 2)
@@ -193,7 +195,7 @@ const dTree = {
       dTree._sortPersons(person.children, opts);
 
       // add "direct" children
-      _.forEach(person.children, function (child: any) {
+      forEach(person.children, function (child: any) {
         reconstructTree(child, node);
       });
 
@@ -205,7 +207,7 @@ const dTree = {
       dTree._sortMarriages(person.marriages, opts);
 
       // go through marriage
-      _.forEach(person.marriages, function (marriage: any, index: number) {
+      forEach(person.marriages, function (marriage: any, index: number) {
         var m: any = {
           name: '',
           id: id++,
@@ -245,7 +247,7 @@ const dTree = {
         }
 
         dTree._sortPersons(marriage.children, opts);
-        _.forEach(marriage.children, function (child: any) {
+        forEach(marriage.children, function (child: any) {
           reconstructTree(child, m);
         });
 
@@ -277,12 +279,12 @@ const dTree = {
       rightNeighbors.forEach((n) => parent.children.push(n));
     };
 
-    _.forEach(data, function (person: any) {
+    forEach(data, function (person: any) {
       reconstructTree(person, root);
     });
 
     return {
-      root: d3.hierarchy(root),
+      root: hierarchy(root),
       siblings: siblings
     };
   },

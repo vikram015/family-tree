@@ -4,6 +4,8 @@ import { SupabaseService } from '../../services/supabaseService';
 interface Village {
   id: string;
   name: string;
+  district_id?: string;
+  created_at?: string;
 }
 
 interface VillageState {
@@ -36,6 +38,8 @@ export const fetchVillages = createAsyncThunk(
       const villageList: Village[] = villageData.map((village: any) => ({
         id: village.id,
         name: village.name,
+        district_id: village.district_id || village.district?.id || undefined,
+        created_at: village.created_at,
       }));
 
       return villageList;

@@ -60,6 +60,41 @@ BEGIN
         -- Reverse: related_person_id → parent → new_person (adding a parent)
         INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
         VALUES (p_related_person_id, v_new_person_id, 'parent', p_relation_subtype, now(), now());
+
+        -- If the child already has another parent, link them as spouses
+        IF p_related_person_id_2 IS NOT NULL THEN
+          v_spouse_id := p_related_person_id_2;
+        ELSE
+          SELECT related_person_id INTO v_spouse_id
+          FROM people_relations
+          WHERE person_id = p_related_person_id
+            AND relation_type = 'parent'
+            AND related_person_id != v_new_person_id
+          LIMIT 1;
+        END IF;
+
+        IF v_spouse_id IS NOT NULL THEN
+          -- Create bidirectional spouse relationships if missing
+          INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
+          SELECT v_new_person_id, v_spouse_id, 'spouse', 'married', now(), now()
+          WHERE NOT EXISTS (
+            SELECT 1 FROM people_relations pr
+            WHERE pr.person_id = v_new_person_id
+              AND pr.related_person_id = v_spouse_id
+              AND pr.relation_type = 'spouse'
+          );
+
+          INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
+          SELECT v_spouse_id, v_new_person_id, 'spouse', 'married', now(), now()
+          WHERE NOT EXISTS (
+            SELECT 1 FROM people_relations pr
+            WHERE pr.person_id = v_spouse_id
+              AND pr.related_person_id = v_new_person_id
+              AND pr.relation_type = 'spouse'
+          );
+
+          v_affected_ids := array_append(v_affected_ids, v_spouse_id);
+        END IF;
       ELSE
         -- Normal: new_person → parent → related_person_id (first parent)
         INSERT INTO people_relations (person_id, related_person_id, relation_type, relation_subtype, created_at, modified_at)
