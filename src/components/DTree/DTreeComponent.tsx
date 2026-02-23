@@ -35,6 +35,8 @@ interface DTreeNode {
 interface DTreeComponentProps {
   nodes: FNode[];
   rootId: string;
+  autoExpandNodeId?: string | null;
+  onAutoExpandHandled?: () => void;
   onNodeClick: (nodeId: string) => void;
   onEditNode?: (nodeId: string) => void;
   onAddRelative?: (
@@ -51,6 +53,8 @@ interface DTreeComponentProps {
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
   rootId,
+  autoExpandNodeId,
+  onAutoExpandHandled,
   onNodeClick,
   onEditNode,
   onAddRelative,
@@ -178,6 +182,19 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     addMenuNodeIdRef.current = addMenuNodeId;
   }, [addMenuNodeId]);
 
+  // Parent-driven focus request after add-child.
+  // In collapsed mode, this expands the requested node's branch.
+  useEffect(() => {
+    if (!autoExpandNodeId) return;
+
+    if (!showFullTree) {
+      setAddMenuNodeId(null);
+      setMainId(autoExpandNodeId);
+    }
+
+    onAutoExpandHandled?.();
+  }, [autoExpandNodeId, showFullTree, onAutoExpandHandled]);
+
   // Keep isMobile in sync and listen for resize
   useEffect(() => {
     isMobileRef.current = isMobile;
@@ -191,6 +208,19 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   // Center viewport on a person node (by their UUID, not dTree internal id).
   // Preserves the current zoom level and only pans.
   const centerOnNode = useCallback((personId: string) => {
+    const getNodePosition = (nodeEl: SVGGElement): { x: number; y: number } | null => {
+      const data = (nodeEl as any).__data__;
+      if (typeof data?.x === "number" && typeof data?.y === "number") {
+        return { x: data.x, y: data.y };
+      }
+      const transform = nodeEl.getAttribute("transform") || "";
+      const match = transform.match(
+        /translate\(\s*([-\d.]+)(?:[\s,]+)([-\d.]+)\s*\)/,
+      );
+      if (!match) return null;
+      return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+    };
+
     if (!containerRef.current || !treeRef.current) return;
     try {
       const svg = containerRef.current.querySelector("svg");
@@ -209,11 +239,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           ? treeRef.current.getBuilder()
           : null;
       if (!builder?.zoom || !builder?.svg) return;
-      const transform = (targetG as SVGGElement).getAttribute("transform");
-      const match = transform?.match(/translate\(([^,]+),([^)]+)\)/);
-      if (!match) return;
-      const nodeX = parseFloat(match[1]);
-      const nodeY = parseFloat(match[2]);
+      const nodePos = getNodePosition(targetG as SVGGElement);
+      if (!nodePos) return;
+      const nodeX = nodePos.x;
+      const nodeY = nodePos.y;
       const cw = containerRef.current.clientWidth;
       const ch = containerRef.current.clientHeight;
       // Keep current zoom scale so we only pan
@@ -248,13 +277,13 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         setMobileSheetNodeId(null);
       }
 
-      // Center the tapped node in the viewport (works in both full-tree and
-      // expand/collapse modes).  In expand/collapse mode the useEffect will
-      // rebuild the tree and re-center after, but this gives immediate feedback.
-      centerOnNodeRef.current(nodeId);
-
-      // When full tree mode is on, skip expand/collapse
-      if (showFullTree) return;
+      // In full-tree mode, center immediately and skip expand/collapse.
+      // In collapsed mode, center only once after expansion/rebuild to avoid
+      // double-pan flicker.
+      if (showFullTree) {
+        centerOnNodeRef.current(nodeId);
+        return;
+      }
 
       // If tapping the same node that's already focused, do nothing extra
       if (mainId === nodeId) {
@@ -597,6 +626,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         treeNode.marriages.push({
           extra: {
             relationType: spouse.type,
+            hasDeceasedPartner:
+              person.isAlive === false || spouseNode.isAlive === false,
           },
           spouse: {
             name: spouseNode.name,
@@ -954,9 +985,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       // Determine if mainId actually changed (vs just addMenuNodeId toggling)
       const mainIdChanged = mainId !== prevMainIdRef.current;
 
-      // Restore zoom state when tree structure hasn't fundamentally changed
-      // (e.g. only addMenuNodeId toggled, or no mainId set)
-      if (currentZoom && treeRef.current && (!mainId || !mainIdChanged)) {
+      // Restore previous zoom/pan state after rebuild so collapsed-mode focus
+      // changes don't jump to the default transform before centering.
+      if (currentZoom && treeRef.current) {
         try {
           if (typeof treeRef.current.getBuilder === "function") {
             const builder = treeRef.current.getBuilder();
@@ -969,53 +1000,13 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         }
       }
 
-      // Auto-center on the focused mainId node only when mainId actually changed
-      if (mainId && mainIdChanged && treeRef.current && containerRef.current) {
-        try {
-          const svg = containerRef.current.querySelector("svg");
-          if (svg) {
-            // Find the <g> node whose extra.id matches mainId
-            const allNodes = svg.querySelectorAll("g.node");
-            let targetEl: SVGGElement | null = null;
-            allNodes.forEach((g) => {
-              const textEl = g.querySelector("text");
-              // We stored extra.id in the node data; match via the g element's __data__
-              const d = (g as any).__data__;
-              if (d?.data?.extra?.id === mainId) {
-                targetEl = g as SVGGElement;
-              }
-            });
-
-            if (targetEl && typeof treeRef.current.getBuilder === "function") {
-              const builder = treeRef.current.getBuilder();
-              if (builder && builder.zoom && builder.svg) {
-                const transform = (targetEl as SVGGElement).getAttribute(
-                  "transform",
-                );
-                const match = transform?.match(/translate\(([^,]+),([^)]+)\)/);
-                if (match) {
-                  const nodeX = parseFloat(match[1]);
-                  const nodeY = parseFloat(match[2]);
-                  const cw = containerRef.current!.clientWidth;
-                  const ch = containerRef.current!.clientHeight;
-                  // Center the target node in the viewport
-                  const scale = 1;
-                  const tx = cw / 2 - nodeX * scale;
-                  const ty = ch / 2 - nodeY * scale;
-                  const newTransform = zoomIdentity
-                    .translate(tx, ty)
-                    .scale(scale);
-                  builder.svg
-                    .transition()
-                    .duration(300)
-                    .call(builder.zoom.transform, newTransform);
-                }
-              }
-            }
-          }
-        } catch (e) {
-          console.warn("Failed to center on mainId node:", e);
-        }
+      // Auto-center on the focused mainId only when mainId actually changed.
+      // Reuse the shared centering helper so full-tree and collapsed modes
+      // follow identical pan/zoom behavior.
+      if (mainId && mainIdChanged) {
+        setTimeout(() => {
+          centerOnNodeRef.current(mainId);
+        }, 0);
       }
 
       // Update refs to current state

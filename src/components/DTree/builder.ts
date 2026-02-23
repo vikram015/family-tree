@@ -7,6 +7,7 @@ import { filter, forEach, get, map } from 'lodash-es';
 
 class TreeBuilder {
   static DEBUG_LEVEL = 0;
+  static CONNECTOR_RADIUS = 16;
   root: any;
   siblings: any[];
   opts: any;
@@ -190,7 +191,15 @@ class TreeBuilder {
       .data(this.siblings)
       .enter()
       .append('path')
-      .attr('class', opts.styles.marriage)
+      .attr('class', function (d: any) {
+        const relationType = d?.target?.marriageNode?.data?.extra?.relationType;
+        const hasDeceasedPartner =
+          d?.target?.marriageNode?.data?.extra?.hasDeceasedPartner === true;
+        const classes = [opts.styles.marriage];
+        if (relationType === 'divorced') classes.push('divorced');
+        if (hasDeceasedPartner) classes.push('deceased');
+        return classes.join(' ');
+      })
       .attr('d', this._siblingLine.bind(this))
       .style('opacity', duration === 0 ? 1 : 0);
 
@@ -350,7 +359,7 @@ class TreeBuilder {
       }
     ];
 
-    return this._roundedOrthogonalPath(linedata, 8);
+    return this._roundedOrthogonalPath(linedata, TreeBuilder.CONNECTOR_RADIUS);
   }
 
   _linkSiblings() {
@@ -401,12 +410,13 @@ class TreeBuilder {
     // Determine direction of the spouse relative to the node
     let isRight = d.target.x > d.source.x;
 
-    // For multiple marriages, alternate height to avoid overlaps
-    // d.number 0 (Right) and 1 (Left) are "Inner" marriages (close to node)
-    // d.number 2 (Right) and 3 (Left) are "Outer" marriages (farther)
-    // We lift the connection line for outer marriages
+    // For multiple marriages, alternate height to avoid overlaps.
+    // d.number 0/1 are inner connections, d.number >= 2 are outer connections.
+    // Outer connections are lifted with extra clearance so they don't intersect
+    // top-right UI affordances (e.g. external tree icon) on neighboring spouse cards.
     if (d.number > 1) {
-      ny -= Math.round((nodeHeight * 6) / 10);
+      const iconClearance = Math.round(nodeHeight / 2 + 16);
+      ny -= iconClearance;
     }
 
     // Determine horizontal offset from the node
@@ -445,7 +455,7 @@ class TreeBuilder {
       }
     ];
 
-    return this._roundedOrthogonalPath(linedata, 8);
+    return this._roundedOrthogonalPath(linedata, TreeBuilder.CONNECTOR_RADIUS);
   }
 
   _roundedOrthogonalPath(points: Array<{ x: number; y: number }>, radius: number) {
@@ -507,13 +517,18 @@ class TreeBuilder {
       .map((s: any) => {
         const marriageNode = s.target.marriageNode;
         const relationType = marriageNode?.data?.extra?.relationType;
+        const hasDeceasedPartner =
+          marriageNode?.data?.extra?.hasDeceasedPartner === true;
         const isDivorced = relationType === 'divorced';
+        const stateClass = isDivorced ? 'divorced' : 'married';
+        const deceasedClass = hasDeceasedPartner ? ' deceased' : '';
+
         return {
           id: marriageNode?.data?.id ?? `m-${s.source?.id}-${s.target?.id}`,
           x: marriageNode.x,
           y: marriageNode.y,
-          icon: isDivorced ? '💔' : '❤',
-          className: isDivorced ? 'marriage-marker divorced' : 'marriage-marker married'
+          icon: isDivorced ? '\u{1F494}' : '\u2764',
+          className: `marriage-marker ${stateClass}${deceasedClass}`
         };
       })
       .filter((m: any, index: number, arr: any[]) => {
@@ -531,20 +546,22 @@ class TreeBuilder {
 
     markers
       .append('circle')
-      .attr('class', (d: any) =>
-        d.className.includes('divorced')
+      .attr('class', (d: any) => {
+        const base = d.className.includes('divorced')
           ? 'marriage-marker-circle divorced'
-          : 'marriage-marker-circle married'
-      )
+          : 'marriage-marker-circle married';
+        return d.className.includes('deceased') ? `${base} deceased` : base;
+      })
       .attr('r', 8);
 
     markers
       .append('text')
-      .attr('class', (d: any) =>
-        d.className.includes('divorced')
+      .attr('class', (d: any) => {
+        const base = d.className.includes('divorced')
           ? 'marriage-marker-icon divorced'
-          : 'marriage-marker-icon married'
-      )
+          : 'marriage-marker-icon married';
+        return d.className.includes('deceased') ? `${base} deceased` : base;
+      })
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .text((d: any) => d.icon);
@@ -635,3 +652,5 @@ class TreeBuilder {
 }
 
 export default TreeBuilder;
+
+

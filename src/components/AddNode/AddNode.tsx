@@ -422,6 +422,9 @@ const AddNode: React.FC<AddNodeProps> = ({
     name,
     dob,
     gender,
+    bloodGroup,
+    isAlive,
+    deceasedDate,
     gotra,
     village,
     customFields,
@@ -433,6 +436,7 @@ const AddNode: React.FC<AddNodeProps> = ({
     selectedRelType,
     mode,
     selectedPerson,
+    photoBlob,
   ]);
 
   return (

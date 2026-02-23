@@ -263,7 +263,7 @@ export function renderNodeCardSvg(
 
   // --- Name text ---
   svg += `<text x="${dim.text_x}" y="${dim.text_y}" `;
-  svg += `font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" `;
+  svg += `font-family="'Manrope', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" `;
   svg += `font-size="13" font-weight="600" fill="${colors.text}" `;
   svg += `dominant-baseline="auto" cursor="pointer">`;
   svg += escapedName;
@@ -271,14 +271,14 @@ export function renderNodeCardSvg(
 
   // --- Subtitle (DOB or children count) ---
   const subtitleParts: string[] = [];
-  if (isDeceased) subtitleParts.push("🕉 Deceased");
+  if (isDeceased) subtitleParts.push("Deceased");
   if (extra?.dob) subtitleParts.push(extra.dob);
   else if (extra?.childrenCount)
     subtitleParts.push(`${extra.childrenCount} children`);
-  const subtitle = subtitleParts.join(" • ");
+  const subtitle = subtitleParts.join(" | ");
   if (subtitle) {
     svg += `<text x="${dim.text_x}" y="${dim.text_y + 16}" `;
-    svg += `font-family="'Segoe UI', Roboto, sans-serif" `;
+    svg += `font-family="'Manrope', 'Segoe UI', Roboto, sans-serif" `;
     svg += `font-size="10" fill="${colors.text}" opacity="0.6" `;
     svg += `dominant-baseline="auto" cursor="pointer">`;
     svg += escapeXml(subtitle);
@@ -304,7 +304,7 @@ export function renderNodeCardSvg(
     const linkR = 10;
     svg += `<g class="external-tree-icon" data-tree-id="${extra.treeId}" cursor="pointer">`;
     svg += `<circle cx="${linkX}" cy="${linkY}" r="${linkR}" fill="white" stroke="#1976d2" stroke-width="1.5"/>`;
-    svg += `<text x="${linkX}" y="${linkY + 1}" text-anchor="middle" dominant-baseline="central" font-size="11">🔗</text>`;
+    svg += `<text x="${linkX}" y="${linkY + 1}" text-anchor="middle" dominant-baseline="central" font-size="11">></text>`;
     svg += `</g>`;
   }
 
@@ -372,7 +372,7 @@ export function renderPlaceholderCardSvg(
 
   // Label text
   svg += `<text x="${dim.text_x}" y="${dim.h / 2 + 1}" `;
-  svg += `font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" `;
+  svg += `font-family="'Manrope', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" `;
   svg += `font-size="12" font-weight="500" fill="${colors.text}" opacity="0.7" `;
   svg += `dominant-baseline="central" cursor="pointer">`;
   svg += escapeXml(name);
@@ -396,3 +396,4 @@ export function renderMarriageNodeSvg(
   const r = size / 2;
   return `<circle cx="${r}" cy="${r}" r="${r}" fill="black" class="${nodeClass}" id="node${id}"/>`;
 }
+

@@ -48,6 +48,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [rootId, setRootId] = useState("");
   const [villageId, setVillageId] = useState<string | undefined>(undefined);
   const [selectId, setSelectId] = useState<string>();
+  const [autoExpandNodeId, setAutoExpandNodeId] = useState<string | null>(null);
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
   // Track initial view & add info for NodeDetails (when opening from placeholder nodes)
   const [nodeDetailsInitialView, setNodeDetailsInitialView] = useState<
@@ -530,6 +531,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             // Fallback: full reload if procedure didn't return affected_nodes (old DB version)
             await loadTreeData(true);
           }
+          if (relation === "child" && targetId) {
+            setAutoExpandNodeId(targetId);
+          }
           return newPerson.person_id;
         }
       } catch (err) {
@@ -843,6 +847,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               <DTreeComponent
                 nodes={nodes}
                 rootId={rootId}
+                autoExpandNodeId={autoExpandNodeId}
+                onAutoExpandHandled={() => setAutoExpandNodeId(null)}
                 onNodeClick={(id) => {
                   setNodeDetailsInitialView(undefined);
                   setNodeDetailsAddInfo(undefined);
