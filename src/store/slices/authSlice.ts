@@ -18,6 +18,17 @@ const initialState: AuthState = {
   resetPasswordMode: false,
 };
 
+function isAuthTokenError(message?: string): boolean {
+  if (!message) return false;
+  const msg = message.toLowerCase();
+  return (
+    msg.includes('jwt') ||
+    msg.includes('token') ||
+    msg.includes('session') ||
+    msg.includes('auth session missing')
+  );
+}
+
 // Async thunks
 export const initializeAuth = createAsyncThunk(
   'auth/initialize',
@@ -45,6 +56,9 @@ export const initializeAuth = createAsyncThunk(
         userProfile: userProfile ? { id: user.id, ...userProfile } as AppUser : null,
       };
     } catch (error: any) {
+      if (isAuthTokenError(error?.message)) {
+        return { currentUser: null, userProfile: null };
+      }
       return rejectWithValue(error.message);
     }
   }
@@ -239,6 +253,9 @@ export const updateAuthState = createAsyncThunk(
 
       if (profileError) {
         console.error('Error fetching user profile:', profileError);
+        if (isAuthTokenError(profileError.message)) {
+          return { currentUser: null, userProfile: null };
+        }
         // Fallback to existing profile if IDs match to prevent "logout" on transient errors
         if (currentProfile && currentProfile.id === user.id) {
           return { currentUser: user, userProfile: currentProfile };
@@ -311,6 +328,9 @@ export const updateAuthState = createAsyncThunk(
         userProfile: newUserProfile,
       };
     } catch (error: any) {
+      if (isAuthTokenError(error?.message)) {
+        return { currentUser: null, userProfile: null };
+      }
       return rejectWithValue(error.message);
     }
   },
@@ -451,10 +471,20 @@ const authSlice = createSlice({
         state.error = null;
       })
       // Update auth state
+      .addCase(updateAuthState.pending, (state) => {
+        state.loading = true;
+      })
       .addCase(updateAuthState.fulfilled, (state, action) => {
         state.currentUser = action.payload.currentUser;
         state.userProfile = action.payload.userProfile;
         state.loading = false;
+        state.error = null;
+      })
+      .addCase(updateAuthState.rejected, (state, action) => {
+        state.currentUser = null;
+        state.userProfile = null;
+        state.loading = false;
+        state.error = action.payload as string;
       })
       // Link user to node
       .addCase(linkUserToNode.fulfilled, (state, action) => {

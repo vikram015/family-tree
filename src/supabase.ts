@@ -24,3 +24,25 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     }
   }
 });
+
+// Public read-only client.
+// It intentionally does not persist or attach user sessions, so queries that
+// are allowed for anon users keep working even if a stale/expired JWT exists
+// in the main auth client.
+export const supabasePublic = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'supabase-js-web-public'
+    }
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  }
+});

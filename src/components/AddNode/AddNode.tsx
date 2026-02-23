@@ -11,6 +11,7 @@ import {
   Typography,
   TextField,
   Button,
+  CircularProgress,
   FormControl,
   FormLabel,
   RadioGroup,
@@ -130,6 +131,8 @@ const AddNode: React.FC<AddNodeProps> = ({
     undefined,
   );
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDetails, setIsSavingDetails] = useState(false);
 
   // Load villages for the search dropdown
   useEffect(() => {
@@ -282,7 +285,10 @@ const AddNode: React.FC<AddNodeProps> = ({
   }, [onComplete, onCancel]);
 
   const handleSaveDetails = async () => {
+    if (isSavingDetails) return;
+    setIsSavingDetails(true);
     if (!savedNodeId) {
+      setIsSavingDetails(false);
       handleFlowComplete();
       return;
     }
@@ -322,26 +328,35 @@ const AddNode: React.FC<AddNodeProps> = ({
       }
     } catch (error) {
       console.error("Error saving details:", error);
+    } finally {
+      setIsSavingDetails(false);
     }
 
     handleFlowComplete();
   };
 
   const handleSave = useCallback(async () => {
+    if (isSaving) return;
+
     // If linking existing person
     if (mode === "link") {
       if (!selectedPerson) return;
-      onAdd?.(
-        {
-          id: selectedPerson.id,
-          name: selectedPerson.name,
-        } as unknown as Partial<FNode>, // Pass existing ID
-        relation,
-        targetId,
-        selectedRelType,
-        selectedOtherParentId,
-      );
-      handleCancel();
+      setIsSaving(true);
+      try {
+        await onAdd?.(
+          {
+            id: selectedPerson.id,
+            name: selectedPerson.name,
+          } as unknown as Partial<FNode>, // Pass existing ID
+          relation,
+          targetId,
+          selectedRelType,
+          selectedOtherParentId,
+        );
+        handleCancel();
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
 
@@ -357,53 +372,58 @@ const AddNode: React.FC<AddNodeProps> = ({
     };
 
     const processAdd = async () => {
+      setIsSaving(true);
       // prepare parents array: include targetId (if adding child) and optional other parent
-      let parents: Array<{ id: string; type?: RelType }> = [];
-      if (relation === "child" && targetId) {
-        parents.push({ id: targetId, type: selectedRelType });
-        if (selectedOtherParentId && selectedOtherParentId !== targetId) {
-          parents.push({ id: selectedOtherParentId, type: selectedRelType });
-        }
-      }
-
-      const newNode: Partial<any> = {
-        name: name.trim(),
-        dob: dob || undefined,
-        gender: (gender as any) || undefined,
-        bloodGroup: bloodGroup || undefined,
-        isAlive: isAlive,
-        deceasedDate: !isAlive && deceasedDate ? deceasedDate : undefined,
-        children: [],
-        parents: parents.length ? parents : undefined,
-        spouses: [],
-        customFields:
-          Object.keys(mergedFields).length > 0 ? mergedFields : undefined,
-      };
-
-      const resultId = await onAdd?.(
-        newNode,
-        relation,
-        targetId,
-        selectedRelType,
-        selectedOtherParentId,
-      );
-
-      if (resultId && typeof resultId === "string") {
-        // Upload photo if one was cropped
-        if (photoBlob) {
-          try {
-            setPhotoUploading(true);
-            await SupabaseService.uploadPersonPhoto(resultId, photoBlob);
-          } catch (err) {
-            console.error("Photo upload failed:", err);
-          } finally {
-            setPhotoUploading(false);
+      try {
+        let parents: Array<{ id: string; type?: RelType }> = [];
+        if (relation === "child" && targetId) {
+          parents.push({ id: targetId, type: selectedRelType });
+          if (selectedOtherParentId && selectedOtherParentId !== targetId) {
+            parents.push({ id: selectedOtherParentId, type: selectedRelType });
           }
         }
-        setSavedNodeId(resultId);
-        setStep(2);
-      } else {
-        handleCancel();
+
+        const newNode: Partial<any> = {
+          name: name.trim(),
+          dob: dob || undefined,
+          gender: (gender as any) || undefined,
+          bloodGroup: bloodGroup || undefined,
+          isAlive: isAlive,
+          deceasedDate: !isAlive && deceasedDate ? deceasedDate : undefined,
+          children: [],
+          parents: parents.length ? parents : undefined,
+          spouses: [],
+          customFields:
+            Object.keys(mergedFields).length > 0 ? mergedFields : undefined,
+        };
+
+        const resultId = await onAdd?.(
+          newNode,
+          relation,
+          targetId,
+          selectedRelType,
+          selectedOtherParentId,
+        );
+
+        if (resultId && typeof resultId === "string") {
+          // Upload photo if one was cropped
+          if (photoBlob) {
+            try {
+              setPhotoUploading(true);
+              await SupabaseService.uploadPersonPhoto(resultId, photoBlob);
+            } catch (err) {
+              console.error("Photo upload failed:", err);
+            } finally {
+              setPhotoUploading(false);
+            }
+          }
+          setSavedNodeId(resultId);
+          setStep(2);
+        } else {
+          handleCancel();
+        }
+      } finally {
+        setIsSaving(false);
       }
     };
 
@@ -437,6 +457,7 @@ const AddNode: React.FC<AddNodeProps> = ({
     mode,
     selectedPerson,
     photoBlob,
+    isSaving,
   ]);
 
   return (
@@ -529,12 +550,18 @@ const AddNode: React.FC<AddNodeProps> = ({
             <Button
               onClick={handleSaveDetails}
               variant="contained"
+              startIcon={
+                isSavingDetails ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : undefined
+              }
               disabled={
+                isSavingDetails ||
                 (occupationType === "business" && !businessName) ||
                 (occupationType === "job" && !jobTitle)
               }
             >
-              Save & Finish
+              {isSavingDetails ? "Saving..." : "Save & Finish"}
             </Button>
           </Box>
         </Stack>
@@ -835,9 +862,17 @@ const AddNode: React.FC<AddNodeProps> = ({
             <Button
               onClick={handleSave}
               variant="contained"
-              disabled={mode === "create" ? !name.trim() : !selectedPerson}
+              disabled={
+                isSaving ||
+                (mode === "create" ? !name.trim() : !selectedPerson)
+              }
+              startIcon={
+                isSaving ? (
+                  <CircularProgress size={14} color="inherit" />
+                ) : undefined
+              }
             >
-              {mode === "link" ? "Link" : "Save"}
+              {isSaving ? "Saving..." : mode === "link" ? "Link" : "Save"}
             </Button>
           </Box>
         </Stack>

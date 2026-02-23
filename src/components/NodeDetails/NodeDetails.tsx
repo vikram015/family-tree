@@ -10,6 +10,7 @@ import {
   Divider,
   TextField,
   Button,
+  CircularProgress,
   FormControl,
   FormLabel,
   RadioGroup,
@@ -116,6 +117,7 @@ export const NodeDetails = memo(function NodeDetails({
     string | undefined
   >(undefined);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Delete Dialog State
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -223,8 +225,10 @@ export const NodeDetails = memo(function NodeDetails({
   }, [currentUser, openLoginModal]);
 
   const handleSaveEdit = useCallback(async () => {
+    if (isSavingEdit) return;
     if (node && props.onUpdate) {
       try {
+        setIsSavingEdit(true);
         const updates: Partial<FNode> = {
           name: editedName.trim(),
           dob: editedDob.trim(),
@@ -247,9 +251,12 @@ export const NodeDetails = memo(function NodeDetails({
         setView("details");
       } catch (err) {
         console.error("NodeDetails: Error during update:", err);
+      } finally {
+        setIsSavingEdit(false);
       }
     }
   }, [
+    isSavingEdit,
     node,
     editedName,
     editedDob,
@@ -739,9 +746,14 @@ export const NodeDetails = memo(function NodeDetails({
               <Button
                 onClick={handleSaveEdit}
                 variant="contained"
-                disabled={!editedName.trim()}
+                disabled={isSavingEdit || !editedName.trim()}
+                startIcon={
+                  isSavingEdit ? (
+                    <CircularProgress size={14} color="inherit" />
+                  ) : undefined
+                }
               >
-                Save Changes
+                {isSavingEdit ? "Saving..." : "Save Changes"}
               </Button>
             </DialogActions>
           </>

@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, supabasePublic } from '../supabase';
 import { FNode } from '../components/model/FNode';
 
 /**
@@ -101,7 +101,7 @@ export const SupabaseService = {
    * Fetch all people for a specific tree with their relationships
    */
   async getPeopleByTree(treeId: string): Promise<PersonWithRelations[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select('*')
       .eq('tree_id', treeId);
@@ -127,7 +127,7 @@ export const SupabaseService = {
    */
   async getPeopleByVillage(villageId: string): Promise<PersonWithRelations[]> {
     // First get all trees in this village
-    const { data: trees, error: treesError } = await supabase
+    const { data: trees, error: treesError } = await supabasePublic
       .from('tree')
       .select('id')
       .eq('village_id', villageId);
@@ -137,7 +137,7 @@ export const SupabaseService = {
 
     // Get all people from all trees in this village
     const treeIds = trees.map(t => t.id);
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select('*')
       .in('tree_id', treeIds);
@@ -168,7 +168,7 @@ export const SupabaseService = {
     children?: Array<{ id: string; type: RelationType }>;
     spouses?: Array<{ id: string; type: RelationType }>;
   }> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_relations')
       .select('related_person_id, relation_type')
       .eq('person_id', personId);
@@ -200,7 +200,7 @@ export const SupabaseService = {
       }
 
       // For children, query from the other direction
-      const { data: childData } = await supabase
+      const { data: childData } = await supabasePublic
         .from('people_relations')
         .select('person_id, relation_type')
         .eq('related_person_id', personId)
@@ -222,7 +222,7 @@ export const SupabaseService = {
    * Calls the SQL procedure get_complete_tree_by_id
    */
   async getCompleteTreeById(treeId: string): Promise<CompleteTreeResponse> {
-    const { data, error } = await supabase.rpc('get_complete_tree_by_id', {
+    const { data, error } = await supabasePublic.rpc('get_complete_tree_by_id', {
       p_tree_id: treeId,
     });
 
@@ -237,7 +237,7 @@ export const SupabaseService = {
    * Fetch person by ID with relationships
    */
   async getPersonById(personId: string): Promise<PersonWithRelations | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select('*')
       .eq('id', personId)
@@ -257,7 +257,7 @@ export const SupabaseService = {
    * Create a new person in the family tree
    */
   async getPersonCustomFields(personId: string): Promise<Record<string, string>> {
-     const { data, error } = await supabase
+     const { data, error } = await supabasePublic
       .from('people_additional_detail')
       .select('field_value, people_field!inner(field_name)')
       .eq('people_id', personId);
@@ -473,7 +473,7 @@ export const SupabaseService = {
    * Used for field dropdown in additional details
    */
   async getPredefinedFields(): Promise<string[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_field')
       .select('field_name')
       .order('field_name', { ascending: true });
@@ -488,7 +488,7 @@ export const SupabaseService = {
    * Joins with people_field to return field names instead of field IDs
    */
   async getPersonAdditionalDetails(personId: string): Promise<Record<string, string>> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_additional_detail')
       .select('people_field(field_name), field_value')
       .eq('people_id', personId);
@@ -624,7 +624,7 @@ export const SupabaseService = {
     searchTerm: string,
     treeId?: string
   ): Promise<PersonWithRelations[]> {
-    let query = supabase
+    let query = supabasePublic
       .from('people')
       .select('*')
       .ilike('name', `%${searchTerm}%`);
@@ -656,7 +656,7 @@ export const SupabaseService = {
    */
   async getTrees(villageId?: string): Promise<any[]> {
     // First get all trees
-    let query = supabase
+    let query = supabasePublic
       .from('tree')
       .select(`
         *,
@@ -690,7 +690,7 @@ export const SupabaseService = {
       // Fetch caste names
       let casteMap: Record<string, string> = {};
       if (casteIds.size > 0) {
-        const { data: castes } = await supabase
+        const { data: castes } = await supabasePublic
           .from('caste')
           .select('id, name')
           .in('id', Array.from(casteIds));
@@ -705,7 +705,7 @@ export const SupabaseService = {
       // Fetch sub_caste names
       let subCasteMap: Record<string, string> = {};
       if (subCasteIds.size > 0) {
-        const { data: subCastes } = await supabase
+        const { data: subCastes } = await supabasePublic
           .from('sub_caste')
           .select('id, name')
           .in('id', Array.from(subCasteIds));
@@ -732,7 +732,7 @@ export const SupabaseService = {
    * Get tree with village details
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
-    const { data: tree, error } = await supabase
+    const { data: tree, error } = await supabasePublic
       .from('tree')
       .select('*, village(*)')
       .eq('id', treeId)
@@ -742,7 +742,7 @@ export const SupabaseService = {
     
     if (tree) {
       if (tree.caste) {
-        const { data: casteData } = await supabase
+        const { data: casteData } = await supabasePublic
           .from('caste')
           .select('name')
           .eq('id', tree.caste)
@@ -751,7 +751,7 @@ export const SupabaseService = {
       }
       
       if (tree.sub_caste) {
-        const { data: subCasteData } = await supabase
+        const { data: subCasteData } = await supabasePublic
           .from('sub_caste')
           .select('name')
           .eq('id', tree.sub_caste)
@@ -796,7 +796,7 @@ export const SupabaseService = {
     try {
       console.log("SupabaseService: getVillages called");
       
-      const { data, error } = await supabase
+      const { data, error } = await supabasePublic
         .from('village')
         .select('*, district(*, state(*))')
         .is('is_deleted', false);
@@ -814,7 +814,7 @@ export const SupabaseService = {
    * Get all states
    */
   async getStates(): Promise<any[]> {
-    const { data, error } = await supabase.from('state').select('*');
+    const { data, error } = await supabasePublic.from('state').select('*');
 
     if (error) throw error;
     return data || [];
@@ -824,7 +824,7 @@ export const SupabaseService = {
    * Get all districts for a state
    */
   async getDistricts(stateId?: string): Promise<any[]> {
-    let query = supabase.from('district').select('*');
+    let query = supabasePublic.from('district').select('*');
     if (stateId) {
       query = query.eq('state_id', stateId);
     }
@@ -838,7 +838,7 @@ export const SupabaseService = {
    * Get all villages for a district
    */
   async getVillagesForDistrict(districtId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('village')
       .select('*')
       .eq('district_id', districtId);
@@ -851,7 +851,7 @@ export const SupabaseService = {
    * Get all castes
    */
   async getCastes(): Promise<any[]> {
-    const { data, error } = await supabase.from('caste').select('*');
+    const { data, error } = await supabasePublic.from('caste').select('*');
 
     if (error) throw error;
     return data || [];
@@ -861,7 +861,7 @@ export const SupabaseService = {
    * Get sub-castes for a caste
    */
   async getSubCastes(casteId?: string): Promise<any[]> {
-    let query = supabase.from('sub_caste').select('*');
+    let query = supabasePublic.from('sub_caste').select('*');
     if (casteId) {
       query = query.eq('caste_id', casteId);
     }
@@ -875,7 +875,7 @@ export const SupabaseService = {
    * Search businesses by name and optional person (owner)
    */
   async searchBusinesses(searchTerm: string, peopleId?: string): Promise<any[]> {
-    let query = supabase
+    let query = supabasePublic
       .from('business')
       .select('*, people(*)')
       .ilike('name', `%${searchTerm}%`);
@@ -894,7 +894,7 @@ export const SupabaseService = {
    * Get businesses for a person
    */
   async getBusinessesByPerson(peopleId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('business')
       .select('*')
       .eq('people_id', peopleId)
@@ -968,7 +968,7 @@ export const SupabaseService = {
    * Get all businesses
    */
   async getAllBusinesses(): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('business')
       .select('*, people(*)');
 
@@ -982,7 +982,7 @@ export const SupabaseService = {
   async getBusinessesByVillageWithHierarchy(
     villageId: string
   ): Promise<any[]> {
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabasePublic.rpc(
       'get_businesses_by_village',
       { p_village_id: villageId }
     );
@@ -995,7 +995,7 @@ export const SupabaseService = {
    * Subscribe to real-time updates for people in a tree
    */
   subscribeToPeople(treeId: string, callback: (people: PersonWithRelations[]) => void) {
-    return supabase
+    return supabasePublic
       .channel(`people:${treeId}`)
       .on(
         'postgres_changes',
@@ -1065,7 +1065,7 @@ export const SupabaseService = {
    * Get all professions
    */
   async getAllProfessions(): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('professions')
       .select('*')
       .eq('is_deleted', false);
@@ -1092,7 +1092,7 @@ export const SupabaseService = {
    * Get professions for a person
    */
   async getProfessionsByPerson(peopleId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_professions')
       .select('profession:professions(*)')
       .eq('people_id', peopleId)
@@ -1167,7 +1167,7 @@ export const SupabaseService = {
    * Get people with a specific profession
    */
   async getPeopleWithProfession(professionId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_professions')
       .select('people(*)')
       .eq('profession_id', professionId)
@@ -1197,7 +1197,7 @@ export const SupabaseService = {
     searchTerm: string,
     villageId: string
   ): Promise<any[]> {
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabasePublic.rpc(
       'search_people_by_village',
       {
         p_search_term: searchTerm,
@@ -1213,7 +1213,7 @@ export const SupabaseService = {
    * Get all people with their professions for a village
    */
   async getPeopleWithProfessionsByVillage(villageId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select(`
         id,
@@ -1236,7 +1236,7 @@ export const SupabaseService = {
    * Get professions by village with people and hierarchy
    */
   async getProfessionsByVillage(villageId: string): Promise<any[]> {
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabasePublic.rpc(
       'get_professions_by_village',
       { p_village_id: villageId }
     );
@@ -1284,7 +1284,7 @@ export const SupabaseService = {
     try {
       console.log("SupabaseService: getDashboardStatistics called");
       
-      const { data, error } = await supabase.rpc('get_dashboard_statistics');
+      const { data, error } = await supabasePublic.rpc('get_dashboard_statistics');
 
       console.log("SupabaseService: getDashboardStatistics response - data:", data, "error:", error);
       if (error) throw error;
