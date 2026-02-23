@@ -1,7 +1,7 @@
 import { select } from 'd3-selection';
 import { zoom as d3Zoom, zoomIdentity } from 'd3-zoom';
 import { tree as d3tree } from 'd3-hierarchy';
-import { line, curveStepAfter } from 'd3-shape';
+import { line } from 'd3-shape';
 import 'd3-transition';
 import { filter, forEach, get, map } from 'lodash-es';
 
@@ -333,28 +333,24 @@ class TreeBuilder {
 
     let linedata = [
       {
-        x: d.target.x,
-        y: d.target.y
+        x: d.source.x,
+        y: d.source.y
+      },
+      {
+        x: d.source.x,
+        y: ny
       },
       {
         x: d.target.x,
         y: ny
       },
       {
-        x: d.source.x,
-        y: d.source.y
+        x: d.target.x,
+        y: d.target.y
       }
     ];
 
-    let fun = line()
-      .curve(curveStepAfter)
-      .x(function (d: any) {
-        return d.x;
-      })
-      .y(function (d: any) {
-        return d.y;
-      });
-    return fun(linedata as any);
+    return this._roundedOrthogonalPath(linedata, 8);
   }
 
   _linkSiblings() {
@@ -449,15 +445,60 @@ class TreeBuilder {
       }
     ];
 
-    let fun = line()
-      .curve(curveStepAfter)
-      .x(function (d: any) {
-        return d.x;
-      })
-      .y(function (d: any) {
-        return d.y;
-      });
-    return fun(linedata as any);
+    return this._roundedOrthogonalPath(linedata, 8);
+  }
+
+  _roundedOrthogonalPath(points: Array<{ x: number; y: number }>, radius: number) {
+    if (!points || points.length === 0) {
+      return 'M0,0';
+    }
+    if (points.length === 1) {
+      return `M${points[0].x},${points[0].y}`;
+    }
+
+    let d = `M${points[0].x},${points[0].y}`;
+
+    for (let i = 1; i < points.length - 1; i++) {
+      const p0 = points[i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+
+      const v1x = p1.x - p0.x;
+      const v1y = p1.y - p0.y;
+      const v2x = p2.x - p1.x;
+      const v2y = p2.y - p1.y;
+
+      const len1 = Math.hypot(v1x, v1y);
+      const len2 = Math.hypot(v2x, v2y);
+
+      if (len1 === 0 || len2 === 0) {
+        d += ` L${p1.x},${p1.y}`;
+        continue;
+      }
+
+      // Skip rounding on non-turns.
+      const cross = v1x * v2y - v1y * v2x;
+      if (Math.abs(cross) < 0.001) {
+        d += ` L${p1.x},${p1.y}`;
+        continue;
+      }
+
+      const rr = Math.min(radius, len1 / 2, len2 / 2);
+      const u1x = v1x / len1;
+      const u1y = v1y / len1;
+      const u2x = v2x / len2;
+      const u2y = v2y / len2;
+
+      const p1a = { x: p1.x - u1x * rr, y: p1.y - u1y * rr };
+      const p1b = { x: p1.x + u2x * rr, y: p1.y + u2y * rr };
+
+      d += ` L${Math.round(p1a.x)},${Math.round(p1a.y)}`;
+      d += ` Q${p1.x},${p1.y} ${Math.round(p1b.x)},${Math.round(p1b.y)}`;
+    }
+
+    const last = points[points.length - 1];
+    d += ` L${last.x},${last.y}`;
+    return d;
   }
 
   _renderMarriageMarkers(duration: number, siblingDelay: number) {
