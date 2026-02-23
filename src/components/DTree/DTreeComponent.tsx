@@ -19,6 +19,7 @@ interface DTreeNode {
   textClass?: string;
   depthOffset?: number;
   marriages?: Array<{
+    extra?: any;
     spouse: {
       name: string;
       class?: string;
@@ -594,6 +595,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         }
 
         treeNode.marriages.push({
+          extra: {
+            relationType: spouse.type,
+          },
           spouse: {
             name: spouseNode.name,
             class:
@@ -624,6 +628,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       if (showPlaceholders) {
         const spouseClass = person.gender === "female" ? "man" : "woman";
         treeNode.marriages.push({
+          extra: {
+            _placeholder: true,
+          },
           spouse: {
             name: "Add Spouse",
             class: spouseClass,

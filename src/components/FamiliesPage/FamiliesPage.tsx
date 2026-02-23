@@ -112,7 +112,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               spouses:
                 person.spouses?.map((s: any) => ({
                   id: s.id,
-                  type: RelType.married,
+                  type: (s.type || s.relation_subtype || RelType.married) as RelType,
                 })) || [],
               siblings:
                 person.siblings?.map((s: any) => ({
@@ -297,7 +297,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             spouses:
               raw.spouses?.map((s: any) => ({
                 id: s.id,
-                type: RelType.married,
+                type: (s.type || s.relation_subtype || RelType.married) as RelType,
               })) || [],
             siblings:
               raw.siblings?.map((s: any) => ({

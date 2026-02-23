@@ -13,6 +13,36 @@
   stroke-width: 2px;
 }
 
+.marriage-marker {
+  pointer-events: none;
+}
+
+.marriage-marker-circle {
+  stroke-width: 1.3px;
+}
+
+.marriage-marker-circle.married {
+  fill: #fdecec;
+  stroke: #b71c1c;
+}
+
+.marriage-marker-circle.divorced {
+  fill: #f5f5f5;
+  stroke: #616161;
+}
+
+.marriage-marker-icon {
+  font-size: 10px;
+}
+
+.marriage-marker-icon.married {
+  fill: #c62828;
+}
+
+.marriage-marker-icon.divorced {
+  fill: #424242;
+}
+
 /* === Node Group Styles === */
 /* The .node group is the outer <g> with translate(x,y) */
 g.node {

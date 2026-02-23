@@ -202,6 +202,8 @@ class TreeBuilder {
         .style('opacity', 1);
     }
 
+    this._renderMarriageMarkers(duration, siblingDelay);
+
     // Set opacity to 1 immediately if logic suggests a refresh, but transition is nice.
     // However, for existing nodes, we want to update position.
     
@@ -456,6 +458,63 @@ class TreeBuilder {
         return d.y;
       });
     return fun(linedata as any);
+  }
+
+  _renderMarriageMarkers(duration: number, siblingDelay: number) {
+    const markerData = this.siblings
+      .filter((s: any) => !s.isPlaceholder && s.target?.marriageNode)
+      .map((s: any) => {
+        const marriageNode = s.target.marriageNode;
+        const relationType = marriageNode?.data?.extra?.relationType;
+        const isDivorced = relationType === 'divorced';
+        return {
+          id: marriageNode?.data?.id ?? `m-${s.source?.id}-${s.target?.id}`,
+          x: marriageNode.x,
+          y: marriageNode.y,
+          icon: isDivorced ? '💔' : '❤',
+          className: isDivorced ? 'marriage-marker divorced' : 'marriage-marker married'
+        };
+      })
+      .filter((m: any, index: number, arr: any[]) => {
+        return arr.findIndex((a: any) => a.id === m.id) === index;
+      });
+
+    const markers = this.g
+      .selectAll('.marriage-marker')
+      .data(markerData)
+      .enter()
+      .append('g')
+      .attr('class', (d: any) => d.className)
+      .attr('transform', (d: any) => `translate(${d.x},${d.y})`)
+      .style('opacity', duration === 0 ? 1 : 0);
+
+    markers
+      .append('circle')
+      .attr('class', (d: any) =>
+        d.className.includes('divorced')
+          ? 'marriage-marker-circle divorced'
+          : 'marriage-marker-circle married'
+      )
+      .attr('r', 8);
+
+    markers
+      .append('text')
+      .attr('class', (d: any) =>
+        d.className.includes('divorced')
+          ? 'marriage-marker-icon divorced'
+          : 'marriage-marker-icon married'
+      )
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .text((d: any) => d.icon);
+
+    if (duration > 0) {
+      markers
+        .transition()
+        .duration(duration)
+        .delay(siblingDelay)
+        .style('opacity', 1);
+    }
   }
 
   static _nodeHeightSeperation(nodeWidth: number, nodeMaxHeight: number) {
