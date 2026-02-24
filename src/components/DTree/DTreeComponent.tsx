@@ -35,6 +35,7 @@ interface DTreeNode {
 interface DTreeComponentProps {
   nodes: FNode[];
   rootId: string;
+  canEditTree?: boolean;
   autoExpandNodeId?: string | null;
   onAutoExpandHandled?: () => void;
   onNodeClick: (nodeId: string) => void;
@@ -53,6 +54,7 @@ interface DTreeComponentProps {
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
   rootId,
+  canEditTree = true,
   autoExpandNodeId,
   onAutoExpandHandled,
   onNodeClick,
@@ -324,7 +326,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Placeholder "add relative" card clicked ---
       const placeholderTarget = target.closest(".placeholder-click-target");
-      if (placeholderTarget) {
+      if (placeholderTarget && canEditTree) {
         e.preventDefault();
         e.stopPropagation();
         const relType = placeholderTarget.getAttribute("data-rel-type") as
@@ -345,7 +347,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Edit icon ---
       const editIcon = target.closest(".node-edit-icon");
-      if (editIcon) {
+      if (editIcon && canEditTree) {
         e.preventDefault();
         e.stopPropagation();
         const nodeId = editIcon.getAttribute("data-node-id");
@@ -357,7 +359,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Add icon (toggle placeholder nodes in tree) ---
       const addIcon = target.closest(".node-add-icon");
-      if (addIcon) {
+      if (addIcon && canEditTree) {
         e.preventDefault();
         e.stopPropagation();
         const nodeId = addIcon.getAttribute("data-node-id");
@@ -442,7 +444,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         });
       }
     };
-  }, [onExternalTreeClick, onEditNode, onAddRelative]);
+  }, [onExternalTreeClick, onEditNode, onAddRelative, canEditTree]);
 
   // Helper: check if 'ancestorId' is an ancestor of 'targetId'
   // Traverses parent links AND spouse connections so that a spouse from
@@ -527,7 +529,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     // Check if this node has the add-menu open (placeholder nodes should appear)
     // On mobile, placeholders are skipped — the bottom sheet handles add-relative actions directly
     const showPlaceholders =
-      !isMobileRef.current && addMenuNodeIdRef.current === personId;
+      canEditTree && !isMobileRef.current && addMenuNodeIdRef.current === personId;
     const shouldWrapWithParentPlaceholders =
       showPlaceholders && (!person.parents || person.parents.length === 0);
     const addMenuChildId = addMenuNodeIdRef.current;
@@ -957,6 +959,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               currentTreeId,
               isMain,
               isMobileRef.current,
+              canEditTree,
             );
           },
           nodeDblClick: (name: string, extra: any, id: string) => {
@@ -1028,7 +1031,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         select(containerRef.current).selectAll("*").remove();
       }
     };
-  }, [nodes, rootId, mainId, addMenuNodeId]);
+  }, [nodes, rootId, mainId, addMenuNodeId, currentTreeId, showFullTree]);
 
   if (error) {
     return (
@@ -1149,7 +1152,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: isExternalNode ? "1fr 1fr" : "1fr 1fr 1fr",
+                gridTemplateColumns:
+                  isExternalNode || !canEditTree ? "1fr 1fr" : "1fr 1fr 1fr",
                 gap: 6,
               }}
             >
@@ -1171,13 +1175,15 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               >
                 View
               </button>
-              {isExternalNode ? (
+              {isExternalNode || !canEditTree ? (
                 <button
                   onClick={() => {
-                    const tid = mobileSheetNode.treeId;
-                    setMobileSheetNodeId(null);
-                    if (tid) {
-                      onExternalTreeClick?.(tid);
+                    if (isExternalNode) {
+                      const tid = mobileSheetNode.treeId;
+                      setMobileSheetNodeId(null);
+                      if (tid) {
+                        onExternalTreeClick?.(tid);
+                      }
                     }
                   }}
                   style={{
@@ -1191,7 +1197,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                     cursor: "pointer",
                   }}
                 >
-                  Open Tree
+                  {isExternalNode ? "Open Tree" : "Read Only"}
                 </button>
               ) : (
                 <>
@@ -1234,7 +1240,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                 </>
               )}
             </div>
-            {!isExternalNode && (
+            {!isExternalNode && canEditTree && (
               <>
                 <div
                   style={{

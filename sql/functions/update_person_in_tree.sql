@@ -17,12 +17,34 @@ CREATE OR REPLACE FUNCTION update_person_in_tree(
 )
 RETURNS JSON AS $$
 DECLARE
+  v_access JSON;
+  v_tree_id UUID;
   v_field_key TEXT;
   v_field_value TEXT;
   v_field_id UUID;
   v_result JSON;
   v_person_record RECORD;
 BEGIN
+  SELECT p.tree_id
+  INTO v_tree_id
+  FROM people p
+  WHERE p.id = p_person_id;
+
+  IF v_tree_id IS NULL THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Person not found'
+    );
+  END IF;
+
+  v_access := check_tree_write_access(v_tree_id);
+  IF NOT COALESCE((v_access->>'allowed')::BOOLEAN, false) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', COALESCE(v_access->>'error', 'Permission denied')
+    );
+  END IF;
+
   
   -- Update person's core properties
   UPDATE people

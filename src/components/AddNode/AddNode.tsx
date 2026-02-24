@@ -115,9 +115,11 @@ const AddNode: React.FC<AddNodeProps> = ({
   const [businessName, setBusinessName] = useState("");
   const [businessCategory, setBusinessCategory] = useState("");
   const [businessAddress, setBusinessAddress] = useState("");
+  const [businessContact, setBusinessContact] = useState("");
 
   // Profession Fields
   const [jobTitle, setJobTitle] = useState("");
+  const [jobContact, setJobContact] = useState("");
   const [allProfessions, setAllProfessions] = useState<any[]>([]);
 
   // New person fields
@@ -242,7 +244,9 @@ const AddNode: React.FC<AddNodeProps> = ({
     setBusinessName("");
     setBusinessCategory("");
     setBusinessAddress("");
+    setBusinessContact("");
     setJobTitle("");
+    setJobContact("");
     setOccupationType("business");
   }, [onCancel]);
 
@@ -273,7 +277,9 @@ const AddNode: React.FC<AddNodeProps> = ({
     setBusinessName("");
     setBusinessCategory("");
     setBusinessAddress("");
+    setBusinessContact("");
     setJobTitle("");
+    setJobContact("");
     setOccupationType("business");
 
     // Close the dialog — prefer onComplete, fallback to onCancel
@@ -301,6 +307,7 @@ const AddNode: React.FC<AddNodeProps> = ({
             category: businessCategory,
             address: businessAddress, // Use description or separate field if available, SupabaseService uses description
             description: businessAddress,
+            contact: businessContact || null,
             people_id: savedNodeId,
           });
         }
@@ -316,6 +323,7 @@ const AddNode: React.FC<AddNodeProps> = ({
           if (!profId) {
             const newProf = await SupabaseService.createProfession({
               name: jobTitle.trim(),
+              description: jobContact ? `Contact: ${jobContact}` : undefined,
             });
             // Handle response which might be object or array
             profId = newProf?.id || (Array.isArray(newProf) && newProf[0]?.id);
@@ -523,6 +531,13 @@ const AddNode: React.FC<AddNodeProps> = ({
                 onChange={(e) => setBusinessAddress(e.target.value)}
                 placeholder="Where is it located?"
               />
+              <TextField
+                label="Contact Number"
+                fullWidth
+                value={businessContact}
+                onChange={(e) => setBusinessContact(e.target.value)}
+                placeholder="Phone number (optional)"
+              />
             </>
           )}
 
@@ -538,6 +553,13 @@ const AddNode: React.FC<AddNodeProps> = ({
               <Typography variant="caption" color="text.secondary">
                 We will link this to the unified list of professions.
               </Typography>
+              <TextField
+                label="Contact Number"
+                fullWidth
+                value={jobContact}
+                onChange={(e) => setJobContact(e.target.value)}
+                placeholder="Phone number (optional)"
+              />
             </>
           )}
 

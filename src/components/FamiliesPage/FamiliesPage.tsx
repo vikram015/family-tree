@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   Box,
@@ -6,6 +6,7 @@ import {
   Typography,
   Container,
   CircularProgress,
+  Fab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -13,6 +14,7 @@ import {
   DialogContentText,
   Alert,
 } from "@mui/material";
+import ShareIcon from "@mui/icons-material/Share";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
@@ -74,11 +76,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     open: false,
     targetTreeId: null,
   });
+  const [dismissNoAccessAlert, setDismissNoAccessAlert] = useState(false);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const loadRequestIdRef = useRef(0);
+  const canWriteCurrentTree = hasPermission("admin", villageId);
+  const showNoAccessAlert =
+    isAdmin() && isApproved && !canWriteCurrentTree && !dismissNoAccessAlert;
 
   const loadTreeData = useCallback(
     async (keepRoot = false) => {
+      const requestId = ++loadRequestIdRef.current;
       if (!treeId || treeId === "") {
+        if (requestId !== loadRequestIdRef.current) return;
         setNodes([]);
         setSelectId(undefined);
         setIsLoading(false);
@@ -91,6 +100,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }
         // Fetch complete tree from Supabase using the PostgreSQL function
         const treeData = await SupabaseService.getCompleteTreeById(treeId);
+        if (requestId !== loadRequestIdRef.current) return;
         setVillageId(treeData.tree?.village?.id);
 
         // Convert tree data to FNode format
@@ -138,6 +148,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setSelectId(undefined);
 
         if (items.length === 0) {
+          if (requestId !== loadRequestIdRef.current) return;
           setIsLoading(false);
           return;
         }
@@ -255,6 +266,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
         setIsLoading(false);
       } catch (error) {
+        if (requestId !== loadRequestIdRef.current) return;
         console.error("FamiliesPage: Failed to load tree data:", error);
         setNodes([]);
         setIsLoading(false);
@@ -264,6 +276,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   );
 
   useEffect(() => {
+    // Prevent stale tree content/icons while switching between trees.
+    setNodes([]);
+    setRootId("");
+    setSelectId(undefined);
+    setDismissNoAccessAlert(false);
     loadTreeData();
   }, [loadTreeData]);
 
@@ -363,7 +380,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
-      if (!hasPermission("admin", villageId)) {
+      if (!canWriteCurrentTree) {
         alert("You don't have permission to edit this family tree.");
         return;
       }
@@ -384,12 +401,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId, loadTreeData, villageId],
+    [canWriteCurrentTree, treeId, loadTreeData, villageId],
   );
 
   const onDelete = useCallback(
     async (nodeId: string, force: boolean = false) => {
-      if (!hasPermission("admin", villageId)) {
+      if (!canWriteCurrentTree) {
         alert("You don't have permission to delete from this family tree.");
         return;
       }
@@ -423,7 +440,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId, loadTreeData, nodes, villageId],
+    [canWriteCurrentTree, treeId, loadTreeData, nodes, villageId],
   );
 
   const onAdd = useCallback(
@@ -434,7 +451,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       type?: RelType,
       otherParentId?: string,
     ): Promise<string | undefined> => {
-      if (!hasPermission("admin", villageId)) {
+      if (!canWriteCurrentTree) {
         alert("You don't have permission to add to this family tree.");
         return undefined;
       }
@@ -546,8 +563,27 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
       return undefined;
     },
-    [hasPermission, treeId, loadTreeData, villageId, nodes],
+    [canWriteCurrentTree, treeId, loadTreeData, villageId, nodes],
   );
+
+  const handleShareTree = useCallback(async () => {
+    const shareUrl = treeId
+      ? `${window.location.origin}/families?tree=${treeId}`
+      : window.location.href;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Family Tree",
+          url: shareUrl,
+        });
+        return;
+      }
+      alert("Native share is not supported on this device/browser.");
+    } catch (err) {
+      console.warn("Share cancelled or failed:", err);
+    }
+  }, [treeId]);
 
   // Handler for "View Details" — opens NodeDetails in details view
   const handleViewDetails = useCallback((nodeId: string) => {
@@ -559,6 +595,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   // Handler for edit icon on tree nodes — opens NodeDetails in edit view
   const handleEditNode = useCallback(
     (nodeId: string) => {
+      if (!canWriteCurrentTree) {
+        alert("You don't have permission to edit this family tree.");
+        return;
+      }
       if (!currentUser) {
         openLoginModal(() => {
           setNodeDetailsInitialView("edit");
@@ -571,7 +611,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodeDetailsAddInfo(undefined);
       setSelectId(nodeId);
     },
-    [currentUser, openLoginModal],
+    [canWriteCurrentTree, currentUser, openLoginModal],
   );
 
   // Handler for placeholder "add relative" nodes in the tree
@@ -580,6 +620,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       nodeId: string,
       relType: "father" | "mother" | "spouse" | "son" | "daughter",
     ) => {
+      if (!canWriteCurrentTree) {
+        alert("You don't have permission to add to this family tree.");
+        return;
+      }
       // Map family-chart relTypes to onAdd's relation + gender
       let relation: "child" | "spouse" | "parent";
       let gender: string | undefined;
@@ -620,7 +664,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodeDetailsAddInfo({ relation, gender });
       setSelectId(nodeId);
     },
-    [currentUser, openLoginModal],
+    [canWriteCurrentTree, currentUser, openLoginModal],
   );
 
   // Calculate tree statistics
@@ -695,10 +739,42 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           />
         </Box>
       )}
+      <Box
+        sx={{
+          position: "fixed",
+          left: { xs: 16, sm: 24 },
+          bottom: { xs: 16, sm: 24 },
+          zIndex: 1200,
+          display: { xs: "flex", sm: "none" },
+          opacity: isMobileSheetOpen ? 0 : 1,
+          pointerEvents: isMobileSheetOpen ? "none" : "auto",
+          transition: "opacity 0.2s ease",
+        }}
+      >
+        <Fab
+          color="primary"
+          size="medium"
+          aria-label="Share tree"
+          onClick={handleShareTree}
+          disabled={!treeId}
+        >
+          <ShareIcon />
+        </Fab>
+      </Box>
       {isAdmin() && !isApproved && (
         <Alert severity="info" sx={{ mx: 2, mt: 1 }}>
           Your account is pending approval. You can view trees but cannot make
           changes until a Super Admin approves your account.
+        </Alert>
+      )}
+      {showNoAccessAlert && (
+        <Alert
+          severity="info"
+          sx={{ mx: 2, mt: 1 }}
+          onClose={() => setDismissNoAccessAlert(true)}
+        >
+          You can view this tree but cannot make changes because you don&apos;t
+          have village write access for this tree.
         </Alert>
       )}
       {nodes.length > 0 && !isLoading && (
@@ -847,6 +923,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               <DTreeComponent
                 nodes={nodes}
                 rootId={rootId}
+                canEditTree={canWriteCurrentTree}
                 autoExpandNodeId={autoExpandNodeId}
                 onAutoExpandHandled={() => setAutoExpandNodeId(null)}
                 onNodeClick={(id) => {
@@ -882,7 +959,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         ) : (
           treeId &&
           treeId !== "" && (
-            <Container maxWidth="sm" sx={{ mt: 8, textAlign: "center" }}>
+            <Container
+              maxWidth="sm"
+              sx={{ mt: { xs: 14, sm: 8 }, textAlign: "center" }}
+            >
               <Typography variant="h5" gutterBottom>
                 This tree is empty.
               </Typography>
@@ -897,6 +977,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 <Button
                   variant="contained"
                   onClick={() => setShowAddStartingNode(true)}
+                  disabled={!canWriteCurrentTree}
                 >
                   Create First Node
                 </Button>

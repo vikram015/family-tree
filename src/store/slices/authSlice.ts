@@ -344,35 +344,19 @@ export const linkUserToNode = createAsyncThunk(
       const state = getState() as any;
       const userId = state.auth.currentUser?.id;
       if (!userId) throw new Error('Not authenticated');
-
-      // Look up the tree to find its village_id
-      const { data: tree, error: treeError } = await supabase
-        .from('tree')
-        .select('village_id')
-        .eq('id', treeId)
-        .single();
-
-      if (treeError) throw new Error(treeError.message);
-
-      const currentVillages = state.auth.userProfile?.villages || [];
-      const villageId = tree?.village_id;
-      const updatedVillages = villageId && !currentVillages.includes(villageId)
-        ? [...currentVillages, villageId]
-        : currentVillages;
-
-      // Update user record: set people_id and add tree's village to villages array
+      // Update user record: set people_id only.
+      // Village access is managed via village access request workflow.
       const { error: updateError } = await supabase
         .from('users')
         .update({
           people_id: personId,
-          villages: updatedVillages,
           modified_at: new Date().toISOString(),
         })
         .eq('id', userId);
 
       if (updateError) throw new Error(updateError.message);
 
-      return { personId, villages: updatedVillages };
+      return { personId };
     } catch (error: any) {
       return rejectWithValue(error.message);
     }
@@ -490,7 +474,6 @@ const authSlice = createSlice({
       .addCase(linkUserToNode.fulfilled, (state, action) => {
         if (state.userProfile) {
           state.userProfile.peopleId = action.payload.personId;
-          state.userProfile.villages = action.payload.villages;
         }
       })
       // Update User Profile

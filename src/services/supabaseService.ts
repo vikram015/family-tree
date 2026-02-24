@@ -891,6 +891,19 @@ export const SupabaseService = {
   },
 
   /**
+   * Global search across people, businesses, and professions.
+   * Returns enriched context including tree/village and ancestor hierarchy.
+   */
+  async globalSearch(searchTerm: string): Promise<any[]> {
+    const { data, error } = await supabasePublic.rpc("global_search", {
+      p_search_term: searchTerm,
+    });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
    * Get businesses for a person
    */
   async getBusinessesByPerson(peopleId: string): Promise<any[]> {
@@ -912,6 +925,7 @@ export const SupabaseService = {
       name: business.name,
       category: business.category || null,
       description: business.description || null,
+      contact: business.contact || null,
       people_id: business.people_id || null,
       created_at: new Date(),
       modified_at: new Date(),
@@ -939,6 +953,7 @@ export const SupabaseService = {
     if (updates.category) updateData.category = updates.category;
     if (updates.description) updateData.description = updates.description;
     if (updates.people_id) updateData.people_id = updates.people_id;
+    if (updates.contact !== undefined) updateData.contact = updates.contact;
     if (updates.is_deleted !== undefined) updateData.is_deleted = updates.is_deleted;
 
     const { data, error } = await supabase

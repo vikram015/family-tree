@@ -18,9 +18,8 @@ interface VillageState {
 const initialState: VillageState = {
   villages: [],
   selectedVillage: (() => {
-    const stored = localStorage.getItem('selectedVillage');
     const params = new URLSearchParams(window.location.search);
-    return params.get('village') || stored || '';
+    return params.get('village') || '';
   })(),
   loading: true,
   error: null,
@@ -56,9 +55,6 @@ const villageSlice = createSlice({
   reducers: {
     setSelectedVillage: (state, action: PayloadAction<string>) => {
       state.selectedVillage = action.payload;
-      if (action.payload) {
-        localStorage.setItem('selectedVillage', action.payload);
-      }
     },
     clearError: (state) => {
       state.error = null;
@@ -80,7 +76,6 @@ const villageSlice = createSlice({
         // Auto-select first village if none selected
         if (state.villages.length > 0 && !state.selectedVillage) {
           state.selectedVillage = state.villages[0].id;
-          localStorage.setItem('selectedVillage', state.villages[0].id);
         }
       })
       .addCase(fetchVillages.rejected, (state, action) => {

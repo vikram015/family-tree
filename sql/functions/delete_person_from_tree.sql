@@ -7,6 +7,7 @@
 CREATE OR REPLACE FUNCTION delete_person_from_tree(p_person_id UUID, p_force BOOLEAN DEFAULT false)
 RETURNS JSON AS $$
 DECLARE
+  v_access JSON;
   v_person_record RECORD;
   v_child_count INTEGER;
   v_result JSON;
@@ -23,6 +24,14 @@ BEGIN
     RETURN json_build_object(
       'success', false,
       'error', 'Person not found'
+    );
+  END IF;
+
+  v_access := check_tree_write_access(v_person_record.tree_id);
+  IF NOT COALESCE((v_access->>'allowed')::BOOLEAN, false) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', COALESCE(v_access->>'error', 'Permission denied')
     );
   END IF;
 

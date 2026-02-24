@@ -64,6 +64,7 @@ BEGIN
     LEFT JOIN people_relations pr ON p.id = pr.person_id AND pr.relation_type = 'parent'
     LEFT JOIN people parent_p ON pr.related_person_id = parent_p.id
     WHERE p.tree_id = ANY(v_tree_ids)
+      AND parent_p.gender = 'male'
 
     UNION ALL
 
@@ -83,8 +84,7 @@ BEGIN
     LEFT JOIN people parent_p ON pr.related_person_id = parent_p.id
     WHERE pc.generation < 5
       AND pc.related_person_id IS NOT NULL
-      AND pc.parent_gender = 'male'
-	  AND parent_p.gender = 'male'
+      AND parent_p.gender = 'male'
   ),
   parent_data AS (
     -- Build the parent hierarchy JSON structure

@@ -173,6 +173,7 @@ export function renderNodeCardSvg(
   currentTreeId?: string,
   isMain?: boolean,
   isMobile?: boolean,
+  canEditTree: boolean = true,
 ): string {
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
@@ -309,7 +310,7 @@ export function renderNodeCardSvg(
   }
 
   // === Action icons (edit + add) INSIDE the card — desktop only ===
-  if (extra?.id && !extra?._placeholder && !isMobile) {
+  if (canEditTree && extra?.id && !extra?._placeholder && !isMobile) {
     const iconR = 8;
     const gap = 4;
     // Position: bottom-right inside the card

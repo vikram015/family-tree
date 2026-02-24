@@ -25,6 +25,7 @@ CREATE OR REPLACE FUNCTION add_person_to_tree(
 )
 RETURNS JSON AS $$
 DECLARE
+  v_access JSON;
   v_new_person_id UUID;
   v_field_key TEXT;
   v_field_value TEXT;
@@ -36,6 +37,14 @@ DECLARE
   v_affected_nodes JSON;
   v_auto_created_spouse_id UUID; -- Track separately if a spouse was auto-created
 BEGIN
+  v_access := check_tree_write_access(p_tree_id);
+  IF NOT COALESCE((v_access->>'allowed')::BOOLEAN, false) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', COALESCE(v_access->>'error', 'Permission denied')
+    );
+  END IF;
+
   
   -- Generate new UUID for the person
   v_new_person_id := gen_random_uuid();

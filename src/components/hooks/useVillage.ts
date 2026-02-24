@@ -2,8 +2,8 @@
  * Compatibility hook for migrating from VillageContext to Redux
  * Provides the same API as the old Context hook
  */
-
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
+import { useCallback } from 'react';
 import {
   selectVillages,
   selectSelectedVillage,
@@ -20,11 +20,15 @@ export function useVillage() {
   const villages = useAppSelector(selectVillages);
   const selectedVillage = useAppSelector(selectSelectedVillage);
   const loading = useAppSelector(selectVillageLoading);
+  const setSelectedVillage = useCallback(
+    (villageId: string) => dispatch(setSelectedVillageAction(villageId)),
+    [dispatch],
+  );
 
   return {
     villages,
     selectedVillage,
     loading,
-    setSelectedVillage: (villageId: string) => dispatch(setSelectedVillageAction(villageId)),
+    setSelectedVillage,
   };
 }

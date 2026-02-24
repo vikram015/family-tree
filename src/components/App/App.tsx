@@ -53,9 +53,19 @@ const theme = createTheme({
 function AppContent() {
   console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
+  const getTreeIdFromParams = useCallback(() => {
+    return searchParams.get("tree") || "";
+  }, [searchParams]);
   const [treeId, setTreeId] = useState<string>(() => {
     return searchParams.get("tree") || "";
   });
+
+  useEffect(() => {
+    const paramTreeId = getTreeIdFromParams();
+    if (paramTreeId !== treeId) {
+      setTreeId(paramTreeId);
+    }
+  }, [getTreeIdFromParams, treeId]);
 
   useEffect(() => {
     // Prefetch FamiliesPage code in background after initial load

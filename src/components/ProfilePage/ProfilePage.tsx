@@ -27,6 +27,7 @@ import {
   Chip,
   Stack,
   Tooltip,
+  Link,
 } from "@mui/material";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
@@ -43,6 +44,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import { SupabaseService } from "../../services/supabaseService";
+import { supabase } from "../../supabase";
 
 export const ProfilePage: React.FC = () => {
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
@@ -69,6 +71,7 @@ export const ProfilePage: React.FC = () => {
   // Form State
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>("");
   const [newProfessionName, setNewProfessionName] = useState("");
+  const [newProfessionContact, setNewProfessionContact] = useState("");
   const [editProfileData, setEditProfileData] = useState({
     name: "",
     phone: "",
@@ -77,10 +80,16 @@ export const ProfilePage: React.FC = () => {
     name: "",
     category: "",
     description: "",
+    contact: "",
   });
   const [linkedPersonDetails, setLinkedPersonDetails] = useState<any | null>(
     null,
   );
+  const [requestVillageId, setRequestVillageId] = useState("");
+  const [requestMessage, setRequestMessage] = useState("");
+  const [myVillageRequests, setMyVillageRequests] = useState<any[]>([]);
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const hasAssignedVillage = (userProfile?.villages || []).length > 0;
 
   useEffect(() => {
     if (userProfile) {
@@ -125,6 +134,23 @@ export const ProfilePage: React.FC = () => {
     fetchDetails();
   }, [userProfile?.peopleId]);
 
+  const loadMyVillageRequests = async () => {
+    try {
+      const { data, error } = await supabase.rpc("get_my_village_access_requests");
+      if (error) throw error;
+      setMyVillageRequests(data || []);
+    } catch (err) {
+      console.error("Error loading village requests:", err);
+      setMyVillageRequests([]);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser && userProfile?.role === "admin") {
+      loadMyVillageRequests();
+    }
+  }, [currentUser, userProfile?.role]);
+
   const handleUpdateProfile = async () => {
     try {
       if (updateUserProfile) {
@@ -147,6 +173,9 @@ export const ProfilePage: React.FC = () => {
         const newProf = await SupabaseService.createProfession({
           name: newProfessionName,
           category: "Other",
+          description: newProfessionContact
+            ? `Contact: ${newProfessionContact}`
+            : undefined,
         });
         profId = newProf.id;
         // Refresh all professions
@@ -164,9 +193,10 @@ export const ProfilePage: React.FC = () => {
           userProfile.peopleId,
         );
         setProfessions(updatedProfs);
-        setOpenProfessionDialog(false);
-        setSelectedProfessionId("");
-        setNewProfessionName("");
+      setOpenProfessionDialog(false);
+      setSelectedProfessionId("");
+      setNewProfessionName("");
+      setNewProfessionContact("");
       }
     } catch (err) {
       console.error("Error adding profession:", err);
@@ -189,7 +219,7 @@ export const ProfilePage: React.FC = () => {
       );
       setBusinesses(updatedBiz);
       setOpenBusinessDialog(false);
-      setNewBusinessData({ name: "", category: "", description: "" });
+      setNewBusinessData({ name: "", category: "", description: "", contact: "" });
     } catch (err) {
       console.error("Error adding business:", err);
     }
@@ -241,6 +271,31 @@ export const ProfilePage: React.FC = () => {
       setError(e.message || "Failed to link. Please try again.");
     } finally {
       setLinking(false);
+    }
+  };
+
+  const handleSubmitVillageRequest = async () => {
+    if (!requestVillageId) return;
+    setRequestSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      const { data, error } = await supabase.rpc("submit_village_access_request", {
+        p_village_id: requestVillageId,
+        p_request_message: requestMessage || null,
+      });
+
+      if (error) throw error;
+      if (data && !data.success) throw new Error(data.error);
+
+      setSuccess("Village access request submitted successfully.");
+      setRequestVillageId("");
+      setRequestMessage("");
+      await loadMyVillageRequests();
+    } catch (err: any) {
+      setError(err.message || "Failed to submit request");
+    } finally {
+      setRequestSubmitting(false);
     }
   };
 
@@ -416,7 +471,11 @@ export const ProfilePage: React.FC = () => {
                   color="text.secondary"
                   sx={{ mt: 1 }}
                 >
-                  To change this link, please contact a super admin.
+                  To change this link, please contact superadmin at{" "}
+                  <Link href="mailto:support@kinvia.in" underline="hover">
+                    support@kinvia.in
+                  </Link>
+                  .
                 </Typography>
               </Box>
             ) : (
@@ -670,6 +729,7 @@ export const ProfilePage: React.FC = () => {
                                   {biz.category}
                                 </Typography>
                                 {biz.description && ` — ${biz.description}`}
+                                {biz.contact && ` — ${biz.contact}`}
                               </React.Fragment>
                             }
                           />
@@ -688,6 +748,108 @@ export const ProfilePage: React.FC = () => {
                   )}
                 </Grid>
               </Grid>
+            </Paper>
+          </Grid>
+        )}
+
+        {userProfile?.role === "admin" && (
+          <Grid size={{ xs: 12 }}>
+            <Paper elevation={2} sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Village Assignment Requests
+              </Typography>
+              <Divider sx={{ mb: 2 }} />
+
+              {hasAssignedVillage ? (
+                <Box sx={{ mb: 3 }}>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Your village assignment is already approved.
+                  </Alert>
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Assigned Village
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}>
+                    {(userProfile?.villages || []).map((vId) => {
+                      const vName = villages.find((v) => v.id === vId)?.name || vId;
+                      return <Chip key={vId} label={vName} color="success" size="small" />;
+                    })}
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    To change village assignment, contact superadmin at{" "}
+                    <Link href="mailto:support@kinvia.in" underline="hover">
+                      support@kinvia.in
+                    </Link>
+                    .
+                  </Typography>
+                </Box>
+              ) : (
+                <Stack spacing={2} sx={{ mb: 3 }}>
+                  <FormControl fullWidth>
+                    <InputLabel id="request-village-label">
+                      Select Village
+                    </InputLabel>
+                    <Select
+                      labelId="request-village-label"
+                      value={requestVillageId}
+                      label="Select Village"
+                      onChange={(e) => setRequestVillageId(e.target.value)}
+                    >
+                      {villages.map((village) => (
+                        <MenuItem key={village.id} value={village.id}>
+                          {village.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Request Note (Optional)"
+                    multiline
+                    rows={2}
+                    value={requestMessage}
+                    onChange={(e) => setRequestMessage(e.target.value)}
+                  />
+                  <Box>
+                    <Button
+                      variant="contained"
+                      disabled={!requestVillageId || requestSubmitting}
+                      onClick={handleSubmitVillageRequest}
+                    >
+                      {requestSubmitting ? "Submitting..." : "Raise Request"}
+                    </Button>
+                  </Box>
+                </Stack>
+              )}
+
+              <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                My Requests
+              </Typography>
+              {myVillageRequests.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No requests submitted yet.
+                </Typography>
+              ) : (
+                <List dense>
+                  {myVillageRequests.map((req) => (
+                    <ListItem key={req.id} sx={{ border: "1px solid #eee", borderRadius: 1, mb: 1 }}>
+                      <ListItemText
+                        primary={req.village_name || req.village_id}
+                        secondary={req.request_message || "No note"}
+                      />
+                      <Chip
+                        size="small"
+                        label={req.status}
+                        color={
+                          req.status === "approved"
+                            ? "success"
+                            : req.status === "rejected"
+                              ? "error"
+                              : "warning"
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
             </Paper>
           </Grid>
         )}
@@ -721,13 +883,22 @@ export const ProfilePage: React.FC = () => {
             </FormControl>
 
             {!selectedProfessionId && (
-              <TextField
-                fullWidth
-                label="New Profession Name"
-                value={newProfessionName}
-                onChange={(e) => setNewProfessionName(e.target.value)}
-                helperText="Enter a new profession name if not in list"
-              />
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <TextField
+                  fullWidth
+                  label="New Profession Name"
+                  value={newProfessionName}
+                  onChange={(e) => setNewProfessionName(e.target.value)}
+                  helperText="Enter a new profession name if not in list"
+                />
+                <TextField
+                  fullWidth
+                  label="Contact Number"
+                  value={newProfessionContact}
+                  onChange={(e) => setNewProfessionContact(e.target.value)}
+                  placeholder="Enter phone number (optional)"
+                />
+              </Box>
             )}
           </Box>
         </DialogContent>
@@ -789,6 +960,18 @@ export const ProfilePage: React.FC = () => {
                   description: e.target.value,
                 })
               }
+            />
+            <TextField
+              fullWidth
+              label="Contact Number"
+              value={newBusinessData.contact}
+              onChange={(e) =>
+                setNewBusinessData({
+                  ...newBusinessData,
+                  contact: e.target.value,
+                })
+              }
+              placeholder="Enter phone number (optional)"
             />
           </Box>
         </DialogContent>

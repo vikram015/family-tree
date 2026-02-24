@@ -14,9 +14,37 @@ CREATE OR REPLACE FUNCTION link_spouse_in_tree(
 )
 RETURNS JSON AS $$
 DECLARE
+  v_tree_id_1 UUID;
+  v_tree_id_2 UUID;
+  v_access JSON;
   v_result JSON;
   v_relation_subtype VARCHAR := 'married'; -- Default subtype
 BEGIN
+  SELECT tree_id INTO v_tree_id_1 FROM people WHERE id = p_person_id_1;
+  SELECT tree_id INTO v_tree_id_2 FROM people WHERE id = p_person_id_2;
+
+  IF v_tree_id_1 IS NULL OR v_tree_id_2 IS NULL THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', 'Person not found'
+    );
+  END IF;
+
+  v_access := check_tree_write_access(v_tree_id_1);
+  IF NOT COALESCE((v_access->>'allowed')::BOOLEAN, false) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', COALESCE(v_access->>'error', 'Permission denied')
+    );
+  END IF;
+
+  v_access := check_tree_write_access(v_tree_id_2);
+  IF NOT COALESCE((v_access->>'allowed')::BOOLEAN, false) THEN
+    RETURN json_build_object(
+      'success', false,
+      'error', COALESCE(v_access->>'error', 'Permission denied')
+    );
+  END IF;
   
   -- 1. Create Bidirectional Spouse Relationship
   

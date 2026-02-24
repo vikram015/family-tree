@@ -63,6 +63,7 @@ BEGIN
     LEFT JOIN people parent_p ON pr.related_person_id = parent_p.id
     WHERE p.tree_id = ANY(v_tree_ids)
       AND p.is_deleted = FALSE
+      AND parent_p.gender = 'male'
 
     UNION ALL
 
@@ -82,7 +83,6 @@ BEGIN
     LEFT JOIN people parent_p ON pr.related_person_id = parent_p.id
     WHERE pc.generation < 5
       AND pc.related_person_id IS NOT NULL
-      AND pc.parent_gender = 'male'
       AND parent_p.gender = 'male'
   ),
   parent_data AS (
