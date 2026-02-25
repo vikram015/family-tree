@@ -110,6 +110,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               id: person.id,
               name: person.name,
               gender: person.gender as Gender,
+              dob: person.dob || "",
               parents:
                 person.parents?.map((p: any) => ({
                   id: p.id,

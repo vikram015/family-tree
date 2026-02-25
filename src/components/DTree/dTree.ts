@@ -48,8 +48,13 @@ const dTree = {
             textRenderer
           );
         },
-        nodeSize: function (nodes: any[], width: number, textRenderer: Function) {
-          return TreeBuilder._nodeSize(nodes, width, textRenderer);
+        nodeSize: function (
+          nodes: any[],
+          width: number,
+          textRenderer: Function,
+          nodeHeight: number
+        ) {
+          return TreeBuilder._nodeSize(nodes, width, textRenderer, nodeHeight);
         },
         nodeSorter: function (aName: string, aExtra: any, bName: string, bExtra: any) {
           return 0;
@@ -79,6 +84,7 @@ const dTree = {
         left: 0
       },
       nodeWidth: 100,
+      nodeHeight: 50,
       marriageNodeSize: 10,
       styles: {
         node: 'node',

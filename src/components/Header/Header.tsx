@@ -14,6 +14,9 @@ import {
   FormControl,
   Select,
   MenuItem,
+  Dialog,
+  ListItemButton,
+  ListItemText,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
@@ -27,6 +30,7 @@ import { useAuth } from "../hooks/useAuth";
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [villagePickerOpen, setVillagePickerOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
@@ -353,7 +357,31 @@ export const Header: React.FC = () => {
 
           {isMobile && (
             <>
-              <Box sx={{ flexGrow: 1 }} />
+              <Box sx={{ flexGrow: 1, px: 1, minWidth: 0, display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  color="inherit"
+                  variant="outlined"
+                  onClick={() => setVillagePickerOpen(true)}
+                  sx={{
+                    textTransform: "none",
+                    borderColor: "rgba(255,255,255,0.55)",
+                    color: "white",
+                    minWidth: 150,
+                    maxWidth: 220,
+                    justifyContent: "flex-start",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    "&:hover": {
+                      borderColor: "white",
+                      backgroundColor: "rgba(255,255,255,0.08)",
+                    },
+                  }}
+                >
+                  {villages.find((v) => v.id === selectedVillage)?.name ||
+                    (villages.length === 0 ? "Loading..." : "Select Village")}
+                </Button>
+              </Box>
               <IconButton
                 color="inherit"
                 edge="end"
@@ -373,6 +401,41 @@ export const Header: React.FC = () => {
       >
         {drawerContent}
       </Drawer>
+
+      <Dialog fullScreen open={villagePickerOpen} onClose={() => setVillagePickerOpen(false)}>
+        <AppBar position="static" color="primary">
+          <Toolbar>
+            <Typography sx={{ flexGrow: 1 }} variant="h6">
+              Select Village
+            </Typography>
+            <IconButton color="inherit" onClick={() => setVillagePickerOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+        <Box sx={{ p: 2 }}>
+          <List>
+            {villages.length === 0 && (
+              <ListItem>
+                <ListItemText primary="Loading villages..." />
+              </ListItem>
+            )}
+            {villages.map((village) => (
+              <ListItem key={village.id} disablePadding>
+                <ListItemButton
+                  selected={selectedVillage === village.id}
+                  onClick={() => {
+                    setSelectedVillage(village.id);
+                    setVillagePickerOpen(false);
+                  }}
+                >
+                  <ListItemText primary={village.name} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Dialog>
     </>
   );
 };

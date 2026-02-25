@@ -38,7 +38,8 @@ class TreeBuilder {
         (node: any) => !(node.hidden || get(node, 'data.isMarriage'))
       ),
       opts.nodeWidth,
-      opts.callbacks.textRenderer
+      opts.callbacks.textRenderer,
+      opts.nodeHeight
     );
     this.marriageSize = opts.callbacks.marriageSize.call(
       this,
@@ -579,10 +580,13 @@ class TreeBuilder {
     return nodeMaxHeight + 45;
   }
 
-  static _nodeSize(nodes: any[], width: number, textRenderer: Function) {
-    // Fixed card dimensions from NodeCard CARD_DIM
-    // width param = configured nodeWidth (CARD_DIM.w = 180)
-    const cardHeight = 50; // CARD_DIM.h
+  static _nodeSize(
+    nodes: any[],
+    width: number,
+    textRenderer: Function,
+    nodeHeight: number = 50
+  ) {
+    const cardHeight = nodeHeight;
 
     nodes.forEach((n: any) => {
       n.cHeight = cardHeight;

@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { select } from "d3-selection";
 import { zoomIdentity, zoomTransform } from "d3-zoom";
 import "d3-transition";
+import MuiBox from "@mui/material/Box";
+import { Paper, Typography, Popper } from "@mui/material";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
@@ -98,6 +100,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const [mobileSheetNodeId, setMobileSheetNodeId] = useState<string | null>(
     null,
   );
+  const [hoverInfo, setHoverInfo] = useState<{
+    node: FNode;
+    anchorEl: Element;
+  } | null>(null);
   const mobileSheetNode = mobileSheetNodeId
     ? nodes.find((n) => n.id === mobileSheetNodeId) || null
     : null;
@@ -308,9 +314,22 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   }, [handleNodeTap]);
 
   useEffect(() => {
+    const formatDate = (value?: string) => {
+      if (!value) return "";
+      const raw = String(value).trim();
+      const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
+      const parts = datePart.split("-");
+      if (parts.length === 3) {
+        const [y, m, d] = parts;
+        if (y.length === 4) return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+      }
+      return value;
+    };
+
     // Event delegation for icons and placeholder clicks
     const handleContainerClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      setHoverInfo(null);
 
       // --- External tree link ---
       const linkButton = target.closest(".external-tree-icon");
@@ -375,6 +394,48 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       container.addEventListener("click", handleContainerClick);
     }
 
+    const handleContainerMouseMove = (e: MouseEvent) => {
+      if (isMobileRef.current) return;
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (
+        target.closest(".node-edit-icon") ||
+        target.closest(".node-add-icon") ||
+        target.closest(".external-tree-icon") ||
+        target.closest(".placeholder-click-target")
+      ) {
+        setHoverInfo(null);
+        return;
+      }
+      const nodeG = target.closest("g.node") as any;
+      if (!nodeG || !nodeG.__data__) {
+        setHoverInfo(null);
+        return;
+      }
+      const d = nodeG.__data__;
+      if (d.data?.extra?._placeholder || d.data?.isMarriage || !d.data?.extra?.id) {
+        setHoverInfo(null);
+        return;
+      }
+      const hovered = nodes.find((n) => n.id === d.data.extra.id);
+      if (!hovered) {
+        setHoverInfo(null);
+        return;
+      }
+      setHoverInfo({
+        node: {
+          ...hovered,
+          dob: formatDate(hovered.dob),
+          deceasedDate: formatDate(hovered.deceasedDate),
+        },
+        anchorEl: nodeG as Element,
+      });
+    };
+
+    const handleContainerMouseLeave = () => {
+      setHoverInfo(null);
+    };
+
     // --- Mobile touch tap detection ---
     // D3 zoom can consume touch events, preventing click from firing on nodes.
     // We detect a quick tap (short duration, minimal movement) on a node card
@@ -431,6 +492,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         passive: true,
         capture: true,
       });
+      container.addEventListener("mousemove", handleContainerMouseMove);
+      container.addEventListener("mouseleave", handleContainerMouseLeave);
     }
 
     return () => {
@@ -442,9 +505,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         container.removeEventListener("touchend", handleTouchEnd, {
           capture: true,
         });
+        container.removeEventListener("mousemove", handleContainerMouseMove);
+        container.removeEventListener("mouseleave", handleContainerMouseLeave);
       }
     };
-  }, [onExternalTreeClick, onEditNode, onAddRelative, canEditTree]);
+  }, [onExternalTreeClick, onEditNode, onAddRelative, canEditTree, nodes]);
 
   // Helper: check if 'ancestorId' is an ancestor of 'targetId'
   // Traverses parent links AND spouse connections so that a spouse from
@@ -901,6 +966,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         duration: 0,
         margin: margin,
         nodeWidth: CARD_DIM.w,
+        nodeHeight: CARD_DIM.h,
         callbacks: {
           nodeClick: (
             name: string,
@@ -1101,6 +1167,79 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           cursor: "grab",
         }}
       />
+
+      {hoverInfo && !isMobile && (
+        <Popper
+          open
+          anchorEl={hoverInfo.anchorEl as any}
+          placement="top"
+          modifiers={[
+            { name: "offset", options: { offset: [0, 10] } },
+            { name: "flip", options: { fallbackPlacements: ["bottom", "right", "left"] } },
+            { name: "preventOverflow", options: { padding: 12 } },
+          ]}
+          sx={{ zIndex: 1500, pointerEvents: "none" }}
+        >
+          <Paper
+            elevation={6}
+            sx={{
+              px: 1.25,
+              py: 1,
+              maxWidth: 320,
+              border: "1px solid",
+              borderColor: "divider",
+              bgcolor: "rgba(255,255,255,0.96)",
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+              {hoverInfo.node.name}
+            </Typography>
+            {hoverInfo.node.dob && (
+              <Typography variant="caption" display="block" color="text.secondary">
+                Born: {hoverInfo.node.dob}
+              </Typography>
+            )}
+            <Typography variant="caption" display="block" color="text.secondary">
+              Parents: {hoverInfo.node.parents?.length || 0} | Children:{" "}
+              {hoverInfo.node.children?.length || 0} | Spouses:{" "}
+              {hoverInfo.node.spouses?.length || 0}
+            </Typography>
+            {Array.isArray(hoverInfo.node.hierarchy) &&
+              hoverInfo.node.hierarchy.length > 0 && (
+                <>
+                  <Typography
+                    variant="caption"
+                    display="block"
+                    color="text.secondary"
+                    sx={{
+                      mt: 0.6,
+                      pt: 0.5,
+                      borderTop: "1px solid",
+                      borderColor: "divider",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Ancestry:
+                  </Typography>
+                  <MuiBox sx={{ ml: 0.5, mt: 0.25 }}>
+                    {hoverInfo.node.hierarchy.map((ancestor, index) => (
+                      <Typography
+                        key={`${ancestor.id}-${index}`}
+                        variant="caption"
+                        display="block"
+                        color="text.secondary"
+                        sx={{ fontSize: "0.72rem" }}
+                      >
+                        {"↑ ".repeat(hoverInfo.node.hierarchy!.length - index)}
+                        {ancestor.name}
+                      </Typography>
+                    ))}
+                  </MuiBox>
+                </>
+              )}
+          </Paper>
+        </Popper>
+      )}
 
       {/* Mobile inline action bar — no backdrop, tree shrinks to make room */}
       {mobileSheetNode && (

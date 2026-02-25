@@ -11,14 +11,14 @@
 
 // Card dimensions (similar to family-chart)
 export const CARD_DIM = {
-  w: 180, // total card width
-  h: 50, // total card height
-  img_w: 40, // image width
-  img_h: 40, // image height
-  img_x: 5, // image x offset from card left
-  img_y: 5, // image y offset from card top
-  text_x: 52, // text x start (after image + gap)
-  text_y: 18, // text y position (baseline from card top)
+  w: 200, // total card width
+  h: 64, // total card height
+  img_w: 64, // image width (full card height)
+  img_h: 64, // image height (full card height)
+  img_x: 0, // image x offset from card left
+  img_y: 0, // image y offset from card top
+  text_x: 72, // text x start (after image + gap)
+  text_y: 23, // text y position (baseline from card top)
   r: 8, // border radius
 };
 
@@ -82,6 +82,20 @@ function escapeXml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+function formatDisplayDate(value?: string): string {
+  if (!value) return "";
+  const raw = String(value).trim();
+  const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
+  const parts = datePart.split("-");
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    if (y.length === 4 && m.length >= 1 && d.length >= 1) {
+      return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+    }
+  }
+  return value;
 }
 
 /**
@@ -270,19 +284,33 @@ export function renderNodeCardSvg(
   svg += escapedName;
   svg += `</text>`;
 
-  // --- Subtitle (DOB or children count) ---
-  const subtitleParts: string[] = [];
-  if (isDeceased) subtitleParts.push("Deceased");
-  if (extra?.dob) subtitleParts.push(extra.dob);
-  else if (extra?.childrenCount)
-    subtitleParts.push(`${extra.childrenCount} children`);
-  const subtitle = subtitleParts.join(" | ");
-  if (subtitle) {
-    svg += `<text x="${dim.text_x}" y="${dim.text_y + 16}" `;
+  // --- Subtitle line 1 (DOB) ---
+  const subtitleMaxWidth = dim.w - dim.text_x - 10;
+  const dobValue = extra?.dob ? formatDisplayDate(extra.dob) : "-";
+  const dobLine = truncateText(`DOB: ${dobValue}`, Math.max(30, subtitleMaxWidth));
+  svg += `<text x="${dim.text_x}" y="${dim.text_y + 16}" `;
+  svg += `font-family="'Manrope', 'Segoe UI', Roboto, sans-serif" `;
+  svg += `font-size="10" fill="${colors.text}" opacity="0.6" `;
+  svg += `dominant-baseline="auto" cursor="pointer">`;
+  svg += escapeXml(dobLine);
+  svg += `</text>`;
+
+  // --- Subtitle line 2 (Children + deceased) ---
+  const childrenCount =
+    typeof extra?.childrenCount === "number" ? extra.childrenCount : 0;
+  const childrenParts: string[] = [];
+  if (childrenCount > 0) childrenParts.push(`Children: ${childrenCount}`);
+  if (isDeceased) childrenParts.push("Deceased");
+  const childrenRaw = childrenParts.join(" | ");
+  const childrenLine = childrenRaw
+    ? truncateText(childrenRaw, Math.max(30, subtitleMaxWidth))
+    : "";
+  if (childrenLine) {
+    svg += `<text x="${dim.text_x}" y="${dim.text_y + 28}" `;
     svg += `font-family="'Manrope', 'Segoe UI', Roboto, sans-serif" `;
     svg += `font-size="10" fill="${colors.text}" opacity="0.6" `;
     svg += `dominant-baseline="auto" cursor="pointer">`;
-    svg += escapeXml(subtitle);
+    svg += escapeXml(childrenLine);
     svg += `</text>`;
   }
 
@@ -314,13 +342,14 @@ export function renderNodeCardSvg(
     const iconR = 8;
     const gap = 4;
     // Position: bottom-right inside the card
-    const iconY = dim.h - iconR - 5;
+    const iconY = dim.h - iconR - 6;
     const cx2 = dim.w - iconR - 5; // add icon (rightmost)
     const cx1 = cx2 - iconR * 2 - gap; // edit icon (left of add)
 
     // Edit icon button
     svg += `<g class="node-action-icon node-edit-icon" data-node-id="${extra.id}" cursor="pointer">`;
     svg += `<circle cx="${cx1}" cy="${iconY}" r="${iconR}" fill="white" stroke="#9e9e9e" stroke-width="1"/>`;
+    svg += `<title>Edit</title>`;
     svg += `<g transform="translate(${cx1 - 4}, ${iconY - 4}) scale(0.33)">`;
     svg += `<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="#757575"/>`;
     svg += `</g>`;
@@ -329,6 +358,7 @@ export function renderNodeCardSvg(
     // Add relative icon button
     svg += `<g class="node-action-icon node-add-icon" data-node-id="${extra.id}" cursor="pointer">`;
     svg += `<circle cx="${cx2}" cy="${iconY}" r="${iconR}" fill="white" stroke="#66bb6a" stroke-width="1"/>`;
+    svg += `<title>Add Relative</title>`;
     svg += `<line x1="${cx2 - 3.5}" y1="${iconY}" x2="${cx2 + 3.5}" y2="${iconY}" stroke="#4caf50" stroke-width="1.8" stroke-linecap="round"/>`;
     svg += `<line x1="${cx2}" y1="${iconY - 3.5}" x2="${cx2}" y2="${iconY + 3.5}" stroke="#4caf50" stroke-width="1.8" stroke-linecap="round"/>`;
     svg += `</g>`;

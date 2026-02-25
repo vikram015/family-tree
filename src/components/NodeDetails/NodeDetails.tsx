@@ -83,6 +83,11 @@ export const NodeDetails = memo(function NodeDetails({
   initialAddInfo,
   ...props
 }: NodeDetailsProps) {
+  const formatDisplayDate = (value?: string) => {
+    if (!value) return "";
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format("DD/MM/YYYY") : value;
+  };
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [view, setView] = useState<
@@ -435,11 +440,11 @@ export const NodeDetails = memo(function NodeDetails({
                       : node.gender === Gender.female
                         ? "Female"
                         : "Other"}
-                    {node.dob && ` • Born ${node.dob}`}
+                    {node.dob && ` • Born ${formatDisplayDate(node.dob)}`}
                     {node.isAlive === false && ` • Deceased`}
                     {node.isAlive === false &&
                       node.deceasedDate &&
-                      ` (${node.deceasedDate})`}
+                      ` (${formatDisplayDate(node.deceasedDate)})`}
                   </Typography>
                   {node.bloodGroup && (
                     <Typography variant="body2" color="text.secondary">
@@ -919,3 +924,4 @@ export const NodeDetails = memo(function NodeDetails({
     </>
   );
 });
+
