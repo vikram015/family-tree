@@ -114,12 +114,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               parents:
                 person.parents?.map((p: any) => ({
                   id: p.id,
-                  type: RelType.blood,
+                  type: (p.type || p.relation_subtype || RelType.blood) as RelType,
                 })) || [],
               children:
                 person.children?.map((c: any) => ({
                   id: c.id,
-                  type: RelType.blood,
+                  type: (c.type || c.relation_subtype || RelType.blood) as RelType,
                 })) || [],
               spouses:
                 person.spouses?.map((s: any) => ({
@@ -306,12 +306,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             parents:
               raw.parents?.map((p: any) => ({
                 id: p.id,
-                type: RelType.blood,
+                type: (p.type || p.relation_subtype || RelType.blood) as RelType,
               })) || [],
             children:
               raw.children?.map((c: any) => ({
                 id: c.id,
-                type: RelType.blood,
+                type: (c.type || c.relation_subtype || RelType.blood) as RelType,
               })) || [],
             spouses:
               raw.spouses?.map((s: any) => ({

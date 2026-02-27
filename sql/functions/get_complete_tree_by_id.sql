@@ -97,7 +97,9 @@ BEGIN
           'id', p_parent.id,
           'name', p_parent.name,
           'gender', p_parent.gender,
-          'dob', p_parent.dob
+          'dob', p_parent.dob,
+          'relation_subtype', COALESCE(pr.relation_subtype, 'blood'),
+          'type', COALESCE(pr.relation_subtype, 'blood')
         ))
         FROM people_relations pr
         JOIN people p_parent ON pr.related_person_id = p_parent.id
@@ -109,7 +111,9 @@ BEGIN
           'id', p_child.id,
           'name', p_child.name,
           'gender', p_child.gender,
-          'dob', p_child.dob
+          'dob', p_child.dob,
+          'relation_subtype', COALESCE(pr.relation_subtype, 'blood'),
+          'type', COALESCE(pr.relation_subtype, 'blood')
         ))
         FROM people_relations pr
         JOIN people p_child ON pr.person_id = p_child.id
@@ -121,18 +125,36 @@ BEGIN
           'id', p_spouse.id,
           'name', p_spouse.name,
           'gender', p_spouse.gender,
-          'dob', p_spouse.dob
+          'dob', p_spouse.dob,
+          'relation_subtype', p_spouse.relation_subtype,
+          'type', p_spouse.relation_subtype
         ))
         FROM (
-          SELECT DISTINCT p_spouse.id, p_spouse.name, p_spouse.gender, p_spouse.dob
-          FROM people_relations pr
-          JOIN people p_spouse ON pr.related_person_id = p_spouse.id
-          WHERE pr.person_id = p.id AND pr.relation_type = 'spouse'
-          UNION
-          SELECT DISTINCT p_spouse.id, p_spouse.name, p_spouse.gender, p_spouse.dob
-          FROM people_relations pr
-          JOIN people p_spouse ON pr.person_id = p_spouse.id
-          WHERE pr.related_person_id = p.id AND pr.relation_type = 'spouse'
+          SELECT
+            p_spouse.id,
+            p_spouse.name,
+            p_spouse.gender,
+            p_spouse.dob,
+            CASE
+              WHEN bool_or(COALESCE(pr.relation_subtype, 'married') = 'divorced') THEN 'divorced'
+              WHEN bool_or(COALESCE(pr.relation_subtype, 'married') = 'married') THEN 'married'
+              ELSE COALESCE(max(pr.relation_subtype), 'married')
+            END AS relation_subtype
+          FROM (
+            SELECT
+              pr.related_person_id AS spouse_id,
+              pr.relation_subtype
+            FROM people_relations pr
+            WHERE pr.person_id = p.id AND pr.relation_type = 'spouse'
+            UNION ALL
+            SELECT
+              pr.person_id AS spouse_id,
+              pr.relation_subtype
+            FROM people_relations pr
+            WHERE pr.related_person_id = p.id AND pr.relation_type = 'spouse'
+          ) pr
+          JOIN people p_spouse ON p_spouse.id = pr.spouse_id
+          GROUP BY p_spouse.id, p_spouse.name, p_spouse.gender, p_spouse.dob
         ) AS p_spouse),
         '[]'::json
       ),

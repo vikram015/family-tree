@@ -660,8 +660,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           const placeholderTarget = showSpousePlaceholders
             ? spouseNode.id
             : personId;
-          const parentPlaceholders =
-            showPlaceholders && shouldWrapWithParentPlaceholders
+          // When adding relatives from the spouse card, only show child actions.
+          // Parent placeholders are relevant to the primary node add flow.
+          const parentPlaceholders = showSpousePlaceholders
+            ? []
+            : showPlaceholders && shouldWrapWithParentPlaceholders
               ? []
               : buildParentPlaceholders(placeholderTarget);
           const childPlaceholders: DTreeNode[] = [
