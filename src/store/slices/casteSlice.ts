@@ -77,7 +77,9 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchCastes.fulfilled, (state, action: PayloadAction<Caste[]>) => {
       state.castesLoading = false;
-      state.castes = action.payload;
+      state.castes = (action.payload || []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
     });
     builder.addCase(fetchCastes.rejected, (state, action) => {
       state.castesLoading = false;
@@ -91,7 +93,9 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchSubCastes.fulfilled, (state, action: PayloadAction<SubCaste[]>) => {
       state.subCastesLoading = false;
-      state.subCastes = action.payload;
+      state.subCastes = (action.payload || []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
     });
     builder.addCase(fetchSubCastes.rejected, (state, action) => {
       state.subCastesLoading = false;
@@ -105,7 +109,9 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchAllSubCastes.fulfilled, (state, action: PayloadAction<SubCaste[]>) => {
       state.subCastesLoading = false;
-      state.subCastes = action.payload;
+      state.subCastes = (action.payload || []).slice().sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      );
     });
     builder.addCase(fetchAllSubCastes.rejected, (state, action) => {
       state.subCastesLoading = false;

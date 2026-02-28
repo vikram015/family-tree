@@ -2,7 +2,10 @@ import type { ExtNode } from "relatives-tree/lib/types";
 export type FNode = ExtNode & {
   name: string;
   dob: string;
-  dod?: string; // Date of Death
+  dod?: string; // Date of Death (legacy)
+  bloodGroup?: string; // Blood group (A+, B-, O+, etc.)
+  isAlive?: boolean; // Whether the person is alive
+  deceasedDate?: string; // Date of death
   place?: string; // Place (birthplace or current location)
   notes?: string; // Additional notes
   photo?: string; // Photo URL

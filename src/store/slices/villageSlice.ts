@@ -4,6 +4,8 @@ import { SupabaseService } from '../../services/supabaseService';
 interface Village {
   id: string;
   name: string;
+  district_id?: string;
+  created_at?: string;
 }
 
 interface VillageState {
@@ -16,9 +18,8 @@ interface VillageState {
 const initialState: VillageState = {
   villages: [],
   selectedVillage: (() => {
-    const stored = localStorage.getItem('selectedVillage');
     const params = new URLSearchParams(window.location.search);
-    return params.get('village') || stored || '';
+    return params.get('village') || '';
   })(),
   loading: true,
   error: null,
@@ -36,6 +37,8 @@ export const fetchVillages = createAsyncThunk(
       const villageList: Village[] = villageData.map((village: any) => ({
         id: village.id,
         name: village.name,
+        district_id: village.district_id || village.district?.id || undefined,
+        created_at: village.created_at,
       }));
 
       return villageList;
@@ -52,9 +55,6 @@ const villageSlice = createSlice({
   reducers: {
     setSelectedVillage: (state, action: PayloadAction<string>) => {
       state.selectedVillage = action.payload;
-      if (action.payload) {
-        localStorage.setItem('selectedVillage', action.payload);
-      }
     },
     clearError: (state) => {
       state.error = null;
@@ -66,14 +66,16 @@ const villageSlice = createSlice({
         state.loading = true;
       })
       .addCase(fetchVillages.fulfilled, (state, action) => {
-        state.villages = action.payload;
+        // Sort villages alphabetically by name
+        state.villages = (action.payload || []).slice().sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+        );
         state.loading = false;
         state.error = null;
-        
+
         // Auto-select first village if none selected
-        if (action.payload.length > 0 && !state.selectedVillage) {
-          state.selectedVillage = action.payload[0].id;
-          localStorage.setItem('selectedVillage', action.payload[0].id);
+        if (state.villages.length > 0 && !state.selectedVillage) {
+          state.selectedVillage = state.villages[0].id;
         }
       })
       .addCase(fetchVillages.rejected, (state, action) => {

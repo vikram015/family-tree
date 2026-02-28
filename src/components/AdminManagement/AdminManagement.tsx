@@ -27,7 +27,7 @@ import {
   Tab,
   TextField,
 } from "@mui/material";
-import { Edit, Delete, Add } from "@mui/icons-material";
+import { Edit, Delete, Add, CheckCircle, LocationOn, Close } from "@mui/icons-material";
 import { supabase } from "../../supabase";
 import { SupabaseService } from "../../services/supabaseService";
 import { AppUser, UserRole } from "../model/User";
@@ -47,12 +47,23 @@ import {
   selectSubCastes,
 } from "../../store/slices/casteSlice";
 import { fetchVillages, selectVillages } from "../../store/slices/villageSlice";
+import { useLocation, useNavigate } from "react-router-dom";
 
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
   value: number;
 }
+
+const TAB_KEYS = [
+  "users",
+  "village-requests",
+  "states",
+  "districts",
+  "villages",
+  "castes",
+  "sub-castes",
+] as const;
 
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
@@ -72,7 +83,9 @@ function TabPanel(props: TabPanelProps) {
 
 export const AdminManagement: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isSuperAdmin, userProfile } = useAuth();
+  const { isSuperAdmin, isAdmin, userProfile, loading: authLoading } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Redux state
   const states = useAppSelector(selectStates);
@@ -83,14 +96,15 @@ export const AdminManagement: React.FC = () => {
 
   // Local component state
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [villages, setVillages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [editUser, setEditUser] = useState<AppUser | null>(null);
+  const [editMode, setEditMode] = useState<"full" | "villages">("full");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
   const [selectedVillages, setSelectedVillages] = useState<string[]>([]);
   const [error, setError] = useState<string>("");
   const [tabValue, setTabValue] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   // Add dialog states
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -118,16 +132,13 @@ export const AdminManagement: React.FC = () => {
         (usersData || []).map((user) => ({
           ...user,
           id: user.id,
+          isVerified: user.is_verified,
         })) as AppUser[],
       );
 
-      // Load trees from Supabase
-      const trees = await SupabaseService.getTrees();
-      const treeIds = trees.map((tree) => tree.id);
-      setVillages(treeIds);
-
       // Load hierarchy data
       await loadHierarchyData();
+      await loadPendingRequests();
 
       setLoading(false);
     } catch (err) {
@@ -139,8 +150,10 @@ export const AdminManagement: React.FC = () => {
 
   useEffect(() => {
     const checkAccessAndLoad = async () => {
-      if (!isSuperAdmin()) {
-        setError("Access denied. Only superadmin can access this page.");
+      if (authLoading) return;
+
+      if (!isAdmin()) {
+        setError("Access denied. Only admins can access this page.");
         setLoading(false);
         return;
       }
@@ -149,7 +162,45 @@ export const AdminManagement: React.FC = () => {
     };
 
     checkAccessAndLoad();
-  }, [isSuperAdmin, loadData]);
+  }, [isSuperAdmin, isAdmin, loadData, authLoading]);
+
+  useEffect(() => {
+    if (!isSuperAdmin()) {
+      setTabValue(1);
+    }
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabKey = params.get("tab");
+    if (!tabKey) return;
+
+    const idx = TAB_KEYS.indexOf(tabKey as (typeof TAB_KEYS)[number]);
+    if (idx === -1) return;
+    if (!isSuperAdmin() && idx > 1) return;
+    setTabValue(idx);
+  }, [location.search, isSuperAdmin]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextKey = TAB_KEYS[tabValue] || "users";
+    if (params.get("tab") === nextKey) return;
+    params.set("tab", nextKey);
+    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+  }, [tabValue, location.pathname, location.search, navigate]);
+
+  const loadPendingRequests = async () => {
+    try {
+      const { data, error } = await supabase.rpc(
+        "get_pending_village_access_requests",
+      );
+      if (error) throw error;
+      setPendingRequests(data || []);
+    } catch (err) {
+      console.error("Error loading pending requests:", err);
+      setPendingRequests([]);
+    }
+  };
 
   const loadHierarchyData = async () => {
     try {
@@ -233,14 +284,47 @@ export const AdminManagement: React.FC = () => {
     }
   };
 
+  const handleVerifyUser = async (userId: string) => {
+    if (!isSuperAdmin()) return;
+    try {
+      // Use the RPC function to verify both Auth email and Public status
+      const { data, error } = await supabase.rpc("verify_user_email", {
+        target_user_id: userId,
+      });
+
+      if (error) throw error;
+      if (data && !data.success) throw new Error(data.error);
+
+      setSuccessMessage("User verified successfully");
+      await loadData();
+
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err: any) {
+      console.error("Error verifying user:", err);
+      setError(err.message || "Failed to verify user");
+    }
+  };
+
   const handleEditClick = (user: AppUser) => {
+    if (!isSuperAdmin()) return;
     setEditUser(user);
+    setEditMode("full");
     setSelectedRole(user.role);
     setSelectedVillages(user.villages || []);
     setEditDialogOpen(true);
   };
 
+  const handleEditVillagesClick = (user: AppUser) => {
+    if (!isSuperAdmin()) return;
+    setEditUser(user);
+    setEditMode("villages");
+    setSelectedRole("admin");
+    setSelectedVillages(user.villages || []);
+    setEditDialogOpen(true);
+  };
+
   const handleSaveEdit = async () => {
+    if (!isSuperAdmin()) return;
     if (!editUser) return;
 
     try {
@@ -250,8 +334,8 @@ export const AdminManagement: React.FC = () => {
         .update({
           role: selectedRole,
           villages: selectedRole === "superadmin" ? [] : selectedVillages,
-          updatedAt: new Date().toISOString(),
-          updatedBy: userProfile?.id,
+          modified_at: new Date().toISOString(),
+          modified_by: userProfile?.id,
         })
         .eq("id", editUser.id);
 
@@ -269,6 +353,7 @@ export const AdminManagement: React.FC = () => {
   };
 
   const handleDeleteUser = async (userId: string) => {
+    if (!isSuperAdmin()) return;
     if (!window.confirm("Are you sure you want to delete this user?")) {
       return;
     }
@@ -296,20 +381,43 @@ export const AdminManagement: React.FC = () => {
     );
   };
 
-  if (!isSuperAdmin()) {
+  const handleReviewRequest = async (
+    requestId: string,
+    action: "approved" | "rejected",
+  ) => {
+    try {
+      const { data, error } = await supabase.rpc("review_village_access_request", {
+        p_request_id: requestId,
+        p_action: action,
+        p_review_note: null,
+      });
+
+      if (error) throw error;
+      if (data && !data.success) throw new Error(data.error);
+
+      setSuccessMessage(`Request ${action === "approved" ? "approved" : "rejected"} successfully`);
+      await loadData();
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err: any) {
+      console.error("Error reviewing request:", err);
+      setError(err.message || "Failed to review request");
+    }
+  };
+
+  if (authLoading || loading) {
     return (
       <Container sx={{ mt: 4 }}>
-        <Alert severity="error">
-          Access denied. Only superadmin can access this page.
-        </Alert>
+        <Typography>Loading...</Typography>
       </Container>
     );
   }
 
-  if (loading) {
+  if (!isAdmin()) {
     return (
       <Container sx={{ mt: 4 }}>
-        <Typography>Loading...</Typography>
+        <Alert severity="error">
+          Access denied. Only admins can access this page.
+        </Alert>
       </Container>
     );
   }
@@ -333,37 +441,58 @@ export const AdminManagement: React.FC = () => {
       )}
 
       <Paper>
-        <Tabs value={tabValue} onChange={(e, val) => setTabValue(val)}>
+        <Tabs
+          value={tabValue}
+          onChange={(e, val) => setTabValue(val)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
+        >
           <Tab
             label="Users"
             id="admin-tab-0"
             aria-controls="admin-tabpanel-0"
           />
           <Tab
-            label="States"
+            label="Village Requests"
             id="admin-tab-1"
             aria-controls="admin-tabpanel-1"
           />
-          <Tab
-            label="Districts"
-            id="admin-tab-2"
-            aria-controls="admin-tabpanel-2"
-          />
-          <Tab
-            label="Villages"
-            id="admin-tab-3"
-            aria-controls="admin-tabpanel-3"
-          />
-          <Tab
-            label="Castes"
-            id="admin-tab-4"
-            aria-controls="admin-tabpanel-4"
-          />
-          <Tab
-            label="Sub-Castes"
-            id="admin-tab-5"
-            aria-controls="admin-tabpanel-5"
-          />
+          {isSuperAdmin() && (
+            <Tab
+              label="States"
+              id="admin-tab-2"
+              aria-controls="admin-tabpanel-2"
+            />
+          )}
+          {isSuperAdmin() && (
+            <Tab
+              label="Districts"
+              id="admin-tab-3"
+              aria-controls="admin-tabpanel-3"
+            />
+          )}
+          {isSuperAdmin() && (
+            <Tab
+              label="Villages"
+              id="admin-tab-4"
+              aria-controls="admin-tabpanel-4"
+            />
+          )}
+          {isSuperAdmin() && (
+            <Tab
+              label="Castes"
+              id="admin-tab-5"
+              aria-controls="admin-tabpanel-5"
+            />
+          )}
+          {isSuperAdmin() && (
+            <Tab
+              label="Sub-Castes"
+              id="admin-tab-6"
+              aria-controls="admin-tabpanel-6"
+            />
+          )}
         </Tabs>
 
         {/* Users Tab */}
@@ -371,15 +500,22 @@ export const AdminManagement: React.FC = () => {
           <Box sx={{ mb: 2 }}>
             <Typography variant="h6">User Management</Typography>
           </Box>
-          <TableContainer>
-            <Table>
+          {!isSuperAdmin() && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Only superadmin can edit users. Admins can review village access
+              requests from the "Village Requests" tab.
+            </Alert>
+          )}
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 720 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell>Phone Number</TableCell>
-                  <TableCell>Display Name</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Name</TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Villages</TableCell>
-                  <TableCell>Created At</TableCell>
+                  <TableCell>Linked Node</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -387,7 +523,9 @@ export const AdminManagement: React.FC = () => {
                 {users.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.displayName || "-"}</TableCell>
+                    <TableCell>
+                      {user.name || user.displayName || "-"}
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={
@@ -404,9 +542,13 @@ export const AdminManagement: React.FC = () => {
                         <Box
                           sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}
                         >
-                          {user.villages.map((v) => (
-                            <Chip key={v} label={v} size="small" />
-                          ))}
+                          {user.villages.map((v) => {
+                            const villageName =
+                              villagesList.find((vl) => vl.id === v)?.name || v;
+                            return (
+                              <Chip key={v} label={villageName} size="small" />
+                            );
+                          })}
                         </Box>
                       ) : (
                         <Typography variant="caption" color="text.secondary">
@@ -414,17 +556,72 @@ export const AdminManagement: React.FC = () => {
                         </Typography>
                       )}
                     </TableCell>
-                    <TableCell>{formatDate(user.createdAt)}</TableCell>
                     <TableCell>
+                      {(user as any).people_id ? (
+                        <Chip
+                          label="Linked"
+                          color="info"
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Not linked
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {user.isVerified ? (
+                        <Chip
+                          icon={<CheckCircle />}
+                          label="Approved"
+                          color="success"
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Chip
+                          label="Pending Approval"
+                          color="warning"
+                          size="small"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {isSuperAdmin() && !user.isVerified && (
+                        <Tooltip title="Approve User">
+                          <IconButton
+                            size="small"
+                            color="success"
+                            onClick={() => handleVerifyUser(user.id)}
+                          >
+                            <CheckCircle />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {isSuperAdmin() && (
+                      <Tooltip title="Edit Villages">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => handleEditVillagesClick(user)}
+                          disabled={user.role !== "admin"}
+                        >
+                          <LocationOn />
+                        </IconButton>
+                      </Tooltip>
+                      )}
+                      {isSuperAdmin() && (
                       <Tooltip title="Edit">
                         <IconButton
                           size="small"
                           onClick={() => handleEditClick(user)}
-                          disabled={user.id === userProfile?.id}
                         >
                           <Edit />
                         </IconButton>
                       </Tooltip>
+                      )}
+                      {isSuperAdmin() && (
                       <Tooltip title="Delete">
                         <IconButton
                           size="small"
@@ -435,6 +632,67 @@ export const AdminManagement: React.FC = () => {
                           <Delete />
                         </IconButton>
                       </Tooltip>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* Village Requests Tab */}
+        <TabPanel value={tabValue} index={1}>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6">Pending Village Access Requests</Typography>
+          </Box>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 760 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Requester</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Village</TableCell>
+                  <TableCell>Message</TableCell>
+                  <TableCell>Requested At</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {pendingRequests.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <Typography color="text.secondary">
+                        No pending requests
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {pendingRequests.map((req) => (
+                  <TableRow key={req.id}>
+                    <TableCell>{req.requester_name || "-"}</TableCell>
+                    <TableCell>{req.requester_email || "-"}</TableCell>
+                    <TableCell>{req.village_name || req.village_id}</TableCell>
+                    <TableCell>{req.request_message || "-"}</TableCell>
+                    <TableCell>{formatDate(req.created_at)}</TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        onClick={() => handleReviewRequest(req.id, "approved")}
+                        sx={{ mr: 1 }}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        onClick={() => handleReviewRequest(req.id, "rejected")}
+                      >
+                        Reject
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -444,7 +702,11 @@ export const AdminManagement: React.FC = () => {
         </TabPanel>
 
         {/* States Tab */}
-        <TabPanel value={tabValue} index={1}>
+        <TabPanel value={tabValue} index={2}>
+          {!isSuperAdmin() ? (
+            <Alert severity="info">Only superadmin can manage states.</Alert>
+          ) : (
+          <>
           <Box sx={{ mb: 2 }}>
             <Button
               variant="contained"
@@ -457,8 +719,8 @@ export const AdminManagement: React.FC = () => {
           {states.length === 0 && (
             <Typography color="text.secondary">No states found</Typography>
           )}
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 520 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -476,10 +738,16 @@ export const AdminManagement: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          </>
+          )}
         </TabPanel>
 
         {/* Districts Tab */}
-        <TabPanel value={tabValue} index={2}>
+        <TabPanel value={tabValue} index={3}>
+          {!isSuperAdmin() ? (
+            <Alert severity="info">Only superadmin can manage districts.</Alert>
+          ) : (
+          <>
           <Box sx={{ mb: 2 }}>
             <Button
               variant="contained"
@@ -489,8 +757,8 @@ export const AdminManagement: React.FC = () => {
               Add District
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 640 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -512,10 +780,16 @@ export const AdminManagement: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          </>
+          )}
         </TabPanel>
 
         {/* Villages Tab */}
-        <TabPanel value={tabValue} index={3}>
+        <TabPanel value={tabValue} index={4}>
+          {!isSuperAdmin() ? (
+            <Alert severity="info">Only superadmin can manage villages.</Alert>
+          ) : (
+          <>
           <Box sx={{ mb: 2 }}>
             <Button
               variant="contained"
@@ -525,8 +799,8 @@ export const AdminManagement: React.FC = () => {
               Add Village
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 760 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -553,10 +827,16 @@ export const AdminManagement: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          </>
+          )}
         </TabPanel>
 
         {/* Castes Tab */}
-        <TabPanel value={tabValue} index={4}>
+        <TabPanel value={tabValue} index={5}>
+          {!isSuperAdmin() ? (
+            <Alert severity="info">Only superadmin can manage castes.</Alert>
+          ) : (
+          <>
           <Box sx={{ mb: 2 }}>
             <Button
               variant="contained"
@@ -566,8 +846,8 @@ export const AdminManagement: React.FC = () => {
               Add Caste
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 480 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -584,10 +864,16 @@ export const AdminManagement: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          </>
+          )}
         </TabPanel>
 
         {/* Sub-Castes Tab */}
-        <TabPanel value={tabValue} index={5}>
+        <TabPanel value={tabValue} index={6}>
+          {!isSuperAdmin() ? (
+            <Alert severity="info">Only superadmin can manage sub-castes.</Alert>
+          ) : (
+          <>
           <Box sx={{ mb: 2 }}>
             <Button
               variant="contained"
@@ -597,8 +883,8 @@ export const AdminManagement: React.FC = () => {
               Add Sub-Caste
             </Button>
           </Box>
-          <TableContainer>
-            <Table>
+          <TableContainer sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 640 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -620,6 +906,8 @@ export const AdminManagement: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          </>
+          )}
         </TabPanel>
       </Paper>
 
@@ -696,31 +984,49 @@ export const AdminManagement: React.FC = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Edit User</DialogTitle>
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            pr: 1,
+          }}
+        >
+          Edit User
+          <IconButton
+            aria-label="Close"
+            onClick={() => setEditDialogOpen(false)}
+            size="small"
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" sx={{ mb: 2 }}>
               Email: {editUser?.email}
             </Typography>
 
-            <FormControl fullWidth sx={{ mb: 3 }}>
-              <InputLabel>Role</InputLabel>
-              <Select
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
-                label="Role"
-              >
-                <MenuItem value="admin">Admin</MenuItem>
-                <MenuItem value="superadmin">Super Admin</MenuItem>
-              </Select>
-            </FormControl>
+            {editMode === "full" && (
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>Role</InputLabel>
+                <Select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                  label="Role"
+                >
+                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="superadmin">Super Admin</MenuItem>
+                </Select>
+              </FormControl>
+            )}
 
-            {selectedRole === "admin" && (
+            {(selectedRole === "admin" || editMode === "villages") && (
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   Assign Villages:
                 </Typography>
-                {villages.length === 0 ? (
+                {villagesList.length === 0 ? (
                   <Typography variant="caption" color="text.secondary">
                     No villages available
                   </Typography>
@@ -728,26 +1034,26 @@ export const AdminManagement: React.FC = () => {
                   <Box
                     sx={{ display: "flex", flexDirection: "column", gap: 1 }}
                   >
-                    {villages.map((village) => (
+                    {villagesList.map((village) => (
                       <Box
-                        key={village}
+                        key={village.id}
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           p: 1,
                           border: 1,
-                          borderColor: selectedVillages.includes(village)
+                          borderColor: selectedVillages.includes(village.id)
                             ? "primary.main"
                             : "divider",
                           borderRadius: 1,
                           cursor: "pointer",
-                          bgcolor: selectedVillages.includes(village)
+                          bgcolor: selectedVillages.includes(village.id)
                             ? "action.selected"
                             : "transparent",
                         }}
-                        onClick={() => handleVillageToggle(village)}
+                        onClick={() => handleVillageToggle(village.id)}
                       >
-                        <Typography>{village}</Typography>
+                        <Typography>{village.name}</Typography>
                       </Box>
                     ))}
                   </Box>

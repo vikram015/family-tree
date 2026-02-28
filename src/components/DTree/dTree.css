@@ -1,0 +1,163 @@
+/* dTree CSS styles - Pure SVG rendering (no foreignObject) */
+:root {
+  --tree-line: #6b7280;
+  --tree-line-soft: #9ca3af;
+  --tree-marriage: #d64562;
+  --tree-node-shadow: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.08));
+}
+
+/* === Link / Line Styles === */
+.linage {
+  fill: none;
+  stroke: var(--tree-line);
+  stroke-width: 1.9px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.marriage {
+  fill: none;
+  stroke: var(--tree-marriage);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.95;
+}
+
+.marriage.divorced {
+  stroke: #64748b;
+  stroke-dasharray: 6 4;
+}
+
+.marriage.deceased {
+  opacity: 0.72;
+}
+
+.marriage-marker {
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08));
+}
+
+.marriage-marker-circle {
+  stroke-width: 1.2px;
+}
+
+.marriage-marker-circle.married {
+  fill: #fff1f3;
+  stroke: #be123c;
+}
+
+.marriage-marker-circle.divorced {
+  fill: #f8fafc;
+  stroke: #64748b;
+}
+
+.marriage-marker-circle.deceased {
+  fill: #f3f4f6;
+  stroke: #6b7280;
+  stroke-dasharray: 2.2 1.6;
+}
+
+.marriage-marker-icon {
+  font-size: 10px;
+  font-family: "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI", sans-serif;
+}
+
+.marriage-marker-icon.married {
+  fill: #be123c;
+}
+
+.marriage-marker-icon.divorced {
+  fill: #334155;
+}
+
+.marriage-marker-icon.deceased {
+  opacity: 0.7;
+}
+
+/* === Node Group Styles === */
+/* The .node group is the outer <g> with translate(x,y) */
+g.node {
+  cursor: pointer;
+}
+
+/* Hover effect on the card background rect */
+g.node:hover .card-bg {
+  filter: var(--tree-node-shadow) brightness(0.985);
+}
+
+g.node:hover .card-outline {
+  stroke-width: 2.1;
+}
+
+g.node .card-bg {
+  transition:
+    filter 0.18s ease,
+    stroke 0.18s ease,
+    stroke-width 0.18s ease;
+  filter: var(--tree-node-shadow);
+}
+
+g.node .card-outline {
+  transition: stroke-width 0.18s ease, opacity 0.18s ease;
+}
+
+/* === Focused Node Glow Effect === */
+g.node .node-glow {
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* === Marriage Node === */
+.marriageNode {
+  fill: black;
+}
+
+/* === Hidden Nodes === */
+.hidden-node {
+  display: none;
+  visibility: hidden;
+}
+/* === Placeholder "Add Relative" Node Cards === */
+g.node:hover .placeholder-card-bg {
+  opacity: 1;
+  filter: brightness(0.95);
+}
+
+g.node .placeholder-click-target:hover ~ .placeholder-card-bg,
+g.node .placeholder-card-bg:hover {
+  stroke-dasharray: none;
+}
+
+/* Action icons (edit / add) — always visible inside card */
+.node-action-icon {
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+g.node:hover .node-action-icon,
+.node-action-icon:hover {
+  opacity: 1;
+}
+
+.node-action-icon:hover circle {
+  filter: brightness(0.92);
+}
+
+/* Hide action icons on small screens — mobile uses bottom sheet instead */
+@media (max-width: 767px) {
+  .node-action-icon {
+    display: none !important;
+  }
+}
+
+/* Mobile bottom sheet animation */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

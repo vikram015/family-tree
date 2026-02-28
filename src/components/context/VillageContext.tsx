@@ -26,10 +26,9 @@ export function useVillage() {
 
 export function VillageProvider({ children }: { children: React.ReactNode }) {
   const [selectedVillage, setSelectedVillage] = useState<string>(() => {
-    // Try to get from localStorage or URL
-    const stored = localStorage.getItem("selectedVillage");
+    // Try to get from URL
     const params = new URLSearchParams(window.location.search);
-    return params.get("village") || stored || "";
+    return params.get("village") || "";
   });
   const [villages, setVillages] = useState<Village[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,13 +77,6 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, []);
-
-  // Persist selected village to localStorage
-  useEffect(() => {
-    if (selectedVillage) {
-      localStorage.setItem("selectedVillage", selectedVillage);
-    }
-  }, [selectedVillage]);
 
   const value = {
     selectedVillage,

@@ -1,25 +1,32 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Helmet } from "react-helmet-async";
-import ReactFamilyTree from "react-family-tree";
 import {
   Box,
   Button,
   Typography,
   Container,
   CircularProgress,
+  Fab,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  Alert,
 } from "@mui/material";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { FamilyNode } from "../FamilyNode/FamilyNode";
+import ShareIcon from "@mui/icons-material/Share";
+import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
-import { NODE_WIDTH, NODE_HEIGHT, getNodeHierarchy } from "../const";
-import { getNodeStyle } from "../App/utils";
+import AddNode from "../AddNode/AddNode";
+import { getNodeHierarchy } from "../const";
 import { SupabaseService } from "../../services/supabaseService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
-import AddNode from "../AddNode/AddNode";
 import { useAuth } from "../hooks/useAuth";
+import { useVillage } from "../hooks/useVillage";
+import { useLoginModal } from "../context/LoginModalContext";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -34,133 +41,338 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   onSourceChange,
   onCreate,
 }) => {
-  const { hasPermission } = useAuth();
+  const { currentUser, hasPermission, isApproved, isAdmin, isSuperAdmin } =
+    useAuth();
+  const { setSelectedVillage } = useVillage();
+  const { openLoginModal } = useLoginModal();
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const firstNodeId = useMemo(() => nodes[0]?.id ?? "", [nodes]);
-  const [rootId, setRootId] = useState(firstNodeId);
+  const [rootId, setRootId] = useState("");
+  const [villageId, setVillageId] = useState<string | undefined>(undefined);
   const [selectId, setSelectId] = useState<string>();
-  const [hoverId, setHoverId] = useState<string>();
+  const [autoExpandNodeId, setAutoExpandNodeId] = useState<string | null>(null);
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
+  // Track initial view & add info for NodeDetails (when opening from placeholder nodes)
+  const [nodeDetailsInitialView, setNodeDetailsInitialView] = useState<
+    "details" | "edit" | "add" | undefined
+  >(undefined);
+  const [nodeDetailsAddInfo, setNodeDetailsAddInfo] = useState<
+    { relation: "child" | "spouse" | "parent"; gender?: string } | undefined
+  >(undefined);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    open: boolean;
+    personId: string | null;
+    childrenCount: number;
+    personName?: string;
+  }>({
+    open: false,
+    personId: null,
+    childrenCount: 0,
+  });
+  const [externalTreeConfirm, setExternalTreeConfirm] = useState<{
+    open: boolean;
+    targetTreeId: string | null;
+  }>({
+    open: false,
+    targetTreeId: null,
+  });
+  const [dismissNoAccessAlert, setDismissNoAccessAlert] = useState(false);
+  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const loadRequestIdRef = useRef(0);
+  const canWriteCurrentTree = hasPermission("admin", villageId);
+  const showNoAccessAlert =
+    isAdmin() && isApproved && !canWriteCurrentTree && !dismissNoAccessAlert;
 
-  useEffect(() => {
-    // Only load data if a specific tree ID is selected
-    if (treeId && treeId !== "") {
-      const loadTreeData = async () => {
-        try {
-          console.log(
-            "FamiliesPage: Starting to load tree data for treeId:",
-            treeId,
-          );
+  const loadTreeData = useCallback(
+    async (keepRoot = false) => {
+      const requestId = ++loadRequestIdRef.current;
+      if (!treeId || treeId === "") {
+        if (requestId !== loadRequestIdRef.current) return;
+        setNodes([]);
+        setSelectId(undefined);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        if (!keepRoot) {
           setIsLoading(true);
-          // Fetch complete tree from Supabase using the PostgreSQL function
-          const treeData = await SupabaseService.getCompleteTreeById(treeId);
-          console.log("FamiliesPage: Tree data loaded:", treeData);
-          // Convert tree data to FNode format
-          const items: Readonly<FNode>[] = (treeData.members || []).map(
-            (person: any) =>
-              ({
-                id: person.id,
-                name: person.name,
-                gender: person.gender as Gender,
-                parents:
-                  person.parents?.map((p: any) => ({
-                    id: p.id,
-                    type: RelType.blood,
-                  })) || [],
-                children:
-                  person.children?.map((c: any) => ({
-                    id: c.id,
-                    type: RelType.blood,
-                  })) || [],
-                spouses:
-                  person.spouses?.map((s: any) => ({
-                    id: s.id,
-                    type: RelType.married,
-                  })) || [],
-                siblings:
-                  person.siblings?.map((s: any) => ({
-                    id: s.id,
-                    type: RelType.blood,
-                  })) || [],
-                treeId: treeId,
-              }) as FNode,
-          );
-          console.log(
-            "FamiliesPage: Converted tree data to FNode format, items count:",
-            items.length,
-          );
-          // Populate hierarchy for all nodes
-          const itemsWithHierarchy = items.map((node) => ({
-            ...node,
-            hierarchy: getNodeHierarchy(node.id, items),
-          }));
-
-          setNodes(itemsWithHierarchy);
-          setSelectId(undefined);
-          setHoverId(undefined);
-
-          if (items.length === 0) {
-            console.log("FamiliesPage: No items in tree");
-            setIsLoading(false);
-            return;
-          }
-          const rootCandidate = items.find(
-            (item) =>
-              (item.parents?.length ?? 0) === 0 &&
-              (item.spouses?.length ?? 0) === 0,
-          );
-          if (rootCandidate) {
-            setRootId(rootCandidate.id);
-          } else {
-            setRootId(items[0].id);
-          }
-          setIsLoading(false);
-          console.log("FamiliesPage: Tree data loaded and state updated.");
-        } catch (error) {
-          console.error("FamiliesPage: Failed to load tree data:", error);
-          setNodes([]);
-          setIsLoading(false);
         }
-      };
+        // Fetch complete tree from Supabase using the PostgreSQL function
+        const treeData = await SupabaseService.getCompleteTreeById(treeId);
+        if (requestId !== loadRequestIdRef.current) return;
+        setVillageId(treeData.tree?.village?.id);
 
-      loadTreeData();
-    } else {
-      setNodes([]);
-      setSelectId(undefined);
-      setHoverId(undefined);
-      setIsLoading(false);
-    }
-  }, [treeId]);
+        // Convert tree data to FNode format
+        const items: Readonly<FNode>[] = (treeData.members || []).map(
+          (person: any) =>
+            ({
+              id: person.id,
+              name: person.name,
+              gender: person.gender as Gender,
+              dob: person.dob || "",
+              parents:
+                person.parents?.map((p: any) => ({
+                  id: p.id,
+                  type: (p.type || p.relation_subtype || RelType.blood) as RelType,
+                })) || [],
+              children:
+                person.children?.map((c: any) => ({
+                  id: c.id,
+                  type: (c.type || c.relation_subtype || RelType.blood) as RelType,
+                })) || [],
+              spouses:
+                person.spouses?.map((s: any) => ({
+                  id: s.id,
+                  type: (s.type || s.relation_subtype || RelType.married) as RelType,
+                })) || [],
+              siblings:
+                person.siblings?.map((s: any) => ({
+                  id: s.id,
+                  type: RelType.blood,
+                })) || [],
+              treeId: person.tree_id || treeId,
+              photo: person.photo_url || undefined,
+              bloodGroup: person.blood_group || undefined,
+              isAlive: person.is_alive !== false,
+              deceasedDate: person.deceased_date || undefined,
+            }) as FNode,
+        );
 
-  // Load additional details when a node is selected
-  useEffect(() => {
-    console.log("Selected node ID changed to:", selectId);
-    if (selectId && nodes.length > 0) {
-      const selectedNode = nodes.find((item) => item.id === selectId);
-      if (selectedNode) {
-        const loadAdditionalDetails = async () => {
-          console.log("Loading additional details for node:", selectId);
-          try {
-            const additionalDetails =
-              await SupabaseService.getPersonAdditionalDetails(selectId);
-            // Update the selected node with additional details
-            setNodes((prevNodes) =>
-              prevNodes.map((node) =>
-                node.id === selectId
-                  ? { ...node, customFields: additionalDetails }
-                  : node,
-              ),
-            );
-          } catch (error) {
-            console.error("Failed to load additional details:", error);
+        // Populate hierarchy for all nodes
+        const itemsWithHierarchy = items.map((node) => ({
+          ...node,
+          hierarchy: getNodeHierarchy(node.id, items),
+        }));
+
+        setNodes(itemsWithHierarchy);
+        setSelectId(undefined);
+
+        if (items.length === 0) {
+          if (requestId !== loadRequestIdRef.current) return;
+          setIsLoading(false);
+          return;
+        }
+
+        // If keepRoot is true, we want to see if the current root ID is still valid in the new data.
+        // We can access the current rootId via the state setter to make a decision,
+        // OR we can just allow the caller to handle the root preservation logic?
+        // No, the caller just says "reload data".
+
+        // Let's use a functional state update to determine if we need to CHANGE the root.
+        // But we need to calculate the *new potential root* first.
+
+        // -------------------------------------------------------------
+        // Root Selection Logic Refined
+
+        // -------------------------------------------------------------
+        // Root Selection Logic Refined
+        // 1. Candidate must belong to the current tree.
+        // 2. Candidate must have NO parents.
+        // 3. If Candidate has a spouse in the SAME tree, that spouse must NOT have parents.
+        //    (If the spouse has parents, then the spouse's lineage is the true root, and Candidate is just an in-law).
+        // -------------------------------------------------------------
+
+        const currentTreeId = treeId;
+        const rawMembers = treeData.members || [];
+        const memberMap = new Map(rawMembers.map((m: any) => [m.id, m]));
+
+        // Step 1 & 2: Filter by Tree ID and No Parents
+        const baseCandidates = rawMembers.filter((m: any) => {
+          const isInCurrentTree = m.tree_id === currentTreeId;
+          const hasNoParents = !m.parents || m.parents.length === 0;
+          return isInCurrentTree && hasNoParents;
+        });
+
+        // Step 3: Filter out "In-Laws" (whose spouses are in-tree and have parents)
+        const validCandidates = baseCandidates.filter((candidate: any) => {
+          const spouses = candidate.spouses || [];
+
+          // Check if ANY spouse disqualifies this candidate
+          const isDisqualified = spouses.some((s: any) => {
+            const spouseNode = memberMap.get(s.id);
+
+            if (!spouseNode) return false; // Spouse data missing, ignore
+
+            // Condition: Spouse is in the SAME tree
+            if (spouseNode.tree_id === currentTreeId) {
+              // Check if this spouse has parents (meaning the root is higher up on their side)
+              if (spouseNode.parents && spouseNode.parents.length > 0) {
+                return true; // Disqualify Candidate
+              }
+            }
+            return false;
+          });
+
+          return !isDisqualified;
+        });
+
+        // Tie-Breaking: Use Descendant Count and Age
+        const countDescendants = (
+          nodeId: string,
+          depth = 0,
+          memo = new Map<string, number>(),
+        ): number => {
+          if (depth > 50) return 0;
+          if (memo.has(nodeId)) return memo.get(nodeId)!;
+
+          const node = memberMap.get(nodeId);
+          if (!node || !node.children || node.children.length === 0) {
+            memo.set(nodeId, 0);
+            return 0;
           }
+
+          let count = 0;
+          node.children.forEach((child: any) => {
+            count += 1 + countDescendants(child.id, depth + 1, memo);
+          });
+
+          memo.set(nodeId, count);
+          return count;
         };
 
-        loadAdditionalDetails();
+        const finalCandidates =
+          validCandidates.length > 0 ? validCandidates : baseCandidates;
+
+        // Sort candidates
+        finalCandidates.sort((a: any, b: any) => {
+          // Priority 1: Descendant Count
+          const aDesc = countDescendants(a.id);
+          const bDesc = countDescendants(b.id);
+          if (aDesc !== bDesc) return bDesc - aDesc;
+
+          // Priority 2: Creation Date (Oldest First)
+          const aTime = new Date(a.created_at).getTime() || 0;
+          const bTime = new Date(b.created_at).getTime() || 0;
+          return aTime - bTime;
+        });
+
+        if (finalCandidates.length > 0) {
+          const bestRootId = finalCandidates[0].id;
+          setRootId((prevRoot) => {
+            if (keepRoot && prevRoot && items.find((n) => n.id === prevRoot)) {
+              return prevRoot;
+            }
+            return bestRootId;
+          });
+        } else if (items.length > 0) {
+          const firstItemId = items[0].id;
+          setRootId((prevRoot) => {
+            if (keepRoot && prevRoot && items.find((n) => n.id === prevRoot)) {
+              return prevRoot;
+            }
+            return firstItemId;
+          });
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        if (requestId !== loadRequestIdRef.current) return;
+        console.error("FamiliesPage: Failed to load tree data:", error);
+        setNodes([]);
+        setIsLoading(false);
       }
-    }
-  }, [selectId, nodes]);
+    },
+    [treeId],
+  );
+
+  useEffect(() => {
+    // Prevent stale tree content/icons while switching between trees.
+    setNodes([]);
+    setRootId("");
+    setSelectId(undefined);
+    setDismissNoAccessAlert(false);
+    loadTreeData();
+  }, [loadTreeData]);
+
+  /**
+   * Merges affected nodes from add_person_to_tree into the current state.
+   * - New nodes (not in current state) are added.
+   * - Existing nodes (already in state) have their relationship arrays updated.
+   * - Hierarchy is recalculated for all nodes that changed.
+   * This avoids a full tree reload.
+   */
+  const mergeAffectedNodes = useCallback(
+    (affectedRaw: any[], newPersonId?: string) => {
+      setNodes((prevNodes) => {
+        const nodeMap = new Map(prevNodes.map((n) => [n.id, { ...n }]));
+
+        for (const raw of affectedRaw) {
+          const fnode: FNode = {
+            id: raw.id,
+            name: raw.name,
+            gender: (raw.gender as Gender) || ("" as any),
+            dob: raw.dob || "",
+            parents:
+              raw.parents?.map((p: any) => ({
+                id: p.id,
+                type: (p.type || p.relation_subtype || RelType.blood) as RelType,
+              })) || [],
+            children:
+              raw.children?.map((c: any) => ({
+                id: c.id,
+                type: (c.type || c.relation_subtype || RelType.blood) as RelType,
+              })) || [],
+            spouses:
+              raw.spouses?.map((s: any) => ({
+                id: s.id,
+                type: (s.type || s.relation_subtype || RelType.married) as RelType,
+              })) || [],
+            siblings:
+              raw.siblings?.map((s: any) => ({
+                id: s.id,
+                type: RelType.blood,
+              })) || [],
+            treeId: raw.tree_id || treeId,
+            photo: raw.photo_url || undefined,
+            bloodGroup: raw.blood_group || undefined,
+            isAlive: raw.is_alive !== false,
+            deceasedDate: raw.deceased_date || undefined,
+          } as FNode;
+
+          nodeMap.set(raw.id, fnode);
+        }
+
+        // Rebuild hierarchy for all nodes (cheap — just walks parent pointers)
+        const allNodes = Array.from(nodeMap.values());
+        const result = allNodes.map((node) => ({
+          ...node,
+          hierarchy: getNodeHierarchy(node.id, allNodes),
+        }));
+
+        // Update rootId if needed:
+        // - Tree was empty (prevNodes was []) → set root to the new person
+        // - A new parent was added (reverse relation) → new person has no parents, should be root
+        setRootId((prevRoot) => {
+          // If we already have a valid root in the updated data, keep it
+          if (prevRoot && result.find((n) => n.id === prevRoot)) {
+            // But if the new person is a parent (has no parents, and the old root
+            // now has parents), switch to the new root
+            if (newPersonId) {
+              const newNode = result.find((n) => n.id === newPersonId);
+              const oldRootNode = result.find((n) => n.id === prevRoot);
+              if (
+                newNode &&
+                oldRootNode &&
+                newNode.parents.length === 0 &&
+                oldRootNode.parents.length > 0
+              ) {
+                return newPersonId;
+              }
+            }
+            return prevRoot;
+          }
+          // No valid root — pick the new person or first parentless node
+          if (newPersonId) return newPersonId;
+          const parentless = result.find((n) => n.parents.length === 0);
+          return parentless?.id || (result.length > 0 ? result[0].id : "");
+        });
+
+        return result;
+      });
+    },
+    [treeId],
+  );
 
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
@@ -169,9 +381,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
-      console.log("Updating node:", nodeId, "with updates:", updates);
-      // Check permission before updating
-      if (!hasPermission("admin", treeId)) {
+      if (!canWriteCurrentTree) {
         alert("You don't have permission to edit this family tree.");
         return;
       }
@@ -179,202 +389,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       try {
         // Update person with both core properties and additional details in one call
         await SupabaseService.updatePerson(nodeId, updates);
-
-        // Update local state instead of fetching from database
-        setNodes((prevNodes) => {
-          const nodeIndex = prevNodes.findIndex((n) => n.id === nodeId);
-          if (nodeIndex === -1) return prevNodes;
-
-          const currentNode = prevNodes[nodeIndex];
-          const updatedNodes = [...prevNodes];
-
-          // Update the current node's core properties
-          const updatedNode = { ...currentNode };
-          if (updates.name) updatedNode.name = updates.name;
-          if (updates.gender) updatedNode.gender = updates.gender;
-          if (updates.dob) updatedNode.dob = updates.dob;
-          if (updates.customFields)
-            updatedNode.customFields = updates.customFields;
-
-          // Handle parent relationship changes
-          if (updates.parents) {
-            const oldParentIds = (currentNode.parents || []).map((p) => p.id);
-            const newParentIds = (updates.parents || []).map((p) => p.id);
-
-            // Remove from old parents' children arrays
-            oldParentIds.forEach((parentId) => {
-              if (!newParentIds.includes(parentId)) {
-                const parentIndex = updatedNodes.findIndex(
-                  (n) => n.id === parentId,
-                );
-                if (parentIndex !== -1) {
-                  updatedNodes[parentIndex] = {
-                    ...updatedNodes[parentIndex],
-                    children: (updatedNodes[parentIndex].children || []).filter(
-                      (c) => c.id !== nodeId,
-                    ),
-                  };
-                }
-              }
-            });
-
-            // Add to new parents' children arrays
-            newParentIds.forEach((parentId) => {
-              if (!oldParentIds.includes(parentId)) {
-                const parentIndex = updatedNodes.findIndex(
-                  (n) => n.id === parentId,
-                );
-                if (parentIndex !== -1) {
-                  updatedNodes[parentIndex] = {
-                    ...updatedNodes[parentIndex],
-                    children: [
-                      ...(updatedNodes[parentIndex].children || []),
-                      { id: nodeId, type: RelType.blood },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.parents = updates.parents;
-          }
-
-          // Handle children relationship changes
-          if (updates.children) {
-            const oldChildIds = (currentNode.children || []).map((c) => c.id);
-            const newChildIds = (updates.children || []).map((c) => c.id);
-
-            // Remove from old children's parents arrays
-            oldChildIds.forEach((childId) => {
-              if (!newChildIds.includes(childId)) {
-                const childIndex = updatedNodes.findIndex(
-                  (n) => n.id === childId,
-                );
-                if (childIndex !== -1) {
-                  updatedNodes[childIndex] = {
-                    ...updatedNodes[childIndex],
-                    parents: (updatedNodes[childIndex].parents || []).filter(
-                      (p) => p.id !== nodeId,
-                    ),
-                  };
-                }
-              }
-            });
-
-            // Add to new children's parents arrays
-            newChildIds.forEach((childId) => {
-              if (!oldChildIds.includes(childId)) {
-                const childIndex = updatedNodes.findIndex(
-                  (n) => n.id === childId,
-                );
-                if (childIndex !== -1) {
-                  updatedNodes[childIndex] = {
-                    ...updatedNodes[childIndex],
-                    parents: [
-                      ...(updatedNodes[childIndex].parents || []),
-                      { id: nodeId, type: RelType.blood },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.children = updates.children;
-          }
-
-          // Handle spouse relationship changes
-          if (updates.spouses) {
-            const oldSpouseIds = (currentNode.spouses || []).map((s) => s.id);
-            const newSpouseIds = (updates.spouses || []).map((s) => s.id);
-
-            // Remove from old spouses' spouses arrays
-            oldSpouseIds.forEach((spouseId) => {
-              if (!newSpouseIds.includes(spouseId)) {
-                const spouseIndex = updatedNodes.findIndex(
-                  (n) => n.id === spouseId,
-                );
-                if (spouseIndex !== -1) {
-                  updatedNodes[spouseIndex] = {
-                    ...updatedNodes[spouseIndex],
-                    spouses: (updatedNodes[spouseIndex].spouses || []).filter(
-                      (s) => s.id !== nodeId,
-                    ),
-                  };
-                }
-              }
-            });
-
-            // Add to new spouses' spouses arrays
-            newSpouseIds.forEach((spouseId) => {
-              if (!oldSpouseIds.includes(spouseId)) {
-                const spouseIndex = updatedNodes.findIndex(
-                  (n) => n.id === spouseId,
-                );
-                if (spouseIndex !== -1) {
-                  updatedNodes[spouseIndex] = {
-                    ...updatedNodes[spouseIndex],
-                    spouses: [
-                      ...(updatedNodes[spouseIndex].spouses || []),
-                      { id: nodeId, type: RelType.married },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.spouses = updates.spouses;
-          }
-
-          // Handle sibling relationship changes
-          if (updates.siblings) {
-            const oldSiblingIds = (currentNode.siblings || []).map((s) => s.id);
-            const newSiblingIds = (updates.siblings || []).map((s) => s.id);
-
-            // Remove from old siblings' siblings arrays
-            oldSiblingIds.forEach((siblingId) => {
-              if (!newSiblingIds.includes(siblingId)) {
-                const siblingIndex = updatedNodes.findIndex(
-                  (n) => n.id === siblingId,
-                );
-                if (siblingIndex !== -1) {
-                  updatedNodes[siblingIndex] = {
-                    ...updatedNodes[siblingIndex],
-                    siblings: (
-                      updatedNodes[siblingIndex].siblings || []
-                    ).filter((s) => s.id !== nodeId),
-                  };
-                }
-              }
-            });
-
-            // Add to new siblings' siblings arrays
-            newSiblingIds.forEach((siblingId) => {
-              if (!oldSiblingIds.includes(siblingId)) {
-                const siblingIndex = updatedNodes.findIndex(
-                  (n) => n.id === siblingId,
-                );
-                if (siblingIndex !== -1) {
-                  updatedNodes[siblingIndex] = {
-                    ...updatedNodes[siblingIndex],
-                    siblings: [
-                      ...(updatedNodes[siblingIndex].siblings || []),
-                      { id: nodeId, type: RelType.blood },
-                    ],
-                  };
-                }
-              }
-            });
-
-            updatedNode.siblings = updates.siblings;
-          }
-
-          // Recalculate hierarchy after update
-          updatedNode.hierarchy = getNodeHierarchy(nodeId, updatedNodes);
-          updatedNodes[nodeIndex] = updatedNode;
-
-          return updatedNodes;
-        });
-
+        // Refresh tree data but keep current root if valid
+        await loadTreeData(true);
         // Clear selection to refresh the detail panel
         setSelectId(undefined);
       } catch (err) {
@@ -386,105 +402,36 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId],
+    [canWriteCurrentTree, treeId, loadTreeData, villageId],
   );
 
   const onDelete = useCallback(
-    async (nodeId: string) => {
-      console.log("Deleting node1:", nodeId);
-      // Check permission before deleting
-      if (!hasPermission("admin", treeId)) {
+    async (nodeId: string, force: boolean = false) => {
+      if (!canWriteCurrentTree) {
         alert("You don't have permission to delete from this family tree.");
         return;
       }
 
       try {
-        console.log("Deleting node:", nodeId);
-
         // Delete person using Supabase
-        await SupabaseService.deletePerson(nodeId);
+        const result = await SupabaseService.deletePerson(nodeId, force);
 
-        // Update local state instead of fetching from database
-        setNodes((prevNodes) => {
-          const nodeToDelete = prevNodes.find((n) => n.id === nodeId);
-          if (!nodeToDelete) return prevNodes;
+        if (result?.requires_confirmation) {
+          const person = nodes.find((n) => n.id === nodeId);
+          setDeleteConfirmation({
+            open: true,
+            personId: nodeId,
+            childrenCount: result.children_count,
+            personName: person?.name,
+          });
+          return;
+        }
 
-          // Remove the node
-          const updatedNodes = prevNodes.filter((n) => n.id !== nodeId);
-
-          // Update all parents to remove this node from their children array
-          if (nodeToDelete.parents) {
-            for (const parent of nodeToDelete.parents) {
-              const parentIndex = updatedNodes.findIndex(
-                (n) => n.id === parent.id,
-              );
-              if (parentIndex !== -1) {
-                updatedNodes[parentIndex] = {
-                  ...updatedNodes[parentIndex],
-                  children: (updatedNodes[parentIndex].children || []).filter(
-                    (c) => c.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          // Update all children to remove this node from their parents array
-          if (nodeToDelete.children) {
-            for (const child of nodeToDelete.children) {
-              const childIndex = updatedNodes.findIndex(
-                (n) => n.id === child.id,
-              );
-              if (childIndex !== -1) {
-                updatedNodes[childIndex] = {
-                  ...updatedNodes[childIndex],
-                  parents: (updatedNodes[childIndex].parents || []).filter(
-                    (p) => p.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          // Update all spouses to remove this node from their spouses array
-          if (nodeToDelete.spouses) {
-            for (const spouse of nodeToDelete.spouses) {
-              const spouseIndex = updatedNodes.findIndex(
-                (n) => n.id === spouse.id,
-              );
-              if (spouseIndex !== -1) {
-                updatedNodes[spouseIndex] = {
-                  ...updatedNodes[spouseIndex],
-                  spouses: (updatedNodes[spouseIndex].spouses || []).filter(
-                    (s) => s.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          // Update all siblings to remove this node from their siblings array
-          if (nodeToDelete.siblings) {
-            for (const sibling of nodeToDelete.siblings) {
-              const siblingIndex = updatedNodes.findIndex(
-                (n) => n.id === sibling.id,
-              );
-              if (siblingIndex !== -1) {
-                updatedNodes[siblingIndex] = {
-                  ...updatedNodes[siblingIndex],
-                  siblings: (updatedNodes[siblingIndex].siblings || []).filter(
-                    (s) => s.id !== nodeId,
-                  ),
-                };
-              }
-            }
-          }
-
-          return updatedNodes;
-        });
-
+        // Refresh tree data but keep current root if valid
+        await loadTreeData(true);
         // Clear selection
         setSelectId(undefined);
+        setDeleteConfirmation((prev) => ({ ...prev, open: false }));
       } catch (err) {
         console.error("Failed to delete node:", err);
         alert(
@@ -494,7 +441,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [hasPermission, treeId],
+    [canWriteCurrentTree, treeId, loadTreeData, nodes, villageId],
   );
 
   const onAdd = useCallback(
@@ -504,21 +451,29 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       targetId?: string,
       type?: RelType,
       otherParentId?: string,
-    ) => {
-      console.log(
-        "Adding node:",
-        node,
-        "as",
-        relation,
-        "to",
-        targetId,
-        "with other parent:",
-        otherParentId,
-      );
-      // Check permission before adding
-      if (!hasPermission("admin", treeId)) {
+    ): Promise<string | undefined> => {
+      if (!canWriteCurrentTree) {
         alert("You don't have permission to add to this family tree.");
-        return;
+        return undefined;
+      }
+
+      // Special handling for linking existing spouse
+      if (node.id && relation === "spouse" && targetId) {
+        try {
+          setIsLoading(true);
+          await SupabaseService.addSpouse(targetId, node.id);
+          await loadTreeData(true);
+          return node.id; // Return the linked person ID
+        } catch (err) {
+          console.error("Failed to link spouse:", err);
+          alert(
+            `Failed to link spouse: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          setIsLoading(false);
+          return undefined;
+        }
       }
 
       try {
@@ -552,6 +507,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           // We store it as: new_person is the related_person, but mark it as reverse
           relationType = "parent";
           relatedPersonId = targetId;
+          // If the child already has another parent, pass it so the backend
+          // can maintain spouse linkage between parents.
+          const targetNode = nodes.find((n) => n.id === targetId);
+          if (targetNode?.parents && targetNode.parents.length > 0) {
+            const preferredParent = targetNode.parents.find((p) => {
+              const parentNode = nodes.find((n) => n.id === p.id);
+              return coreNode.gender
+                ? parentNode?.gender && parentNode.gender !== coreNode.gender
+                : true;
+            });
+            relatedPersonId2 = preferredParent?.id || targetNode.parents[0].id;
+          }
           isReverseRelation = true;
         }
 
@@ -568,59 +535,24 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           customFields, // Pass additional details
           isReverseRelation,
           relatedPersonId2,
+          coreNode.bloodGroup,
+          coreNode.isAlive,
+          coreNode.deceasedDate,
         );
 
-        // Reload tree data to ensure all relationships are accurately reflected
-        // This is important for auto-created spouses and multiple parent relationships
+        // Efficiently merge affected_nodes into existing state instead of full reload
         if (newPerson?.success && newPerson?.person_id) {
-          // Close the sidebar after successfully adding a node
-          setSelectId(undefined);
-
-          try {
-            if (treeId) {
-              const result = await SupabaseService.getCompleteTreeById(treeId);
-              if (result?.members) {
-                // Convert CompleteTreeNode[] to FNode[]
-                // Map PersonWithRelations to the FNode relationship format { id: string; type: RelType }
-                const convertedNodes: FNode[] = result.members.map(
-                  (member) => ({
-                    id: member.id,
-                    name: member.name,
-                    dob: member.dob || "",
-                    created_at: member.created_at,
-                    gender: (member.gender as unknown as Gender) || Gender.male,
-                    customFields: {},
-                    treeId: treeId,
-                    // Position properties (used for visualization)
-                    top: 0,
-                    left: 0,
-                    hasSubTree: false,
-                    // Transform relationship arrays to include type
-                    parents: (member.parents || []).map((p) => ({
-                      id: p.id,
-                      type: RelType.blood, // Default to blood for parents
-                    })),
-                    children: (member.children || []).map((c) => ({
-                      id: c.id,
-                      type: RelType.blood, // Default to blood for children
-                    })),
-                    spouses: (member.spouses || []).map((s) => ({
-                      id: s.id,
-                      type: RelType.married, // Spouses are always married
-                    })),
-                    siblings: (member.siblings || []).map((sib) => ({
-                      id: sib.id,
-                      type: RelType.blood, // Default to blood for siblings
-                    })),
-                  }),
-                );
-                setNodes(convertedNodes);
-              }
-            }
-          } catch (reloadErr) {
-            console.warn("Failed to reload tree data:", reloadErr);
-            // Continue even if reload fails - operation was successful
+          const affectedNodes = newPerson.affected_nodes || [];
+          if (affectedNodes.length > 0) {
+            mergeAffectedNodes(affectedNodes, newPerson.person_id);
+          } else {
+            // Fallback: full reload if procedure didn't return affected_nodes (old DB version)
+            await loadTreeData(true);
           }
+          if (relation === "child" && targetId) {
+            setAutoExpandNodeId(targetId);
+          }
+          return newPerson.person_id;
         }
       } catch (err) {
         console.error("Failed to add node:", err);
@@ -630,50 +562,111 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }`,
         );
       }
+      return undefined;
     },
-    [hasPermission, treeId],
+    [canWriteCurrentTree, treeId, loadTreeData, villageId, nodes],
   );
 
-  // Update rootId when nodes change
-  useEffect(() => {
-    if (nodes.length > 0) {
-      // First, try to find a male with no parents and no spouses
-      let rootCandidate = nodes.find(
-        (item) =>
-          item.gender === Gender.male &&
-          (item.parents?.length ?? 0) === 0 &&
-          (item.spouses?.length ?? 0) === 0,
-      );
+  const handleShareTree = useCallback(async () => {
+    const shareUrl = treeId
+      ? `${window.location.origin}/families?tree=${treeId}`
+      : window.location.href;
 
-      // If not found, try to find any male with no parents
-      if (!rootCandidate) {
-        rootCandidate = nodes.find(
-          (item) =>
-            item.gender === Gender.male && (item.parents?.length ?? 0) === 0,
-        );
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Family Tree",
+          url: shareUrl,
+        });
+        return;
       }
-
-      // If still not found, use the first male node
-      if (!rootCandidate) {
-        rootCandidate = nodes.find((item) => item.gender === Gender.male);
-      }
-
-      // If no males found, fall back to original logic
-      if (!rootCandidate) {
-        rootCandidate = nodes.find(
-          (item) =>
-            (item.parents?.length ?? 0) === 0 &&
-            (item.spouses?.length ?? 0) === 0,
-        );
-      }
-
-      if (rootCandidate) {
-        setRootId(rootCandidate.id);
-      } else {
-        setRootId(nodes[0].id);
-      }
+      alert("Native share is not supported on this device/browser.");
+    } catch (err) {
+      console.warn("Share cancelled or failed:", err);
     }
-  }, [nodes]);
+  }, [treeId]);
+
+  // Handler for "View Details" — opens NodeDetails in details view
+  const handleViewDetails = useCallback((nodeId: string) => {
+    setNodeDetailsInitialView("details");
+    setNodeDetailsAddInfo(undefined);
+    setSelectId(nodeId);
+  }, []);
+
+  // Handler for edit icon on tree nodes — opens NodeDetails in edit view
+  const handleEditNode = useCallback(
+    (nodeId: string) => {
+      if (!canWriteCurrentTree) {
+        alert("You don't have permission to edit this family tree.");
+        return;
+      }
+      if (!currentUser) {
+        openLoginModal(() => {
+          setNodeDetailsInitialView("edit");
+          setNodeDetailsAddInfo(undefined);
+          setSelectId(nodeId);
+        });
+        return;
+      }
+      setNodeDetailsInitialView("edit");
+      setNodeDetailsAddInfo(undefined);
+      setSelectId(nodeId);
+    },
+    [canWriteCurrentTree, currentUser, openLoginModal],
+  );
+
+  // Handler for placeholder "add relative" nodes in the tree
+  const handleAddRelative = useCallback(
+    (
+      nodeId: string,
+      relType: "father" | "mother" | "spouse" | "son" | "daughter",
+    ) => {
+      if (!canWriteCurrentTree) {
+        alert("You don't have permission to add to this family tree.");
+        return;
+      }
+      // Map family-chart relTypes to onAdd's relation + gender
+      let relation: "child" | "spouse" | "parent";
+      let gender: string | undefined;
+
+      switch (relType) {
+        case "father":
+          relation = "parent";
+          gender = "male";
+          break;
+        case "mother":
+          relation = "parent";
+          gender = "female";
+          break;
+        case "spouse":
+          relation = "spouse";
+          gender = undefined;
+          break;
+        case "son":
+          relation = "child";
+          gender = "male";
+          break;
+        case "daughter":
+          relation = "child";
+          gender = "female";
+          break;
+      }
+
+      if (!currentUser) {
+        openLoginModal(() => {
+          setNodeDetailsInitialView("add");
+          setNodeDetailsAddInfo({ relation, gender });
+          setSelectId(nodeId);
+        });
+        return;
+      }
+
+      setNodeDetailsInitialView("add");
+      setNodeDetailsAddInfo({ relation, gender });
+      setSelectId(nodeId);
+    },
+    [canWriteCurrentTree, currentUser, openLoginModal],
+  );
 
   // Calculate tree statistics
   const statistics = useMemo(() => {
@@ -699,9 +692,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   }, [nodes]);
 
   return (
-    <>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        minHeight: 0,
+        width: "100%",
+      }}
+    >
       <Helmet>
-        <title>My Family Tree - Kinvia | Build Your Family Heritage</title>
+        <title>My Family Tree - Kinvia | Build Your Family Tree</title>
         <meta
           name="description"
           content="Create and manage your interactive family tree. Visualize relationships, add family members, and preserve your family history on Kinvia."
@@ -716,31 +717,71 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           content="View and manage your interactive family tree with Kinvia."
         />
       </Helmet>
+      {(isSuperAdmin() || isApproved) && (
+        <Box
+          sx={{
+            position: "fixed",
+            right: { xs: 16, sm: 24 },
+            bottom: { xs: 16, sm: 24 },
+            zIndex: 1200,
+            opacity: isMobileSheetOpen ? 0 : 1,
+            pointerEvents: isMobileSheetOpen ? "none" : "auto",
+            transition: "opacity 0.2s ease",
+          }}
+        >
+          <AddTree
+            variant="fab"
+            onCreate={(createdTreeId) => {
+              // Move to the newly created tree
+              setTreeId(createdTreeId);
+              // Call parent onCreate callback if provided
+              onCreate?.(createdTreeId);
+            }}
+          />
+        </Box>
+      )}
       <Box
         sx={{
-          display: "flex",
-          gap: 2,
-          p: 2,
-          borderBottom: 1,
-          borderColor: "divider",
-          alignItems: "center",
-          flexWrap: "wrap",
+          position: "fixed",
+          left: { xs: 16, sm: 24 },
+          bottom: { xs: 16, sm: 24 },
+          zIndex: 1200,
+          display: { xs: "flex", sm: "none" },
+          opacity: isMobileSheetOpen ? 0 : 1,
+          pointerEvents: isMobileSheetOpen ? "none" : "auto",
+          transition: "opacity 0.2s ease",
         }}
       >
-        <SourceSelect onChange={onSourceChange} />
-        <AddTree
-          onCreate={(createdTreeId) => {
-            // Move to the newly created tree
-            setTreeId(createdTreeId);
-            // Call parent onCreate callback if provided
-            onCreate?.(createdTreeId);
-          }}
-        />
+        <Fab
+          color="primary"
+          size="medium"
+          aria-label="Share tree"
+          onClick={handleShareTree}
+          disabled={!treeId}
+        >
+          <ShareIcon />
+        </Fab>
       </Box>
+      {isAdmin() && !isApproved && (
+        <Alert severity="info" sx={{ mx: 2, mt: 1 }}>
+          Your account is pending approval. You can view trees but cannot make
+          changes until a Super Admin approves your account.
+        </Alert>
+      )}
+      {showNoAccessAlert && (
+        <Alert
+          severity="info"
+          sx={{ mx: 2, mt: 1 }}
+          onClose={() => setDismissNoAccessAlert(true)}
+        >
+          You can view this tree but cannot make changes because you don&apos;t
+          have village write access for this tree.
+        </Alert>
+      )}
       {nodes.length > 0 && !isLoading && (
         <Box
           sx={{
-            display: "flex",
+            display: { xs: "none", sm: "flex" },
             gap: 2,
             p: 1.5,
             px: 2,
@@ -827,149 +868,259 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           </Box>
         </Box>
       )}
-      {isLoading ? (
+      <Box
+        sx={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+        }}
+      >
         <Box
           sx={{
-            flex: 1,
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            flexDirection: "column",
-            gap: 2,
+            position: "absolute",
+            top: 10,
+            left: 10,
+            right: { xs: 10, sm: "auto" },
+            width: { xs: "calc(100% - 20px)", sm: "auto" },
+            zIndex: 20,
+            background: "rgba(255,255,255,0.92)",
+            padding: "4px 8px",
+            borderRadius: 1,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
           }}
         >
-          <CircularProgress />
-          <Typography variant="body1" sx={{ color: "text.secondary" }}>
-            Loading tree...
-          </Typography>
+          <SourceSelect onChange={onSourceChange} />
         </Box>
-      ) : nodes.length > 0 ? (
-        <Box
-          sx={{
-            flex: 1,
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <TransformWrapper
-            initialScale={1}
-            minScale={0.1}
-            maxScale={2.5}
-            centerOnInit={true}
-            limitToBounds={false}
-            wheel={{ step: 0.1 }}
-            doubleClick={{ disabled: false, mode: "reset" }}
-            panning={{ disabled: false, velocityDisabled: true }}
-            pinch={{ disabled: false }}
+        {isLoading ? (
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              flexDirection: "column",
+              gap: 2,
+            }}
           >
-            <TransformComponent
-              wrapperStyle={{
-                width: "100%",
-                height: "100%",
-              }}
-              contentStyle={{
-                width: "100%",
-                height: "100%",
-                cursor: "grab",
-              }}
-            >
-              {rootId && nodes.find((n) => n.id === rootId) ? (
-                <ReactFamilyTree
-                  nodes={nodes as Readonly<FNode>[]}
-                  rootId={rootId}
-                  width={NODE_WIDTH}
-                  height={NODE_HEIGHT}
-                  renderNode={(node: Readonly<FNode>) => (
-                    <FamilyNode
-                      key={node.id}
-                      node={node}
-                      isRoot={node.id === rootId}
-                      isHover={node.id === hoverId}
-                      onClick={setSelectId}
-                      onSubClick={setRootId}
-                      style={getNodeStyle(node)}
-                    />
-                  )}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    height: "100%",
-                  }}
-                >
-                  <Typography>
-                    Unable to find root node. Please check tree data.
-                  </Typography>
-                </Box>
-              )}
-            </TransformComponent>
-          </TransformWrapper>
-        </Box>
-      ) : (
-        treeId &&
-        treeId !== "" && (
-          <Container maxWidth="sm" sx={{ mt: 8, textAlign: "center" }}>
-            <Typography variant="h5" gutterBottom>
-              This tree is empty.
+            <CircularProgress />
+            <Typography variant="body1" sx={{ color: "text.secondary" }}>
+              Loading tree...
             </Typography>
-            <Box
-              sx={{
-                mt: 3,
-                display: "flex",
-                gap: 2,
-                justifyContent: "center",
-              }}
-            >
-              <Button
-                variant="contained"
-                onClick={() => setShowAddStartingNode(true)}
+          </Box>
+        ) : nodes.length > 0 ? (
+          <Box
+            sx={{
+              flex: 1,
+              position: "relative",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {rootId && nodes.find((n) => n.id === rootId) ? (
+              <DTreeComponent
+                nodes={nodes}
+                rootId={rootId}
+                canEditTree={canWriteCurrentTree}
+                autoExpandNodeId={autoExpandNodeId}
+                onAutoExpandHandled={() => setAutoExpandNodeId(null)}
+                onNodeClick={(id) => {
+                  setNodeDetailsInitialView(undefined);
+                  setNodeDetailsAddInfo(undefined);
+                  setSelectId(id);
+                }}
+                onEditNode={handleEditNode}
+                onDelete={onDelete}
+                onAddRelative={handleAddRelative}
+                onViewDetails={handleViewDetails}
+                currentTreeId={treeId}
+                onMobileSheetChange={setIsMobileSheetOpen}
+                onExternalTreeClick={(tid) => {
+                  setExternalTreeConfirm({ open: true, targetTreeId: tid });
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  height: "100%",
+                }}
               >
-                Create First Node
-              </Button>
-            </Box>
-          </Container>
-        )
-      )}
-      {showAddStartingNode && (
-        <Box
-          sx={{
-            position: "fixed",
-            right: 0,
-            top: 0,
-            height: "100%",
-            width: { xs: "100%", sm: "400px" },
-            backgroundColor: "background.paper",
-            boxShadow: "-2px 0 8px rgba(0, 0, 0, 0.1)",
-            zIndex: 1000,
-            overflow: "auto",
-            p: 3,
-          }}
-        >
+                <Typography>
+                  Unable to find root node. Please check tree data.
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          treeId &&
+          treeId !== "" && (
+            <Container
+              maxWidth="sm"
+              sx={{ mt: { xs: 14, sm: 8 }, textAlign: "center" }}
+            >
+              <Typography variant="h5" gutterBottom>
+                This tree is empty.
+              </Typography>
+              <Box
+                sx={{
+                  mt: 3,
+                  display: "flex",
+                  gap: 2,
+                  justifyContent: "center",
+                }}
+              >
+                <Button
+                  variant="contained"
+                  onClick={() => setShowAddStartingNode(true)}
+                  disabled={!canWriteCurrentTree}
+                >
+                  Create First Node
+                </Button>
+              </Box>
+            </Container>
+          )
+        )}
+      </Box>
+      <Dialog
+        open={showAddStartingNode}
+        onClose={() => setShowAddStartingNode(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create First Person</DialogTitle>
+        <DialogContent>
           <AddNode
-            onAdd={(node) => {
-              onAdd(node, "child");
-              setShowAddStartingNode(false);
+            isFirstNode={true}
+            onAdd={async (node) => {
+              // Pass as 'child' with no target - the onAdd handler will handle default case if we modify it,
+              // OR we just pass appropriate dummy values that onAdd understands.
+              // Looking at onAdd, it doesn't handle "no relation". I should update onAdd or pass dummy.
+              // Actually, better to check onAdd logic.
+              // If I pass relation="child" and targetId=undefined, it skips all if/else blocks and goes to default addPersonToTree.
+              // addPersonToTree procedure handles null relations as root node.
+              return await onAdd(node, "child", undefined); // "child" is just a placeholder type, won't be used logic-wise if targetId is missing
             }}
             onCancel={() => setShowAddStartingNode(false)}
-            nodes={nodes}
-            noCard={true}
-            isFirstNode={true}
+            onComplete={() => setShowAddStartingNode(false)}
+            noCard
+            // Pass the callback to handle completion
           />
-        </Box>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteConfirmation.open}
+        onClose={() =>
+          setDeleteConfirmation((prev) => ({ ...prev, open: false }))
+        }
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {deleteConfirmation.personName || "This person"} has{" "}
+            <strong>{deleteConfirmation.childrenCount} children</strong> in the
+            tree.
+            <br />
+            <br />
+            Deleting them will leave these children as <strong>
+              orphans
+            </strong>{" "}
+            (disconnected from the main lineage).
+            <br />
+            <br />
+            Are you sure you want to proceed?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setDeleteConfirmation((prev) => ({ ...prev, open: false }))
+            }
+          >
+            Cancel
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => {
+              if (deleteConfirmation.personId) {
+                onDelete(deleteConfirmation.personId, true);
+              }
+            }}
+          >
+            Force Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* External tree navigation confirmation */}
+      <Dialog
+        open={externalTreeConfirm.open}
+        onClose={() =>
+          setExternalTreeConfirm({ open: false, targetTreeId: null })
+        }
+      >
+        <DialogTitle>Navigate to Another Tree</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This person belongs to another family tree. Would you like to
+            navigate to that tree?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() =>
+              setExternalTreeConfirm({ open: false, targetTreeId: null })
+            }
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              const tid = externalTreeConfirm.targetTreeId;
+              setExternalTreeConfirm({ open: false, targetTreeId: null });
+              if (tid) {
+                try {
+                  const tree = await SupabaseService.getTreeWithDetails(tid);
+                  if (tree?.village_id) {
+                    setSelectedVillage(tree.village_id);
+                  }
+                } catch (e) {
+                  console.warn("Could not fetch target tree village:", e);
+                }
+                onSourceChange(tid, []);
+              }
+            }}
+          >
+            Navigate
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {selected && (
+        <NodeDetails
+          node={selected}
+          nodes={nodes}
+          onSelect={(id) => {
+            setNodeDetailsInitialView(undefined);
+            setNodeDetailsAddInfo(undefined);
+            setSelectId(id);
+          }}
+          onAdd={onAdd}
+          onUpdate={onUpdate}
+          onDelete={onDelete}
+          treeId={treeId}
+          initialView={nodeDetailsInitialView}
+          initialAddInfo={nodeDetailsAddInfo}
+        />
       )}
-      <NodeDetails
-        node={selected || null}
-        nodes={nodes}
-        onAdd={onAdd}
-        onUpdate={onUpdate}
-        onDelete={onDelete}
-        onSelect={setSelectId}
-        onHover={setHoverId}
-        onClear={() => setHoverId(undefined)}
-      />
-    </>
+    </Box>
   );
 };

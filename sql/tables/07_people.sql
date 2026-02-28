@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS people (
   gender VARCHAR(10),
   dob DATE,
   -- Foreign keys
+  blood_group VARCHAR(5) DEFAULT NULL,
+  is_alive BOOLEAN DEFAULT TRUE,
+  deceased_date DATE DEFAULT NULL,
+  photo_url TEXT DEFAULT NULL,
   tree_id UUID NOT NULL REFERENCES tree(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT now(),
   modified_at TIMESTAMP DEFAULT now(),

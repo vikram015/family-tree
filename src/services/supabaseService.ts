@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { supabase, supabasePublic } from '../supabase';
 import { FNode } from '../components/model/FNode';
 
 /**
@@ -32,6 +32,37 @@ interface CompleteTreeNode {
   children: PersonWithRelations[];
   spouses: PersonWithRelations[];
   siblings: PersonWithRelations[];
+}
+
+/** Shape of a single member node returned by the procedure */
+interface AffectedNode {
+  id: string;
+  name: string;
+  gender?: string;
+  dob?: string;
+  tree_id: string;
+  created_at?: string;
+  parents: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+  children: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+  spouses: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+  siblings: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
+}
+
+/** Result from add_person_to_tree procedure */
+export interface AddPersonResult {
+  success: boolean;
+  person_id: string;
+  auto_created_spouse_id?: string | null;
+  name: string;
+  gender?: string;
+  dob?: string;
+  tree_id: string;
+  relation_type?: string;
+  relation_subtype?: string;
+  related_person_id?: string;
+  fields_added: number;
+  affected_nodes: AffectedNode[];
+  error?: string;
 }
 
 interface CompleteTreeResponse {
@@ -70,7 +101,7 @@ export const SupabaseService = {
    * Fetch all people for a specific tree with their relationships
    */
   async getPeopleByTree(treeId: string): Promise<PersonWithRelations[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select('*')
       .eq('tree_id', treeId);
@@ -96,7 +127,7 @@ export const SupabaseService = {
    */
   async getPeopleByVillage(villageId: string): Promise<PersonWithRelations[]> {
     // First get all trees in this village
-    const { data: trees, error: treesError } = await supabase
+    const { data: trees, error: treesError } = await supabasePublic
       .from('tree')
       .select('id')
       .eq('village_id', villageId);
@@ -106,7 +137,7 @@ export const SupabaseService = {
 
     // Get all people from all trees in this village
     const treeIds = trees.map(t => t.id);
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select('*')
       .in('tree_id', treeIds);
@@ -137,7 +168,7 @@ export const SupabaseService = {
     children?: Array<{ id: string; type: RelationType }>;
     spouses?: Array<{ id: string; type: RelationType }>;
   }> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_relations')
       .select('related_person_id, relation_type')
       .eq('person_id', personId);
@@ -169,7 +200,7 @@ export const SupabaseService = {
       }
 
       // For children, query from the other direction
-      const { data: childData } = await supabase
+      const { data: childData } = await supabasePublic
         .from('people_relations')
         .select('person_id, relation_type')
         .eq('related_person_id', personId)
@@ -191,7 +222,7 @@ export const SupabaseService = {
    * Calls the SQL procedure get_complete_tree_by_id
    */
   async getCompleteTreeById(treeId: string): Promise<CompleteTreeResponse> {
-    const { data, error } = await supabase.rpc('get_complete_tree_by_id', {
+    const { data, error } = await supabasePublic.rpc('get_complete_tree_by_id', {
       p_tree_id: treeId,
     });
 
@@ -206,7 +237,7 @@ export const SupabaseService = {
    * Fetch person by ID with relationships
    */
   async getPersonById(personId: string): Promise<PersonWithRelations | null> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select('*')
       .eq('id', personId)
@@ -225,7 +256,28 @@ export const SupabaseService = {
   /**
    * Create a new person in the family tree
    */
-  async createPerson(person: Partial<FNode>): Promise<PersonWithRelations> {
+  async getPersonCustomFields(personId: string): Promise<Record<string, string>> {
+     const { data, error } = await supabasePublic
+      .from('people_additional_detail')
+      .select('field_value, people_field!inner(field_name)')
+      .eq('people_id', personId);
+      
+      if (error) {
+        console.error('Error fetching custom fields:', error);
+        return {};
+      }
+
+      const result: Record<string, string> = {};
+      data?.forEach((item: any) => {
+        if (item.people_field?.field_name) {
+          result[item.people_field.field_name] = item.field_value;
+        }
+      });
+      return result;
+  },
+
+  /**
+   * Create a new person in the family tree
     const personData = {
       name: person.name,
       gender: person.gender || null,
@@ -269,6 +321,10 @@ export const SupabaseService = {
       p_gender: coreUpdates.gender || null,
       p_dob: coreUpdates.dob || null,
       p_additional_fields: fieldsJsonb,
+      p_blood_group: coreUpdates.bloodGroup || null,
+      p_is_alive: coreUpdates.isAlive !== undefined ? coreUpdates.isAlive : null,
+      p_deceased_date: coreUpdates.deceasedDate || null,
+      p_photo_url: coreUpdates.photo || null,
     });
 
     if (error) throw new Error(`Failed to update person: ${error.message}`);
@@ -288,18 +344,20 @@ export const SupabaseService = {
    * Delete a person from a tree using SQL procedure
    * Handles deletion of person, relationships, and additional details atomically
    */
-  async deletePerson(personId: string): Promise<void> {
+  async deletePerson(personId: string, force: boolean = false): Promise<any> {
     const { data, error } = await supabase.rpc('delete_person_from_tree', {
       p_person_id: personId,
+      p_force: force
     });
 
     if (error) throw new Error(`Failed to delete person: ${error.message}`);
     
-    if (data?.success === false) {
+    // If explicit error (not confirmation request), throw it
+    if (data?.success === false && !data?.requires_confirmation) {
       throw new Error(`Failed to delete person: ${data.error}`);
     }
 
-    console.log('Person deleted successfully:', data.deleted_person_name);
+    return data;
   },
 
   /**
@@ -320,32 +378,20 @@ export const SupabaseService = {
   },
 
   /**
-   * Add a spouse relationship (bidirectional)
+   * Add a spouse relationship (bidirectional) and link children
    */
-  async addSpouse(personId: string, spouseId: string): Promise<void> {
-    // Add relationship from person to spouse
-    const relation1 = {
-      person_id: personId,
-      related_person_id: spouseId,
-      relation_type: 'spouse',
-      created_at: new Date(),
-      modified_at: new Date(),
-    };
+  async addSpouse(personId: string, spouseId: string, placeholderId?: string): Promise<void> {
+    const { data, error } = await supabase.rpc('link_spouse_in_tree', {
+      p_person_id_1: personId,
+      p_person_id_2: spouseId,
+      p_replace_person_id: placeholderId || null
+    });
 
-    // Add relationship from spouse to person
-    const relation2 = {
-      person_id: spouseId,
-      related_person_id: personId,
-      relation_type: 'spouse',
-      created_at: new Date(),
-      modified_at: new Date(),
-    };
-
-    const { error } = await supabase
-      .from('people_relations')
-      .insert([relation1, relation2]);
-
-    if (error) throw error;
+    if (error) throw new Error(`Failed to link spouse: ${error.message}`);
+    
+    if (data?.success === false) {
+      throw new Error(`Failed to link spouse: ${data.error}`);
+    }
   },
 
   /**
@@ -373,6 +419,7 @@ export const SupabaseService = {
    * Add a new person to a tree using SQL procedure
    * Handles person creation, relationships, and additional details in one call
    * Supports adding child with two parents or creating spouse with multiple targets
+   * Returns affected_nodes with full relationship data for efficient UI merge
    */
   async addPersonToTree(
     treeId: string,
@@ -384,8 +431,12 @@ export const SupabaseService = {
     relationSubtype?: string,
     additionalFields?: Record<string, string>,
     isReverseRelation?: boolean,
-    relatedPersonId2?: string
-  ): Promise<any> {
+    relatedPersonId2?: string,
+    bloodGroup?: string,
+    isAlive?: boolean,
+    deceasedDate?: string,
+    photoUrl?: string
+  ): Promise<AddPersonResult> {
     // Pass additional fields as object (Supabase will convert to JSONB)
     const fieldsJsonb = additionalFields && Object.keys(additionalFields).length > 0 
       ? additionalFields
@@ -402,6 +453,10 @@ export const SupabaseService = {
       p_is_reverse_relation: isReverseRelation || false,
       p_additional_fields: fieldsJsonb,
       p_related_person_id_2: relatedPersonId2 || null,
+      p_blood_group: bloodGroup || null,
+      p_is_alive: isAlive !== undefined ? isAlive : true,
+      p_deceased_date: deceasedDate || null,
+      p_photo_url: photoUrl || null,
     });
 
     if (error) throw new Error(`Failed to add person: ${error.message}`);
@@ -410,7 +465,7 @@ export const SupabaseService = {
       throw new Error(`Failed to add person: ${data.error}`);
     }
 
-    return data;
+    return data as AddPersonResult;
   },
 
   /**
@@ -418,7 +473,7 @@ export const SupabaseService = {
    * Used for field dropdown in additional details
    */
   async getPredefinedFields(): Promise<string[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_field')
       .select('field_name')
       .order('field_name', { ascending: true });
@@ -433,7 +488,7 @@ export const SupabaseService = {
    * Joins with people_field to return field names instead of field IDs
    */
   async getPersonAdditionalDetails(personId: string): Promise<Record<string, string>> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_additional_detail')
       .select('people_field(field_name), field_value')
       .eq('people_id', personId);
@@ -569,7 +624,7 @@ export const SupabaseService = {
     searchTerm: string,
     treeId?: string
   ): Promise<PersonWithRelations[]> {
-    let query = supabase
+    let query = supabasePublic
       .from('people')
       .select('*')
       .ilike('name', `%${searchTerm}%`);
@@ -601,7 +656,7 @@ export const SupabaseService = {
    */
   async getTrees(villageId?: string): Promise<any[]> {
     // First get all trees
-    let query = supabase
+    let query = supabasePublic
       .from('tree')
       .select(`
         *,
@@ -635,7 +690,7 @@ export const SupabaseService = {
       // Fetch caste names
       let casteMap: Record<string, string> = {};
       if (casteIds.size > 0) {
-        const { data: castes } = await supabase
+        const { data: castes } = await supabasePublic
           .from('caste')
           .select('id, name')
           .in('id', Array.from(casteIds));
@@ -650,7 +705,7 @@ export const SupabaseService = {
       // Fetch sub_caste names
       let subCasteMap: Record<string, string> = {};
       if (subCasteIds.size > 0) {
-        const { data: subCastes } = await supabase
+        const { data: subCastes } = await supabasePublic
           .from('sub_caste')
           .select('id, name')
           .in('id', Array.from(subCasteIds));
@@ -677,14 +732,35 @@ export const SupabaseService = {
    * Get tree with village details
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
-    const { data, error } = await supabase
+    const { data: tree, error } = await supabasePublic
       .from('tree')
       .select('*, village(*)')
       .eq('id', treeId)
       .single();
 
     if (error) throw error;
-    return data;
+    
+    if (tree) {
+      if (tree.caste) {
+        const { data: casteData } = await supabasePublic
+          .from('caste')
+          .select('name')
+          .eq('id', tree.caste)
+          .single();
+        if (casteData) tree.caste = casteData.name;
+      }
+      
+      if (tree.sub_caste) {
+        const { data: subCasteData } = await supabasePublic
+          .from('sub_caste')
+          .select('name')
+          .eq('id', tree.sub_caste)
+          .single();
+        if (subCasteData) tree.sub_caste = subCasteData.name;
+      }
+    }
+
+    return tree;
   },
 
   /**
@@ -720,7 +796,7 @@ export const SupabaseService = {
     try {
       console.log("SupabaseService: getVillages called");
       
-      const { data, error } = await supabase
+      const { data, error } = await supabasePublic
         .from('village')
         .select('*, district(*, state(*))')
         .is('is_deleted', false);
@@ -738,7 +814,7 @@ export const SupabaseService = {
    * Get all states
    */
   async getStates(): Promise<any[]> {
-    const { data, error } = await supabase.from('state').select('*');
+    const { data, error } = await supabasePublic.from('state').select('*');
 
     if (error) throw error;
     return data || [];
@@ -748,7 +824,7 @@ export const SupabaseService = {
    * Get all districts for a state
    */
   async getDistricts(stateId?: string): Promise<any[]> {
-    let query = supabase.from('district').select('*');
+    let query = supabasePublic.from('district').select('*');
     if (stateId) {
       query = query.eq('state_id', stateId);
     }
@@ -762,7 +838,7 @@ export const SupabaseService = {
    * Get all villages for a district
    */
   async getVillagesForDistrict(districtId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('village')
       .select('*')
       .eq('district_id', districtId);
@@ -775,7 +851,7 @@ export const SupabaseService = {
    * Get all castes
    */
   async getCastes(): Promise<any[]> {
-    const { data, error } = await supabase.from('caste').select('*');
+    const { data, error } = await supabasePublic.from('caste').select('*');
 
     if (error) throw error;
     return data || [];
@@ -785,7 +861,7 @@ export const SupabaseService = {
    * Get sub-castes for a caste
    */
   async getSubCastes(casteId?: string): Promise<any[]> {
-    let query = supabase.from('sub_caste').select('*');
+    let query = supabasePublic.from('sub_caste').select('*');
     if (casteId) {
       query = query.eq('caste_id', casteId);
     }
@@ -799,7 +875,7 @@ export const SupabaseService = {
    * Search businesses by name and optional person (owner)
    */
   async searchBusinesses(searchTerm: string, peopleId?: string): Promise<any[]> {
-    let query = supabase
+    let query = supabasePublic
       .from('business')
       .select('*, people(*)')
       .ilike('name', `%${searchTerm}%`);
@@ -815,13 +891,27 @@ export const SupabaseService = {
   },
 
   /**
+   * Global search across people, businesses, and professions.
+   * Returns enriched context including tree/village and ancestor hierarchy.
+   */
+  async globalSearch(searchTerm: string): Promise<any[]> {
+    const { data, error } = await supabasePublic.rpc("global_search", {
+      p_search_term: searchTerm,
+    });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  /**
    * Get businesses for a person
    */
   async getBusinessesByPerson(peopleId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('business')
       .select('*')
-      .eq('people_id', peopleId);
+      .eq('people_id', peopleId)
+      .eq('is_deleted', false); // Ensure this filters by default
 
     if (error) throw error;
     return data || [];
@@ -835,6 +925,7 @@ export const SupabaseService = {
       name: business.name,
       category: business.category || null,
       description: business.description || null,
+      contact: business.contact || null,
       people_id: business.people_id || null,
       created_at: new Date(),
       modified_at: new Date(),
@@ -862,6 +953,8 @@ export const SupabaseService = {
     if (updates.category) updateData.category = updates.category;
     if (updates.description) updateData.description = updates.description;
     if (updates.people_id) updateData.people_id = updates.people_id;
+    if (updates.contact !== undefined) updateData.contact = updates.contact;
+    if (updates.is_deleted !== undefined) updateData.is_deleted = updates.is_deleted;
 
     const { data, error } = await supabase
       .from('business')
@@ -890,7 +983,7 @@ export const SupabaseService = {
    * Get all businesses
    */
   async getAllBusinesses(): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('business')
       .select('*, people(*)');
 
@@ -904,7 +997,7 @@ export const SupabaseService = {
   async getBusinessesByVillageWithHierarchy(
     villageId: string
   ): Promise<any[]> {
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabasePublic.rpc(
       'get_businesses_by_village',
       { p_village_id: villageId }
     );
@@ -917,7 +1010,7 @@ export const SupabaseService = {
    * Subscribe to real-time updates for people in a tree
    */
   subscribeToPeople(treeId: string, callback: (people: PersonWithRelations[]) => void) {
-    return supabase
+    return supabasePublic
       .channel(`people:${treeId}`)
       .on(
         'postgres_changes',
@@ -987,7 +1080,7 @@ export const SupabaseService = {
    * Get all professions
    */
   async getAllProfessions(): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('professions')
       .select('*')
       .eq('is_deleted', false);
@@ -1013,8 +1106,8 @@ export const SupabaseService = {
   /**
    * Get professions for a person
    */
-  async getPeopleProfileasons(peopleId: string): Promise<any[]> {
-    const { data, error } = await supabase
+  async getProfessionsByPerson(peopleId: string): Promise<any[]> {
+    const { data, error } = await supabasePublic
       .from('people_professions')
       .select('profession:professions(*)')
       .eq('people_id', peopleId)
@@ -1028,34 +1121,68 @@ export const SupabaseService = {
    * Add profession to a person
    */
   async addProfessionToPerson(peopleId: string, professionId: string): Promise<any> {
-    const { data, error } = await supabase
+    // Check if the relation already exists (including soft-deleted)
+    const { data: existing, error: fetchError } = await supabase
       .from('people_professions')
-      .insert([{ people_id: peopleId, profession_id: professionId, is_deleted: false }])
-      .select()
-      .single();
+      .select('id')
+      .eq('people_id', peopleId)
+      .eq('profession_id', professionId)
+      .maybeSingle();
 
-    if (error) throw error;
-    return data;
+    if (fetchError) throw fetchError;
+
+    if (existing) {
+      // If exists, update it to be active
+      const { data, error } = await supabase
+        .from('people_professions')
+        .update({ is_deleted: false, modified_at: new Date() })
+        .eq('id', existing.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    } else {
+      // If not exists, insert new
+      const { data, error } = await supabase
+        .from('people_professions')
+        .insert([{ people_id: peopleId, profession_id: professionId, is_deleted: false }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
   },
 
   /**
    * Remove profession from a person
    */
   async removeProfessionFromPerson(peopleId: string, professionId: string): Promise<void> {
+    // Try update is_deleted first as per convention
     const { error } = await supabase
       .from('people_professions')
-      .update({ is_deleted: true })
+      .update({ is_deleted: true }) 
       .eq('people_id', peopleId)
       .eq('profession_id', professionId);
-
+      
     if (error) throw error;
+    
+    // Also try hard delete just in case checks constraints
+    /*
+    const { error: delError } = await supabase
+      .from('people_professions')
+      .delete()
+      .eq('people_id', peopleId)
+      .eq('profession_id', professionId);
+    */
   },
 
   /**
    * Get people with a specific profession
    */
   async getPeopleWithProfession(professionId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people_professions')
       .select('people(*)')
       .eq('profession_id', professionId)
@@ -1085,7 +1212,7 @@ export const SupabaseService = {
     searchTerm: string,
     villageId: string
   ): Promise<any[]> {
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabasePublic.rpc(
       'search_people_by_village',
       {
         p_search_term: searchTerm,
@@ -1101,7 +1228,7 @@ export const SupabaseService = {
    * Get all people with their professions for a village
    */
   async getPeopleWithProfessionsByVillage(villageId: string): Promise<any[]> {
-    const { data, error } = await supabase
+    const { data, error } = await supabasePublic
       .from('people')
       .select(`
         id,
@@ -1124,7 +1251,7 @@ export const SupabaseService = {
    * Get professions by village with people and hierarchy
    */
   async getProfessionsByVillage(villageId: string): Promise<any[]> {
-    const { data, error } = await supabase.rpc(
+    const { data, error } = await supabasePublic.rpc(
       'get_professions_by_village',
       { p_village_id: villageId }
     );
@@ -1172,7 +1299,7 @@ export const SupabaseService = {
     try {
       console.log("SupabaseService: getDashboardStatistics called");
       
-      const { data, error } = await supabase.rpc('get_dashboard_statistics');
+      const { data, error } = await supabasePublic.rpc('get_dashboard_statistics');
 
       console.log("SupabaseService: getDashboardStatistics response - data:", data, "error:", error);
       if (error) throw error;
@@ -1181,5 +1308,65 @@ export const SupabaseService = {
       console.error("SupabaseService: getDashboardStatistics error:", error);
       throw error;
     }
+  },
+
+  // =====================================================
+  // PHOTO UPLOAD (Supabase Storage)
+  // =====================================================
+
+  /**
+   * Upload a person's cropped photo to Supabase Storage.
+   * Returns the public URL of the uploaded image.
+   */
+  async uploadPersonPhoto(personId: string, blob: Blob): Promise<string> {
+    const filePath = `people/${personId}.jpg`;
+
+    // Upload (upsert so re-uploads overwrite)
+    const { error: uploadError } = await supabase.storage
+      .from('photos')
+      .upload(filePath, blob, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (uploadError) throw new Error(`Failed to upload photo: ${uploadError.message}`);
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('photos')
+      .getPublicUrl(filePath);
+
+    if (!urlData?.publicUrl) throw new Error('Failed to get public URL for photo');
+
+    // Add cache-busting timestamp so the browser fetches the new image
+    const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+    // Update the person's photo_url in the database
+    const { error: updateError } = await supabase
+      .from('people')
+      .update({ photo_url: publicUrl, modified_at: new Date() })
+      .eq('id', personId);
+
+    if (updateError) throw new Error(`Failed to update photo URL: ${updateError.message}`);
+
+    return publicUrl;
+  },
+
+  /**
+   * Remove a person's photo from Supabase Storage and clear the column.
+   */
+  async removePersonPhoto(personId: string): Promise<void> {
+    const filePath = `people/${personId}.jpg`;
+
+    // Remove from storage (ignore error if file doesn't exist)
+    await supabase.storage.from('photos').remove([filePath]);
+
+    // Clear the photo_url column
+    const { error } = await supabase
+      .from('people')
+      .update({ photo_url: null, modified_at: new Date() })
+      .eq('id', personId);
+
+    if (error) throw new Error(`Failed to clear photo URL: ${error.message}`);
   },
 };

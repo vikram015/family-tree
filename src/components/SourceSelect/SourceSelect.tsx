@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Node } from "relatives-tree/lib/types";
 import { SupabaseService } from "../../services/supabaseService";
 import {
@@ -37,7 +37,8 @@ export const SourceSelect = memo(function SourceSelect({
     const params = new URLSearchParams(window.location.search);
     return params.get("tree") || "";
   });
-  const { selectedVillage } = useVillage();
+  const { selectedVillage, setSelectedVillage } = useVillage();
+  const syncedSharedTreeRef = useRef<string | null>(null);
 
   // Filter items based on search text
   const filteredItems = useMemo(() => {
@@ -59,6 +60,34 @@ export const SourceSelect = memo(function SourceSelect({
   useEffect(() => {
     const loadTrees = async () => {
       try {
+        const params = new URLSearchParams(window.location.search);
+        const urlTreeId = params.get("tree");
+
+        if (!urlTreeId) {
+          syncedSharedTreeRef.current = null;
+        }
+
+        // If a shared tree link points to a tree in a different village,
+        // switch village first so that tree appears in the filtered tree list.
+        // Do this only once per URL tree value to avoid blocking manual village changes.
+        if (urlTreeId && syncedSharedTreeRef.current !== urlTreeId) {
+          try {
+            const targetTree = await SupabaseService.getTreeWithDetails(urlTreeId);
+            if (
+              targetTree?.village_id &&
+              targetTree.village_id !== selectedVillage
+            ) {
+              syncedSharedTreeRef.current = urlTreeId;
+              setSelectedVillage(targetTree.village_id);
+              return;
+            }
+            syncedSharedTreeRef.current = urlTreeId;
+          } catch (err) {
+            console.warn("Could not resolve shared tree village:", err);
+            syncedSharedTreeRef.current = urlTreeId;
+          }
+        }
+
         let trees = await SupabaseService.getTrees(selectedVillage);
 
         // No need to filter again since getTrees now handles it
@@ -72,12 +101,11 @@ export const SourceSelect = memo(function SourceSelect({
         setItems(sources);
 
         // If value from URL exists and is valid, use it
-        const urlTreeId = new URLSearchParams(window.location.search).get(
-          "tree",
-        );
         if (urlTreeId && sources.some((s) => s.id === urlTreeId)) {
-          setValue(urlTreeId);
-          if (autoNotifyOnInit) memoizedOnChange(urlTreeId, []);
+          if (urlTreeId !== value) {
+            setValue(urlTreeId);
+            if (autoNotifyOnInit) memoizedOnChange(urlTreeId, []);
+          }
         }
         // Otherwise auto-select first source if none selected yet
         else if (sources.length > 0 && !value) {
@@ -97,7 +125,12 @@ export const SourceSelect = memo(function SourceSelect({
     };
 
     loadTrees();
-  }, [memoizedOnChange, autoNotifyOnInit, selectedVillage, value]);
+  }, [
+    memoizedOnChange,
+    autoNotifyOnInit,
+    selectedVillage,
+    value,
+  ]);
 
   const changeHandler = useCallback(
     (event: any) => {
@@ -137,7 +170,14 @@ export const SourceSelect = memo(function SourceSelect({
   const selectedItem = getSelectedItem();
 
   return (
-    <FormControl sx={{ minWidth: 350 }} size="small">
+    <FormControl
+      sx={{
+        width: { xs: "100%", sm: "auto" },
+        minWidth: { xs: "100%", sm: 320 },
+        maxWidth: "calc(100vw - 32px)",
+      }}
+      size="small"
+    >
       <InputLabel id="source-select-label">Family Tree</InputLabel>
       <Select
         labelId="source-select-label"

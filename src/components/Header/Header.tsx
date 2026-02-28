@@ -14,6 +14,9 @@ import {
   FormControl,
   Select,
   MenuItem,
+  Dialog,
+  ListItemButton,
+  ListItemText,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
@@ -27,6 +30,7 @@ import { useAuth } from "../hooks/useAuth";
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [villagePickerOpen, setVillagePickerOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
@@ -46,7 +50,7 @@ export const Header: React.FC = () => {
   const navLinks = [
     { label: "Home", path: "/" },
     { label: "Business", path: "/business" },
-    { label: "Heritage", path: "/heritage" },
+    // { label: "Heritage", path: "/heritage" },
     { label: "Families", path: "/families" },
     { label: "Contact", path: "/contact" },
   ];
@@ -70,24 +74,24 @@ export const Header: React.FC = () => {
       </Box>
 
       {/* Village Selector for Mobile */}
-      {villages.length > 0 && (
-        <Box sx={{ mb: 2, px: 2 }}>
-          <FormControl fullWidth size="small">
-            <Select
-              value={selectedVillage}
-              onChange={(e) => setSelectedVillage(e.target.value)}
-              displayEmpty
-            >
-              <MenuItem value="">Select Village</MenuItem>
-              {villages.map((village) => (
-                <MenuItem key={village.id} value={village.id}>
-                  {village.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-      )}
+      <Box sx={{ mb: 2, px: 2 }}>
+        <FormControl fullWidth size="small">
+          <Select
+            value={selectedVillage}
+            onChange={(e) => setSelectedVillage(e.target.value)}
+            displayEmpty
+          >
+            <MenuItem value="">
+              {villages.length === 0 ? "Loading villages..." : "Select Village"}
+            </MenuItem>
+            {villages.map((village) => (
+              <MenuItem key={village.id} value={village.id}>
+                {village.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
       <List>
         {allNavLinks.map((link) => (
@@ -109,7 +113,22 @@ export const Header: React.FC = () => {
       <Box sx={{ px: 2, pt: 2, borderTop: 1, borderColor: "divider", mt: 2 }}>
         {currentUser ? (
           <>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+            <Box
+              component={Link}
+              to="/profile"
+              onClick={() => setDrawerOpen(false)}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                mb: 2,
+                textDecoration: "none",
+                color: "inherit",
+                "&:hover": {
+                  textDecoration: "underline",
+                },
+              }}
+            >
               <AccountCircleIcon />
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
@@ -235,7 +254,7 @@ export const Header: React.FC = () => {
           )}
 
           {/* Village Selector */}
-          {!isMobile && villages.length > 0 && (
+          {!isMobile && (
             <FormControl
               size="small"
               sx={{
@@ -263,7 +282,9 @@ export const Header: React.FC = () => {
                 onChange={(e) => setSelectedVillage(e.target.value)}
                 displayEmpty
               >
-                <MenuItem value="">Select Village</MenuItem>
+                <MenuItem value="">
+                  {villages.length === 0 ? "Loading..." : "Select Village"}
+                </MenuItem>
                 {villages.map((village) => (
                   <MenuItem key={village.id} value={village.id}>
                     {village.name}
@@ -278,24 +299,37 @@ export const Header: React.FC = () => {
             <Box sx={{ ml: 2 }}>
               {currentUser ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <AccountCircleIcon />
-                  <Box sx={{ mr: 1 }}>
-                    <Typography variant="body2" fontWeight={600}>
-                      {userProfile?.displayName || "User"}
-                    </Typography>
-                    {userProfile?.role && (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        display="block"
-                        sx={{ fontWeight: 600, mt: 0.25 }}
-                      >
-                        {userProfile.role === "superadmin"
-                          ? "Super Admin"
-                          : "Admin"}
+                  <Button
+                    component={Link}
+                    to="/profile"
+                    color="inherit"
+                    sx={{
+                      textTransform: "none",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      mr: 1,
+                    }}
+                  >
+                    <AccountCircleIcon />
+                    <Box sx={{ textAlign: "left" }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {userProfile?.displayName || "User"}
                       </Typography>
-                    )}
-                  </Box>
+                      {userProfile?.role && (
+                        <Typography
+                          variant="caption"
+                          color="rgba(255, 255, 255, 0.7)"
+                          display="block"
+                          sx={{ fontWeight: 600, mt: 0.25 }}
+                        >
+                          {userProfile.role === "superadmin"
+                            ? "Super Admin"
+                            : "Admin"}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Button>
                   <Button
                     color="inherit"
                     startIcon={<LogoutIcon />}
@@ -323,7 +357,31 @@ export const Header: React.FC = () => {
 
           {isMobile && (
             <>
-              <Box sx={{ flexGrow: 1 }} />
+              <Box sx={{ flexGrow: 1, px: 1, minWidth: 0, display: "flex", justifyContent: "flex-end" }}>
+                <Button
+                  color="inherit"
+                  variant="outlined"
+                  onClick={() => setVillagePickerOpen(true)}
+                  sx={{
+                    textTransform: "none",
+                    borderColor: "rgba(255,255,255,0.55)",
+                    color: "white",
+                    minWidth: 150,
+                    maxWidth: 220,
+                    justifyContent: "flex-start",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    "&:hover": {
+                      borderColor: "white",
+                      backgroundColor: "rgba(255,255,255,0.08)",
+                    },
+                  }}
+                >
+                  {villages.find((v) => v.id === selectedVillage)?.name ||
+                    (villages.length === 0 ? "Loading..." : "Select Village")}
+                </Button>
+              </Box>
               <IconButton
                 color="inherit"
                 edge="end"
@@ -343,6 +401,41 @@ export const Header: React.FC = () => {
       >
         {drawerContent}
       </Drawer>
+
+      <Dialog fullScreen open={villagePickerOpen} onClose={() => setVillagePickerOpen(false)}>
+        <AppBar position="static" color="primary">
+          <Toolbar>
+            <Typography sx={{ flexGrow: 1 }} variant="h6">
+              Select Village
+            </Typography>
+            <IconButton color="inherit" onClick={() => setVillagePickerOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+        <Box sx={{ p: 2 }}>
+          <List>
+            {villages.length === 0 && (
+              <ListItem>
+                <ListItemText primary="Loading villages..." />
+              </ListItem>
+            )}
+            {villages.map((village) => (
+              <ListItem key={village.id} disablePadding>
+                <ListItemButton
+                  selected={selectedVillage === village.id}
+                  onClick={() => {
+                    setSelectedVillage(village.id);
+                    setVillagePickerOpen(false);
+                  }}
+                >
+                  <ListItemText primary={village.name} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Dialog>
     </>
   );
 };

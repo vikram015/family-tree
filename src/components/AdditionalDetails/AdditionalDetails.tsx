@@ -20,11 +20,15 @@ interface CustomFieldValue {
 interface AdditionalDetailsProps {
   value: Record<string, string>; // Current custom fields as key-value pairs
   onChange: (fields: Record<string, string>) => void;
+  excludeFields?: string[];
 }
+
+const DEFAULT_EXCLUDE_FIELDS: string[] = [];
 
 export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
   value,
   onChange,
+  excludeFields = DEFAULT_EXCLUDE_FIELDS,
 }) => {
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [fieldValues, setFieldValues] = useState<CustomFieldValue[]>([]);
@@ -34,7 +38,10 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     const loadFields = async () => {
       try {
         const fields = await SupabaseService.getPredefinedFields();
-        setAvailableFields(fields.sort());
+        // Filter out excluded fields from the available options
+        setAvailableFields(
+          fields.filter((f) => !excludeFields.includes(f)).sort(),
+        );
       } catch (error) {
         console.error("Failed to load predefined fields:", error);
         setAvailableFields([]);
@@ -42,18 +49,19 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     };
 
     loadFields();
-  }, []);
+  }, [excludeFields]);
 
   // Convert value prop to array format for editing
-  // Update whenever the value prop genuinely changes (not when we're just typing)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Update whenever the value prop genuinely changes
   useEffect(() => {
-    const fieldsArray = Object.entries(value).map(([fieldName, val]) => ({
-      fieldName,
-      value: val,
-    }));
+    const fieldsArray = Object.entries(value)
+      .filter(([key]) => !excludeFields.includes(key)) // Filter out excluded fields from the list
+      .map(([fieldName, val]) => ({
+        fieldName,
+        value: val,
+      }));
     setFieldValues(fieldsArray);
-  }, [value]);
+  }, [value, excludeFields]);
 
   // Convert array back to object and notify parent
   // Only include complete fields (both fieldName and value)
@@ -61,8 +69,9 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     (fields: CustomFieldValue[]) => {
       const fieldsObject: Record<string, string> = {};
       fields.forEach((field) => {
-        if (field.fieldName && field.value) {
-          fieldsObject[field.fieldName] = field.value;
+        // We include fields even if value is empty, so they don't get wiped out by the useEffect syncing
+        if (field.fieldName) {
+          fieldsObject[field.fieldName] = field.value || "";
         }
       });
       onChange(fieldsObject);
