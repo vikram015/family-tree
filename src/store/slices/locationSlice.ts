@@ -3,23 +3,23 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 
 interface State {
   id: string;
   name: string;
-  created_at?: string;
-  modified_at?: string;
-  is_deleted?: boolean;
+  createdAt?: string;
+  modifiedAt?: string;
+  isDeleted?: boolean;
 }
 
 interface District {
   id: string;
   name: string;
-  state_id: string;
-  created_at?: string;
-  modified_at?: string;
-  is_deleted?: boolean;
+  stateId: string;
+  createdAt?: string;
+  modifiedAt?: string;
+  isDeleted?: boolean;
 }
 
 interface LocationState {
@@ -42,21 +42,21 @@ const initialState: LocationState = {
 export const fetchStates = createAsyncThunk(
   'location/fetchStates',
   async () => {
-    return await SupabaseService.getStates();
+    return await ApiService.getStates();
   }
 );
 
 export const fetchDistricts = createAsyncThunk(
   'location/fetchDistricts',
   async (stateId?: string) => {
-    return await SupabaseService.getDistricts(stateId);
+    return await ApiService.getDistricts(stateId);
   }
 );
 
 export const fetchAllDistricts = createAsyncThunk(
   'location/fetchAllDistricts',
   async () => {
-    return await SupabaseService.getDistricts();
+    return await ApiService.getDistricts();
   }
 );
 
@@ -132,3 +132,4 @@ export const selectDistrictsLoading = (state: any) => state.location.districtsLo
 export const selectLocationError = (state: any) => state.location.error;
 
 export default locationSlice.reducer;
+

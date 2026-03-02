@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, Suspense } from "react";
+import React, { useCallback, useEffect, Suspense } from "react";
 import {
   ThemeProvider,
   createTheme,
@@ -28,7 +28,6 @@ import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
-import { ResetPasswordModal } from "../ResetPasswordModal/ResetPasswordModal";
 import { LinkNodeDialog } from "../LinkNodeDialog/LinkNodeDialog";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 
@@ -53,19 +52,18 @@ const theme = createTheme({
 function AppContent() {
   console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
-  const getTreeIdFromParams = useCallback(() => {
-    return searchParams.get("tree") || "";
-  }, [searchParams]);
-  const [treeId, setTreeId] = useState<string>(() => {
-    return searchParams.get("tree") || "";
-  });
+  const treeId = searchParams.get("tree") || "";
 
-  useEffect(() => {
-    const paramTreeId = getTreeIdFromParams();
-    if (paramTreeId !== treeId) {
-      setTreeId(paramTreeId);
-    }
-  }, [getTreeIdFromParams, treeId]);
+  const setTreeId = useCallback(
+    (value: string) => {
+      if (value) {
+        setSearchParams({ tree: value });
+      } else {
+        setSearchParams({});
+      }
+    },
+    [setSearchParams],
+  );
 
   useEffect(() => {
     // Prefetch FamiliesPage code in background after initial load
@@ -78,14 +76,8 @@ function AppContent() {
   const onChange = useCallback(
     (value: string) => {
       setTreeId(value);
-      // Update URL with tree ID
-      if (value) {
-        setSearchParams({ tree: value });
-      } else {
-        setSearchParams({});
-      }
     },
-    [setSearchParams],
+    [setTreeId],
   );
 
   console.log("AppContent: About to return JSX");
@@ -102,7 +94,6 @@ function AppContent() {
         },
       }}
     >
-      <ResetPasswordModal />
       <LinkNodeDialog />
       <Header />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
@@ -133,7 +124,6 @@ function AppContent() {
                       setTreeId={setTreeId}
                       onSourceChange={onChange}
                       onCreate={(id) => {
-                        setTreeId(id);
                         onChange(id);
                       }}
                     />

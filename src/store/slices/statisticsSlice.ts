@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 
 interface StatisticsState {
   statistics: any | null;
@@ -19,7 +19,7 @@ export const fetchDashboardStatistics = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Redux: Starting to fetch statistics');
-      const stats = await SupabaseService.getDashboardStatistics();
+      const stats = await ApiService.getDashboardStatistics();
       console.log('Redux: Statistics fetched:', stats);
       return stats;
     } catch (error: any) {
@@ -62,3 +62,4 @@ export const selectStatisticsLoading = (state: any) => state.statistics.loading;
 export const selectStatisticsError = (state: any) => state.statistics.error;
 
 export default statisticsSlice.reducer;
+

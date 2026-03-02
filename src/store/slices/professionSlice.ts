@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 import { FNode } from '../../components/model/FNode';
 
 interface Profession {
@@ -36,22 +36,22 @@ export const fetchProfessionsData = createAsyncThunk(
   async (villageId: string, { rejectWithValue }) => {
     try {
       // Fetch all professions for the select dropdown
-      const allProfessions = await SupabaseService.getAllProfessions();
+      const allProfessions = await ApiService.getAllProfessions();
 
       // Fetch professions with people and hierarchy for the village
-      const profsWithPeopleData = await SupabaseService.getProfessionsByVillage(villageId);
+      const profsWithPeopleData = await ApiService.getProfessionsByVillage(villageId);
 
       // Extract all people from the professions data
       const uniquePeople = new Map<string, FNode>();
       profsWithPeopleData.forEach((prof: any) => {
         prof.people?.forEach((person: any) => {
-          if (!uniquePeople.has(person.person_id)) {
-            uniquePeople.set(person.person_id, {
-              id: person.person_id,
-              name: person.person_name,
+          if (!uniquePeople.has(person.personId)) {
+            uniquePeople.set(person.personId, {
+              id: person.personId,
+              name: person.personName,
               gender: person.gender,
-              dob: person.person_dob || '',
-              treeId: person.tree_id,
+              dob: person.personDob || '',
+              treeId: person.treeId,
               parents: [] as any,
               children: [] as any,
               siblings: [] as any,
@@ -68,15 +68,15 @@ export const fetchProfessionsData = createAsyncThunk(
       const peopleProfsMap = new Map<string, PersonWithProfessions>();
       profsWithPeopleData.forEach((prof: any) => {
         prof.people?.forEach((person: any) => {
-          const personKey = person.person_id;
+          const personKey = person.personId;
           if (!peopleProfsMap.has(personKey)) {
             peopleProfsMap.set(personKey, {
               person: {
-                id: person.person_id,
-                name: person.person_name,
+                id: person.personId,
+                name: person.personName,
                 gender: person.gender,
-                dob: person.person_dob || '',
-                treeId: person.tree_id,
+                dob: person.personDob || '',
+                treeId: person.treeId,
                 parents: [] as any,
                 children: [] as any,
                 siblings: [] as any,
@@ -89,10 +89,10 @@ export const fetchProfessionsData = createAsyncThunk(
             });
           }
           peopleProfsMap.get(personKey)!.professions.push({
-            id: prof.profession_id,
-            name: prof.profession_name,
-            description: prof.profession_description,
-            category: prof.profession_category,
+            id: prof.professionId,
+            name: prof.professionName,
+            description: prof.professionDescription,
+            category: prof.professionCategory,
           });
         });
       });
@@ -151,3 +151,4 @@ export const selectProfessionLoading = (state: any) => state.profession.loading;
 export const selectProfessionError = (state: any) => state.profession.error;
 
 export default professionSlice.reducer;
+

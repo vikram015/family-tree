@@ -1,11 +1,11 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 
 interface Village {
   id: string;
   name: string;
-  district_id?: string;
-  created_at?: string;
+  districtId?: string;
+  createdAt?: string;
 }
 
 interface VillageState {
@@ -31,14 +31,14 @@ export const fetchVillages = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Redux: Starting to fetch villages');
-      const villageData = await SupabaseService.getVillages();
+      const villageData = await ApiService.getVillages();
       console.log('Redux: Villages fetched:', villageData);
       
       const villageList: Village[] = villageData.map((village: any) => ({
         id: village.id,
         name: village.name,
-        district_id: village.district_id || village.district?.id || undefined,
-        created_at: village.created_at,
+        districtId: village.districtId || village.district?.id || undefined,
+        createdAt: village.createdAt,
       }));
 
       return villageList;
@@ -94,3 +94,4 @@ export const selectVillageLoading = (state: any) => state.village.loading;
 export const selectVillageError = (state: any) => state.village.error;
 
 export default villageSlice.reducer;
+

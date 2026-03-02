@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../../supabase";
 import {
   Container,
   Typography,
@@ -11,6 +10,7 @@ import {
 import { runHierarchyMigrationForAllTrees } from "../../utils/hierarchyMigration";
 import { populateVillageInfoForAllNodes } from "../../utils/populateVillageInfo";
 import { MigrationService } from "../../services/migrationService";
+import { backendApi } from "../../services/backendApi";
 
 export const DebugPage: React.FC = () => {
   const [villages, setVillages] = useState<any[]>([]);
@@ -24,27 +24,28 @@ export const DebugPage: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Get all villages from Supabase
-        const { data: villagesList, error: villagesError } = await supabase
-          .from("village")
-          .select("*");
-
-        if (villagesError) {
-          throw villagesError;
-        }
+        const villagesList = await backendApi.get<any[]>(
+          "/api/lookup/villages",
+        );
 
         console.log("Villages found:", villagesList);
         setVillages(villagesList || []);
 
         // Get heritage data
         if ((villagesList || []).length > 0) {
-          const { data: heritageList, error: heritageError } = await supabase
-            .from("heritage")
-            .select("*");
-
-          if (heritageError) {
-            throw heritageError;
-          }
+          const heritageList = (
+            await Promise.all(
+              (villagesList || []).map(async (village) => {
+                try {
+                  return await backendApi.get<any>(
+                    `/api/heritage/${village.id}`,
+                  );
+                } catch {
+                  return null;
+                }
+              }),
+            )
+          ).filter(Boolean);
 
           console.log("Heritage documents found:", heritageList);
           setHeritageData(heritageList);

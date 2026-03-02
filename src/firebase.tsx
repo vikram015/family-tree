@@ -1,8 +1,28 @@
-// Firebase configuration has been removed.
-// All authentication and data operations now use Supabase.
-// See supabase.ts for the Supabase client configuration.
+import { initializeApp, getApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
 
-export const db = null; // No longer used - Firebase removed
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+};
 
-const firebaseStub = {}; // Stub replacement for deprecated Firebase initialization
-export default firebaseStub;
+if (
+  !firebaseConfig.apiKey ||
+  !firebaseConfig.projectId ||
+  !firebaseConfig.appId
+) {
+  throw new Error(
+    "Missing Firebase configuration. Set REACT_APP_FIREBASE_* variables.",
+  );
+}
+
+export const firebaseApp = getApps().length
+  ? getApp()
+  : initializeApp(firebaseConfig);
+export const firebaseAuth = getAuth(firebaseApp);
+
+export default firebaseApp;

@@ -41,7 +41,7 @@ import {
   selectStatistics,
   selectStatisticsLoading,
 } from "../../store/slices/statisticsSlice";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
 
 interface SearchResult {
@@ -86,14 +86,14 @@ export const HomePage: React.FC = () => {
     setIsSearching(true);
     setShowResults(true);
     try {
-      const rows = await SupabaseService.globalSearch(query.trim());
+      const rows = await ApiService.globalSearch(query.trim());
 
       const results: SearchResult[] = [];
 
       rows.forEach((row: any) => {
         const lineageText =
-          row.entity_type === "person" && Array.isArray(row.parent_hierarchy)
-            ? row.parent_hierarchy
+          row.entityType === "person" && Array.isArray(row.parentHierarchy)
+            ? row.parentHierarchy
                 .slice(-5)
                 .map((a: any) => a?.name)
                 .filter(Boolean)
@@ -101,24 +101,24 @@ export const HomePage: React.FC = () => {
             : "";
 
         results.push({
-          id: row.entity_id,
+          id: row.entityId,
           name: row.title || "Unknown",
-          type: row.entity_type,
-          treeId: row.tree_id,
+          type: row.entityType,
+          treeId: row.treeId,
           extra:
-            row.entity_type === "person"
+            row.entityType === "person"
               ? [
-                  row.village_name ? `Village: ${row.village_name}` : null,
-                  row.tree_name ? `Tree: ${row.tree_name}` : "Family Member",
+                  row.villageName ? `Village: ${row.villageName}` : null,
+                  row.treeName ? `Tree: ${row.treeName}` : "Family Member",
                   lineageText ? `Lineage: ${lineageText}` : "Lineage: N/A",
                 ]
                   .filter(Boolean)
                   .join(" | ")
               : row.subtitle || undefined,
-          villageName: row.village_name || undefined,
-          casteName: row.caste_name || undefined,
-          subCasteName: row.sub_caste_name || undefined,
-          parentHierarchy: row.parent_hierarchy || [],
+          villageName: row.villageName || undefined,
+          casteName: row.casteName || undefined,
+          subCasteName: row.subCasteName || undefined,
+          parentHierarchy: row.parentHierarchy || [],
         });
       });
 
@@ -151,18 +151,18 @@ export const HomePage: React.FC = () => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
 
-  const totalPeople = statistics?.total_people || 0;
-  const totalTrees = statistics?.total_trees || 0;
-  const totalVillages = statistics?.total_villages || 0;
-  const totalBusinesses = statistics?.total_businesses || 0;
+  const totalPeople = statistics?.totalPeople || 0;
+  const totalTrees = statistics?.totalTrees || 0;
+  const totalVillages = statistics?.totalVillages || 0;
+  const totalBusinesses = statistics?.totalBusinesses || 0;
   const professionCoverage = totalPeople
-    ? Math.round(((statistics?.people_with_professions || 0) / totalPeople) * 100)
+    ? Math.round(((statistics?.peopleWithProfessions || 0) / totalPeople) * 100)
     : 0;
 
   const pulseItems = [
     `Families across ${totalVillages} villages are preserving lineage records.`,
     `${totalBusinesses} family businesses are now visible in the network.`,
-    `${statistics?.total_professions_assigned || 0} professional links are mapped.`,
+    `${statistics?.totalProfessionsAssigned || 0} professional links are mapped.`,
   ];
 
   const historyTodayItems = [
@@ -533,3 +533,4 @@ export const HomePage: React.FC = () => {
     </>
   );
 };
+

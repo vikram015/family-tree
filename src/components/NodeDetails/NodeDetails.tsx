@@ -40,7 +40,7 @@ import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
@@ -137,7 +137,7 @@ export const NodeDetails = memo(function NodeDetails({
 
   useEffect(() => {
     if (view === "link-external" && villages.length === 0) {
-      SupabaseService.getVillages().then((data) => setVillages(data));
+      ApiService.getVillages().then((data) => setVillages(data));
     }
   }, [view, villages.length]);
 
@@ -161,7 +161,7 @@ export const NodeDetails = memo(function NodeDetails({
       setEditedPhotoPreview(node.photo || undefined);
 
       // Fetch latest custom fields separately
-      SupabaseService.getPersonCustomFields(node.id).then((fields) => {
+      ApiService.getPersonCustomFields(node.id).then((fields) => {
         setEditedCustomFields(fields);
         setEditedGotra(fields["Gotra"] || "");
         setEditedVillage(fields["Village"] || "");
@@ -324,7 +324,7 @@ export const NodeDetails = memo(function NodeDetails({
       // targetId = spouse.id (The person staying in the tree)
       // spouseId = selectedExternalPerson.id (The new person coming in)
       // placeholderId = node.id (The person leaving)
-      await SupabaseService.addSpouse(
+      await ApiService.addSpouse(
         spouse.id,
         selectedExternalPerson.id,
         node.id,
@@ -601,7 +601,7 @@ export const NodeDetails = memo(function NodeDetails({
                       if (!node) return;
                       try {
                         setPhotoUploading(true);
-                        const url = await SupabaseService.uploadPersonPhoto(
+                        const url = await ApiService.uploadPersonPhoto(
                           node.id,
                           blob,
                         );
@@ -617,7 +617,7 @@ export const NodeDetails = memo(function NodeDetails({
                       if (!node) return;
                       try {
                         setPhotoUploading(true);
-                        await SupabaseService.removePersonPhoto(node.id);
+                        await ApiService.removePersonPhoto(node.id);
                         setEditedPhotoPreview(undefined);
                       } catch (err) {
                         console.error("Photo remove failed:", err);
@@ -924,4 +924,5 @@ export const NodeDetails = memo(function NodeDetails({
     </>
   );
 });
+
 

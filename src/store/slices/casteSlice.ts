@@ -3,23 +3,23 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 
 interface Caste {
   id: string;
   name: string;
-  created_at?: string;
-  modified_at?: string;
-  is_deleted?: boolean;
+  createdAt?: string;
+  modifiedAt?: string;
+  isDeleted?: boolean;
 }
 
 interface SubCaste {
   id: string;
   name: string;
-  caste_id: string;
-  created_at?: string;
-  modified_at?: string;
-  is_deleted?: boolean;
+  casteId: string;
+  createdAt?: string;
+  modifiedAt?: string;
+  isDeleted?: boolean;
 }
 
 interface CasteState {
@@ -42,21 +42,21 @@ const initialState: CasteState = {
 export const fetchCastes = createAsyncThunk(
   'caste/fetchCastes',
   async () => {
-    return await SupabaseService.getCastes();
+    return await ApiService.getCastes();
   }
 );
 
 export const fetchSubCastes = createAsyncThunk(
   'caste/fetchSubCastes',
   async (casteId?: string) => {
-    return await SupabaseService.getSubCastes(casteId);
+    return await ApiService.getSubCastes(casteId);
   }
 );
 
 export const fetchAllSubCastes = createAsyncThunk(
   'caste/fetchAllSubCastes',
   async () => {
-    return await SupabaseService.getSubCastes();
+    return await ApiService.getSubCastes();
   }
 );
 
@@ -131,3 +131,4 @@ export const selectSubCastesLoading = (state: any) => state.caste.subCastesLoadi
 export const selectCasteError = (state: any) => state.caste.error;
 
 export default casteSlice.reducer;
+

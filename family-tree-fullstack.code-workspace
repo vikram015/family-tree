@@ -1,0 +1,18 @@
+{
+  "folders": [
+    {
+      "path": "."
+    },
+    {
+      "path": "../family-tree-backend-node"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.gradle": true,
+      "**/build": true,
+      "**/target": true
+    }
+  }
+}

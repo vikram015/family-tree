@@ -19,7 +19,7 @@ import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
 import { getNodeHierarchy } from "../const";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
@@ -99,7 +99,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           setIsLoading(true);
         }
         // Fetch complete tree from Supabase using the PostgreSQL function
-        const treeData = await SupabaseService.getCompleteTreeById(treeId);
+        const treeData = await ApiService.getCompleteTreeById(treeId);
         if (requestId !== loadRequestIdRef.current) return;
         setVillageId(treeData.tree?.village?.id);
 
@@ -114,28 +114,28 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               parents:
                 person.parents?.map((p: any) => ({
                   id: p.id,
-                  type: (p.type || p.relation_subtype || RelType.blood) as RelType,
+                  type: (p.type || RelType.blood) as RelType,
                 })) || [],
               children:
                 person.children?.map((c: any) => ({
                   id: c.id,
-                  type: (c.type || c.relation_subtype || RelType.blood) as RelType,
+                  type: (c.type || RelType.blood) as RelType,
                 })) || [],
               spouses:
                 person.spouses?.map((s: any) => ({
                   id: s.id,
-                  type: (s.type || s.relation_subtype || RelType.married) as RelType,
+                  type: (s.type || RelType.married) as RelType,
                 })) || [],
               siblings:
                 person.siblings?.map((s: any) => ({
                   id: s.id,
                   type: RelType.blood,
                 })) || [],
-              treeId: person.tree_id || treeId,
-              photo: person.photo_url || undefined,
-              bloodGroup: person.blood_group || undefined,
-              isAlive: person.is_alive !== false,
-              deceasedDate: person.deceased_date || undefined,
+              treeId: person.treeId || treeId,
+              photo: person.photoUrl || undefined,
+              bloodGroup: person.bloodGroup || undefined,
+              isAlive: person.isAlive !== false,
+              deceasedDate: person.deceasedDate || undefined,
             }) as FNode,
         );
 
@@ -179,7 +179,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
         // Step 1 & 2: Filter by Tree ID and No Parents
         const baseCandidates = rawMembers.filter((m: any) => {
-          const isInCurrentTree = m.tree_id === currentTreeId;
+          const isInCurrentTree = m.treeId === currentTreeId;
           const hasNoParents = !m.parents || m.parents.length === 0;
           return isInCurrentTree && hasNoParents;
         });
@@ -195,7 +195,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             if (!spouseNode) return false; // Spouse data missing, ignore
 
             // Condition: Spouse is in the SAME tree
-            if (spouseNode.tree_id === currentTreeId) {
+            if (spouseNode.treeId === currentTreeId) {
               // Check if this spouse has parents (meaning the root is higher up on their side)
               if (spouseNode.parents && spouseNode.parents.length > 0) {
                 return true; // Disqualify Candidate
@@ -242,8 +242,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           if (aDesc !== bDesc) return bDesc - aDesc;
 
           // Priority 2: Creation Date (Oldest First)
-          const aTime = new Date(a.created_at).getTime() || 0;
-          const bTime = new Date(b.created_at).getTime() || 0;
+          const aTime = new Date(a.createdAt).getTime() || 0;
+          const bTime = new Date(b.createdAt).getTime() || 0;
           return aTime - bTime;
         });
 
@@ -306,28 +306,28 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             parents:
               raw.parents?.map((p: any) => ({
                 id: p.id,
-                type: (p.type || p.relation_subtype || RelType.blood) as RelType,
+                type: (p.type || RelType.blood) as RelType,
               })) || [],
             children:
               raw.children?.map((c: any) => ({
                 id: c.id,
-                type: (c.type || c.relation_subtype || RelType.blood) as RelType,
+                type: (c.type || RelType.blood) as RelType,
               })) || [],
             spouses:
               raw.spouses?.map((s: any) => ({
                 id: s.id,
-                type: (s.type || s.relation_subtype || RelType.married) as RelType,
+                type: (s.type || RelType.married) as RelType,
               })) || [],
             siblings:
               raw.siblings?.map((s: any) => ({
                 id: s.id,
                 type: RelType.blood,
               })) || [],
-            treeId: raw.tree_id || treeId,
-            photo: raw.photo_url || undefined,
-            bloodGroup: raw.blood_group || undefined,
-            isAlive: raw.is_alive !== false,
-            deceasedDate: raw.deceased_date || undefined,
+            treeId: raw.treeId || treeId,
+            photo: raw.photoUrl || undefined,
+            bloodGroup: raw.bloodGroup || undefined,
+            isAlive: raw.isAlive !== false,
+            deceasedDate: raw.deceasedDate || undefined,
           } as FNode;
 
           nodeMap.set(raw.id, fnode);
@@ -388,7 +388,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
       try {
         // Update person with both core properties and additional details in one call
-        await SupabaseService.updatePerson(nodeId, updates);
+        await ApiService.updatePerson(nodeId, updates);
         // Refresh tree data but keep current root if valid
         await loadTreeData(true);
         // Clear selection to refresh the detail panel
@@ -414,14 +414,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
       try {
         // Delete person using Supabase
-        const result = await SupabaseService.deletePerson(nodeId, force);
+        const result = await ApiService.deletePerson(nodeId, force);
 
-        if (result?.requires_confirmation) {
+        if (result?.requiresConfirmation) {
           const person = nodes.find((n) => n.id === nodeId);
           setDeleteConfirmation({
             open: true,
             personId: nodeId,
-            childrenCount: result.children_count,
+            childrenCount: result.childrenCount,
             personName: person?.name,
           });
           return;
@@ -461,7 +461,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (node.id && relation === "spouse" && targetId) {
         try {
           setIsLoading(true);
-          await SupabaseService.addSpouse(targetId, node.id);
+          await ApiService.addSpouse(targetId, node.id);
           await loadTreeData(true);
           return node.id; // Return the linked person ID
         } catch (err) {
@@ -524,7 +524,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
         // Create person in Supabase using the add_person_to_tree procedure
         // This handles: person creation, relationship creation, and auto-spouse creation for children
-        const newPerson = await SupabaseService.addPersonToTree(
+        const newPerson = await ApiService.addPersonToTree(
           treeId,
           coreNode.name || "Unnamed",
           coreNode.gender,
@@ -540,19 +540,19 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           coreNode.deceasedDate,
         );
 
-        // Efficiently merge affected_nodes into existing state instead of full reload
-        if (newPerson?.success && newPerson?.person_id) {
-          const affectedNodes = newPerson.affected_nodes || [];
+        // Efficiently merge affected nodes into existing state instead of full reload
+        if (newPerson?.success && newPerson?.personId) {
+          const affectedNodes = newPerson.affectedNodes || [];
           if (affectedNodes.length > 0) {
-            mergeAffectedNodes(affectedNodes, newPerson.person_id);
+            mergeAffectedNodes(affectedNodes, newPerson.personId);
           } else {
-            // Fallback: full reload if procedure didn't return affected_nodes (old DB version)
+            // Fallback: full reload if response did not include affected nodes
             await loadTreeData(true);
           }
           if (relation === "child" && targetId) {
             setAutoExpandNodeId(targetId);
           }
-          return newPerson.person_id;
+          return newPerson.personId;
         }
       } catch (err) {
         console.error("Failed to add node:", err);
@@ -1088,9 +1088,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               setExternalTreeConfirm({ open: false, targetTreeId: null });
               if (tid) {
                 try {
-                  const tree = await SupabaseService.getTreeWithDetails(tid);
-                  if (tree?.village_id) {
-                    setSelectedVillage(tree.village_id);
+                  const tree = await ApiService.getTreeWithDetails(tid);
+                  if (tree?.villageId) {
+                    setSelectedVillage(tree.villageId);
                   }
                 } catch (e) {
                   console.warn("Could not fetch target tree village:", e);
@@ -1124,3 +1124,4 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     </Box>
   );
 };
+

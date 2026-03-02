@@ -20,7 +20,8 @@ import LinkIcon from "@mui/icons-material/Link";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
-import { supabase } from "../../supabase";
+import { useAppDispatch } from "../../store/hooks";
+import { submitVillageAccessRequest } from "../../store/thunks/apiThunks";
 
 interface SelectedPerson {
   id: string;
@@ -37,6 +38,7 @@ interface SelectedPerson {
  * Shown once per user (persisted in localStorage).
  */
 export const LinkNodeDialog: React.FC = () => {
+  const dispatch = useAppDispatch();
   const { currentUser, linkUserToNode, userProfile } = useAuth();
   const { selectedVillage, setSelectedVillage, villages } = useVillage();
   const [searchValue, setSearchValue] = useState("");
@@ -53,8 +55,8 @@ export const LinkNodeDialog: React.FC = () => {
   const hasAssignedVillage = (userProfile?.villages || []).length > 0;
 
   const storageKey = useMemo(
-    () => `kinvia_admin_onboarding_seen_v1_${currentUser?.id || "anon"}`,
-    [currentUser?.id],
+    () => `kinvia_admin_onboarding_seen_v1_${currentUser?.uid || "anon"}`,
+    [currentUser?.uid],
   );
 
   // Auto-select first village if none selected
@@ -75,7 +77,13 @@ export const LinkNodeDialog: React.FC = () => {
       setOpen(true);
       setStep(userProfile?.peopleId || hasAssignedVillage ? "intro" : "intro");
     }
-  }, [currentUser, userProfile?.role, userProfile?.peopleId, hasAssignedVillage, storageKey]);
+  }, [
+    currentUser,
+    userProfile?.role,
+    userProfile?.peopleId,
+    hasAssignedVillage,
+    storageKey,
+  ]);
 
   const handleClosePermanently = () => {
     localStorage.setItem(storageKey, "1");
@@ -102,15 +110,17 @@ export const LinkNodeDialog: React.FC = () => {
     setRequesting(true);
     setError("");
     try {
-      const { data, error: rpcError } = await supabase.rpc(
-        "submit_village_access_request",
-        {
-          p_village_id: selectedVillage,
-          p_request_message: requestMessage || null,
-        },
-      );
-
-      if (rpcError) throw rpcError;
+      const userId = userProfile?.id;
+      if (!userId) {
+        throw new Error("User profile not loaded");
+      }
+      const data = await dispatch(
+        submitVillageAccessRequest({
+          userId,
+          villageId: selectedVillage,
+          requestMessage: requestMessage || null,
+        }),
+      ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
       setSuccess("Village access request submitted.");
@@ -243,7 +253,11 @@ export const LinkNodeDialog: React.FC = () => {
                   value={requestMessage}
                   onChange={(e) => setRequestMessage(e.target.value)}
                 />
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1, display: "block" }}
+                >
                   You can request this anytime from Profile.
                 </Typography>
               </>
@@ -298,7 +312,9 @@ export const LinkNodeDialog: React.FC = () => {
               variant="contained"
               onClick={handleLink}
               disabled={!selectedPerson || linking}
-              startIcon={linking ? <CircularProgress size={16} /> : <LinkIcon />}
+              startIcon={
+                linking ? <CircularProgress size={16} /> : <LinkIcon />
+              }
               sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
             >
               {linking ? "Linking..." : "Link My Account"}
@@ -313,12 +329,24 @@ export const LinkNodeDialog: React.FC = () => {
             </Button>
             <Button
               variant="contained"
-              onClick={hasAssignedVillage ? handleClosePermanently : handleRequestVillageAccess}
-              disabled={hasAssignedVillage ? false : !selectedVillage || requesting}
-              startIcon={requesting ? <CircularProgress size={16} /> : undefined}
+              onClick={
+                hasAssignedVillage
+                  ? handleClosePermanently
+                  : handleRequestVillageAccess
+              }
+              disabled={
+                hasAssignedVillage ? false : !selectedVillage || requesting
+              }
+              startIcon={
+                requesting ? <CircularProgress size={16} /> : undefined
+              }
               sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
             >
-              {hasAssignedVillage ? "Done" : requesting ? "Submitting..." : "Request Access"}
+              {hasAssignedVillage
+                ? "Done"
+                : requesting
+                  ? "Submitting..."
+                  : "Request Access"}
             </Button>
           </>
         )}
