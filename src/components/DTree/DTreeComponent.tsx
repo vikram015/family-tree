@@ -818,7 +818,26 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           treeNode.children = children;
         }
       } else if (children.length > 0) {
-        treeNode.children = children;
+        if (showPlaceholders) {
+          const spouseClass = person.gender === "female" ? "man" : "woman";
+          treeNode.marriages = [
+            {
+              spouse: {
+                name: "Add Spouse",
+                class: spouseClass,
+                textClass: "nodeText",
+                extra: {
+                  _placeholder: true,
+                  _placeholderType: "spouse",
+                  _targetNodeId: personId,
+                },
+              },
+              children,
+            },
+          ];
+        } else {
+          treeNode.children = children;
+        }
       }
     }
     // No spouses and no children — inject all placeholders as a single marriage

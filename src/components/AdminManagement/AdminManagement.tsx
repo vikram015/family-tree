@@ -105,6 +105,7 @@ export const AdminManagement: React.FC = () => {
   } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const superAdmin = isSuperAdmin();
 
   // Redux state
   const states = useAppSelector(selectStates);
@@ -122,7 +123,6 @@ export const AdminManagement: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
   const [selectedVillages, setSelectedVillages] = useState<string[]>([]);
   const [error, setError] = useState<string>("");
-  const [tabValue, setTabValue] = useState(0);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   // Add dialog states
@@ -207,30 +207,14 @@ export const AdminManagement: React.FC = () => {
     checkAccessAndLoad();
   }, [isSuperAdmin, isAdmin, loadData, authLoading]);
 
-  useEffect(() => {
-    if (!isSuperAdmin()) {
-      setTabValue(1);
-    }
-  }, [isSuperAdmin]);
-
-  useEffect(() => {
+  const tabValue = React.useMemo(() => {
     const params = new URLSearchParams(location.search);
-    const tabKey = params.get("tab");
-    if (!tabKey) return;
-
-    const idx = TAB_KEYS.indexOf(tabKey as (typeof TAB_KEYS)[number]);
-    if (idx === -1) return;
-    if (!isSuperAdmin() && idx > 1) return;
-    setTabValue(idx);
-  }, [location.search, isSuperAdmin]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const nextKey = TAB_KEYS[tabValue] || "users";
-    if (params.get("tab") === nextKey) return;
-    params.set("tab", nextKey);
-    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
-  }, [tabValue, location.pathname, location.search, navigate]);
+    const tabKey = params.get("tab") || "users";
+    let idx = TAB_KEYS.indexOf(tabKey as (typeof TAB_KEYS)[number]);
+    if (idx === -1) idx = 0;
+    if (!superAdmin && idx > 1) idx = 0;
+    return idx;
+  }, [location.search, superAdmin]);
 
   const handleAddClick = (
     type: "state" | "district" | "village" | "caste" | "subcaste",
@@ -455,7 +439,12 @@ export const AdminManagement: React.FC = () => {
       <Paper>
         <Tabs
           value={tabValue}
-          onChange={(e, val) => setTabValue(val)}
+          onChange={(e, val) => {
+            if (val === tabValue) return;
+            const params = new URLSearchParams(location.search);
+            params.set("tab", TAB_KEYS[val] || "users");
+            navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+          }}
           variant="scrollable"
           scrollButtons="auto"
           allowScrollButtonsMobile

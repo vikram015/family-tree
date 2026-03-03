@@ -78,6 +78,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
+    const fullPhoneNumber = `+91${phone}`;
+
     try {
       setError("");
       setSuccessMessage("");
@@ -89,7 +91,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         throw new Error("reCAPTCHA failed to initialize. Please try again.");
       }
 
-      const fullPhoneNumber = `+91${phone}`;
       const result = await signInWithPhoneNumber(
         firebaseAuth,
         fullPhoneNumber,
@@ -98,11 +99,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setConfirmationResult(result);
       setSuccessMessage("OTP sent successfully.");
     } catch (err: any) {
+      const code = err?.code || "";
       const message = err?.message || "Failed to send OTP";
-      if (message.includes("INVALID_APP_CREDENTIAL")) {
-        setError("Firebase rejected app credentials. Check Authorized Domains and API key restrictions.");
+      // Keep detailed error visible for debugging auth misconfiguration issues.
+      // eslint-disable-next-line no-console
+      console.error("Phone auth send OTP failed", {
+        err,
+        code,
+        message,
+        fullPhoneNumber,
+      });
+      if (
+        code === "auth/invalid-app-credential" ||
+        message.includes("INVALID_APP_CREDENTIAL")
+      ) {
+        setError(
+          "Firebase rejected app credentials (auth/invalid-app-credential). Check Authorized Domains, Phone provider is enabled, and API key restrictions allow Identity Toolkit.",
+        );
+      } else if (code === "auth/captcha-check-failed") {
+        setError("reCAPTCHA verification failed. Reload and try again.");
+      } else if (code === "auth/unauthorized-domain") {
+        setError(
+          "Current domain is not authorized for Firebase Auth. Add it in Firebase Console > Authentication > Settings > Authorized domains.",
+        );
       } else {
-        setError(message);
+        setError(code ? `${code}: ${message}` : message);
       }
     } finally {
       setLoading(false);
@@ -183,15 +204,23 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               variant="outlined"
               value={phone}
               onChange={(e) => {
-                const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
+                const digitsOnly = e.target.value
+                  .replace(/\D/g, "")
+                  .slice(0, 10);
                 setPhone(digitsOnly);
               }}
               placeholder="9876543210"
               sx={{ mb: 2 }}
               disabled={loading || !!confirmationResult}
-              inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 10 }}
+              inputProps={{
+                inputMode: "numeric",
+                pattern: "[0-9]*",
+                maxLength: 10,
+              }}
               InputProps={{
-                startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+                startAdornment: (
+                  <InputAdornment position="start">+91</InputAdornment>
+                ),
               }}
             />
 

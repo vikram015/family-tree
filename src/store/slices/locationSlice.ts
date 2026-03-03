@@ -38,6 +38,21 @@ const initialState: LocationState = {
   error: null,
 };
 
+function normalizeState(row: any): State {
+  return {
+    ...row,
+    createdAt: row?.createdAt,
+  };
+}
+
+function normalizeDistrict(row: any): District {
+  return {
+    ...row,
+    stateId: row?.stateId,
+    createdAt: row?.createdAt,
+  };
+}
+
 // Thunks
 export const fetchStates = createAsyncThunk(
   'location/fetchStates',
@@ -78,7 +93,7 @@ const locationSlice = createSlice({
     builder.addCase(fetchStates.fulfilled, (state, action: PayloadAction<State[]>) => {
       state.statesLoading = false;
       // Sort states alphabetically by name (case-insensitive)
-      state.states = (action.payload || []).slice().sort((a, b) =>
+      state.states = (action.payload || []).map(normalizeState).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -94,7 +109,7 @@ const locationSlice = createSlice({
     });
     builder.addCase(fetchDistricts.fulfilled, (state, action: PayloadAction<District[]>) => {
       state.districtsLoading = false;
-      state.districts = (action.payload || []).slice().sort((a, b) =>
+      state.districts = (action.payload || []).map(normalizeDistrict).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -110,7 +125,7 @@ const locationSlice = createSlice({
     });
     builder.addCase(fetchAllDistricts.fulfilled, (state, action: PayloadAction<District[]>) => {
       state.districtsLoading = false;
-      state.districts = (action.payload || []).slice().sort((a, b) =>
+      state.districts = (action.payload || []).map(normalizeDistrict).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });

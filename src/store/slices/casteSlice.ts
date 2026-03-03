@@ -38,6 +38,21 @@ const initialState: CasteState = {
   error: null,
 };
 
+function normalizeCaste(row: any): Caste {
+  return {
+    ...row,
+    createdAt: row?.createdAt,
+  };
+}
+
+function normalizeSubCaste(row: any): SubCaste {
+  return {
+    ...row,
+    casteId: row?.casteId,
+    createdAt: row?.createdAt,
+  };
+}
+
 // Thunks
 export const fetchCastes = createAsyncThunk(
   'caste/fetchCastes',
@@ -77,7 +92,7 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchCastes.fulfilled, (state, action: PayloadAction<Caste[]>) => {
       state.castesLoading = false;
-      state.castes = (action.payload || []).slice().sort((a, b) =>
+      state.castes = (action.payload || []).map(normalizeCaste).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -93,7 +108,7 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchSubCastes.fulfilled, (state, action: PayloadAction<SubCaste[]>) => {
       state.subCastesLoading = false;
-      state.subCastes = (action.payload || []).slice().sort((a, b) =>
+      state.subCastes = (action.payload || []).map(normalizeSubCaste).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -109,7 +124,7 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchAllSubCastes.fulfilled, (state, action: PayloadAction<SubCaste[]>) => {
       state.subCastesLoading = false;
-      state.subCastes = (action.payload || []).slice().sort((a, b) =>
+      state.subCastes = (action.payload || []).map(normalizeSubCaste).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
