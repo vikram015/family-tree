@@ -30,6 +30,7 @@ import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
 import { LinkNodeDialog } from "../LinkNodeDialog/LinkNodeDialog";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
+import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 
 // Lazy load FamiliesPage
 const FamiliesPage = React.lazy(() =>
@@ -136,6 +137,7 @@ function AppContent() {
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             </Routes>
           </ErrorBoundary>
         </Box>

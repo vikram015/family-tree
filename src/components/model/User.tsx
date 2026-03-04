@@ -10,6 +10,7 @@ export interface AppUser {
   displayName?: string;
   name?: string; // Aligning with DB column
   phone?: string;
+  privacyPolicyAccepted?: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy?: string; // ID of superadmin who created this user

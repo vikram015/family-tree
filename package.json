@@ -31,7 +31,6 @@
     "typescript": "4.9.5"
   },
   "devDependencies": {
-    "@craco/craco": "^7.1.0",
     "@types/classnames": "2.3.1",
     "@types/d3-hierarchy": "^3.1.4",
     "@types/d3-selection": "^3.0.6",
@@ -47,11 +46,15 @@
     "webpack-bundle-analyzer": "^4.10.2"
   },
   "scripts": {
-    "start": "craco start",
-    "build": "craco build",
+    "start": "react-scripts start",
+    "start:local": "react-scripts start",
+    "build": "react-scripts build",
+    "build:prod": "react-scripts build",
     "analyze": "source-map-explorer build/static/js/*.js",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build",
+    "firebase:clean": "powershell -ExecutionPolicy Bypass -Command \"Remove-Item -Recurse -Force .firebase -ErrorAction Ignore\"",
+    "deploy:firebase": "npm run build && npm run firebase:clean && npx firebase-tools@latest deploy --only hosting --project kinvia-fe353"
   },
   "eslintConfig": {
     "extends": "react-app"

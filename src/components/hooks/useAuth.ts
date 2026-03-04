@@ -29,8 +29,20 @@ export function useAuth() {
   );
 
   const updateUserProfile = useCallback(
-    (name: string, phone: string) =>
-      dispatch(updateUserProfileAction({ name, phone })).unwrap(),
+    (
+      name: string,
+      phone: string,
+      email?: string,
+      privacyPolicyAccepted?: boolean,
+    ) =>
+      dispatch(
+        updateUserProfileAction({
+          name,
+          phone,
+          email,
+          privacyPolicyAccepted,
+        }),
+      ).unwrap(),
     [dispatch],
   );
 

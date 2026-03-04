@@ -10,6 +10,8 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
 import {
@@ -37,6 +39,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [confirmationResult, setConfirmationResult] =
     useState<ConfirmationResult | null>(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
@@ -154,7 +158,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setOtp("");
       setConfirmationResult(null);
       onSuccess?.();
-      onClose();
     } catch (err: any) {
       setError(err?.message || "Invalid OTP");
     } finally {
@@ -174,7 +177,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+      fullScreen={isMobile}
+    >
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
           <Typography variant="h6">Sign In with Phone</Typography>

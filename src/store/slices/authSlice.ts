@@ -27,6 +27,7 @@ type BackendUserProfile = {
   name?: string | null;
   phone?: string | null;
   isVerified?: boolean | null;
+  privacyPolicyAccepted?: boolean | null;
   createdAt?: string;
   modifiedAt?: string;
 };
@@ -42,6 +43,7 @@ function mapBackendUserToAppUser(row: BackendUserProfile): AppUser {
     name: row.name || undefined,
     phone: row.phone || undefined,
     isVerified: row.isVerified ?? undefined,
+    privacyPolicyAccepted: row.privacyPolicyAccepted ?? undefined,
     createdAt: row.createdAt || new Date().toISOString(),
     updatedAt: row.modifiedAt || new Date().toISOString(),
   };
@@ -90,9 +92,27 @@ export const linkUserToNode = createAsyncThunk(
 
 export const updateUserProfile = createAsyncThunk(
   "auth/updateUserProfile",
-  async ({ name, phone }: { name: string; phone: string }, { rejectWithValue }) => {
+  async (
+    {
+      name,
+      phone,
+      email,
+      privacyPolicyAccepted,
+    }: {
+      name: string;
+      phone: string;
+      email?: string;
+      privacyPolicyAccepted?: boolean;
+    },
+    { rejectWithValue },
+  ) => {
     try {
-      const row = await backendApi.patch<BackendUserProfile>("/api/auth/me", { name, phone });
+      const row = await backendApi.patch<BackendUserProfile>("/api/auth/me", {
+        name,
+        phone,
+        email,
+        privacyPolicyAccepted,
+      });
       return mapBackendUserToAppUser(row);
     } catch (error: any) {
       return rejectWithValue(error?.message || "Failed to update profile");

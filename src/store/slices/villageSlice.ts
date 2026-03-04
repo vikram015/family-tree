@@ -17,10 +17,7 @@ interface VillageState {
 
 const initialState: VillageState = {
   villages: [],
-  selectedVillage: (() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('village') || '';
-  })(),
+  selectedVillage: '',
   loading: true,
   error: null,
 };

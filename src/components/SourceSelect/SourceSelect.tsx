@@ -1,4 +1,11 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Node } from "relatives-tree/lib/types";
 import { ApiService } from "../../services/apiService";
 import {
@@ -52,6 +59,7 @@ export const SourceSelect = memo(function SourceSelect({
   );
   const initNotifiedTreeRef = useRef<string | null>(null);
   const sharedTreeResolvedRef = useRef<string | null>(null);
+  const resolveSharedTreeOnInitRef = useRef(true);
   const onChangeRef = useRef(onChange);
 
   useEffect(() => {
@@ -92,7 +100,11 @@ export const SourceSelect = memo(function SourceSelect({
         // If a shared tree link points to a tree in a different village,
         // switch village first so that tree appears in the filtered tree list.
         // Do this only once per URL tree value to avoid blocking manual village changes.
-        if (urlTreeId && sharedTreeResolvedRef.current !== urlTreeId) {
+        if (
+          resolveSharedTreeOnInitRef.current &&
+          urlTreeId &&
+          sharedTreeResolvedRef.current !== urlTreeId
+        ) {
           try {
             const targetTree = await ApiService.getTreeWithDetails(urlTreeId);
             if (
@@ -100,42 +112,63 @@ export const SourceSelect = memo(function SourceSelect({
               targetTree.villageId !== selectedVillage
             ) {
               sharedTreeResolvedRef.current = urlTreeId;
+              resolveSharedTreeOnInitRef.current = false;
               setSelectedVillage(targetTree.villageId);
               return;
             }
             sharedTreeResolvedRef.current = urlTreeId;
+            resolveSharedTreeOnInitRef.current = false;
           } catch (err) {
             console.warn("Could not resolve shared tree village:", err);
             sharedTreeResolvedRef.current = urlTreeId;
+            resolveSharedTreeOnInitRef.current = false;
           }
+        }
+
+        if (resolveSharedTreeOnInitRef.current && !urlTreeId) {
+          resolveSharedTreeOnInitRef.current = false;
         }
 
         const sourceTrees = await ApiService.getTrees(selectedVillage);
         setTrees(sourceTrees);
 
+        let nextValue = value;
+        let notifyValue: string | null = null;
+
         // If URL has a valid tree in current list, sync local select only (no notify)
         if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
-          setValue((prev) => (prev === urlTreeId ? prev : urlTreeId));
+          nextValue = urlTreeId;
         }
         // Otherwise auto-select first only once and notify parent
         else if (sourceTrees.length > 0) {
           const first = sourceTrees[0];
-          setValue((prev) => {
-            if (prev && sourceTrees.some((s) => s.id === prev)) return prev;
+          const currentExists = Boolean(
+            nextValue && sourceTrees.some((s) => s.id === nextValue),
+          );
+
+          if (!currentExists) {
+            nextValue = first.id;
             if (autoNotifyOnInit && initNotifiedTreeRef.current !== first.id) {
               initNotifiedTreeRef.current = first.id;
-              onChangeRef.current(first.id, []);
+              notifyValue = first.id;
             }
-            return first.id;
-          });
+          }
         }
         // If current tree is not in filtered list, clear selection
         else {
-          setValue("");
+          nextValue = "";
           if (autoNotifyOnInit && initNotifiedTreeRef.current !== "") {
             initNotifiedTreeRef.current = "";
-            onChangeRef.current("", []);
+            notifyValue = "";
           }
+        }
+
+        if (nextValue !== value) {
+          setValue(nextValue);
+        }
+
+        if (notifyValue !== null) {
+          onChangeRef.current(notifyValue, []);
         }
       } catch (error) {
         console.error("Failed to load trees:", error);
@@ -144,11 +177,7 @@ export const SourceSelect = memo(function SourceSelect({
     };
 
     loadTrees();
-  }, [
-    autoNotifyOnInit,
-    selectedVillage,
-    setSelectedVillage,
-  ]);
+  }, [autoNotifyOnInit, selectedVillage, setSelectedVillage, value]);
 
   const changeHandler = useCallback(
     (event: any) => {
@@ -294,4 +323,3 @@ export const SourceSelect = memo(function SourceSelect({
     </FormControl>
   );
 });
-
