@@ -106,6 +106,14 @@ interface PersonSearchResult {
   subCasteName?: string;
 }
 
+const buildFamilyPagePath = (treeId?: string, personId?: string): string => {
+  const params = new URLSearchParams();
+  if (treeId) params.set("tree", treeId);
+  if (personId) params.set("personId", personId);
+  const query = params.toString();
+  return query ? `/families?${query}` : "/families";
+};
+
 // Owner link component with hierarchy tooltip
 const OwnerLink: React.FC<{
   business: Business;
@@ -144,7 +152,9 @@ const OwnerLink: React.FC<{
     <Tooltip title={tooltipContent}>
       <Box
         component="span"
-        onClick={() => onNavigate(`/families?tree=${business.treeId}`)}
+        onClick={() =>
+          onNavigate(buildFamilyPagePath(business.treeId, business.ownerId))
+        }
         sx={{
           color: "#0066cc",
           cursor: "pointer",
@@ -1147,7 +1157,10 @@ export const BusinessPage: React.FC = () => {
                                   <Box
                                     onClick={() =>
                                       navigate(
-                                        `/families?tree=${person.treeId}`,
+                                        buildFamilyPagePath(
+                                          person.treeId,
+                                          person.personId,
+                                        ),
                                       )
                                     }
                                     sx={{
