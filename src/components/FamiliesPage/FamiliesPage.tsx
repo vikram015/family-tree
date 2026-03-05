@@ -27,10 +27,11 @@ import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
 import { useLoginModal } from "../context/LoginModalContext";
+import { useSearchParams } from "react-router-dom";
 
 interface FamiliesPageProps {
   treeId: string;
-  setTreeId: (id: string) => void;
+  setTreeId: (id: string, options?: { personId?: string | null }) => void;
   onSourceChange: (value: string, nodes: readonly any[]) => void;
   onCreate?: (id: string) => void;
 }
@@ -41,10 +42,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   onSourceChange,
   onCreate,
 }) => {
+  const [searchParams] = useSearchParams();
   const { currentUser, hasPermission, isApproved, isAdmin, isSuperAdmin } =
     useAuth();
   const { setSelectedVillage } = useVillage();
   const { openLoginModal } = useLoginModal();
+  const highlightedPersonId = searchParams.get("personId");
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
@@ -72,9 +75,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [externalTreeConfirm, setExternalTreeConfirm] = useState<{
     open: boolean;
     targetTreeId: string | null;
+    targetPersonId: string | null;
   }>({
     open: false,
     targetTreeId: null,
+    targetPersonId: null,
   });
   const [dismissNoAccessAlert, setDismissNoAccessAlert] = useState(false);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
@@ -937,9 +942,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 onAddRelative={handleAddRelative}
                 onViewDetails={handleViewDetails}
                 currentTreeId={treeId}
+                highlightedPersonId={highlightedPersonId || undefined}
                 onMobileSheetChange={setIsMobileSheetOpen}
-                onExternalTreeClick={(tid) => {
-                  setExternalTreeConfirm({ open: true, targetTreeId: tid });
+                onExternalTreeClick={(tid, pid) => {
+                  setExternalTreeConfirm({
+                    open: true,
+                    targetTreeId: tid,
+                    targetPersonId: pid || null,
+                  });
                 }}
               />
             ) : (
@@ -1063,7 +1073,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       <Dialog
         open={externalTreeConfirm.open}
         onClose={() =>
-          setExternalTreeConfirm({ open: false, targetTreeId: null })
+          setExternalTreeConfirm({
+            open: false,
+            targetTreeId: null,
+            targetPersonId: null,
+          })
         }
       >
         <DialogTitle>Navigate to Another Tree</DialogTitle>
@@ -1076,7 +1090,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         <DialogActions>
           <Button
             onClick={() =>
-              setExternalTreeConfirm({ open: false, targetTreeId: null })
+              setExternalTreeConfirm({
+                open: false,
+                targetTreeId: null,
+                targetPersonId: null,
+              })
             }
           >
             Cancel
@@ -1085,7 +1103,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             variant="contained"
             onClick={async () => {
               const tid = externalTreeConfirm.targetTreeId;
-              setExternalTreeConfirm({ open: false, targetTreeId: null });
+              const pid = externalTreeConfirm.targetPersonId;
+              setExternalTreeConfirm({
+                open: false,
+                targetTreeId: null,
+                targetPersonId: null,
+              });
               if (tid) {
                 try {
                   const tree = await ApiService.getTreeWithDetails(tid);
@@ -1095,7 +1118,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 } catch (e) {
                   console.warn("Could not fetch target tree village:", e);
                 }
-                onSourceChange(tid, []);
+                setTreeId(tid, { personId: pid || undefined });
               }
             }}
           >

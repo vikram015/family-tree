@@ -56,12 +56,32 @@ function AppContent() {
   const treeId = searchParams.get("tree") || "";
 
   const setTreeId = useCallback(
-    (value: string) => {
-      if (value) {
-        setSearchParams({ tree: value });
-      } else {
-        setSearchParams({});
-      }
+    (value: string, options?: { personId?: string | null }) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        const currentTreeId = prev.get("tree") || "";
+        const isSameTree = value === currentTreeId;
+
+        if (value) {
+          next.set("tree", value);
+        } else {
+          next.delete("tree");
+          next.delete("personId");
+          return next;
+        }
+
+        if (options) {
+          if (options.personId) {
+            next.set("personId", options.personId);
+          } else {
+            next.delete("personId");
+          }
+        } else if (!isSameTree) {
+          next.delete("personId");
+        }
+
+        return next;
+      });
     },
     [setSearchParams],
   );

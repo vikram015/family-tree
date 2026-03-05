@@ -186,6 +186,7 @@ export function renderNodeCardSvg(
   nodeClass: string,
   currentTreeId?: string,
   isMain?: boolean,
+  isHighlighted?: boolean,
   isMobile?: boolean,
   canEditTree: boolean = true,
 ): string {
@@ -326,12 +327,17 @@ export function renderNodeCardSvg(
     svg += `fill="none" stroke="${colors.border}" stroke-width="1" opacity="0.4" pointer-events="none"/>`;
   }
 
+  if (isHighlighted) {
+    svg += `<rect class="card-focus-ring" x="-5" y="-5" width="${dim.w + 10}" height="${dim.h + 10}" rx="${dim.r + 5}" ry="${dim.r + 5}" `;
+    svg += `fill="none" stroke="#ff9800" stroke-width="3" pointer-events="none"/>`;
+  }
+
   // === External tree link icon ===
   if (showExternalLink) {
     const linkX = dim.w - 4;
     const linkY = -4;
     const linkR = 10;
-    svg += `<g class="external-tree-icon" data-tree-id="${extra.treeId}" cursor="pointer">`;
+    svg += `<g class="external-tree-icon" data-tree-id="${extra.treeId}" data-person-id="${extra.id}" cursor="pointer">`;
     svg += `<circle cx="${linkX}" cy="${linkY}" r="${linkR}" fill="white" stroke="#1976d2" stroke-width="1.5"/>`;
     svg += `<text x="${linkX}" y="${linkY + 1}" text-anchor="middle" dominant-baseline="central" font-size="11">></text>`;
     svg += `</g>`;

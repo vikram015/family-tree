@@ -48,8 +48,9 @@ interface DTreeComponentProps {
   ) => void;
   onViewDetails?: (nodeId: string) => void;
   onDelete?: (nodeId: string) => void;
-  onExternalTreeClick?: (treeId: string) => void;
+  onExternalTreeClick?: (treeId: string, personId?: string) => void;
   currentTreeId?: string;
+  highlightedPersonId?: string;
   onMobileSheetChange?: (open: boolean) => void;
 }
 
@@ -66,6 +67,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   onDelete,
   onExternalTreeClick,
   currentTreeId,
+  highlightedPersonId,
   onMobileSheetChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,6 +78,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const prevTreeIdRef = useRef<string | undefined>(currentTreeId);
   // Track previous mainId so we only auto-center when mainId actually changes
   const prevMainIdRef = useRef<string | null>(null);
+  // Track one-time URL focus requests so re-renders don't keep re-centering.
+  const prevHighlightedFocusKeyRef = useRef<string | null>(null);
 
   // Expand/collapse state: which node is the "main" focused node
   const [mainId, setMainId] = useState<string | null>(null);
@@ -337,8 +341,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         e.preventDefault();
         e.stopPropagation();
         const tid = linkButton.getAttribute("data-tree-id");
+        const pid = linkButton.getAttribute("data-person-id");
         if (tid && onExternalTreeClick) {
-          onExternalTreeClick(tid);
+          onExternalTreeClick(tid, pid || undefined);
         }
         return;
       }
@@ -1039,6 +1044,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               return renderPlaceholderCardSvg(name, extra, id, nodeClass);
             }
             const isMain = mainIdRef.current === extra?.id;
+            const isHighlighted = highlightedPersonId === extra?.id;
             return renderNodeCardSvg(
               name,
               extra,
@@ -1046,6 +1052,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               nodeClass,
               currentTreeId,
               isMain,
+              isHighlighted,
               isMobileRef.current,
               canEditTree,
             );
@@ -1075,6 +1082,13 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // Determine if mainId actually changed (vs just addMenuNodeId toggling)
       const mainIdChanged = mainId !== prevMainIdRef.current;
+      const highlightedFocusKey =
+        highlightedPersonId && currentTreeId
+          ? `${currentTreeId}:${highlightedPersonId}`
+          : highlightedPersonId || null;
+      const shouldCenterOnHighlighted =
+        Boolean(highlightedPersonId) &&
+        highlightedFocusKey !== prevHighlightedFocusKeyRef.current;
 
       // Restore previous zoom/pan state after rebuild so collapsed-mode focus
       // changes don't jump to the default transform before centering.
@@ -1100,10 +1114,18 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         }, 0);
       }
 
+      // URL-driven focus (tree navigation/search) should center exactly once per key.
+      if (highlightedPersonId && shouldCenterOnHighlighted) {
+        setTimeout(() => {
+          centerOnNodeRef.current(highlightedPersonId);
+        }, 0);
+      }
+
       // Update refs to current state
       prevRootIdRef.current = rootId;
       prevTreeIdRef.current = currentTreeId;
       prevMainIdRef.current = mainId;
+      prevHighlightedFocusKeyRef.current = highlightedFocusKey;
     } catch (error) {
       console.error("Error rendering dTree:", error);
       setError("Error rendering family tree. Please try refreshing the page.");
@@ -1119,7 +1141,15 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         select(containerRef.current).selectAll("*").remove();
       }
     };
-  }, [nodes, rootId, mainId, addMenuNodeId, currentTreeId, showFullTree]);
+  }, [
+    nodes,
+    rootId,
+    mainId,
+    addMenuNodeId,
+    currentTreeId,
+    showFullTree,
+    highlightedPersonId,
+  ]);
 
   if (error) {
     return (
@@ -1343,7 +1373,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                       const tid = mobileSheetNode.treeId;
                       setMobileSheetNodeId(null);
                       if (tid) {
-                        onExternalTreeClick?.(tid);
+                        onExternalTreeClick?.(tid, mobileSheetNode.id);
                       }
                     }
                   }}

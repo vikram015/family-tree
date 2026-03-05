@@ -17,6 +17,7 @@ import {
   Typography,
   TextField,
 } from "@mui/material";
+import { useSearchParams } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
 import { useAppSelector } from "../../store/hooks";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
@@ -39,13 +40,12 @@ export const SourceSelect = memo(function SourceSelect({
   autoNotifyOnInit = true,
 }: SourceSelectProps) {
   console.log("SourceSelect: Rendering component");
+  const [searchParams] = useSearchParams();
+  const urlTreeId = searchParams.get("tree") || "";
   const [trees, setTrees] = React.useState<any[]>([]);
   const [searchText, setSearchText] = useState<string>("");
-  const [value, setValue] = React.useState<string>(() => {
-    // Read tree ID from URL on initial load
-    const params = new URLSearchParams(window.location.search);
-    return params.get("tree") || "";
-  });
+  const [value, setValue] = React.useState<string>(urlTreeId);
+  const valueRef = useRef(value);
   const { selectedVillage, setSelectedVillage } = useVillage();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
@@ -65,6 +65,16 @@ export const SourceSelect = memo(function SourceSelect({
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    if (urlTreeId !== value) {
+      setValue(urlTreeId);
+    }
+  }, [urlTreeId, value]);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   const items = useMemo<TreeItem[]>(
     () =>
@@ -94,9 +104,6 @@ export const SourceSelect = memo(function SourceSelect({
   useEffect(() => {
     const loadTrees = async () => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const urlTreeId = params.get("tree");
-
         // If a shared tree link points to a tree in a different village,
         // switch village first so that tree appears in the filtered tree list.
         // Do this only once per URL tree value to avoid blocking manual village changes.
@@ -132,11 +139,12 @@ export const SourceSelect = memo(function SourceSelect({
         const sourceTrees = await ApiService.getTrees(selectedVillage);
         setTrees(sourceTrees);
 
-        let nextValue = value;
+        let nextValue = valueRef.current;
         let notifyValue: string | null = null;
 
-        // If URL has a valid tree in current list, sync local select only (no notify)
-        if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
+        // If URL has a tree, keep it as source of truth during initialization.
+        // Do not auto-notify fallback values (which can strip personId).
+        if (urlTreeId) {
           nextValue = urlTreeId;
         }
         // Otherwise auto-select first only once and notify parent
@@ -163,7 +171,7 @@ export const SourceSelect = memo(function SourceSelect({
           }
         }
 
-        if (nextValue !== value) {
+        if (nextValue !== valueRef.current) {
           setValue(nextValue);
         }
 
@@ -177,7 +185,7 @@ export const SourceSelect = memo(function SourceSelect({
     };
 
     loadTrees();
-  }, [autoNotifyOnInit, selectedVillage, setSelectedVillage, value]);
+  }, [autoNotifyOnInit, selectedVillage, setSelectedVillage, urlTreeId]);
 
   const changeHandler = useCallback(
     (event: any) => {

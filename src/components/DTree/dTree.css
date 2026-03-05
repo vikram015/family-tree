@@ -103,6 +103,22 @@ g.node .card-outline {
   transition: stroke-width 0.18s ease, opacity 0.18s ease;
 }
 
+g.node .card-focus-ring {
+  animation: focusPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes focusPulse {
+  0% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0.95;
+  }
+}
+
 /* === Focused Node Glow Effect === */
 g.node .node-glow {
   filter: blur(4px);
