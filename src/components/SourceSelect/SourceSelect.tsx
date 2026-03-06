@@ -142,9 +142,9 @@ export const SourceSelect = memo(function SourceSelect({
         let nextValue = valueRef.current;
         let notifyValue: string | null = null;
 
-        // If URL has a tree, keep it as source of truth during initialization.
-        // Do not auto-notify fallback values (which can strip personId).
-        if (urlTreeId) {
+        // Keep URL tree only when it exists in the currently loaded village tree list.
+        // If not present (e.g. user switched village), fall back to a valid local tree.
+        if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
           nextValue = urlTreeId;
         }
         // Otherwise auto-select first only once and notify parent

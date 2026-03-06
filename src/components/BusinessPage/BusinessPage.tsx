@@ -1178,8 +1178,22 @@ export const BusinessPage: React.FC = () => {
                                       },
                                     }}
                                   >
-                                    <Typography variant="body2">
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ fontWeight: 600 }}
+                                    >
                                       {person.personName}
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: "block",
+                                        mt: 0.5,
+                                        color: "text.secondary",
+                                        textDecoration: "none",
+                                      }}
+                                    >
+                                      Lineage: {hierarchyText}
                                     </Typography>
                                   </Box>
                                 </Tooltip>

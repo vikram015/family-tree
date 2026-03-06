@@ -22,6 +22,21 @@ interface PersonWithRelations {
   siblings?: Array<{ id: string; type: RelationType }>;
 }
 
+interface UpdatePersonResponse {
+  success: boolean;
+  error?: string;
+  personId?: string;
+  name?: string;
+  gender?: string;
+  dob?: string;
+  bloodGroup?: string;
+  isAlive?: boolean;
+  deceasedDate?: string;
+  photoUrl?: string;
+  treeId?: string;
+  fieldsUpdated?: number;
+}
+
 interface CompleteTreeNode {
   id: string;
   name: string;
@@ -97,6 +112,11 @@ interface CompleteTreeResponse {
 }
 
 export const ApiService = {
+  normalizeDateValue(value?: string): string | undefined {
+    if (value == null) return undefined;
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : undefined;
+  },
   /**
    * Fetch all people for a specific tree with their relationships
    */
@@ -177,17 +197,43 @@ export const ApiService = {
    */
   async updatePerson(personId: string, updates: Partial<FNode>): Promise<PersonWithRelations> {
     const { customFields, ...coreUpdates } = updates;
+    const normalizedDob = this.normalizeDateValue(coreUpdates.dob);
+    const normalizedDeceasedDate = this.normalizeDateValue(coreUpdates.deceasedDate);
     const payload = {
       name: coreUpdates.name,
       gender: coreUpdates.gender,
-      dob: coreUpdates.dob,
+      dob: normalizedDob,
       additionalFields: customFields && Object.keys(customFields).length > 0 ? customFields : undefined,
       bloodGroup: coreUpdates.bloodGroup,
       isAlive: coreUpdates.isAlive,
-      deceasedDate: coreUpdates.deceasedDate,
+      deceasedDate: normalizedDeceasedDate,
       photoUrl: coreUpdates.photo,
     };
-    return backendApi.patch<PersonWithRelations>(`/api/people/${personId}`, payload);
+    const response = await backendApi.patch<PersonWithRelations | UpdatePersonResponse>(
+      `/api/people/${personId}`,
+      payload,
+    );
+
+    // Backend may return a success envelope instead of the person object.
+    if (
+      response &&
+      typeof response === "object" &&
+      "success" in response
+    ) {
+      const result = response as UpdatePersonResponse;
+      if (!result.success) {
+        throw new Error(result.error || "Failed to update person");
+      }
+      return {
+        id: result.personId || personId,
+        name: result.name || coreUpdates.name || "",
+        gender: result.gender,
+        dob: result.dob,
+        treeId: result.treeId || "",
+      } as PersonWithRelations;
+    }
+
+    return response as PersonWithRelations;
   },
 
   /**
@@ -252,11 +298,14 @@ export const ApiService = {
     deceasedDate?: string,
     photoUrl?: string
   ): Promise<AddPersonResult> {
+    const normalizedDob = this.normalizeDateValue(dob);
+    const normalizedDeceasedDate = this.normalizeDateValue(deceasedDate);
+
     return backendApi.post<AddPersonResult>("/api/people", {
       treeId,
       name,
       gender,
-      dob,
+      dob: normalizedDob,
       relationType,
       relatedPersonId,
       relationSubtype,
@@ -265,7 +314,7 @@ export const ApiService = {
       relatedPersonId2,
       bloodGroup,
       isAlive,
-      deceasedDate,
+      deceasedDate: normalizedDeceasedDate,
       photoUrl,
     });
   },

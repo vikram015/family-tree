@@ -141,7 +141,12 @@ export const HomePage: React.FC = () => {
     setShowResults(false);
     setSearchQuery("");
     if (result.treeId) {
-      navigate(`/families?tree=${result.treeId}`);
+      const params = new URLSearchParams();
+      params.set("tree", result.treeId);
+      if (result.type === "person" && result.id) {
+        params.set("personId", result.id);
+      }
+      navigate(`/families?${params.toString()}`);
     } else if (result.type === "business" || result.type === "profession") {
       navigate("/business");
     }

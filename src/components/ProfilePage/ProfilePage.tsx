@@ -29,6 +29,7 @@ import {
   Tooltip,
   Link,
 } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -52,6 +53,7 @@ import {
 } from "../../store/thunks/apiThunks";
 
 export const ProfilePage: React.FC = () => {
+  const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
     useAuth();
@@ -298,6 +300,17 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const handleOpenLinkedProfileInTree = useCallback(() => {
+    const personId = userProfile?.peopleId;
+    const treeId =
+      linkedPersonDetails?.treeId || linkedPersonDetails?.tree?.id || "";
+    if (!personId || !treeId) return;
+    const params = new URLSearchParams();
+    params.set("tree", treeId);
+    params.set("personId", personId);
+    navigate(`/families?${params.toString()}`);
+  }, [navigate, userProfile?.peopleId, linkedPersonDetails]);
+
   const handleSubmitVillageRequest = async () => {
     if (!requestVillageId) return;
     setRequestSubmitting(true);
@@ -471,7 +484,15 @@ export const ProfilePage: React.FC = () => {
                 {linkedPersonDetails ? (
                   <Box>
                     <Typography variant="body1">
-                      <strong>Name:</strong> {linkedPersonDetails.name}
+                      <strong>Name:</strong>{" "}
+                      <Link
+                        component="button"
+                        type="button"
+                        underline="hover"
+                        onClick={handleOpenLinkedProfileInTree}
+                      >
+                        {linkedPersonDetails.name}
+                      </Link>
                     </Typography>
                     {linkedPersonDetails.tree && (
                       <>
