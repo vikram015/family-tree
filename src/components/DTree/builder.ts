@@ -159,6 +159,13 @@ class TreeBuilder {
     let siblingDelay = duration > 0 ? 200 : 0;
 
     let treenodes = this.tree(source);
+
+    // Pull spouse & marriage nodes close to the person so the couple
+    // stays compact regardless of how wide the children subtree gets.
+    // Children keep their d3-computed positions, so the elbow connectors
+    // naturally form L / inverted-L shapes from the couple midpoint.
+    this._compactCouples();
+
     let links = treenodes.links();
 
     // Create the link lines.
@@ -339,7 +346,17 @@ class TreeBuilder {
     if (d.target.data.noParent) {
       return 'M0,0L0,0';
     }
+
     let ny = Math.round(d.target.y + (d.source.y - d.target.y) * 0.5);
+
+    // When the source is a marriage node, offset the horizontal trunk
+    // slightly per marriage so children of different marriages don't
+    // share the exact same y-level and overlap visually.
+    if (d.source.data.isMarriage && d.source.data._marriageIndex !== undefined) {
+      const idx = d.source.data._marriageIndex as number;
+      // Each subsequent marriage shifts the trunk 14px lower
+      ny += idx * 14;
+    }
 
     let linedata = [
       {
@@ -361,6 +378,75 @@ class TreeBuilder {
     ];
 
     return this._roundedOrthogonalPath(linedata, TreeBuilder.CONNECTOR_RADIUS);
+  }
+
+  /**
+   * Post-layout pass: pull each spouse close to its person so the
+   * couple stays visually compact.  Multiple spouses on the same side
+   * are stacked outward (slot 1, slot 2, …) so they never overlap.
+   *
+   * Children remain at their d3-computed positions — the `_elbow`
+   * connector from the marriage node naturally draws an L-shaped
+   * path to reach each child, and because every marriage node gets
+   * a unique x position the vertical trunks don't collide.
+   */
+  _compactCouples() {
+    const nodeMap = new Map(this.allNodes.map((n: any) => [n.data.id, n]));
+    const nodeWidth = this.nodeSize[0];
+    // Edge-to-edge gap between person and spouse cards.
+    // Just enough room for the marriage heart marker (r=8 → 16px).
+    const coupleGap = 34;
+    const slotWidth = nodeWidth + coupleGap; // center-to-center per slot
+
+    // Group siblings by person so we can assign left/right slots.
+    const byPerson = new Map<number, any[]>();
+    forEach(this.siblings, (s: any) => {
+      const pid = s.source.id;
+      if (!byPerson.has(pid)) byPerson.set(pid, []);
+      byPerson.get(pid)!.push(s);
+    });
+
+    byPerson.forEach((marriages) => {
+      // Sort by marriage index for deterministic slot order.
+      marriages.sort((a: any, b: any) => a.number - b.number);
+
+      let rightSlot = 0; // spouses placed right so far
+      let leftSlot  = 0; // spouses placed left so far
+
+      marriages.forEach((s: any) => {
+        const personNode = nodeMap.get(s.source.id);
+        const spouseNode = nodeMap.get(s.target.id);
+        if (!personNode || !spouseNode) return;
+        if (personNode.x === undefined || spouseNode.x === undefined) return;
+
+        // Even index → right side, odd → left side
+        // (mirrors the left/right distribution in dTree._preprocess)
+        const isRight = s.number % 2 === 0;
+        const slot = isRight ? ++rightSlot : ++leftSlot;
+
+        const targetSpouseX = isRight
+          ? personNode.x + slot * slotWidth
+          : personNode.x - slot * slotWidth;
+
+        const currentDist = Math.abs(spouseNode.x - personNode.x);
+        const targetDist  = Math.abs(targetSpouseX - personNode.x);
+
+        // Only compact inward — never push a spouse further out than d3
+        // already placed it.
+        if (currentDist <= targetDist) return;
+
+        spouseNode.x = targetSpouseX;
+
+        // Reposition the marriage marker at the couple midpoint.
+        const marriageId = spouseNode.data.marriageNode?.id;
+        if (marriageId !== undefined) {
+          const mNode = nodeMap.get(marriageId);
+          if (mNode) {
+            mNode.x = Math.round((personNode.x + spouseNode.x) / 2);
+          }
+        }
+      });
+    });
   }
 
   _linkSiblings() {
@@ -390,7 +476,6 @@ class TreeBuilder {
   }
 
   _siblingLine(d: any, i: any) {
-    let ny = Math.round(d.target.y + (d.source.y - d.target.y) * 0.5);
     let nodeWidth = this.nodeSize[0];
     let nodeHeight = this.nodeSize[1];
 
@@ -408,25 +493,17 @@ class TreeBuilder {
         .y(function (p: any) { return p.y; })(linedata as any);
     }
 
-    // Determine direction of the spouse relative to the node
-    let isRight = d.target.x > d.source.x;
-
-    // For multiple marriages, alternate height to avoid overlaps.
-    // d.number 0/1 are inner connections, d.number >= 2 are outer connections.
-    // Outer connections are lifted with extra clearance so they don't intersect
-    // top-right UI affordances (e.g. external tree icon) on neighboring spouse cards.
+    // After couple compaction, spouses sit close to the person.
+    // Draw a clean horizontal line: person → marriage marker → spouse.
+    // For inner marriages (0, 1) this is a straight horizontal at y.
+    // For outer marriages (2+), the line runs slightly above the card
+    // top so it clears inner spouse cards visually.
+    let lineY = d.source.y;
     if (d.number > 1) {
-      const iconClearance = Math.round(nodeHeight / 2 + 16);
-      ny -= iconClearance;
-    }
-
-    // Determine horizontal offset from the node
-    // Inner marriages (0, 1) get smaller offset, Outer (2, 3...) get larger offset
-    let offsetX = d.number > 1 ? (nodeWidth * 8) / 10 : (nodeWidth * 6) / 10;
-    
-    // Apply direction to offset
-    if (!isRight) {
-      offsetX *= -1;
+      // Shift the line above the card by a progressive amount per extra
+      // marriage layer so multiple outer lines don't overlap each other.
+      const layer = Math.floor(d.number / 2); // 2,3 → 1; 4,5 → 2; …
+      lineY = d.source.y - Math.round(nodeHeight / 2 + 8 + (layer - 1) * 12);
     }
 
     let linedata = [
@@ -435,20 +512,12 @@ class TreeBuilder {
         y: d.source.y
       },
       {
-        x: Math.round(d.source.x + offsetX),
-        y: d.source.y
+        x: d.source.x,
+        y: lineY
       },
       {
-        x: Math.round(d.source.x + offsetX),
-        y: ny
-      },
-      {
-        x: d.target.marriageNode.x,
-        y: ny
-      },
-      {
-        x: d.target.marriageNode.x,
-        y: d.target.y
+        x: d.target.x,
+        y: lineY
       },
       {
         x: d.target.x,

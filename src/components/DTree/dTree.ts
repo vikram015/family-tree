@@ -221,6 +221,7 @@ const dTree = {
           noParent: true,
           children: [],
           isMarriage: true,
+          _marriageIndex: index,
           extra: marriage.extra,
           class: marriage.class ? marriage.class : opts.styles.marriageNode
         };
