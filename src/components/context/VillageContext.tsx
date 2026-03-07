@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 
 interface Village {
   id: string;
@@ -44,7 +44,7 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
         if (!isMounted) return;
 
         console.log("VillageProvider: Starting to load villages");
-        const villageData = await SupabaseService.getVillages();
+        const villageData = await ApiService.getVillages();
 
         if (!isMounted) return;
 
@@ -90,3 +90,4 @@ export function VillageProvider({ children }: { children: React.ReactNode }) {
     <VillageContext.Provider value={value}>{children}</VillageContext.Provider>
   );
 }
+

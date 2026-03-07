@@ -19,10 +19,10 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import WarningIcon from "@mui/icons-material/Warning";
 import ErrorIcon from "@mui/icons-material/Error";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import { supabase } from "../../supabase";
 import { FNode } from "../model/FNode";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
+import { backendApi } from "../../services/backendApi";
 
 interface DiagnosticResult {
   missingNodes: Array<{ id: string; referencedBy: string[] }>;
@@ -61,15 +61,10 @@ export const DiagnosticPage: React.FC = () => {
 
     setLoading(true);
     try {
-      // Get all people for this tree from Supabase
-      const { data: peopleData, error } = await supabase
-        .from("people")
-        .select("*")
-        .eq("treeId", treeId);
-
-      if (error) {
-        throw new Error(`Failed to fetch people: ${error.message}`);
-      }
+      const completeTree = await backendApi.get<any>(
+        `/api/tree/${treeId}/complete`,
+      );
+      const peopleData = completeTree?.members || [];
 
       const nodes: Array<FNode & { id: string }> = (peopleData || []).map(
         (doc) => ({

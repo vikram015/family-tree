@@ -15,12 +15,17 @@ import {
   MenuItem,
   TextField,
   Link,
+  useMediaQuery,
+  useTheme,
+  FormControlLabel,
+  Checkbox,
 } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
-import { supabase } from "../../supabase";
+import { useAppDispatch } from "../../store/hooks";
+import { submitVillageAccessRequest } from "../../store/thunks/apiThunks";
 
 interface SelectedPerson {
   id: string;
@@ -37,7 +42,11 @@ interface SelectedPerson {
  * Shown once per user (persisted in localStorage).
  */
 export const LinkNodeDialog: React.FC = () => {
-  const { currentUser, linkUserToNode, userProfile } = useAuth();
+  const dispatch = useAppDispatch();
+  const { currentUser, linkUserToNode, userProfile, updateUserProfile } =
+    useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { selectedVillage, setSelectedVillage, villages } = useVillage();
   const [searchValue, setSearchValue] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<SelectedPerson | null>(
@@ -48,14 +57,22 @@ export const LinkNodeDialog: React.FC = () => {
   const [requestMessage, setRequestMessage] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [step, setStep] = useState<"intro" | "link" | "request">("intro");
+  const [step, setStep] = useState<"profile" | "link" | "request">("profile");
   const [open, setOpen] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const hasAssignedVillage = (userProfile?.villages || []).length > 0;
-
-  const storageKey = useMemo(
-    () => `kinvia_admin_onboarding_seen_v1_${currentUser?.id || "anon"}`,
-    [currentUser?.id],
+  const needsProfileCompletion = useMemo(
+    () =>
+      !userProfile?.name?.trim() ||
+      !userProfile?.email?.trim() ||
+      !userProfile?.privacyPolicyAccepted,
+    [userProfile?.name, userProfile?.email, userProfile?.privacyPolicyAccepted],
   );
+  const needsLink = !userProfile?.peopleId;
+  const needsVillageRequest = !hasAssignedVillage;
 
   // Auto-select first village if none selected
   useEffect(() => {
@@ -65,21 +82,97 @@ export const LinkNodeDialog: React.FC = () => {
   }, [selectedVillage, villages, setSelectedVillage]);
 
   useEffect(() => {
+    setProfileName(userProfile?.name || "");
+    setProfileEmail(userProfile?.email || "");
+    setPrivacyAccepted(Boolean(userProfile?.privacyPolicyAccepted));
+  }, [
+    userProfile?.name,
+    userProfile?.email,
+    userProfile?.privacyPolicyAccepted,
+  ]);
+
+  useEffect(() => {
     if (!currentUser || userProfile?.role !== "admin") {
       setOpen(false);
       return;
     }
 
-    const seen = localStorage.getItem(storageKey) === "1";
-    if (!seen) {
+    if (needsProfileCompletion) {
       setOpen(true);
-      setStep(userProfile?.peopleId || hasAssignedVillage ? "intro" : "intro");
+      setStep("profile");
+      return;
     }
-  }, [currentUser, userProfile?.role, userProfile?.peopleId, hasAssignedVillage, storageKey]);
 
-  const handleClosePermanently = () => {
-    localStorage.setItem(storageKey, "1");
+    if (needsLink) {
+      setOpen(true);
+      setStep("link");
+      return;
+    }
+
+    if (needsVillageRequest) {
+      setOpen(true);
+      setStep("request");
+      return;
+    }
+
     setOpen(false);
+  }, [
+    currentUser,
+    userProfile?.role,
+    needsProfileCompletion,
+    needsLink,
+    needsVillageRequest,
+  ]);
+
+  const handleCloseDialog = () => {
+    setOpen(false);
+    setError("");
+    setSuccess("");
+  };
+
+  const handleCompleteProfile = async () => {
+    const trimmedName = profileName.trim();
+    const trimmedEmail = profileEmail.trim();
+
+    if (!trimmedName) {
+      setError("Username is required.");
+      return;
+    }
+    if (!trimmedEmail) {
+      setError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Please provide a valid email address.");
+      return;
+    }
+    if (!privacyAccepted) {
+      setError("Please accept the Privacy Policy to continue.");
+      return;
+    }
+
+    setSavingProfile(true);
+    setError("");
+    try {
+      await updateUserProfile(
+        trimmedName,
+        userProfile?.phone || "",
+        trimmedEmail,
+        true,
+      );
+      setSuccess("Profile updated successfully.");
+      if (needsLink) {
+        setStep("link");
+      } else if (needsVillageRequest) {
+        setStep("request");
+      } else {
+        handleCloseDialog();
+      }
+    } catch (e: any) {
+      setError(e.message || "Failed to update profile.");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleLink = async () => {
@@ -89,7 +182,11 @@ export const LinkNodeDialog: React.FC = () => {
     try {
       await linkUserToNode(selectedPerson.id, selectedPerson.treeId);
       setSuccess("Profile linked successfully.");
-      setStep("request");
+      if (needsVillageRequest) {
+        setStep("request");
+      } else {
+        handleCloseDialog();
+      }
     } catch (e: any) {
       setError(e.message || "Failed to link. Please try again.");
     } finally {
@@ -102,19 +199,21 @@ export const LinkNodeDialog: React.FC = () => {
     setRequesting(true);
     setError("");
     try {
-      const { data, error: rpcError } = await supabase.rpc(
-        "submit_village_access_request",
-        {
-          p_village_id: selectedVillage,
-          p_request_message: requestMessage || null,
-        },
-      );
-
-      if (rpcError) throw rpcError;
+      const userId = userProfile?.id;
+      if (!userId) {
+        throw new Error("User profile not loaded");
+      }
+      const data = await dispatch(
+        submitVillageAccessRequest({
+          userId,
+          villageId: selectedVillage,
+          requestMessage: requestMessage || null,
+        }),
+      ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
       setSuccess("Village access request submitted.");
-      handleClosePermanently();
+      handleCloseDialog();
     } catch (e: any) {
       setError(e.message || "Failed to submit request.");
     } finally {
@@ -125,37 +224,78 @@ export const LinkNodeDialog: React.FC = () => {
   if (!open) return null;
 
   return (
-    <Dialog open={open} maxWidth="sm" fullWidth>
+    <Dialog open={open} maxWidth="sm" fullWidth fullScreen={isMobile}>
       <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
         <LinkIcon color="primary" />
         Welcome to Kinvia
       </DialogTitle>
       <DialogContent>
-        {step === "intro" && (
-          <Box>
+        {step === "profile" && (
+          <Box sx={{ pt: 1 }}>
             <Typography variant="body1" sx={{ mb: 2 }}>
-              Hi <strong>{userProfile?.name || "Admin"}</strong>. You can
-              optionally link your profile and request village access now.
+              Complete your profile to continue.
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              You can do both anytime from your profile page by clicking your
-              user profile in the header.
+            <TextField
+              fullWidth
+              label="Username"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Email"
+              type="email"
+              value={profileEmail}
+              onChange={(e) => setProfileEmail(e.target.value)}
+              sx={{ mb: 1 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              Username, email, and privacy policy acceptance are required for
+              first-time login.
             </Typography>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              You cannot edit linked profile and village assignment directly.
-              Please contact superadmin at{" "}
-              <Link href="mailto:support@kinvia.in" underline="hover">
-                support@kinvia.in
-              </Link>
-              .
-            </Alert>
+            <FormControlLabel
+              sx={{ mt: 1 }}
+              control={
+                <Checkbox
+                  checked={privacyAccepted}
+                  onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  I agree to the{" "}
+                  <Link
+                    href="/privacy-policy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    underline="hover"
+                  >
+                    Privacy Policy
+                  </Link>
+                  .
+                </Typography>
+              }
+            />
           </Box>
         )}
 
         {step === "link" && (
           <Box>
             <Typography variant="body1" sx={{ mb: 2 }}>
-              Link your account to your family tree profile (optional).
+              Link your account to your person record in the family tree
+              (optional).
+            </Typography>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <strong>What this means:</strong> Linking connects your login
+              account with your existing person profile in the tree. After
+              linking, admins can identify you correctly and your
+              profile-related actions are tied to that person record.
+            </Alert>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Search your name in your village and select the correct person. If
+              you are not sure, you can skip this step and do it later from the
+              Profile page.
             </Typography>
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel id="village-select-label">Select Village</InputLabel>
@@ -218,6 +358,19 @@ export const LinkNodeDialog: React.FC = () => {
                 <Typography variant="body1" sx={{ mb: 2 }}>
                   Request village access now? (optional)
                 </Typography>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <strong>What this means:</strong> Village access lets an admin
+                  manage data for a specific village (for example people,
+                  businesses, and related records for that village).
+                </Alert>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 2 }}
+                >
+                  Choose the village you want access to. A superadmin will
+                  review and approve or reject your request.
+                </Typography>
                 <FormControl fullWidth sx={{ mb: 2 }}>
                   <InputLabel id="request-village-select-label">
                     Select Village
@@ -243,7 +396,11 @@ export const LinkNodeDialog: React.FC = () => {
                   value={requestMessage}
                   onChange={(e) => setRequestMessage(e.target.value)}
                 />
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1, display: "block" }}
+                >
                   You can request this anytime from Profile.
                 </Typography>
               </>
@@ -263,42 +420,40 @@ export const LinkNodeDialog: React.FC = () => {
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        {step === "intro" && (
-          <>
-            <Button onClick={handleClosePermanently} color="inherit">
-              Skip All
-            </Button>
-            {!userProfile?.peopleId && (
-              <Button onClick={() => setStep("link")} variant="outlined">
-                Link Profile Now
-              </Button>
-            )}
-            <Button
-              variant="contained"
-              onClick={() => {
-                if (hasAssignedVillage) {
-                  handleClosePermanently();
-                } else {
-                  setStep("request");
-                }
-              }}
-              sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
-            >
-              Continue
-            </Button>
-          </>
+        {step === "profile" && (
+          <Button
+            variant="contained"
+            onClick={handleCompleteProfile}
+            disabled={savingProfile}
+            startIcon={
+              savingProfile ? <CircularProgress size={16} /> : undefined
+            }
+          >
+            {savingProfile ? "Saving..." : "Save & Continue"}
+          </Button>
         )}
 
         {step === "link" && (
           <>
-            <Button onClick={() => setStep("request")} color="inherit">
-              Skip
+            <Button
+              onClick={() => {
+                if (needsVillageRequest) {
+                  setStep("request");
+                } else {
+                  handleCloseDialog();
+                }
+              }}
+              color="inherit"
+            >
+              Skip for now
             </Button>
             <Button
               variant="contained"
               onClick={handleLink}
               disabled={!selectedPerson || linking}
-              startIcon={linking ? <CircularProgress size={16} /> : <LinkIcon />}
+              startIcon={
+                linking ? <CircularProgress size={16} /> : <LinkIcon />
+              }
               sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
             >
               {linking ? "Linking..." : "Link My Account"}
@@ -308,17 +463,29 @@ export const LinkNodeDialog: React.FC = () => {
 
         {step === "request" && (
           <>
-            <Button onClick={handleClosePermanently} color="inherit">
-              Not Now
+            <Button onClick={handleCloseDialog} color="inherit">
+              Skip for now
             </Button>
             <Button
               variant="contained"
-              onClick={hasAssignedVillage ? handleClosePermanently : handleRequestVillageAccess}
-              disabled={hasAssignedVillage ? false : !selectedVillage || requesting}
-              startIcon={requesting ? <CircularProgress size={16} /> : undefined}
+              onClick={
+                hasAssignedVillage
+                  ? handleCloseDialog
+                  : handleRequestVillageAccess
+              }
+              disabled={
+                hasAssignedVillage ? false : !selectedVillage || requesting
+              }
+              startIcon={
+                requesting ? <CircularProgress size={16} /> : undefined
+              }
               sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
             >
-              {hasAssignedVillage ? "Done" : requesting ? "Submitting..." : "Request Access"}
+              {hasAssignedVillage
+                ? "Done"
+                : requesting
+                  ? "Submitting..."
+                  : "Submit Request"}
             </Button>
           </>
         )}

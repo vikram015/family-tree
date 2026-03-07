@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { SupabaseService } from "../../services/supabaseService";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { ApiService } from "../../services/apiService";
 import {
   Button,
   Dialog,
@@ -26,8 +26,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
+  fetchAllSubCastes,
   fetchCastes,
-  fetchSubCastes,
   selectCastes,
   selectSubCastes,
 } from "../../store/slices/casteSlice";
@@ -60,24 +60,30 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const [showModal, setShowModal] = useState(false);
   const modalHistoryRef = useRef(false);
   const [selectedVillageId, setSelectedVillageId] = useState<string>("");
+  const filteredSubCastes = useMemo(
+    () => subCastes.filter((s) => !selectedCaste || s.casteId === selectedCaste),
+    [subCastes, selectedCaste],
+  );
   const { villages, selectedVillage, setSelectedVillage } = useVillage();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
 
   // Load castes when modal opens
   useEffect(() => {
-    if (showModal && castes.length === 0) {
-      dispatch(fetchCastes());
+    if (showModal) {
+      if (castes.length === 0) {
+        dispatch(fetchCastes());
+      }
+      if (subCastes.length === 0) {
+        dispatch(fetchAllSubCastes());
+      }
     }
-  }, [showModal, castes.length, dispatch]);
+  }, [showModal, castes.length, subCastes.length, dispatch]);
 
-  // Load sub-castes when caste is selected
+  // Reset selected sub-caste when caste changes
   useEffect(() => {
-    if (selectedCaste) {
-      dispatch(fetchSubCastes(selectedCaste));
-      setSelectedSubCaste(""); // Reset sub-caste when caste changes
-    }
-  }, [selectedCaste, dispatch]);
+    setSelectedSubCaste("");
+  }, [selectedCaste]);
 
   useEffect(() => {
     if (!showModal) return;
@@ -103,16 +109,16 @@ export const AddTree: React.FC<AddTreeProps> = ({
     setError(null);
     setLoading(true);
     try {
-      // Create tree in Supabase - store caste and sub_caste as UUIDs
+      // Create tree and store caste/subCaste as UUIDs
       const treeData = {
         name: name || "Default Tree",
-        village_id: selectedVillageId || selectedVillage || null,
+        villageId: selectedVillageId || selectedVillage || null,
         description: description || null,
         caste: selectedCaste || null,
-        sub_caste: selectedSubCaste || null,
+        subCaste: selectedSubCaste || null,
       };
 
-      const newTree = await SupabaseService.createTree(treeData);
+      const newTree = await ApiService.createTree(treeData);
       const treeId = newTree.id;
 
       setCreatedId(treeId);
@@ -274,7 +280,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
               onChange={(e) => setSelectedSubCaste(e.target.value)}
               disabled={loading || !selectedCaste}
             >
-              {subCastes.map((subCaste) => (
+              {filteredSubCastes.map((subCaste) => (
                 <MenuItem key={subCaste.id} value={subCaste.id}>
                   {subCaste.name}
                 </MenuItem>
@@ -332,3 +338,4 @@ export const AddTree: React.FC<AddTreeProps> = ({
 };
 
 export default AddTree;
+

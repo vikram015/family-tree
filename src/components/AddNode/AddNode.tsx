@@ -32,7 +32,7 @@ import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
@@ -138,10 +138,10 @@ const AddNode: React.FC<AddNodeProps> = ({
 
   // Load villages for the search dropdown
   useEffect(() => {
-    SupabaseService.getVillages().then((data) => {
+    ApiService.getVillages().then((data) => {
       setVillages(data || []);
     });
-    SupabaseService.getAllProfessions().then((data) => {
+    ApiService.getAllProfessions().then((data) => {
       setAllProfessions(data || []);
     });
   }, []);
@@ -302,13 +302,13 @@ const AddNode: React.FC<AddNodeProps> = ({
     try {
       if (occupationType === "business") {
         if (businessName) {
-          await SupabaseService.createBusiness({
+            await ApiService.createBusiness({
             name: businessName,
             category: businessCategory,
-            address: businessAddress, // Use description or separate field if available, SupabaseService uses description
+            address: businessAddress, // Use description or separate field if available, ApiService uses description
             description: businessAddress,
             contact: businessContact || null,
-            people_id: savedNodeId,
+            peopleId: savedNodeId,
           });
         }
       } else if (occupationType === "job") {
@@ -321,7 +321,7 @@ const AddNode: React.FC<AddNodeProps> = ({
           let profId = existing?.id;
 
           if (!profId) {
-            const newProf = await SupabaseService.createProfession({
+            const newProf = await ApiService.createProfession({
               name: jobTitle.trim(),
               description: jobContact ? `Contact: ${jobContact}` : undefined,
             });
@@ -330,7 +330,7 @@ const AddNode: React.FC<AddNodeProps> = ({
           }
 
           if (profId) {
-            await SupabaseService.addProfessionToPerson(savedNodeId, profId);
+            await ApiService.addProfessionToPerson(savedNodeId, profId);
           }
         }
       }
@@ -418,9 +418,14 @@ const AddNode: React.FC<AddNodeProps> = ({
           if (photoBlob) {
             try {
               setPhotoUploading(true);
-              await SupabaseService.uploadPersonPhoto(resultId, photoBlob);
+              await ApiService.uploadPersonPhoto(resultId, photoBlob);
             } catch (err) {
               console.error("Photo upload failed:", err);
+              alert(
+                `Photo upload failed: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
             } finally {
               setPhotoUploading(false);
             }
@@ -904,3 +909,4 @@ const AddNode: React.FC<AddNodeProps> = ({
 };
 
 export default AddNode;
+

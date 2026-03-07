@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 
 interface CustomFieldValue {
   fieldName: string;
@@ -37,7 +37,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
   useEffect(() => {
     const loadFields = async () => {
       try {
-        const fields = await SupabaseService.getPredefinedFields();
+        const fields = await ApiService.getPredefinedFields();
         // Filter out excluded fields from the available options
         setAvailableFields(
           fields.filter((f) => !excludeFields.includes(f)).sort(),
@@ -193,3 +193,4 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     </Box>
   );
 };
+

@@ -1,6 +1,13 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Node } from "relatives-tree/lib/types";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 import {
   FormControl,
   InputLabel,
@@ -10,14 +17,17 @@ import {
   Typography,
   TextField,
 } from "@mui/material";
+import { useSearchParams } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
+import { useAppSelector } from "../../store/hooks";
+import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 
 interface TreeItem {
   name: string;
   id: string;
   caste?: string;
-  sub_caste?: string;
-  village_name?: string;
+  subCaste?: string;
+  villageName?: string;
 }
 
 interface SourceSelectProps {
@@ -30,17 +40,54 @@ export const SourceSelect = memo(function SourceSelect({
   autoNotifyOnInit = true,
 }: SourceSelectProps) {
   console.log("SourceSelect: Rendering component");
-  const [items, setItems] = React.useState<TreeItem[]>([]);
+  const [searchParams] = useSearchParams();
+  const urlTreeId = searchParams.get("tree") || "";
+  const [trees, setTrees] = React.useState<any[]>([]);
   const [searchText, setSearchText] = useState<string>("");
-  const [value, setValue] = React.useState<string>(() => {
-    // Read tree ID from URL on initial load
-    const params = new URLSearchParams(window.location.search);
-    return params.get("tree") || "";
-  });
+  const [value, setValue] = React.useState<string>(urlTreeId);
+  const valueRef = useRef(value);
   const { selectedVillage, setSelectedVillage } = useVillage();
-  const syncedSharedTreeRef = useRef<string | null>(null);
+  const castes = useAppSelector(selectCastes);
+  const subCastes = useAppSelector(selectSubCastes);
+  const casteMap = useMemo(
+    () => new Map(castes.map((c: any) => [c.id, c.name])),
+    [castes],
+  );
+  const subCasteMap = useMemo(
+    () => new Map(subCastes.map((s: any) => [s.id, s.name])),
+    [subCastes],
+  );
+  const initNotifiedTreeRef = useRef<string | null>(null);
+  const sharedTreeResolvedRef = useRef<string | null>(null);
+  const resolveSharedTreeOnInitRef = useRef(true);
+  const onChangeRef = useRef(onChange);
 
-  // Filter items based on search text
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    if (urlTreeId !== value) {
+      setValue(urlTreeId);
+    }
+  }, [urlTreeId, value]);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  const items = useMemo<TreeItem[]>(
+    () =>
+      trees.map((tree) => ({
+        name: tree.name,
+        id: tree.id,
+        caste: casteMap.get(tree.caste) || tree.caste,
+        subCaste: subCasteMap.get(tree.subCaste) || tree.subCaste,
+        villageName: tree.village?.name || tree.villageName,
+      })),
+    [trees, casteMap, subCasteMap],
+  );
+
   const filteredItems = useMemo(() => {
     if (!searchText.trim()) return items;
 
@@ -49,97 +96,106 @@ export const SourceSelect = memo(function SourceSelect({
       (item) =>
         item.name.toLowerCase().includes(lowerSearch) ||
         item.caste?.toLowerCase().includes(lowerSearch) ||
-        item.sub_caste?.toLowerCase().includes(lowerSearch) ||
-        item.village_name?.toLowerCase().includes(lowerSearch),
+        item.subCaste?.toLowerCase().includes(lowerSearch) ||
+        item.villageName?.toLowerCase().includes(lowerSearch),
     );
   }, [items, searchText]);
-
-  // Memoize the onChange callback to prevent effect from re-running unnecessarily
-  const memoizedOnChange = useCallback(onChange, [onChange]);
 
   useEffect(() => {
     const loadTrees = async () => {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const urlTreeId = params.get("tree");
-
-        if (!urlTreeId) {
-          syncedSharedTreeRef.current = null;
-        }
-
         // If a shared tree link points to a tree in a different village,
         // switch village first so that tree appears in the filtered tree list.
         // Do this only once per URL tree value to avoid blocking manual village changes.
-        if (urlTreeId && syncedSharedTreeRef.current !== urlTreeId) {
+        if (
+          resolveSharedTreeOnInitRef.current &&
+          urlTreeId &&
+          sharedTreeResolvedRef.current !== urlTreeId
+        ) {
           try {
-            const targetTree = await SupabaseService.getTreeWithDetails(urlTreeId);
+            const targetTree = await ApiService.getTreeWithDetails(urlTreeId);
             if (
-              targetTree?.village_id &&
-              targetTree.village_id !== selectedVillage
+              targetTree?.villageId &&
+              targetTree.villageId !== selectedVillage
             ) {
-              syncedSharedTreeRef.current = urlTreeId;
-              setSelectedVillage(targetTree.village_id);
+              sharedTreeResolvedRef.current = urlTreeId;
+              resolveSharedTreeOnInitRef.current = false;
+              setSelectedVillage(targetTree.villageId);
               return;
             }
-            syncedSharedTreeRef.current = urlTreeId;
+            sharedTreeResolvedRef.current = urlTreeId;
+            resolveSharedTreeOnInitRef.current = false;
           } catch (err) {
             console.warn("Could not resolve shared tree village:", err);
-            syncedSharedTreeRef.current = urlTreeId;
+            sharedTreeResolvedRef.current = urlTreeId;
+            resolveSharedTreeOnInitRef.current = false;
           }
         }
 
-        let trees = await SupabaseService.getTrees(selectedVillage);
-
-        // No need to filter again since getTrees now handles it
-        const sources: TreeItem[] = trees.map((tree) => ({
-          name: tree.name,
-          id: tree.id,
-          caste: tree.caste,
-          sub_caste: tree.sub_caste,
-          village_name: tree.village?.name || tree.villageName,
-        }));
-        setItems(sources);
-
-        // If value from URL exists and is valid, use it
-        if (urlTreeId && sources.some((s) => s.id === urlTreeId)) {
-          if (urlTreeId !== value) {
-            setValue(urlTreeId);
-            if (autoNotifyOnInit) memoizedOnChange(urlTreeId, []);
-          }
+        if (resolveSharedTreeOnInitRef.current && !urlTreeId) {
+          resolveSharedTreeOnInitRef.current = false;
         }
-        // Otherwise auto-select first source if none selected yet
-        else if (sources.length > 0 && !value) {
-          const first = sources[0];
-          setValue(first.id);
-          if (autoNotifyOnInit) memoizedOnChange(first.id, []);
+
+        const sourceTrees = await ApiService.getTrees(selectedVillage);
+        setTrees(sourceTrees);
+
+        let nextValue = valueRef.current;
+        let notifyValue: string | null = null;
+
+        // Keep URL tree only when it exists in the currently loaded village tree list.
+        // If not present (e.g. user switched village), fall back to a valid local tree.
+        if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
+          nextValue = urlTreeId;
+        }
+        // Otherwise auto-select first only once and notify parent
+        else if (sourceTrees.length > 0) {
+          const first = sourceTrees[0];
+          const currentExists = Boolean(
+            nextValue && sourceTrees.some((s) => s.id === nextValue),
+          );
+
+          if (!currentExists) {
+            nextValue = first.id;
+            if (autoNotifyOnInit && initNotifiedTreeRef.current !== first.id) {
+              initNotifiedTreeRef.current = first.id;
+              notifyValue = first.id;
+            }
+          }
         }
         // If current tree is not in filtered list, clear selection
-        else if (value && !sources.some((s) => s.id === value)) {
-          setValue("");
-          memoizedOnChange("", []);
+        else {
+          nextValue = "";
+          if (autoNotifyOnInit && initNotifiedTreeRef.current !== "") {
+            initNotifiedTreeRef.current = "";
+            notifyValue = "";
+          }
+        }
+
+        if (nextValue !== valueRef.current) {
+          setValue(nextValue);
+        }
+
+        if (notifyValue !== null) {
+          onChangeRef.current(notifyValue, []);
         }
       } catch (error) {
         console.error("Failed to load trees:", error);
-        setItems([]);
+        setTrees([]);
       }
     };
 
     loadTrees();
-  }, [
-    memoizedOnChange,
-    autoNotifyOnInit,
-    selectedVillage,
-    value,
-  ]);
+  }, [autoNotifyOnInit, selectedVillage, setSelectedVillage, urlTreeId]);
 
   const changeHandler = useCallback(
     (event: any) => {
       const id = event.target.value;
+      if (id === value) return;
       setValue(id);
       // pass the selected id; second param (nodes) is not available here so pass an empty array
-      onChange(id, []);
+      onChangeRef.current(id, []);
     },
-    [onChange],
+    [value],
   );
 
   const getSelectedItem = (): TreeItem | undefined => {
@@ -157,9 +213,9 @@ export const SourceSelect = memo(function SourceSelect({
       >
         {item.name}
       </Typography>
-      {(item.caste || item.sub_caste || item.village_name) && (
+      {(item.caste || item.subCaste || item.villageName) && (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {[item.caste, item.sub_caste, item.village_name]
+          {[item.caste, item.subCaste, item.villageName]
             .filter(Boolean)
             .join(" • ")}
         </Typography>
@@ -208,7 +264,7 @@ export const SourceSelect = memo(function SourceSelect({
                 {item.name}
               </Typography>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {[item.caste, item.sub_caste, item.village_name]
+                {[item.caste, item.subCaste, item.villageName]
                   .filter(Boolean)
                   .join(" • ")}
               </Typography>

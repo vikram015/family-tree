@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -29,8 +29,10 @@ import {
   Tooltip,
   Link,
 } from "@mui/material";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import LinkIcon from "@mui/icons-material/Link";
 import PersonIcon from "@mui/icons-material/Person";
@@ -43,13 +45,21 @@ import WorkIcon from "@mui/icons-material/Work";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
-import { SupabaseService } from "../../services/supabaseService";
-import { supabase } from "../../supabase";
+import { ApiService } from "../../services/apiService";
+import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
+import {
+  fetchMyVillageAccessRequests,
+  submitVillageAccessRequest,
+} from "../../store/thunks/apiThunks";
 
 export const ProfilePage: React.FC = () => {
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
     useAuth();
   const { villages, selectedVillage, setSelectedVillage } = useVillage();
+  const castes = useAppSelector(selectCastes);
+  const subCastes = useAppSelector(selectSubCastes);
   const [isLinking, setIsLinking] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
@@ -90,6 +100,14 @@ export const ProfilePage: React.FC = () => {
   const [myVillageRequests, setMyVillageRequests] = useState<any[]>([]);
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const hasAssignedVillage = (userProfile?.villages || []).length > 0;
+  const casteMap = new Map(castes.map((c: any) => [c.id, c.name]));
+  const subCasteMap = new Map(subCastes.map((s: any) => [s.id, s.name]));
+  const linkedTreeCaste =
+    casteMap.get(linkedPersonDetails?.tree?.caste) ||
+    linkedPersonDetails?.tree?.caste;
+  const linkedTreeSubCaste =
+    subCasteMap.get(linkedPersonDetails?.tree?.subCaste) ||
+    linkedPersonDetails?.tree?.subCaste;
 
   useEffect(() => {
     if (userProfile) {
@@ -105,21 +123,21 @@ export const ProfilePage: React.FC = () => {
       if (userProfile?.peopleId) {
         setLoadingDetails(true);
         try {
-          const person = await SupabaseService.getPersonById(
+          const person = await ApiService.getPersonById(
             userProfile.peopleId,
           );
           let treeDetails = null;
-          if (person && (person as any).tree_id) {
-            treeDetails = await SupabaseService.getTreeWithDetails(
-              (person as any).tree_id,
+          if (person && (person as any).treeId) {
+            treeDetails = await ApiService.getTreeWithDetails(
+              (person as any).treeId,
             );
           }
           setLinkedPersonDetails({ ...person, tree: treeDetails });
 
           const [profs, biz, allProfs] = await Promise.all([
-            SupabaseService.getProfessionsByPerson(userProfile.peopleId),
-            SupabaseService.getBusinessesByPerson(userProfile.peopleId),
-            SupabaseService.getAllProfessions(),
+            ApiService.getProfessionsByPerson(userProfile.peopleId),
+            ApiService.getBusinessesByPerson(userProfile.peopleId),
+            ApiService.getAllProfessions(),
           ]);
           setProfessions(profs || []);
           setBusinesses(biz || []);
@@ -134,22 +152,28 @@ export const ProfilePage: React.FC = () => {
     fetchDetails();
   }, [userProfile?.peopleId]);
 
-  const loadMyVillageRequests = async () => {
+  const loadMyVillageRequests = useCallback(async () => {
     try {
-      const { data, error } = await supabase.rpc("get_my_village_access_requests");
-      if (error) throw error;
+      const userId = userProfile?.id;
+      if (!userId) {
+        setMyVillageRequests([]);
+        return;
+      }
+      const data = await dispatch(
+        fetchMyVillageAccessRequests(userId),
+      ).unwrap();
       setMyVillageRequests(data || []);
     } catch (err) {
       console.error("Error loading village requests:", err);
       setMyVillageRequests([]);
     }
-  };
+  }, [dispatch, userProfile?.id]);
 
   useEffect(() => {
     if (currentUser && userProfile?.role === "admin") {
       loadMyVillageRequests();
     }
-  }, [currentUser, userProfile?.role]);
+  }, [currentUser, userProfile?.role, loadMyVillageRequests]);
 
   const handleUpdateProfile = async () => {
     try {
@@ -170,7 +194,7 @@ export const ProfilePage: React.FC = () => {
 
       // If "Other" or new profession is entered (simplified logic: if ID is empty but name is provided, create new)
       if (!profId && newProfessionName) {
-        const newProf = await SupabaseService.createProfession({
+        const newProf = await ApiService.createProfession({
           name: newProfessionName,
           category: "Other",
           description: newProfessionContact
@@ -179,24 +203,24 @@ export const ProfilePage: React.FC = () => {
         });
         profId = newProf.id;
         // Refresh all professions
-        const updatedAll = await SupabaseService.getAllProfessions();
+        const updatedAll = await ApiService.getAllProfessions();
         setAllProfessions(updatedAll);
       }
 
       if (profId) {
-        await SupabaseService.addProfessionToPerson(
+        await ApiService.addProfessionToPerson(
           userProfile.peopleId,
           profId,
         );
         // Refresh user professions
-        const updatedProfs = await SupabaseService.getProfessionsByPerson(
+        const updatedProfs = await ApiService.getProfessionsByPerson(
           userProfile.peopleId,
         );
         setProfessions(updatedProfs);
-      setOpenProfessionDialog(false);
-      setSelectedProfessionId("");
-      setNewProfessionName("");
-      setNewProfessionContact("");
+        setOpenProfessionDialog(false);
+        setSelectedProfessionId("");
+        setNewProfessionName("");
+        setNewProfessionContact("");
       }
     } catch (err) {
       console.error("Error adding profession:", err);
@@ -208,18 +232,23 @@ export const ProfilePage: React.FC = () => {
     if (!userProfile?.peopleId) return;
 
     try {
-      await SupabaseService.createBusiness({
+      await ApiService.createBusiness({
         ...newBusinessData,
-        people_id: userProfile.peopleId,
+        peopleId: userProfile.peopleId,
       });
 
       // Refresh businesses
-      const updatedBiz = await SupabaseService.getBusinessesByPerson(
+      const updatedBiz = await ApiService.getBusinessesByPerson(
         userProfile.peopleId,
       );
       setBusinesses(updatedBiz);
       setOpenBusinessDialog(false);
-      setNewBusinessData({ name: "", category: "", description: "", contact: "" });
+      setNewBusinessData({
+        name: "",
+        category: "",
+        description: "",
+        contact: "",
+      });
     } catch (err) {
       console.error("Error adding business:", err);
     }
@@ -227,11 +256,8 @@ export const ProfilePage: React.FC = () => {
 
   const handleDeleteBusiness = async (id: string) => {
     try {
-      // Assuming we implement delete or soft delete. For now, let's just log or skip if not implemented.
-      // Wait, updateBusiness exists, maybe generic delete?
-      // Since there isn't a deleteBusiness method exposed in grep, maybe just update is_deleted = true
-      await SupabaseService.updateBusiness(id, { is_deleted: true });
-      const updatedBiz = await SupabaseService.getBusinessesByPerson(
+      await ApiService.deleteBusiness(id);
+      const updatedBiz = await ApiService.getBusinessesByPerson(
         userProfile!.peopleId!,
       );
       setBusinesses(updatedBiz);
@@ -243,11 +269,11 @@ export const ProfilePage: React.FC = () => {
   const handleRemoveProfession = async (profId: string) => {
     if (!userProfile?.peopleId) return;
     try {
-      await SupabaseService.removeProfessionFromPerson(
+      await ApiService.removeProfessionFromPerson(
         userProfile.peopleId,
         profId,
       );
-      const updatedProfs = await SupabaseService.getProfessionsByPerson(
+      const updatedProfs = await ApiService.getProfessionsByPerson(
         userProfile.peopleId,
       );
       setProfessions(updatedProfs);
@@ -274,18 +300,34 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const handleOpenLinkedProfileInTree = useCallback(() => {
+    const personId = userProfile?.peopleId;
+    const treeId =
+      linkedPersonDetails?.treeId || linkedPersonDetails?.tree?.id || "";
+    if (!personId || !treeId) return;
+    const params = new URLSearchParams();
+    params.set("tree", treeId);
+    params.set("personId", personId);
+    navigate(`/families?${params.toString()}`);
+  }, [navigate, userProfile?.peopleId, linkedPersonDetails]);
+
   const handleSubmitVillageRequest = async () => {
     if (!requestVillageId) return;
     setRequestSubmitting(true);
     setError("");
     setSuccess("");
     try {
-      const { data, error } = await supabase.rpc("submit_village_access_request", {
-        p_village_id: requestVillageId,
-        p_request_message: requestMessage || null,
-      });
-
-      if (error) throw error;
+      const userId = userProfile?.id;
+      if (!userId) {
+        throw new Error("User profile not loaded");
+      }
+      const data = await dispatch(
+        submitVillageAccessRequest({
+          userId,
+          villageId: requestVillageId,
+          requestMessage: requestMessage || null,
+        }),
+      ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
       setSuccess("Village access request submitted successfully.");
@@ -442,17 +484,24 @@ export const ProfilePage: React.FC = () => {
                 {linkedPersonDetails ? (
                   <Box>
                     <Typography variant="body1">
-                      <strong>Name:</strong> {linkedPersonDetails.name}
+                      <strong>Name:</strong>{" "}
+                      <Link
+                        component="button"
+                        type="button"
+                        underline="hover"
+                        onClick={handleOpenLinkedProfileInTree}
+                      >
+                        {linkedPersonDetails.name}
+                      </Link>
                     </Typography>
                     {linkedPersonDetails.tree && (
                       <>
                         <Typography variant="body1">
-                          <strong>Caste:</strong>{" "}
-                          {linkedPersonDetails.tree.caste || "N/A"}
+                          <strong>Caste:</strong> {linkedTreeCaste || "N/A"}
                         </Typography>
                         <Typography variant="body1">
                           <strong>Sub-Caste:</strong>{" "}
-                          {linkedPersonDetails.tree.sub_caste || "N/A"}
+                          {linkedTreeSubCaste || "N/A"}
                         </Typography>
                         <Typography variant="body1">
                           <strong>Village:</strong>{" "}
@@ -768,10 +817,20 @@ export const ProfilePage: React.FC = () => {
                   <Typography variant="subtitle1" sx={{ mb: 1 }}>
                     Assigned Village
                   </Typography>
-                  <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}>
+                  <Box
+                    sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}
+                  >
                     {(userProfile?.villages || []).map((vId) => {
-                      const vName = villages.find((v) => v.id === vId)?.name || vId;
-                      return <Chip key={vId} label={vName} color="success" size="small" />;
+                      const vName =
+                        villages.find((v) => v.id === vId)?.name || vId;
+                      return (
+                        <Chip
+                          key={vId}
+                          label={vName}
+                          color="success"
+                          size="small"
+                        />
+                      );
                     })}
                   </Box>
                   <Typography variant="body2" color="text.secondary">
@@ -830,10 +889,13 @@ export const ProfilePage: React.FC = () => {
               ) : (
                 <List dense>
                   {myVillageRequests.map((req) => (
-                    <ListItem key={req.id} sx={{ border: "1px solid #eee", borderRadius: 1, mb: 1 }}>
+                    <ListItem
+                      key={req.id}
+                      sx={{ border: "1px solid #eee", borderRadius: 1, mb: 1 }}
+                    >
                       <ListItemText
-                        primary={req.village_name || req.village_id}
-                        secondary={req.request_message || "No note"}
+                        primary={req.villageName || req.villageId}
+                        secondary={req.requestMessage || "No note"}
                       />
                       <Chip
                         size="small"
@@ -1047,3 +1109,4 @@ export const ProfilePage: React.FC = () => {
     </Container>
   );
 };
+

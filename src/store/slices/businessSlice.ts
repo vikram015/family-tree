@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 
 interface Business {
   id: string;
@@ -39,27 +39,27 @@ export const fetchBusinessesByVillage = createAsyncThunk(
   async (villageId: string, { rejectWithValue }) => {
     try {
       console.log('Redux: Starting to fetch businesses for village:', villageId);
-      const businessesWithHierarchy = await SupabaseService.getBusinessesByVillageWithHierarchy(villageId);
+      const businessesWithHierarchy = await ApiService.getBusinessesByVillageWithHierarchy(villageId);
       console.log('Redux: Businesses fetched:', businessesWithHierarchy);
 
       const businessList: Business[] = businessesWithHierarchy.map((business: any) => ({
-        id: business.business_id,
-        name: business.business_name,
-        category: business.business_category || '',
-        description: business.business_description || '',
-        owner: business.person_name || '',
-        ownerId: business.person_id || '',
-        ownerName: business.person_name || '',
-        contact: business.business_contact || '',
+        id: business.businessId,
+        name: business.businessName,
+        category: business.businessCategory || '',
+        description: business.businessDescription || '',
+        owner: business.personName || '',
+        ownerId: business.personId || '',
+        ownerName: business.personName || '',
+        contact: business.businessContact || '',
         villageId: villageId,
-        treeId: business.tree_id || '',
-        gender: business.person_gender || '',
-        dob: business.person_dob || '',
-        hierarchy: business.parent_hierarchy || [],
-        casteName: business.caste_name || '',
-        subCasteName: business.sub_caste_name || '',
-        createdAt: business.business_created_at,
-        updatedAt: business.business_created_at,
+        treeId: business.treeId || '',
+        gender: business.personGender || '',
+        dob: business.personDob || '',
+        hierarchy: business.parentHierarchy || [],
+        casteName: business.casteName || '',
+        subCasteName: business.subCasteName || '',
+        createdAt: business.businessCreatedAt,
+        updatedAt: business.businessCreatedAt,
       }));
 
       return businessList;
@@ -106,3 +106,4 @@ export const selectBusinessLoading = (state: any) => state.business.loading;
 export const selectBusinessError = (state: any) => state.business.error;
 
 export default businessSlice.reducer;
+

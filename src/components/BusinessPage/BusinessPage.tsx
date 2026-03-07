@@ -54,7 +54,7 @@ import {
   selectProfessionsWithCount,
   clearProfessions,
 } from "../../store/slices/professionSlice";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "./PersonSearchField";
 import { FNode } from "../model/FNode";
 
@@ -106,6 +106,14 @@ interface PersonSearchResult {
   subCasteName?: string;
 }
 
+const buildFamilyPagePath = (treeId?: string, personId?: string): string => {
+  const params = new URLSearchParams();
+  if (treeId) params.set("tree", treeId);
+  if (personId) params.set("personId", personId);
+  const query = params.toString();
+  return query ? `/families?${query}` : "/families";
+};
+
 // Owner link component with hierarchy tooltip
 const OwnerLink: React.FC<{
   business: Business;
@@ -144,7 +152,9 @@ const OwnerLink: React.FC<{
     <Tooltip title={tooltipContent}>
       <Box
         component="span"
-        onClick={() => onNavigate(`/families?tree=${business.treeId}`)}
+        onClick={() =>
+          onNavigate(buildFamilyPagePath(business.treeId, business.ownerId))
+        }
         sx={{
           color: "#0066cc",
           cursor: "pointer",
@@ -308,7 +318,7 @@ export const BusinessPage: React.FC = () => {
     }
 
     try {
-      await SupabaseService.addProfessionToPerson(
+      await ApiService.addProfessionToPerson(
         selectedPersonForProfession.id,
         selectedProfession.id,
       );
@@ -329,7 +339,7 @@ export const BusinessPage: React.FC = () => {
     professionId: string,
   ) => {
     try {
-      await SupabaseService.removeProfessionFromPerson(personId, professionId);
+      await ApiService.removeProfessionFromPerson(personId, professionId);
 
       // Refresh professions data by dispatching Redux action
       if (selectedVillage) {
@@ -348,7 +358,7 @@ export const BusinessPage: React.FC = () => {
     }
 
     try {
-      const newProf = await SupabaseService.createProfession({
+      const newProf = await ApiService.createProfession({
         name: newProfessionName,
         category: "General",
       });
@@ -462,16 +472,16 @@ export const BusinessPage: React.FC = () => {
         name: formData.name,
         category: formData.category,
         description: formData.description,
-        people_id: formData.ownerId || null,
+        peopleId: formData.ownerId || null,
         contact: formData.contact || null,
       };
 
       if (editingBusiness) {
         // Update existing business
-        await SupabaseService.updateBusiness(editingBusiness.id, businessData);
+        await ApiService.updateBusiness(editingBusiness.id, businessData);
       } else {
         // Add new business
-        await SupabaseService.createBusiness(businessData);
+        await ApiService.createBusiness(businessData);
       }
       handleCloseDialog();
 
@@ -490,7 +500,7 @@ export const BusinessPage: React.FC = () => {
   const handleDelete = async (businessId: string) => {
     if (window.confirm("Are you sure you want to delete this business?")) {
       try {
-        await SupabaseService.deleteBusiness(businessId);
+        await ApiService.deleteBusiness(businessId);
         // Refresh businesses list by dispatching Redux action
         if (selectedVillage) {
           dispatch(fetchBusinessesByVillage(selectedVillage));
@@ -1066,7 +1076,7 @@ export const BusinessPage: React.FC = () => {
 
                     return (
                       <Card
-                        key={professionData.profession_id}
+                        key={professionData.professionId}
                         sx={{
                           height: "100%",
                           transition: "transform 0.3s, boxShadow 0.3s",
@@ -1082,24 +1092,24 @@ export const BusinessPage: React.FC = () => {
                             gutterBottom
                             sx={{ fontWeight: 700, mb: 2 }}
                           >
-                            {professionData.profession_name}
+                            {professionData.professionName}
                           </Typography>
-                          {professionData.profession_description && (
+                          {professionData.professionDescription && (
                             <Typography
                               variant="body2"
                               color="text.secondary"
                               paragraph
                               sx={{ minHeight: 40, mb: 2 }}
                             >
-                              {professionData.profession_description}
+                              {professionData.professionDescription}
                             </Typography>
                           )}
                           <Stack spacing={1}>
                             {peopleInProfession.map((person: any) => {
                               const hierarchyText =
-                                person.parent_hierarchy &&
-                                person.parent_hierarchy.length > 0
-                                  ? person.parent_hierarchy
+                                person.parentHierarchy &&
+                                person.parentHierarchy.length > 0
+                                  ? person.parentHierarchy
                                       .slice(-5)
                                       .map((a: any) => a.name)
                                       .join(" → ")
@@ -1111,22 +1121,22 @@ export const BusinessPage: React.FC = () => {
                                     variant="body2"
                                     sx={{ fontWeight: 600 }}
                                   >
-                                    {person.person_name}
+                                    {person.personName}
                                   </Typography>
-                                  {person.caste_name && (
+                                  {person.casteName && (
                                     <Typography
                                       variant="caption"
                                       display="block"
                                     >
-                                      Caste: {person.caste_name}
+                                      Caste: {person.casteName}
                                     </Typography>
                                   )}
-                                  {person.sub_caste_name && (
+                                  {person.subCasteName && (
                                     <Typography
                                       variant="caption"
                                       display="block"
                                     >
-                                      Sub-Caste: {person.sub_caste_name}
+                                      Sub-Caste: {person.subCasteName}
                                     </Typography>
                                   )}
                                   <Typography
@@ -1141,13 +1151,16 @@ export const BusinessPage: React.FC = () => {
 
                               return (
                                 <Tooltip
-                                  key={person.person_id}
+                                  key={person.personId}
                                   title={tooltipContent}
                                 >
                                   <Box
                                     onClick={() =>
                                       navigate(
-                                        `/families?tree=${person.tree_id}`,
+                                        buildFamilyPagePath(
+                                          person.treeId,
+                                          person.personId,
+                                        ),
                                       )
                                     }
                                     sx={{
@@ -1165,8 +1178,22 @@ export const BusinessPage: React.FC = () => {
                                       },
                                     }}
                                   >
-                                    <Typography variant="body2">
-                                      {person.person_name}
+                                    <Typography
+                                      variant="body2"
+                                      sx={{ fontWeight: 600 }}
+                                    >
+                                      {person.personName}
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      sx={{
+                                        display: "block",
+                                        mt: 0.5,
+                                        color: "text.secondary",
+                                        textDecoration: "none",
+                                      }}
+                                    >
+                                      Lineage: {hierarchyText}
                                     </Typography>
                                   </Box>
                                 </Tooltip>
@@ -1438,3 +1465,4 @@ export const BusinessPage: React.FC = () => {
 };
 
 export default BusinessPage;
+

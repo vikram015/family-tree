@@ -19,7 +19,8 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import { useVillage } from "../hooks/useVillage";
-import { supabase } from "../../supabase";
+import { useAppDispatch } from "../../store/hooks";
+import { fetchVillageHeritage } from "../../store/thunks/apiThunks";
 
 interface HeritageData {
   villageOrigin: string;
@@ -34,6 +35,7 @@ interface HeritageData {
 }
 
 export const HeritagePage: React.FC = () => {
+  const dispatch = useAppDispatch();
   const { selectedVillage, villages } = useVillage();
   const [heritageData, setHeritageData] = useState<HeritageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,19 +55,10 @@ export const HeritagePage: React.FC = () => {
 
     const loadHeritageData = async () => {
       try {
-        const { data, error } = await supabase
-          .from("heritage")
-          .select("*")
-          .eq("villageId", selectedVillage)
-          .single();
-
-        if (error) {
-          console.warn(
-            `No heritage document found with villageId: ${selectedVillage}`,
-            error,
-          );
-          setHeritageData(null);
-        } else if (data) {
+        const data = await dispatch(
+          fetchVillageHeritage(selectedVillage),
+        ).unwrap();
+        if (data) {
           console.log("Heritage data found:", data);
           setHeritageData(data as HeritageData);
         } else {

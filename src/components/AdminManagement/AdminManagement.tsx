@@ -27,13 +27,27 @@ import {
   Tab,
   TextField,
 } from "@mui/material";
-import { Edit, Delete, Add, CheckCircle, LocationOn, Close } from "@mui/icons-material";
-import { supabase } from "../../supabase";
-import { SupabaseService } from "../../services/supabaseService";
+import {
+  Edit,
+  Delete,
+  Add,
+  CheckCircle,
+  LocationOn,
+  Close,
+} from "@mui/icons-material";
+import { ApiService } from "../../services/apiService";
 import { AppUser, UserRole } from "../model/User";
 import { useAuth } from "../hooks/useAuth";
 import { formatDate } from "../../utils/dateFormatter";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  deleteAdminUser,
+  fetchAdminUsers,
+  fetchPendingVillageAccessRequests,
+  reviewVillageAccessRequest,
+  updateAdminUser,
+  verifyAdminUser,
+} from "../../store/thunks/apiThunks";
 import {
   fetchStates,
   fetchAllDistricts,
@@ -83,9 +97,15 @@ function TabPanel(props: TabPanelProps) {
 
 export const AdminManagement: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isSuperAdmin, isAdmin, userProfile, loading: authLoading } = useAuth();
+  const {
+    isSuperAdmin,
+    isAdmin,
+    userProfile,
+    loading: authLoading,
+  } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const superAdmin = isSuperAdmin();
 
   // Redux state
   const states = useAppSelector(selectStates);
@@ -103,7 +123,6 @@ export const AdminManagement: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
   const [selectedVillages, setSelectedVillages] = useState<string[]>([]);
   const [error, setError] = useState<string>("");
-  const [tabValue, setTabValue] = useState(0);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
 
   // Add dialog states
@@ -115,24 +134,48 @@ export const AdminManagement: React.FC = () => {
   const [selectedParentId, setSelectedParentId] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  const loadPendingRequests = React.useCallback(async () => {
+    try {
+      const userId = userProfile?.id;
+      if (!userId) {
+        setPendingRequests([]);
+        return;
+      }
+      const data = await dispatch(
+        fetchPendingVillageAccessRequests(userId),
+      ).unwrap();
+      setPendingRequests(data || []);
+    } catch (err) {
+      console.error("Error loading pending requests:", err);
+      setPendingRequests([]);
+    }
+  }, [dispatch, userProfile?.id]);
+
+  const loadHierarchyData = React.useCallback(async () => {
+    try {
+      await Promise.all([
+        dispatch(fetchStates()),
+        dispatch(fetchAllDistricts()),
+        dispatch(fetchVillages()),
+        dispatch(fetchCastes()),
+        dispatch(fetchAllSubCastes()),
+      ]);
+    } catch (err) {
+      console.error("Error loading hierarchy data:", err);
+    }
+  }, [dispatch]);
+
   const loadData = React.useCallback(async () => {
     try {
       setLoading(true);
 
-      // Load users from Supabase
-      const { data: usersData, error: usersError } = await supabase
-        .from("users")
-        .select("*");
-
-      if (usersError) {
-        throw usersError;
-      }
+      const usersData = await dispatch(fetchAdminUsers()).unwrap();
 
       setUsers(
         (usersData || []).map((user) => ({
           ...user,
           id: user.id,
-          isVerified: user.is_verified,
+          isVerified: user.isVerified,
         })) as AppUser[],
       );
 
@@ -146,7 +189,7 @@ export const AdminManagement: React.FC = () => {
       setError("Failed to load data");
       setLoading(false);
     }
-  }, [dispatch]);
+  }, [dispatch, loadHierarchyData, loadPendingRequests]);
 
   useEffect(() => {
     const checkAccessAndLoad = async () => {
@@ -164,58 +207,14 @@ export const AdminManagement: React.FC = () => {
     checkAccessAndLoad();
   }, [isSuperAdmin, isAdmin, loadData, authLoading]);
 
-  useEffect(() => {
-    if (!isSuperAdmin()) {
-      setTabValue(1);
-    }
-  }, [isSuperAdmin]);
-
-  useEffect(() => {
+  const tabValue = React.useMemo(() => {
     const params = new URLSearchParams(location.search);
-    const tabKey = params.get("tab");
-    if (!tabKey) return;
-
-    const idx = TAB_KEYS.indexOf(tabKey as (typeof TAB_KEYS)[number]);
-    if (idx === -1) return;
-    if (!isSuperAdmin() && idx > 1) return;
-    setTabValue(idx);
-  }, [location.search, isSuperAdmin]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const nextKey = TAB_KEYS[tabValue] || "users";
-    if (params.get("tab") === nextKey) return;
-    params.set("tab", nextKey);
-    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
-  }, [tabValue, location.pathname, location.search, navigate]);
-
-  const loadPendingRequests = async () => {
-    try {
-      const { data, error } = await supabase.rpc(
-        "get_pending_village_access_requests",
-      );
-      if (error) throw error;
-      setPendingRequests(data || []);
-    } catch (err) {
-      console.error("Error loading pending requests:", err);
-      setPendingRequests([]);
-    }
-  };
-
-  const loadHierarchyData = async () => {
-    try {
-      // Dispatch Redux actions to fetch all data
-      await Promise.all([
-        dispatch(fetchStates()),
-        dispatch(fetchAllDistricts()),
-        dispatch(fetchVillages()),
-        dispatch(fetchCastes()),
-        dispatch(fetchAllSubCastes()),
-      ]);
-    } catch (err) {
-      console.error("Error loading hierarchy data:", err);
-    }
-  };
+    const tabKey = params.get("tab") || "users";
+    let idx = TAB_KEYS.indexOf(tabKey as (typeof TAB_KEYS)[number]);
+    if (idx === -1) idx = 0;
+    if (!superAdmin && idx > 1) idx = 0;
+    return idx;
+  }, [location.search, superAdmin]);
 
   const handleAddClick = (
     type: "state" | "district" | "village" | "caste" | "subcaste",
@@ -236,16 +235,16 @@ export const AdminManagement: React.FC = () => {
       setLoading(true);
 
       if (addType === "state") {
-        await SupabaseService.createState?.({ name: newName });
+        await ApiService.createState?.({ name: newName });
       } else if (addType === "district") {
         if (!selectedParentId) {
           setError("Please select a state");
           setLoading(false);
           return;
         }
-        await SupabaseService.createDistrict?.({
+        await ApiService.createDistrict?.({
           name: newName,
-          state_id: selectedParentId,
+          stateId: selectedParentId,
         });
       } else if (addType === "village") {
         if (!selectedParentId) {
@@ -253,21 +252,21 @@ export const AdminManagement: React.FC = () => {
           setLoading(false);
           return;
         }
-        await SupabaseService.createVillage?.({
+        await ApiService.createVillage?.({
           name: newName,
-          district_id: selectedParentId,
+          districtId: selectedParentId,
         });
       } else if (addType === "caste") {
-        await SupabaseService.createCaste?.({ name: newName });
+        await ApiService.createCaste?.({ name: newName });
       } else if (addType === "subcaste") {
         if (!selectedParentId) {
           setError("Please select a caste");
           setLoading(false);
           return;
         }
-        await SupabaseService.createSubCaste?.({
+        await ApiService.createSubCaste?.({
           name: newName,
-          caste_id: selectedParentId,
+          casteId: selectedParentId,
         });
       }
 
@@ -287,13 +286,14 @@ export const AdminManagement: React.FC = () => {
   const handleVerifyUser = async (userId: string) => {
     if (!isSuperAdmin()) return;
     try {
-      // Use the RPC function to verify both Auth email and Public status
-      const { data, error } = await supabase.rpc("verify_user_email", {
-        target_user_id: userId,
-      });
-
-      if (error) throw error;
-      if (data && !data.success) throw new Error(data.error);
+      const data = await dispatch(
+        verifyAdminUser({
+          userId,
+          reviewerId: userProfile?.id || null,
+        }),
+      ).unwrap();
+      if (data && !data.success)
+        throw new Error(data.message || "Failed to verify user");
 
       setSuccessMessage("User verified successfully");
       await loadData();
@@ -328,20 +328,14 @@ export const AdminManagement: React.FC = () => {
     if (!editUser) return;
 
     try {
-      // Update user in Supabase
-      const { error } = await supabase
-        .from("users")
-        .update({
+      await dispatch(
+        updateAdminUser({
+          userId: editUser.id,
           role: selectedRole,
           villages: selectedRole === "superadmin" ? [] : selectedVillages,
-          modified_at: new Date().toISOString(),
-          modified_by: userProfile?.id,
-        })
-        .eq("id", editUser.id);
-
-      if (error) {
-        throw error;
-      }
+          modifiedBy: userProfile?.id || null,
+        }),
+      ).unwrap();
 
       await loadData();
       setEditDialogOpen(false);
@@ -359,12 +353,7 @@ export const AdminManagement: React.FC = () => {
     }
 
     try {
-      // Delete user from Supabase
-      const { error } = await supabase.from("users").delete().eq("id", userId);
-
-      if (error) {
-        throw error;
-      }
+      await dispatch(deleteAdminUser(userId)).unwrap();
 
       await loadData();
     } catch (err) {
@@ -386,16 +375,23 @@ export const AdminManagement: React.FC = () => {
     action: "approved" | "rejected",
   ) => {
     try {
-      const { data, error } = await supabase.rpc("review_village_access_request", {
-        p_request_id: requestId,
-        p_action: action,
-        p_review_note: null,
-      });
-
-      if (error) throw error;
+      const userId = userProfile?.id;
+      if (!userId) {
+        throw new Error("User profile not loaded");
+      }
+      const data = await dispatch(
+        reviewVillageAccessRequest({
+          userId,
+          requestId,
+          action,
+          reviewNote: null,
+        }),
+      ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
-      setSuccessMessage(`Request ${action === "approved" ? "approved" : "rejected"} successfully`);
+      setSuccessMessage(
+        `Request ${action === "approved" ? "approved" : "rejected"} successfully`,
+      );
       await loadData();
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err: any) {
@@ -423,7 +419,7 @@ export const AdminManagement: React.FC = () => {
   }
 
   return (
-    <Container sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth={false} sx={{ mt: 2, mb: 2, px: { xs: 2, sm: 3 } }}>
       <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
         Admin Management
       </Typography>
@@ -443,7 +439,12 @@ export const AdminManagement: React.FC = () => {
       <Paper>
         <Tabs
           value={tabValue}
-          onChange={(e, val) => setTabValue(val)}
+          onChange={(e, val) => {
+            if (val === tabValue) return;
+            const params = new URLSearchParams(location.search);
+            params.set("tab", TAB_KEYS[val] || "users");
+            navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+          }}
           variant="scrollable"
           scrollButtons="auto"
           allowScrollButtonsMobile
@@ -507,11 +508,12 @@ export const AdminManagement: React.FC = () => {
             </Alert>
           )}
           <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 720 }}>
+            <Table size="small" sx={{ minWidth: 820 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Email</TableCell>
                   <TableCell>Name</TableCell>
+                  <TableCell>Phone</TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Villages</TableCell>
                   <TableCell>Linked Node</TableCell>
@@ -526,6 +528,7 @@ export const AdminManagement: React.FC = () => {
                     <TableCell>
                       {user.name || user.displayName || "-"}
                     </TableCell>
+                    <TableCell>{user.phone || "-"}</TableCell>
                     <TableCell>
                       <Chip
                         label={
@@ -557,7 +560,7 @@ export const AdminManagement: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {(user as any).people_id ? (
+                      {(user as any).peopleId ? (
                         <Chip
                           label="Linked"
                           color="info"
@@ -600,38 +603,38 @@ export const AdminManagement: React.FC = () => {
                         </Tooltip>
                       )}
                       {isSuperAdmin() && (
-                      <Tooltip title="Edit Villages">
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => handleEditVillagesClick(user)}
-                          disabled={user.role !== "admin"}
-                        >
-                          <LocationOn />
-                        </IconButton>
-                      </Tooltip>
+                        <Tooltip title="Edit Villages">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleEditVillagesClick(user)}
+                            disabled={user.role !== "admin"}
+                          >
+                            <LocationOn />
+                          </IconButton>
+                        </Tooltip>
                       )}
                       {isSuperAdmin() && (
-                      <Tooltip title="Edit">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleEditClick(user)}
-                        >
-                          <Edit />
-                        </IconButton>
-                      </Tooltip>
+                        <Tooltip title="Edit">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEditClick(user)}
+                          >
+                            <Edit />
+                          </IconButton>
+                        </Tooltip>
                       )}
                       {isSuperAdmin() && (
-                      <Tooltip title="Delete">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteUser(user.id)}
-                          disabled={user.id === userProfile?.id}
-                        >
-                          <Delete />
-                        </IconButton>
-                      </Tooltip>
+                        <Tooltip title="Delete">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteUser(user.id)}
+                            disabled={user.id === userProfile?.id}
+                          >
+                            <Delete />
+                          </IconButton>
+                        </Tooltip>
                       )}
                     </TableCell>
                   </TableRow>
@@ -644,7 +647,9 @@ export const AdminManagement: React.FC = () => {
         {/* Village Requests Tab */}
         <TabPanel value={tabValue} index={1}>
           <Box sx={{ mb: 2 }}>
-            <Typography variant="h6">Pending Village Access Requests</Typography>
+            <Typography variant="h6">
+              Pending Village Access Requests
+            </Typography>
           </Box>
           <TableContainer sx={{ overflowX: "auto" }}>
             <Table size="small" sx={{ minWidth: 760 }}>
@@ -670,11 +675,11 @@ export const AdminManagement: React.FC = () => {
                 )}
                 {pendingRequests.map((req) => (
                   <TableRow key={req.id}>
-                    <TableCell>{req.requester_name || "-"}</TableCell>
-                    <TableCell>{req.requester_email || "-"}</TableCell>
-                    <TableCell>{req.village_name || req.village_id}</TableCell>
-                    <TableCell>{req.request_message || "-"}</TableCell>
-                    <TableCell>{formatDate(req.created_at)}</TableCell>
+                    <TableCell>{req.requesterName || "-"}</TableCell>
+                    <TableCell>{req.requesterEmail || "-"}</TableCell>
+                    <TableCell>{req.villageName || req.villageId}</TableCell>
+                    <TableCell>{req.requestMessage || "-"}</TableCell>
+                    <TableCell>{formatDate(req.createdAt)}</TableCell>
                     <TableCell>
                       <Button
                         size="small"
@@ -706,39 +711,39 @@ export const AdminManagement: React.FC = () => {
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage states.</Alert>
           ) : (
-          <>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => handleAddClick("state")}
-            >
-              Add State
-            </Button>
-          </Box>
-          {states.length === 0 && (
-            <Typography color="text.secondary">No states found</Typography>
-          )}
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 520 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Created At</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {states &&
-                  states.map((state) => (
-                    <TableRow key={state.id}>
-                      <TableCell>{state.name}</TableCell>
-                      <TableCell>{formatDate(state.created_at)}</TableCell>
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => handleAddClick("state")}
+                >
+                  Add State
+                </Button>
+              </Box>
+              {states.length === 0 && (
+                <Typography color="text.secondary">No states found</Typography>
+              )}
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 520 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Created At</TableCell>
                     </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          </>
+                  </TableHead>
+                  <TableBody>
+                    {states &&
+                      states.map((state) => (
+                        <TableRow key={state.id}>
+                          <TableCell>{state.name}</TableCell>
+                          <TableCell>{formatDate(state.createdAt)}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
           )}
         </TabPanel>
 
@@ -747,40 +752,40 @@ export const AdminManagement: React.FC = () => {
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage districts.</Alert>
           ) : (
-          <>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => handleAddClick("district")}
-            >
-              Add District
-            </Button>
-          </Box>
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 640 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>State</TableCell>
-                  <TableCell>Created At</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {districts.map((district) => (
-                  <TableRow key={district.id}>
-                    <TableCell>{district.name}</TableCell>
-                    <TableCell>
-                      {states.find((s) => s.id === district.state_id)?.name ||
-                        "-"}
-                    </TableCell>
-                    <TableCell>{formatDate(district.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          </>
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => handleAddClick("district")}
+                >
+                  Add District
+                </Button>
+              </Box>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 640 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>State</TableCell>
+                      <TableCell>Created At</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {districts.map((district) => (
+                      <TableRow key={district.id}>
+                        <TableCell>{district.name}</TableCell>
+                        <TableCell>
+                          {states.find((s) => s.id === district.stateId)
+                            ?.name || "-"}
+                        </TableCell>
+                        <TableCell>{formatDate(district.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
           )}
         </TabPanel>
 
@@ -789,45 +794,49 @@ export const AdminManagement: React.FC = () => {
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage villages.</Alert>
           ) : (
-          <>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => handleAddClick("village")}
-            >
-              Add Village
-            </Button>
-          </Box>
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 760 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>District</TableCell>
-                  <TableCell>State</TableCell>
-                  <TableCell>Created At</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {villagesList.map((village) => {
-                  const district = districts.find(
-                    (d) => d.id === village.district_id,
-                  );
-                  const state = states.find((s) => s.id === district?.state_id);
-                  return (
-                    <TableRow key={village.id}>
-                      <TableCell>{village.name}</TableCell>
-                      <TableCell>{district?.name || "-"}</TableCell>
-                      <TableCell>{state?.name || "-"}</TableCell>
-                      <TableCell>{formatDate(village.created_at)}</TableCell>
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => handleAddClick("village")}
+                >
+                  Add Village
+                </Button>
+              </Box>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 760 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>District</TableCell>
+                      <TableCell>State</TableCell>
+                      <TableCell>Created At</TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          </>
+                  </TableHead>
+                  <TableBody>
+                    {villagesList.map((village) => {
+                      const district = districts.find(
+                        (d) => d.id === village.districtId,
+                      );
+                      const state = states.find(
+                        (s) => s.id === district?.stateId,
+                      );
+                      return (
+                        <TableRow key={village.id}>
+                        <TableCell>{village.name}</TableCell>
+                        <TableCell>{district?.name || "-"}</TableCell>
+                        <TableCell>{state?.name || "-"}</TableCell>
+                        <TableCell>
+                            {formatDate(village.createdAt)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
           )}
         </TabPanel>
 
@@ -836,77 +845,79 @@ export const AdminManagement: React.FC = () => {
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage castes.</Alert>
           ) : (
-          <>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => handleAddClick("caste")}
-            >
-              Add Caste
-            </Button>
-          </Box>
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 480 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Created At</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {castes.map((caste) => (
-                  <TableRow key={caste.id}>
-                    <TableCell>{caste.name}</TableCell>
-                    <TableCell>{formatDate(caste.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          </>
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => handleAddClick("caste")}
+                >
+                  Add Caste
+                </Button>
+              </Box>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 480 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Created At</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {castes.map((caste) => (
+                      <TableRow key={caste.id}>
+                        <TableCell>{caste.name}</TableCell>
+                        <TableCell>{formatDate(caste.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
           )}
         </TabPanel>
 
         {/* Sub-Castes Tab */}
         <TabPanel value={tabValue} index={6}>
           {!isSuperAdmin() ? (
-            <Alert severity="info">Only superadmin can manage sub-castes.</Alert>
+            <Alert severity="info">
+              Only superadmin can manage sub-castes.
+            </Alert>
           ) : (
-          <>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => handleAddClick("subcaste")}
-            >
-              Add Sub-Caste
-            </Button>
-          </Box>
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 640 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Caste</TableCell>
-                  <TableCell>Created At</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {subCastes.map((subCaste) => (
-                  <TableRow key={subCaste.id}>
-                    <TableCell>{subCaste.name}</TableCell>
-                    <TableCell>
-                      {castes.find((c) => c.id === subCaste.caste_id)?.name ||
-                        "-"}
-                    </TableCell>
-                    <TableCell>{formatDate(subCaste.created_at)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          </>
+            <>
+              <Box sx={{ mb: 2 }}>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => handleAddClick("subcaste")}
+                >
+                  Add Sub-Caste
+                </Button>
+              </Box>
+              <TableContainer sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 640 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Caste</TableCell>
+                      <TableCell>Created At</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {subCastes.map((subCaste) => (
+                      <TableRow key={subCaste.id}>
+                        <TableCell>{subCaste.name}</TableCell>
+                        <TableCell>
+                          {castes.find((c) => c.id === subCaste.casteId)
+                            ?.name || "-"}
+                        </TableCell>
+                        <TableCell>{formatDate(subCaste.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
           )}
         </TabPanel>
       </Paper>
@@ -1078,3 +1089,4 @@ export const AdminManagement: React.FC = () => {
     </Container>
   );
 };
+

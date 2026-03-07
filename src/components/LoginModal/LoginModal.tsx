@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,9 +9,17 @@ import {
   Alert,
   DialogTitle,
   IconButton,
+  InputAdornment,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { Close } from "@mui/icons-material";
-import { useAuth } from "../hooks/useAuth";
+import {
+  ConfirmationResult,
+  RecaptchaVerifier,
+  signInWithPhoneNumber,
+} from "firebase/auth";
+import { firebaseAuth } from "../../firebase";
 
 interface LoginModalProps {
   open: boolean;
@@ -24,148 +32,161 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
-  const { signInWithEmail, signUpWithEmail, sendPasswordResetEmail } =
-    useAuth();
+  const [confirmationResult, setConfirmationResult] =
+    useState<ConfirmationResult | null>(null);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const handleResetRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      return setError("Please enter your email");
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
+  const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const initializeRecaptcha = async () => {
+    if (!recaptchaContainerRef.current) {
+      throw new Error("reCAPTCHA container not ready. Please try again.");
     }
 
-    try {
-      setError("");
-      setSuccessMessage("");
-      setLoading(true);
-      await sendPasswordResetEmail(email);
-      setSuccessMessage("Password reset link sent! Please check your email.");
-    } catch (err: any) {
-      console.error("Reset request error:", err);
-      setError(err.message || "Failed to send reset email");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email || !password) {
-      return setError("Please enter email and password");
-    }
-
-    try {
-      setError("");
-      setSuccessMessage("");
-      setLoading(true);
-      await signInWithEmail(email, password);
-
-      // Clear form
-      setEmail("");
-      setPassword("");
-      onSuccess?.();
-      onClose();
-    } catch (err: any) {
-      console.error("Sign in error:", err);
-      const errorMessage = typeof err === "string" ? err : err.message;
-
-      if (
-        errorMessage &&
-        (errorMessage.includes("Email not confirmed") ||
-          errorMessage.includes("Email link is invalid or has expired"))
-      ) {
-        setSuccessMessage(
-          "Please check your email to verify your account before logging in.",
-        );
-        setError("");
-      } else {
-        setError(errorMessage || "Failed to sign in");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!email || !password || !name || !phone) {
-      return setError(
-        "Please fill in all fields (Email, Password, Name, Phone)",
+    if (!recaptchaRef.current) {
+      recaptchaRef.current = new RecaptchaVerifier(
+        firebaseAuth,
+        recaptchaContainerRef.current,
+        {
+          size: "invisible",
+          callback: () => {},
+          "expired-callback": () => {
+            setError("reCAPTCHA expired. Please try again.");
+          },
+        },
       );
     }
 
-    if (password.length < 6) {
-      return setError("Password must be at least 6 characters");
+    await recaptchaRef.current.render();
+  };
+
+  useEffect(() => {
+    return () => {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
+  }, []);
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!/^\d{10}$/.test(phone)) {
+      setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+
+    const fullPhoneNumber = `+91${phone}`;
+
+    try {
+      setError("");
+      setSuccessMessage("");
+      setLoading(true);
+
+      await initializeRecaptcha();
+
+      if (!recaptchaRef.current) {
+        throw new Error("reCAPTCHA failed to initialize. Please try again.");
+      }
+
+      const result = await signInWithPhoneNumber(
+        firebaseAuth,
+        fullPhoneNumber,
+        recaptchaRef.current,
+      );
+      setConfirmationResult(result);
+      setSuccessMessage("OTP sent successfully.");
+    } catch (err: any) {
+      const code = err?.code || "";
+      const message = err?.message || "Failed to send OTP";
+      // Keep detailed error visible for debugging auth misconfiguration issues.
+      // eslint-disable-next-line no-console
+      console.error("Phone auth send OTP failed", {
+        err,
+        code,
+        message,
+        fullPhoneNumber,
+      });
+      if (
+        code === "auth/invalid-app-credential" ||
+        message.includes("INVALID_APP_CREDENTIAL")
+      ) {
+        setError(
+          "Firebase rejected app credentials (auth/invalid-app-credential). Check Authorized Domains, Phone provider is enabled, and API key restrictions allow Identity Toolkit.",
+        );
+      } else if (code === "auth/captcha-check-failed") {
+        setError("reCAPTCHA verification failed. Reload and try again.");
+      } else if (code === "auth/unauthorized-domain") {
+        setError(
+          "Current domain is not authorized for Firebase Auth. Add it in Firebase Console > Authentication > Settings > Authorized domains.",
+        );
+      } else {
+        setError(code ? `${code}: ${message}` : message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!confirmationResult) {
+      setError("Please request OTP first");
+      return;
+    }
+
+    if (!otp.trim()) {
+      setError("Please enter OTP");
+      return;
     }
 
     try {
       setError("");
       setSuccessMessage("");
       setLoading(true);
-      const result = await signUpWithEmail(email, password, name, phone);
 
-      if (!result.currentUser) {
-        // User created but not logged in (Email verification needed)
-        setSuccessMessage(
-          "Account created successfully! Please check your email to verify your account before logging in.",
-        );
-        setIsSignUp(false); // Switch to Sign In view
-        setEmail("");
-        setPassword("");
-        setName("");
-        setPhone("");
-      } else {
-        // User created and logged in (Auto-login)
-        setEmail("");
-        setPassword("");
-        setName("");
-        setPhone("");
-        setIsSignUp(false);
-        onSuccess?.();
-        onClose();
-      }
+      await confirmationResult.confirm(otp.trim());
+
+      setPhone("");
+      setOtp("");
+      setConfirmationResult(null);
+      onSuccess?.();
     } catch (err: any) {
-      console.error("Sign up error:", err);
-      const errorMessage = typeof err === "string" ? err : err.message;
-      setError(errorMessage || "Failed to create account");
+      setError(err?.message || "Invalid OTP");
     } finally {
       setLoading(false);
     }
   };
 
   const handleClose = () => {
-    setEmail("");
-    setPassword("");
-    setName("");
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
     setPhone("");
+    setOtp("");
     setError("");
     setSuccessMessage("");
-    setIsSignUp(false);
-    setIsForgotPassword(false);
+    setConfirmationResult(null);
     onClose();
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+      fullScreen={isMobile}
+    >
       <DialogTitle>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">
-            {isForgotPassword
-              ? "Reset Password"
-              : isSignUp
-                ? "Create Account"
-                : "Sign In"}
-          </Typography>
+          <Typography variant="h6">Sign In with Phone</Typography>
           <IconButton onClick={handleClose} size="small">
             <Close />
           </IconButton>
@@ -185,78 +206,46 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </Alert>
           )}
 
-          <form
-            onSubmit={
-              isForgotPassword
-                ? handleResetRequest
-                : isSignUp
-                  ? handleSignUp
-                  : handleSignIn
-            }
-          >
-            {/* Sign Up Fields */}
-            {!isForgotPassword && isSignUp && (
-              <>
-                <TextField
-                  label="Name"
-                  fullWidth
-                  required
-                  variant="outlined"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your Name"
-                  sx={{ mb: 2 }}
-                  disabled={loading}
-                />
-                <TextField
-                  label="Phone"
-                  fullWidth
-                  required
-                  variant="outlined"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+91..."
-                  sx={{ mb: 2 }}
-                  disabled={loading}
-                />
-              </>
-            )}
-
-            {/* Email Field - Always visible unless... well always visible */}
+          <form onSubmit={confirmationResult ? handleVerifyOtp : handleSendOtp}>
             <TextField
-              label="Email"
+              label="Mobile Number"
               fullWidth
               variant="outlined"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              value={phone}
+              onChange={(e) => {
+                const digitsOnly = e.target.value
+                  .replace(/\D/g, "")
+                  .slice(0, 10);
+                setPhone(digitsOnly);
+              }}
+              placeholder="9876543210"
               sx={{ mb: 2 }}
-              disabled={loading}
-              helperText={
-                isForgotPassword
-                  ? "We'll send you a link to reset your password."
-                  : ""
-              }
+              disabled={loading || !!confirmationResult}
+              inputProps={{
+                inputMode: "numeric",
+                pattern: "[0-9]*",
+                maxLength: 10,
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">+91</InputAdornment>
+                ),
+              }}
             />
 
-            {/* Password Field - Hidden in Forgot Password mode */}
-            {!isForgotPassword && (
+            {confirmationResult && (
               <TextField
-                label="Password"
+                label="OTP"
                 fullWidth
                 variant="outlined"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                helperText={isSignUp ? "Minimum 6 characters" : ""}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                placeholder="Enter verification code"
                 sx={{ mb: 2 }}
                 disabled={loading}
               />
             )}
 
-            {/* Submit Button */}
             <Button
               type="submit"
               variant="contained"
@@ -267,53 +256,29 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             >
               {loading
                 ? "Processing..."
-                : isForgotPassword
-                  ? "Send Reset Link"
-                  : isSignUp
-                    ? "Create Account"
-                    : "Sign In"}
+                : confirmationResult
+                  ? "Verify OTP"
+                  : "Send OTP"}
             </Button>
 
-            {/* Forgot Password Link - Only in Sign In mode */}
-            {!isForgotPassword && !isSignUp && (
+            {confirmationResult && (
               <Button
                 variant="text"
                 fullWidth
-                size="small"
                 onClick={() => {
-                  setIsForgotPassword(true);
-                  setError("");
+                  setConfirmationResult(null);
+                  setOtp("");
                   setSuccessMessage("");
+                  setError("");
                 }}
                 disabled={loading}
-                sx={{ mb: 1 }}
               >
-                Forgot Password?
+                Use different phone number
               </Button>
             )}
-
-            {/* Toggle Mode Button */}
-            <Button
-              variant="text"
-              fullWidth
-              onClick={() => {
-                if (isForgotPassword) {
-                  setIsForgotPassword(false);
-                } else {
-                  setIsSignUp(!isSignUp);
-                }
-                setError("");
-                setSuccessMessage("");
-              }}
-              disabled={loading}
-            >
-              {isForgotPassword
-                ? "Back to Sign In"
-                : isSignUp
-                  ? "Already have an account? Sign In"
-                  : "Don't have an account? Sign Up"}
-            </Button>
           </form>
+
+          <Box ref={recaptchaContainerRef} sx={{ mt: 1 }} />
         </Box>
       </DialogContent>
     </Dialog>

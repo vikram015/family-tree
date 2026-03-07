@@ -3,23 +3,23 @@
  */
 
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { SupabaseService } from '../../services/supabaseService';
+import { ApiService } from '../../services/apiService';
 
 interface Caste {
   id: string;
   name: string;
-  created_at?: string;
-  modified_at?: string;
-  is_deleted?: boolean;
+  createdAt?: string;
+  modifiedAt?: string;
+  isDeleted?: boolean;
 }
 
 interface SubCaste {
   id: string;
   name: string;
-  caste_id: string;
-  created_at?: string;
-  modified_at?: string;
-  is_deleted?: boolean;
+  casteId: string;
+  createdAt?: string;
+  modifiedAt?: string;
+  isDeleted?: boolean;
 }
 
 interface CasteState {
@@ -38,25 +38,40 @@ const initialState: CasteState = {
   error: null,
 };
 
+function normalizeCaste(row: any): Caste {
+  return {
+    ...row,
+    createdAt: row?.createdAt,
+  };
+}
+
+function normalizeSubCaste(row: any): SubCaste {
+  return {
+    ...row,
+    casteId: row?.casteId,
+    createdAt: row?.createdAt,
+  };
+}
+
 // Thunks
 export const fetchCastes = createAsyncThunk(
   'caste/fetchCastes',
   async () => {
-    return await SupabaseService.getCastes();
+    return await ApiService.getCastes();
   }
 );
 
 export const fetchSubCastes = createAsyncThunk(
   'caste/fetchSubCastes',
   async (casteId?: string) => {
-    return await SupabaseService.getSubCastes(casteId);
+    return await ApiService.getSubCastes(casteId);
   }
 );
 
 export const fetchAllSubCastes = createAsyncThunk(
   'caste/fetchAllSubCastes',
   async () => {
-    return await SupabaseService.getSubCastes();
+    return await ApiService.getSubCastes();
   }
 );
 
@@ -77,7 +92,7 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchCastes.fulfilled, (state, action: PayloadAction<Caste[]>) => {
       state.castesLoading = false;
-      state.castes = (action.payload || []).slice().sort((a, b) =>
+      state.castes = (action.payload || []).map(normalizeCaste).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -93,7 +108,7 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchSubCastes.fulfilled, (state, action: PayloadAction<SubCaste[]>) => {
       state.subCastesLoading = false;
-      state.subCastes = (action.payload || []).slice().sort((a, b) =>
+      state.subCastes = (action.payload || []).map(normalizeSubCaste).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -109,7 +124,7 @@ const casteSlice = createSlice({
     });
     builder.addCase(fetchAllSubCastes.fulfilled, (state, action: PayloadAction<SubCaste[]>) => {
       state.subCastesLoading = false;
-      state.subCastes = (action.payload || []).slice().sort((a, b) =>
+      state.subCastes = (action.payload || []).map(normalizeSubCaste).slice().sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
       );
     });
@@ -131,3 +146,4 @@ export const selectSubCastesLoading = (state: any) => state.caste.subCastesLoadi
 export const selectCasteError = (state: any) => state.caste.error;
 
 export default casteSlice.reducer;
+

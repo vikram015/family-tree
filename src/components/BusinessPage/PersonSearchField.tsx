@@ -8,7 +8,7 @@ import {
   Stack,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import { SupabaseService } from "../../services/supabaseService";
+import { ApiService } from "../../services/apiService";
 
 interface PersonSearchResult {
   id: string;
@@ -56,22 +56,22 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     setShowResults(true);
 
     try {
-      const results = await SupabaseService.searchPeopleByVillageWithHierarchy(
+      const results = await ApiService.searchPeopleByVillageWithHierarchy(
         searchValue,
         villageId,
       );
 
       const peopleSearchResults: PersonSearchResult[] = results.map(
         (person: any) => ({
-          id: person.person_id,
-          name: person.person_name,
+          id: person.personId,
+          name: person.personName,
           gender: person.gender,
           dob: person.dob,
-          treeId: person.tree_id,
-          hierarchy: person.parent_hierarchy || [],
-          villageName: person.village_name,
-          casteName: person.caste_name,
-          subCasteName: person.sub_caste_name,
+          treeId: person.treeId,
+          hierarchy: person.parentHierarchy || [],
+          villageName: person.villageName,
+          casteName: person.casteName,
+          subCasteName: person.subCasteName,
         }),
       );
 
@@ -211,3 +211,4 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     </Box>
   );
 };
+

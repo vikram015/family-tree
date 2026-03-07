@@ -5,6 +5,12 @@ import {
   selectVillages,
   selectVillageLoading,
 } from "../store/slices/villageSlice";
+import {
+  fetchAllSubCastes,
+  fetchCastes,
+  selectCastes,
+  selectSubCastes,
+} from "../store/slices/casteSlice";
 
 /**
  * Component to handle village data initialization
@@ -18,12 +24,23 @@ export function VillageInitializer({
   const dispatch = useAppDispatch();
   const villages = useAppSelector(selectVillages);
   const loading = useAppSelector(selectVillageLoading);
+  const castes = useAppSelector(selectCastes);
+  const subCastes = useAppSelector(selectSubCastes);
   const retryCount = useRef(0);
 
   useEffect(() => {
     console.log("VillageInitializer: Fetching villages");
     dispatch(fetchVillages());
   }, [dispatch]);
+
+  useEffect(() => {
+    if (castes.length === 0) {
+      dispatch(fetchCastes());
+    }
+    if (subCastes.length === 0) {
+      dispatch(fetchAllSubCastes());
+    }
+  }, [dispatch, castes.length, subCastes.length]);
 
   // Retry if villages failed to load (empty after loading finished)
   useEffect(() => {
