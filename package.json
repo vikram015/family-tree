@@ -54,7 +54,7 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "firebase:clean": "powershell -ExecutionPolicy Bypass -Command \"Remove-Item -Recurse -Force .firebase -ErrorAction Ignore\"",
-    "deploy:firebase": "npm run build && npm run firebase:clean && npx firebase-tools@latest deploy --only hosting --project kinvia-fe353"
+    "deploy:firebase": "npm run build && npm run firebase:clean && npx --yes firebase-tools@latest deploy --only hosting --project kinvia-fe353"
   },
   "eslintConfig": {
     "extends": "react-app"

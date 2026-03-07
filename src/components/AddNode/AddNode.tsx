@@ -421,6 +421,11 @@ const AddNode: React.FC<AddNodeProps> = ({
               await ApiService.uploadPersonPhoto(resultId, photoBlob);
             } catch (err) {
               console.error("Photo upload failed:", err);
+              alert(
+                `Photo upload failed: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
             } finally {
               setPhotoUploading(false);
             }

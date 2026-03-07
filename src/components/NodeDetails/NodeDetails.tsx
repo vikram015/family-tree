@@ -608,7 +608,13 @@ export const NodeDetails = memo(function NodeDetails({
                         setEditedPhotoPreview(url);
                       } catch (err) {
                         console.error("Photo upload failed:", err);
-                        alert("Failed to upload photo. Please try again.");
+                        alert(
+                          `Failed to upload photo: ${
+                            err instanceof Error
+                              ? err.message
+                              : String(err)
+                          }`,
+                        );
                       } finally {
                         setPhotoUploading(false);
                       }
