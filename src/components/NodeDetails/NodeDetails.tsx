@@ -73,8 +73,6 @@ interface NodeDetailsProps {
   };
 }
 
-const EXCLUDED_FIELDS = ["Gotra", "Village", "Note"];
-
 export const NodeDetails = memo(function NodeDetails({
   node,
   nodes,
@@ -100,14 +98,22 @@ export const NodeDetails = memo(function NodeDetails({
   const [selectedExternalPerson, setSelectedExternalPerson] =
     useState<any>(null);
   const [externalSearchValue, setExternalSearchValue] = useState("");
+  const [linkExternalRelationSubtype, setLinkExternalRelationSubtype] =
+    useState<RelType>(RelType.married);
+  const [linkExternalStartDate, setLinkExternalStartDate] = useState("");
+  const [linkExternalEndDate, setLinkExternalEndDate] = useState("");
+  const [editSpouseDatesOpen, setEditSpouseDatesOpen] = useState(false);
+  const [editSpouseId, setEditSpouseId] = useState("");
+  const [editSpouseRelationSubtype, setEditSpouseRelationSubtype] =
+    useState<RelType>(RelType.married);
+  const [editSpouseStartDate, setEditSpouseStartDate] = useState("");
+  const [editSpouseEndDate, setEditSpouseEndDate] = useState("");
+  const [isSavingSpouseDates, setIsSavingSpouseDates] = useState(false);
 
   // Edit State
   const [editedName, setEditedName] = useState("");
   const [editedDob, setEditedDob] = useState("");
-  const [editedNotes, setEditedNotes] = useState("");
   const [editedGender, setEditedGender] = useState<Gender>(Gender.male);
-  const [editedGotra, setEditedGotra] = useState("");
-  const [editedVillage, setEditedVillage] = useState("");
   const [editedCustomFields, setEditedCustomFields] = useState<
     Record<string, string>
   >({});
@@ -147,12 +153,8 @@ export const NodeDetails = memo(function NodeDetails({
       setView(initialView || "details");
       setEditedName(node.name || "");
       setEditedDob(node.dob || "");
-      setEditedNotes(node.notes || "");
       setEditedGender(node.gender || Gender.male);
 
-      // Initial values from node (will be updated by fetch)
-      setEditedGotra(node.customFields?.["Gotra"] || "");
-      setEditedVillage(node.customFields?.["Village"] || "");
       setEditedCustomFields(node.customFields || {});
       setDisplayCustomFields(node.customFields || {});
       setEditedBloodGroup(node.bloodGroup || "");
@@ -163,10 +165,6 @@ export const NodeDetails = memo(function NodeDetails({
       // Fetch latest custom fields separately
       ApiService.getPersonCustomFields(node.id).then((fields) => {
         setEditedCustomFields(fields);
-        setEditedGotra(fields["Gotra"] || "");
-        setEditedVillage(fields["Village"] || "");
-        // Check local property first, then fallback to custom field "Note"
-        setEditedNotes(node.notes || fields["Note"] || "");
         setDisplayCustomFields(fields);
       });
     }
@@ -244,13 +242,7 @@ export const NodeDetails = memo(function NodeDetails({
             !editedIsAlive && editedDeceasedDate
               ? editedDeceasedDate
               : undefined,
-          // We save notes into customFields under "Note" now, not as a core property
-          customFields: {
-            ...editedCustomFields,
-            Gotra: editedGotra.trim(),
-            Village: editedVillage.trim(),
-            Note: editedNotes.trim(),
-          },
+          customFields: editedCustomFields,
         };
         await props.onUpdate(node.id, updates);
         setView("details");
@@ -265,11 +257,8 @@ export const NodeDetails = memo(function NodeDetails({
     node,
     editedName,
     editedDob,
-    editedNotes,
     editedGender,
     editedCustomFields,
-    editedGotra,
-    editedVillage,
     editedBloodGroup,
     editedIsAlive,
     editedDeceasedDate,
@@ -286,15 +275,29 @@ export const NodeDetails = memo(function NodeDetails({
   const handleLinkExternalClick = useCallback(() => {
     if (!currentUser) {
       openLoginModal(() => {
+        setLinkExternalRelationSubtype(RelType.married);
+        setLinkExternalStartDate("");
+        setLinkExternalEndDate("");
         setView("link-external");
       });
       return;
     }
+    setLinkExternalRelationSubtype(RelType.married);
+    setLinkExternalStartDate("");
+    setLinkExternalEndDate("");
     setView("link-external");
   }, [currentUser, openLoginModal]);
 
   const handleConfirmLinkExternal = async () => {
     if (!node || !selectedExternalPerson) return;
+    if (
+      linkExternalStartDate &&
+      linkExternalEndDate &&
+      dayjs(linkExternalEndDate).isBefore(dayjs(linkExternalStartDate), "day")
+    ) {
+      alert("Marriage end date cannot be before marriage start date.");
+      return;
+    }
 
     // Find spouse of current node
     const spouse =
@@ -327,6 +330,9 @@ export const NodeDetails = memo(function NodeDetails({
       await ApiService.addSpouse(
         spouse.id,
         selectedExternalPerson.id,
+        linkExternalRelationSubtype,
+        linkExternalStartDate || undefined,
+        linkExternalEndDate || undefined,
         node.id,
       );
 
@@ -338,6 +344,82 @@ export const NodeDetails = memo(function NodeDetails({
     }
   };
 
+  const handleOpenSpouseDateEditor = useCallback(() => {
+    if (!node) return;
+
+    const openEditor = () => {
+      const spouseList = node.spouses || [];
+      if (spouseList.length === 0) return;
+      const firstSpouse: any = spouseList[0];
+      setEditSpouseId(firstSpouse.id || "");
+      setEditSpouseRelationSubtype(
+        (firstSpouse.relationSubtype || firstSpouse.type || RelType.married) as RelType,
+      );
+      setEditSpouseStartDate(firstSpouse.startDate || "");
+      setEditSpouseEndDate(firstSpouse.endDate || "");
+      setEditSpouseDatesOpen(true);
+    };
+
+    if (!currentUser) {
+      openLoginModal(() => {
+        openEditor();
+      });
+      return;
+    }
+
+    openEditor();
+  }, [node, currentUser, openLoginModal]);
+
+  const handleChangeEditSpouse = useCallback(
+    (spouseId: string) => {
+      if (!node) return;
+      const relation: any = (node.spouses || []).find((s: any) => s.id === spouseId);
+      setEditSpouseId(spouseId);
+      setEditSpouseRelationSubtype(
+        (relation?.relationSubtype || relation?.type || RelType.married) as RelType,
+      );
+      setEditSpouseStartDate(relation?.startDate || "");
+      setEditSpouseEndDate(relation?.endDate || "");
+    },
+    [node],
+  );
+
+  const handleSaveSpouseDates = useCallback(async () => {
+    if (!node || !editSpouseId || isSavingSpouseDates) return;
+    if (
+      editSpouseStartDate &&
+      editSpouseEndDate &&
+      dayjs(editSpouseEndDate).isBefore(dayjs(editSpouseStartDate), "day")
+    ) {
+      alert("Marriage end date cannot be before marriage start date.");
+      return;
+    }
+
+    try {
+      setIsSavingSpouseDates(true);
+      await ApiService.updateSpouseRelationDates(
+        node.id,
+        editSpouseId,
+        editSpouseRelationSubtype,
+        editSpouseStartDate || undefined,
+        editSpouseEndDate || undefined,
+      );
+      setEditSpouseDatesOpen(false);
+      window.location.reload();
+    } catch (error: any) {
+      alert("Failed to update spouse dates: " + (error?.message || error));
+    } finally {
+      setIsSavingSpouseDates(false);
+    }
+  }, [
+    node,
+    editSpouseId,
+    editSpouseRelationSubtype,
+    editSpouseStartDate,
+    editSpouseEndDate,
+    isSavingSpouseDates,
+  ]);
+
   const relNodeMapper = useCallback(
     (rel: any) => {
       const foundNode = nodes.find((n) => n.id === rel.id);
@@ -345,6 +427,9 @@ export const NodeDetails = memo(function NodeDetails({
       return {
         ...foundNode,
         type: rel.type,
+        relationSubtype: rel.relationSubtype || rel.type,
+        startDate: rel.startDate,
+        endDate: rel.endDate,
       };
     },
     [nodes],
@@ -499,6 +584,11 @@ export const NodeDetails = memo(function NodeDetails({
                         Link & Replace
                       </Button>
                     )}
+                  {node.spouses && node.spouses.length > 0 && (
+                    <Button variant="outlined" onClick={handleOpenSpouseDateEditor}>
+                      Edit Marriage Dates
+                    </Button>
+                  )}
                 </Box>
 
                 {/* Details List */}
@@ -656,25 +746,10 @@ export const NodeDetails = memo(function NodeDetails({
                     format="DD/MM/YYYY"
                   />
                 </Suspense>
-                <TextField
-                  label="Gotra"
-                  value={editedGotra}
-                  onChange={(e) => setEditedGotra(e.target.value)}
-                  fullWidth
-                />
-                <TextField
-                  label="Village"
-                  value={editedVillage}
-                  onChange={(e) => setEditedVillage(e.target.value)}
-                  fullWidth
-                />
-                <TextField
-                  label="Notes"
-                  value={editedNotes}
-                  onChange={(e) => setEditedNotes(e.target.value)}
-                  fullWidth
-                  multiline
-                  rows={3}
+                <AdditionalDetails
+                  value={editedCustomFields}
+                  onChange={setEditedCustomFields}
+                  showAdditionalSection={false}
                 />
                 <FormControl fullWidth>
                   <InputLabel>Blood Group</InputLabel>
@@ -748,7 +823,7 @@ export const NodeDetails = memo(function NodeDetails({
                 <AdditionalDetails
                   value={editedCustomFields}
                   onChange={setEditedCustomFields}
-                  excludeFields={EXCLUDED_FIELDS}
+                  showUpfrontFields={false}
                 />
               </Stack>
             </DialogContent>
@@ -849,6 +924,50 @@ export const NodeDetails = memo(function NodeDetails({
                 placeholder="Search for waiting spouse..."
                 label="Select Real Person"
               />
+
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Relation Type</InputLabel>
+                <Select
+                  value={linkExternalRelationSubtype}
+                  onChange={(e) => {
+                    const next = e.target.value as RelType;
+                    setLinkExternalRelationSubtype(next);
+                    if (next !== RelType.divorced) {
+                      setLinkExternalEndDate("");
+                    }
+                  }}
+                  label="Relation Type"
+                >
+                  <MenuItem value={RelType.married}>married</MenuItem>
+                  <MenuItem value={RelType.divorced}>divorced</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Suspense fallback={<TextField fullWidth label="Marriage Start Date" sx={{ mt: 2 }} />}>
+                <DatePicker
+                  label="Marriage Start Date (optional)"
+                  value={linkExternalStartDate ? dayjs(linkExternalStartDate) : null}
+                  onChange={(val) =>
+                    setLinkExternalStartDate(val ? val.format("YYYY-MM-DD") : "")
+                  }
+                  slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
+                  format="DD/MM/YYYY"
+                />
+              </Suspense>
+
+              {linkExternalRelationSubtype === RelType.divorced && (
+                <Suspense fallback={<TextField fullWidth label="Marriage End Date" sx={{ mt: 2 }} />}>
+                  <DatePicker
+                    label="Marriage End Date (optional)"
+                    value={linkExternalEndDate ? dayjs(linkExternalEndDate) : null}
+                    onChange={(val) =>
+                      setLinkExternalEndDate(val ? val.format("YYYY-MM-DD") : "")
+                    }
+                    slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
+                    format="DD/MM/YYYY"
+                  />
+                </Suspense>
+              )}
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setView("details")}>Cancel</Button>
@@ -863,6 +982,88 @@ export const NodeDetails = memo(function NodeDetails({
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      <Dialog
+        open={editSpouseDatesOpen}
+        onClose={() => setEditSpouseDatesOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Edit Marriage Dates</DialogTitle>
+        <DialogContent dividers>
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Spouse</InputLabel>
+            <Select
+              value={editSpouseId}
+              onChange={(e) => handleChangeEditSpouse(e.target.value)}
+              label="Spouse"
+            >
+              {(node?.spouses || []).map((rel: any) => {
+                const spouseNode = nodes.find((n) => n.id === rel.id);
+                return (
+                  <MenuItem key={rel.id} value={rel.id}>
+                    {spouseNode?.name || rel.id}
+                  </MenuItem>
+                );
+              })}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Relation Type</InputLabel>
+            <Select
+              value={editSpouseRelationSubtype}
+              onChange={(e) => {
+                const next = e.target.value as RelType;
+                setEditSpouseRelationSubtype(next);
+                if (next !== RelType.divorced) {
+                  setEditSpouseEndDate("");
+                }
+              }}
+              label="Relation Type"
+            >
+              <MenuItem value={RelType.married}>married</MenuItem>
+              <MenuItem value={RelType.divorced}>divorced</MenuItem>
+            </Select>
+          </FormControl>
+
+          <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
+            <DatePicker
+              label="Marriage Start Date (optional)"
+              value={editSpouseStartDate ? dayjs(editSpouseStartDate) : null}
+              onChange={(val) =>
+                setEditSpouseStartDate(val ? val.format("YYYY-MM-DD") : "")
+              }
+              slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
+              format="DD/MM/YYYY"
+            />
+          </Suspense>
+
+          {editSpouseRelationSubtype === RelType.divorced && (
+            <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
+              <DatePicker
+                label="Marriage End Date (optional)"
+                value={editSpouseEndDate ? dayjs(editSpouseEndDate) : null}
+                onChange={(val) =>
+                  setEditSpouseEndDate(val ? val.format("YYYY-MM-DD") : "")
+                }
+                slotProps={{ textField: { fullWidth: true } }}
+                format="DD/MM/YYYY"
+              />
+            </Suspense>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditSpouseDatesOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleSaveSpouseDates}
+            variant="contained"
+            disabled={!editSpouseId || isSavingSpouseDates}
+          >
+            {isSavingSpouseDates ? "Saving..." : "Save"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog

@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Node, RelType } from "relatives-tree/lib/types";
+import { RelType } from "relatives-tree/lib/types";
 import {
   Box,
   Typography,
@@ -63,8 +63,6 @@ interface AddNodeProps {
   initialGender?: "male" | "female" | "other" | "";
 }
 
-const EXCLUDED_FIELDS = ["Gotra", "Village"];
-
 const AddNode: React.FC<AddNodeProps> = ({
   targetId,
   onAdd,
@@ -81,11 +79,11 @@ const AddNode: React.FC<AddNodeProps> = ({
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
     initialGender || "male",
   );
-  const [gotra, setGotra] = useState("");
-  const [village, setVillage] = useState("");
   const [relation, setRelation] = useState<"child" | "spouse" | "parent">(
     initialRelation || "child",
   );
+  const [relationStartDate, setRelationStartDate] = useState("");
+  const [relationEndDate, setRelationEndDate] = useState("");
   const [selectedRelType, setSelectedRelType] = useState<RelType>(
     RelType.blood,
   );
@@ -150,6 +148,8 @@ const AddNode: React.FC<AddNodeProps> = ({
   useEffect(() => {
     if (relation !== "spouse") {
       setMode("create");
+      setRelationStartDate("");
+      setRelationEndDate("");
     }
   }, [relation]);
   const targetNode = useMemo(() => {
@@ -224,9 +224,9 @@ const AddNode: React.FC<AddNodeProps> = ({
     setName("");
     setDob("");
     setGender("");
-    setGotra("");
-    setVillage("");
     setRelation("child");
+    setRelationStartDate("");
+    setRelationEndDate("");
     setCustomFields({});
     setMode("create");
     setSelectedPerson(null);
@@ -257,9 +257,9 @@ const AddNode: React.FC<AddNodeProps> = ({
     setName("");
     setDob("");
     setGender("");
-    setGotra("");
-    setVillage("");
     setRelation("child");
+    setRelationStartDate("");
+    setRelationEndDate("");
     setCustomFields({});
     setMode("create");
     setSelectedPerson(null);
@@ -349,12 +349,24 @@ const AddNode: React.FC<AddNodeProps> = ({
     // If linking existing person
     if (mode === "link") {
       if (!selectedPerson) return;
+      if (
+        relation === "spouse" &&
+        relationStartDate &&
+        relationEndDate &&
+        dayjs(relationEndDate).isBefore(dayjs(relationStartDate), "day")
+      ) {
+        alert("Marriage end date cannot be before marriage start date.");
+        return;
+      }
       setIsSaving(true);
       try {
         await onAdd?.(
           {
             id: selectedPerson.id,
             name: selectedPerson.name,
+            relationSubtype: selectedRelType,
+            relationStartDate: relationStartDate || undefined,
+            relationEndDate: relationEndDate || undefined,
           } as unknown as Partial<FNode>, // Pass existing ID
           relation,
           targetId,
@@ -373,11 +385,15 @@ const AddNode: React.FC<AddNodeProps> = ({
       return;
     }
 
-    const mergedFields = {
-      ...customFields,
-      Gotra: gotra.trim(),
-      Village: village.trim(),
-    };
+    if (
+      relation === "spouse" &&
+      relationStartDate &&
+      relationEndDate &&
+      dayjs(relationEndDate).isBefore(dayjs(relationStartDate), "day")
+    ) {
+      alert("Marriage end date cannot be before marriage start date.");
+      return;
+    }
 
     const processAdd = async () => {
       setIsSaving(true);
@@ -402,7 +418,11 @@ const AddNode: React.FC<AddNodeProps> = ({
           parents: parents.length ? parents : undefined,
           spouses: [],
           customFields:
-            Object.keys(mergedFields).length > 0 ? mergedFields : undefined,
+            Object.keys(customFields).length > 0 ? customFields : undefined,
+          relationStartDate:
+            relation === "spouse" ? relationStartDate || undefined : undefined,
+          relationEndDate:
+            relation === "spouse" ? relationEndDate || undefined : undefined,
         };
 
         const resultId = await onAdd?.(
@@ -458,8 +478,6 @@ const AddNode: React.FC<AddNodeProps> = ({
     bloodGroup,
     isAlive,
     deceasedDate,
-    gotra,
-    village,
     customFields,
     relation,
     targetId,
@@ -469,6 +487,8 @@ const AddNode: React.FC<AddNodeProps> = ({
     selectedRelType,
     mode,
     selectedPerson,
+    relationStartDate,
+    relationEndDate,
     photoBlob,
     isSaving,
   ]);
@@ -627,7 +647,13 @@ const AddNode: React.FC<AddNodeProps> = ({
               <RadioGroup
                 row
                 value={selectedRelType}
-                onChange={(e) => setSelectedRelType(e.target.value as RelType)}
+                onChange={(e) => {
+                  const nextType = e.target.value as RelType;
+                  setSelectedRelType(nextType);
+                  if (nextType !== RelType.divorced) {
+                    setRelationEndDate("");
+                  }
+                }}
               >
                 {relTypes.map((type) => (
                   <FormControlLabel
@@ -642,22 +668,49 @@ const AddNode: React.FC<AddNodeProps> = ({
           )}
 
           {!isFirstNode && relation === "spouse" && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Action
-              </Typography>
-              <ToggleButtonGroup
-                color="primary"
-                value={mode}
-                exclusive
-                onChange={(_, newMode) => newMode && setMode(newMode)}
-                size="small"
-                fullWidth
-              >
-                <ToggleButton value="create">Create New Profile</ToggleButton>
-                <ToggleButton value="link">Link Existing Profile</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
+            <Stack spacing={2} sx={{ mb: 1 }}>
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>
+                  Action
+                </Typography>
+                <ToggleButtonGroup
+                  color="primary"
+                  value={mode}
+                  exclusive
+                  onChange={(_, newMode) => newMode && setMode(newMode)}
+                  size="small"
+                  fullWidth
+                >
+                  <ToggleButton value="create">Create New Profile</ToggleButton>
+                  <ToggleButton value="link">Link Existing Profile</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+
+              <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
+                <DatePicker
+                  label="Marriage Start Date (optional)"
+                  value={relationStartDate ? dayjs(relationStartDate) : null}
+                  onChange={(val) =>
+                    setRelationStartDate(val ? val.format("YYYY-MM-DD") : "")
+                  }
+                  slotProps={{ textField: { fullWidth: true } }}
+                  format="DD/MM/YYYY"
+                />
+              </Suspense>
+              {selectedRelType === RelType.divorced && (
+                <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
+                  <DatePicker
+                    label="Marriage End Date (optional)"
+                    value={relationEndDate ? dayjs(relationEndDate) : null}
+                    onChange={(val) =>
+                      setRelationEndDate(val ? val.format("YYYY-MM-DD") : "")
+                    }
+                    slotProps={{ textField: { fullWidth: true } }}
+                    format="DD/MM/YYYY"
+                  />
+                </Suspense>
+              )}
+            </Stack>
           )}
 
           {mode === "link" && relation === "spouse" ? (
@@ -781,18 +834,10 @@ const AddNode: React.FC<AddNodeProps> = ({
                 />
               </Suspense>
 
-              <TextField
-                label="Gotra"
-                value={gotra}
-                onChange={(e) => setGotra(e.target.value)}
-                fullWidth
-              />
-
-              <TextField
-                label="Village"
-                value={village}
-                onChange={(e) => setVillage(e.target.value)}
-                fullWidth
+              <AdditionalDetails
+                value={customFields}
+                onChange={setCustomFields}
+                showAdditionalSection={false}
               />
 
               <FormControl fullWidth>
@@ -875,7 +920,7 @@ const AddNode: React.FC<AddNodeProps> = ({
               <AdditionalDetails
                 value={customFields}
                 onChange={setCustomFields}
-                excludeFields={EXCLUDED_FIELDS}
+                showUpfrontFields={false}
               />
             </>
           )}

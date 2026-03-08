@@ -111,6 +111,22 @@ interface CompleteTreeResponse {
   };
 }
 
+export type PeopleFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "date"
+  | "boolean"
+  | "email"
+  | "phone";
+
+export interface PredefinedPeopleField {
+  fieldName: string;
+  type: PeopleFieldType;
+  sortOrder: number;
+  showUpfront: boolean;
+}
+
 export const ApiService = {
   normalizeDateValue(value?: string): string | undefined {
     if (value == null) return undefined;
@@ -254,11 +270,43 @@ export const ApiService = {
   /**
    * Add a spouse relationship (bidirectional) and link children
    */
-  async addSpouse(personId: string, spouseId: string, placeholderId?: string): Promise<void> {
+  async addSpouse(
+    personId: string,
+    spouseId: string,
+    relationSubtype?: string,
+    relationStartDate?: string,
+    relationEndDate?: string,
+    placeholderId?: string,
+  ): Promise<void> {
+    const normalizedStartDate = this.normalizeDateValue(relationStartDate);
+    const normalizedEndDate = this.normalizeDateValue(relationEndDate);
+
     await backendApi.post(`/api/people/spouse-link`, {
       personId1: personId,
       personId2: spouseId,
+      relationSubtype: relationSubtype || undefined,
+      relationStartDate: normalizedStartDate,
+      relationEndDate: normalizedEndDate,
       replacePersonId: placeholderId || undefined,
+    });
+  },
+
+  async updateSpouseRelationDates(
+    personId1: string,
+    personId2: string,
+    relationSubtype?: string,
+    relationStartDate?: string,
+    relationEndDate?: string,
+  ): Promise<void> {
+    const normalizedStartDate = this.normalizeDateValue(relationStartDate);
+    const normalizedEndDate = this.normalizeDateValue(relationEndDate);
+
+    await backendApi.patch(`/api/people/spouse-relation`, {
+      personId1,
+      personId2,
+      relationSubtype: relationSubtype || undefined,
+      relationStartDate: normalizedStartDate || null,
+      relationEndDate: normalizedEndDate || null,
     });
   },
 
@@ -296,10 +344,14 @@ export const ApiService = {
     bloodGroup?: string,
     isAlive?: boolean,
     deceasedDate?: string,
-    photoUrl?: string
+    photoUrl?: string,
+    relationStartDate?: string,
+    relationEndDate?: string,
   ): Promise<AddPersonResult> {
     const normalizedDob = this.normalizeDateValue(dob);
     const normalizedDeceasedDate = this.normalizeDateValue(deceasedDate);
+    const normalizedRelationStartDate = this.normalizeDateValue(relationStartDate);
+    const normalizedRelationEndDate = this.normalizeDateValue(relationEndDate);
 
     return backendApi.post<AddPersonResult>("/api/people", {
       treeId,
@@ -316,6 +368,8 @@ export const ApiService = {
       isAlive,
       deceasedDate: normalizedDeceasedDate,
       photoUrl,
+      relationStartDate: normalizedRelationStartDate,
+      relationEndDate: normalizedRelationEndDate,
     });
   },
 
@@ -323,8 +377,8 @@ export const ApiService = {
    * Get all predefined field names from people_field table
    * Used for field dropdown in additional details
    */
-  async getPredefinedFields(): Promise<string[]> {
-    return backendApi.get<string[]>('/api/people/predefined-fields');
+  async getPredefinedFields(): Promise<PredefinedPeopleField[]> {
+    return backendApi.get<PredefinedPeopleField[]>('/api/people/predefined-fields');
   },
 
   /**

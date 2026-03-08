@@ -91,7 +91,21 @@ BEGIN
 
       -- 3. If missing AND is standard field (Gotra/Village/Note), auto-create
       IF v_field_id IS NULL AND (LOWER(v_field_key) = 'gotra' OR LOWER(v_field_key) = 'village' OR LOWER(v_field_key) = 'note') THEN
-         INSERT INTO people_field (field_name) VALUES (v_field_key) RETURNING id INTO v_field_id;
+         INSERT INTO people_field (field_name, type, sort_order, show_upfront)
+         VALUES (
+           v_field_key,
+           CASE LOWER(v_field_key)
+             WHEN 'note' THEN 'textarea'
+             ELSE 'text'
+           END,
+           CASE LOWER(v_field_key)
+             WHEN 'village' THEN 1
+             WHEN 'gotra' THEN 2
+             ELSE 3
+           END,
+           TRUE
+         )
+         RETURNING id INTO v_field_id;
       END IF;
       
       -- Only insert if field exists

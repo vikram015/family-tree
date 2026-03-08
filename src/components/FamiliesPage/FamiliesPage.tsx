@@ -130,6 +130,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 person.spouses?.map((s: any) => ({
                   id: s.id,
                   type: (s.type || RelType.married) as RelType,
+                  relationSubtype: s.relationSubtype || s.type || RelType.married,
+                  startDate: s.startDate || undefined,
+                  endDate: s.endDate || undefined,
                 })) || [],
               siblings:
                 person.siblings?.map((s: any) => ({
@@ -322,6 +325,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               raw.spouses?.map((s: any) => ({
                 id: s.id,
                 type: (s.type || RelType.married) as RelType,
+                relationSubtype: s.relationSubtype || s.type || RelType.married,
+                startDate: s.startDate || undefined,
+                endDate: s.endDate || undefined,
               })) || [],
             siblings:
               raw.siblings?.map((s: any) => ({
@@ -466,7 +472,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (node.id && relation === "spouse" && targetId) {
         try {
           setIsLoading(true);
-          await ApiService.addSpouse(targetId, node.id);
+          await ApiService.addSpouse(
+            targetId,
+            node.id,
+            node.relationSubtype,
+            node.relationStartDate,
+            node.relationEndDate,
+          );
           await loadTreeData(true);
           return node.id; // Return the linked person ID
         } catch (err) {
@@ -543,6 +555,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           coreNode.bloodGroup,
           coreNode.isAlive,
           coreNode.deceasedDate,
+          undefined,
+          coreNode.relationStartDate,
+          coreNode.relationEndDate,
         );
 
         // Efficiently merge affected nodes into existing state instead of full reload
