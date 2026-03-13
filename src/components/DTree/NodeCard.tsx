@@ -188,7 +188,7 @@ export function renderNodeCardSvg(
   isMain?: boolean,
   isHighlighted?: boolean,
   isMobile?: boolean,
-  canEditTree: boolean = true,
+  canEditNode: boolean = true,
 ): string {
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
@@ -344,7 +344,7 @@ export function renderNodeCardSvg(
   }
 
   // === Action icons (edit + add) INSIDE the card — desktop only ===
-  if (canEditTree && extra?.id && !extra?._placeholder && !isMobile) {
+  if (canEditNode && extra?.id && !extra?._placeholder && !isMobile) {
     const iconR = 8;
     const gap = 4;
     // Position: bottom-right inside the card

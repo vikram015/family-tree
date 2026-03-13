@@ -76,6 +76,8 @@ interface ImageCropperProps {
   uploading?: boolean;
   /** Size of the preview circle */
   previewSize?: number;
+  /** Visual style for the preview */
+  previewVariant?: "circle" | "rounded";
 }
 
 const ImageCropper: React.FC<ImageCropperProps> = ({
@@ -84,6 +86,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   onRemove,
   uploading = false,
   previewSize = 80,
+  previewVariant = "circle",
 }) => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -142,6 +145,8 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     setImageSrc(null);
   }, []);
 
+  const previewRadius = previewVariant === "rounded" ? "24px" : "50%";
+
   return (
     <>
       {/* Preview + Upload trigger */}
@@ -167,7 +172,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
               style={{
                 width: previewSize,
                 height: previewSize,
-                borderRadius: "50%",
+                borderRadius: previewRadius,
                 objectFit: "cover",
                 border: "2px solid #e0e0e0",
               }}
@@ -177,7 +182,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
               sx={{
                 width: previewSize,
                 height: previewSize,
-                borderRadius: "50%",
+                borderRadius: previewRadius,
                 bgcolor: "action.hover",
                 display: "flex",
                 alignItems: "center",
@@ -197,7 +202,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 left: 0,
                 width: previewSize,
                 height: previewSize,
-                borderRadius: "50%",
+                borderRadius: previewRadius,
                 bgcolor: "rgba(255,255,255,0.7)",
                 display: "flex",
                 alignItems: "center",

@@ -7,7 +7,6 @@ import {
   Box,
   Typography,
   IconButton,
-  Divider,
   TextField,
   Button,
   CircularProgress,
@@ -25,7 +24,10 @@ import {
   Select,
   MenuItem,
   Switch,
+  Paper,
+  Chip,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import dayjs from "dayjs";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
@@ -33,6 +35,9 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import LinkIcon from "@mui/icons-material/Link";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
+import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
+import BloodtypeOutlinedIcon from "@mui/icons-material/BloodtypeOutlined";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
@@ -63,6 +68,7 @@ interface NodeDetailsProps {
   ) => Promise<string | undefined> | Promise<void> | void;
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
   onDelete?: (nodeId: string) => void;
+  canEditNode?: (nodeId: string) => boolean;
   treeId?: string;
   /** Open directly in a specific view (e.g. "add" when clicking a placeholder) */
   initialView?: "details" | "edit" | "add";
@@ -441,6 +447,42 @@ export const NodeDetails = memo(function NodeDetails({
   const children = node.children?.map(relNodeMapper).filter(Boolean) || [];
   const siblings = node.siblings?.map(relNodeMapper).filter(Boolean) || [];
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
+  const canEditCurrentNode = props.canEditNode ? props.canEditNode(node.id) : true;
+  const summaryItems = [
+    {
+      key: "gender",
+      label:
+        node.gender === Gender.male
+          ? "Male"
+          : node.gender === Gender.female
+            ? "Female"
+            : "Other",
+    },
+    node.dob
+      ? {
+          key: "dob",
+          label: `Born ${formatDisplayDate(node.dob)}`,
+          icon: <CakeOutlinedIcon sx={{ fontSize: 16 }} />,
+        }
+      : null,
+    {
+      key: "alive",
+      label:
+        node.isAlive === false
+          ? node.deceasedDate
+            ? `Deceased ${formatDisplayDate(node.deceasedDate)}`
+            : "Deceased"
+          : "Living",
+      icon: <FavoriteBorderOutlinedIcon sx={{ fontSize: 16 }} />,
+    },
+    node.bloodGroup
+      ? {
+          key: "blood",
+          label: `Blood ${node.bloodGroup}`,
+          icon: <BloodtypeOutlinedIcon sx={{ fontSize: 16 }} />,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; icon?: React.ReactNode }>;
 
   return (
     <>
@@ -478,40 +520,39 @@ export const NodeDetails = memo(function NodeDetails({
             </AppBar>
             <DialogContent>
               <Stack spacing={2}>
-                {/* Photo & Basic Info */}
-                <Box
+                <Paper
+                  variant="outlined"
                   sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    mb: 2,
+                    p: { xs: 2, sm: 2.5 },
+                    borderRadius: 3,
+                    background: (muiTheme) =>
+                      `linear-gradient(180deg, ${alpha(muiTheme.palette.primary.main, 0.06)} 0%, ${muiTheme.palette.background.paper} 100%)`,
                   }}
                 >
+                  <Stack spacing={2} alignItems="center" sx={{ textAlign: "center" }}>
                   {node.photo ? (
                     <img
                       src={node.photo}
                       alt={node.name}
                       style={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: "50%",
+                        width: 112,
+                        height: 112,
+                        borderRadius: "24px",
                         objectFit: "cover",
-                        marginBottom: 16,
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                        boxShadow: "0 10px 24px rgba(0,0,0,0.12)",
                       }}
                     />
                   ) : (
                     <Box
                       sx={{
-                        width: 120,
-                        height: 120,
-                        borderRadius: "50%",
+                        width: 112,
+                        height: 112,
+                        borderRadius: "24px",
                         bgcolor: "action.hover",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        mb: 2,
-                        fontSize: 48,
+                        fontSize: 44,
                         fontWeight: "bold",
                         color: "text.secondary",
                       }}
@@ -519,7 +560,32 @@ export const NodeDetails = memo(function NodeDetails({
                       {node.name.charAt(0)}
                     </Box>
                   )}
-                  <Typography variant="subtitle1" color="text.secondary">
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                      {node.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                      Family profile
+                    </Typography>
+                  </Box>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    useFlexGap
+                    flexWrap="wrap"
+                    justifyContent="center"
+                  >
+                    {summaryItems.map((item) => (
+                      <Chip
+                        key={item.key}
+                        icon={item.icon as any}
+                        label={item.label}
+                        size="small"
+                        variant="outlined"
+                      />
+                    ))}
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary">
                     {node.gender === Gender.male
                       ? "Male"
                       : node.gender === Gender.female
@@ -536,132 +602,165 @@ export const NodeDetails = memo(function NodeDetails({
                       🩸 Blood Group: <strong>{node.bloodGroup}</strong>
                     </Typography>
                   )}
-                </Box>
+                  </Stack>
+                </Paper>
 
-                {/* Action Buttons */}
-                <Box
-                  sx={{
-                    display: "flex",
-                    justifyContent: "center",
-                    gap: 1,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <Button
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    onClick={handleEditClick}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleAddClick}
-                  >
-                    Add Relative
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    startIcon={<DeleteIcon />}
-                    onClick={handleDeleteClick}
-                  >
-                    Delete
-                  </Button>
-                  {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder) 
-                    AND is a spouse (has accumulated no parents in this tree, but has a spouse) */}
-                  {(!props.treeId || node.treeId === props.treeId) &&
-                    (!node.parents || node.parents.length === 0) &&
-                    node.spouses &&
-                    node.spouses.length > 0 && (
+                <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 700 }}>
+                    Quick actions
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    {!canEditCurrentNode && (
+                      <Typography variant="body2" color="text.secondary">
+                        You can view this profile, but editing is restricted for this branch.
+                      </Typography>
+                    )}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        gap: 1,
+                        flexWrap: "wrap",
+                      }}
+                    >
                       <Button
                         variant="outlined"
-                        color="info"
-                        startIcon={<LinkIcon />}
-                        onClick={handleLinkExternalClick}
+                        startIcon={<EditIcon />}
+                        onClick={handleEditClick}
+                        disabled={!canEditCurrentNode}
                       >
-                        Link & Replace
+                        Edit
                       </Button>
-                    )}
-                  {node.spouses && node.spouses.length > 0 && (
-                    <Button variant="outlined" onClick={handleOpenSpouseDateEditor}>
-                      Edit Marriage Dates
-                    </Button>
-                  )}
-                </Box>
-
-                {/* Details List */}
-                <Stack spacing={1}>
-                  {node.dod && (
-                    <Typography variant="body2">
-                      <strong>Died:</strong> {node.dod}
-                    </Typography>
-                  )}
-                  {node.place && (
-                    <Typography variant="body2">
-                      <strong>Place:</strong> {node.place}
-                    </Typography>
-                  )}
-                  {node.notes && (
-                    <Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        Notes:
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{ whiteSpace: "pre-wrap", color: "text.secondary" }}
+                      <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={handleAddClick}
+                        disabled={!canEditCurrentNode}
                       >
-                        {node.notes}
-                      </Typography>
+                        Add Relative
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={handleDeleteClick}
+                        disabled={!canEditCurrentNode}
+                      >
+                        Delete
+                      </Button>
+                      {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder)
+                        AND is a spouse (has accumulated no parents in this tree, but has a spouse) */}
+                      {(!props.treeId || node.treeId === props.treeId) &&
+                        (!node.parents || node.parents.length === 0) &&
+                        node.spouses &&
+                        node.spouses.length > 0 && (
+                          <Button
+                            variant="outlined"
+                            color="info"
+                            startIcon={<LinkIcon />}
+                            onClick={handleLinkExternalClick}
+                            disabled={!canEditCurrentNode}
+                          >
+                            Link & Replace
+                          </Button>
+                        )}
+                      {node.spouses && node.spouses.length > 0 && (
+                        <Button
+                          variant="outlined"
+                          onClick={handleOpenSpouseDateEditor}
+                          disabled={!canEditCurrentNode}
+                        >
+                          Edit Marriage Dates
+                        </Button>
+                      )}
                     </Box>
-                  )}
-                  {displayCustomFields &&
-                    Object.keys(displayCustomFields).length > 0 && (
-                      <Box sx={{ mb: 2 }}>
+                  </Stack>
+                </Paper>
+
+                <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 700 }}>
+                    Profile details
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    {node.dod && (
+                      <Typography variant="body2">
+                        <strong>Died:</strong> {node.dod}
+                      </Typography>
+                    )}
+                    {node.place && (
+                      <Typography variant="body2">
+                        <strong>Place:</strong> {node.place}
+                      </Typography>
+                    )}
+                    {node.notes && (
+                      <Box>
+                        <Typography variant="body2" fontWeight="bold">
+                          Notes
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ whiteSpace: "pre-wrap", color: "text.secondary", mt: 0.5 }}
+                        >
+                          {node.notes}
+                        </Typography>
+                      </Box>
+                    )}
+                    {displayCustomFields && Object.keys(displayCustomFields).length > 0 ? (
+                      <Box>
                         <Typography
                           variant="subtitle2"
                           color="text.secondary"
                           sx={{ mb: 1 }}
                         >
-                          Additional Details
+                          Additional details
                         </Typography>
-                        {Object.entries(displayCustomFields || {}).map(
-                          ([key, value]) => (
+                        <Stack spacing={0.75}>
+                          {Object.entries(displayCustomFields || {}).map(([key, value]) => (
                             <Typography key={key} variant="body2">
                               <strong>{key}:</strong> {value}
                             </Typography>
-                          ),
-                        )}
+                          ))}
+                        </Stack>
                       </Box>
+                    ) : (
+                      !node.dod &&
+                      !node.place &&
+                      !node.notes && (
+                        <Typography variant="body2" color="text.secondary">
+                          No extra profile details have been added yet.
+                        </Typography>
+                      )
                     )}
-                </Stack>
+                  </Stack>
+                </Paper>
 
                 {/* Ancestry */}
                 {node.hierarchy && node.hierarchy.length > 0 && (
-                  <Box>
+                  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
                     <Typography
                       variant="subtitle2"
                       sx={{ mb: 1, color: "primary.main" }}
                     >
                       Ancestry
                     </Typography>
-                    <Box sx={{ pl: 1, borderLeft: 2, borderColor: "divider" }}>
+                    <Box sx={{ pl: 1.5, borderLeft: 2, borderColor: "divider" }}>
                       {node.hierarchy.map((ancestor, i) => (
                         <Typography
                           key={ancestor.id}
-                          variant="caption"
+                          variant="body2"
                           display="block"
-                          sx={{ ml: i * 1 }}
+                          sx={{ ml: i * 1.25 }}
                         >
                           {i > 0 && "↳ "} {ancestor.name}
                         </Typography>
                       ))}
                     </Box>
-                  </Box>
+                  </Paper>
                 )}
 
-                <Divider />
+                <Typography variant="subtitle2" color="text.secondary" sx={{ px: 0.5 }}>
+                  Family connections
+                </Typography>
 
                 {/* Relations */}
                 <Relations {...props} title="Parents" items={parents} />
@@ -682,75 +781,126 @@ export const NodeDetails = memo(function NodeDetails({
               Edit {node.name}
             </DialogTitle>
             <DialogContent dividers>
-              <Stack spacing={3} sx={{ pt: 1 }}>
-                {/* Photo Upload with Cropper */}
-                <Suspense fallback={<Box sx={{ height: 96 }} />}>
-                  <ImageCropper
-                    currentPhoto={editedPhotoPreview}
-                    onCropped={async (blob) => {
-                      if (!node) return;
-                      try {
-                        setPhotoUploading(true);
-                        const url = await ApiService.uploadPersonPhoto(
-                          node.id,
-                          blob,
-                        );
-                        setEditedPhotoPreview(url);
-                      } catch (err) {
-                        console.error("Photo upload failed:", err);
-                        alert(
-                          `Failed to upload photo: ${
-                            err instanceof Error
-                              ? err.message
-                              : String(err)
-                          }`,
-                        );
-                      } finally {
-                        setPhotoUploading(false);
-                      }
-                    }}
-                    onRemove={async () => {
-                      if (!node) return;
-                      try {
-                        setPhotoUploading(true);
-                        await ApiService.removePersonPhoto(node.id);
-                        setEditedPhotoPreview(undefined);
-                      } catch (err) {
-                        console.error("Photo remove failed:", err);
-                      } finally {
-                        setPhotoUploading(false);
-                      }
-                    }}
-                    uploading={photoUploading}
-                    previewSize={80}
-                  />
-                </Suspense>
+              <Stack spacing={2.5} sx={{ pt: 1 }}>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                    Identity
+                  </Typography>
+                  <Stack spacing={2}>
+                    <Box
+                      sx={{
+                        p: { xs: 1.5, sm: 2 },
+                        borderRadius: 3,
+                        textAlign: "center",
+                        background: (muiTheme) =>
+                          `linear-gradient(180deg, ${alpha(muiTheme.palette.primary.main, 0.06)} 0%, ${muiTheme.palette.background.paper} 100%)`,
+                      }}
+                    >
+                      <Stack spacing={1.5} alignItems="center">
+                        <Suspense fallback={<Box sx={{ height: 96 }} />}>
+                          <ImageCropper
+                            currentPhoto={editedPhotoPreview}
+                            previewVariant="rounded"
+                            onCropped={async (blob) => {
+                              if (!node) return;
+                              try {
+                                setPhotoUploading(true);
+                                const url = await ApiService.uploadPersonPhoto(
+                                  node.id,
+                                  blob,
+                                );
+                                setEditedPhotoPreview(url);
+                              } catch (err) {
+                                console.error("Photo upload failed:", err);
+                                alert(
+                                  `Failed to upload photo: ${
+                                    err instanceof Error
+                                      ? err.message
+                                      : String(err)
+                                  }`,
+                                );
+                              } finally {
+                                setPhotoUploading(false);
+                              }
+                            }}
+                            onRemove={async () => {
+                              if (!node) return;
+                              try {
+                                setPhotoUploading(true);
+                                await ApiService.removePersonPhoto(node.id);
+                                setEditedPhotoPreview(undefined);
+                              } catch (err) {
+                                console.error("Photo remove failed:", err);
+                              } finally {
+                                setPhotoUploading(false);
+                              }
+                            }}
+                            uploading={photoUploading}
+                            previewSize={112}
+                          />
+                        </Suspense>
+                        <Box>
+                          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                            {editedName || node.name}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            Update the basic identity details and photo for this profile.
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </Box>
 
-                <TextField
-                  label="Name"
-                  value={editedName}
-                  onChange={(e) => setEditedName(e.target.value)}
-                  fullWidth
-                  required
-                />
-                <Suspense
-                  fallback={<TextField fullWidth label="Date of Birth" />}
-                >
-                  <DatePicker
-                    label="Date of Birth"
-                    value={editedDob ? dayjs(editedDob) : null}
-                    onChange={(val) =>
-                      setEditedDob(val ? val.format("YYYY-MM-DD") : "")
-                    }
-                    slotProps={{ textField: { fullWidth: true } }}
-                    format="DD/MM/YYYY"
-                  />
-                </Suspense>
-                <AdditionalDetails
-                  value={editedCustomFields}
-                  onChange={setEditedCustomFields}
-                  showAdditionalSection={false}
-                />
+                    <TextField
+                      label="Name"
+                      value={editedName}
+                      onChange={(e) => setEditedName(e.target.value)}
+                      fullWidth
+                      required
+                    />
+                    <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
+                      <DatePicker
+                        label="Date of Birth"
+                        value={editedDob ? dayjs(editedDob) : null}
+                        onChange={(val) =>
+                          setEditedDob(val ? val.format("YYYY-MM-DD") : "")
+                        }
+                        slotProps={{ textField: { fullWidth: true } }}
+                        format="DD/MM/YYYY"
+                      />
+                    </Suspense>
+                    <FormControl sx={{ m: 0 }}>
+                      <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
+                      <RadioGroup
+                        row
+                        sx={{ gap: 1.5 }}
+                        value={editedGender}
+                        onChange={(e) => setEditedGender(e.target.value as Gender)}
+                      >
+                        <FormControlLabel
+                          value={Gender.male}
+                          control={<Radio />}
+                          label="Male"
+                        />
+                        <FormControlLabel
+                          value={Gender.female}
+                          control={<Radio />}
+                          label="Female"
+                        />
+                        <FormControlLabel
+                          value={"other" as Gender}
+                          control={<Radio />}
+                          label="Other"
+                        />
+                      </RadioGroup>
+                    </FormControl>
+                  </Stack>
+                </Paper>
+
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                    Life details
+                  </Typography>
+                  <Stack spacing={2}>
                 <FormControl fullWidth>
                   <InputLabel>Blood Group</InputLabel>
                   <Select
@@ -770,6 +920,7 @@ export const NodeDetails = memo(function NodeDetails({
                   </Select>
                 </FormControl>
                 <FormControlLabel
+                  sx={{ m: 0 }}
                   control={
                     <Switch
                       checked={editedIsAlive}
@@ -800,31 +951,18 @@ export const NodeDetails = memo(function NodeDetails({
                     />
                   </Suspense>
                 )}
-                <FormControl>
-                  <FormLabel>Gender</FormLabel>
-                  <RadioGroup
-                    row
-                    value={editedGender}
-                    onChange={(e) => setEditedGender(e.target.value as Gender)}
-                  >
-                    <FormControlLabel
-                      value={Gender.male}
-                      control={<Radio />}
-                      label="Male"
-                    />
-                    <FormControlLabel
-                      value={Gender.female}
-                      control={<Radio />}
-                      label="Female"
-                    />
-                  </RadioGroup>
-                </FormControl>
-                <Divider />
-                <AdditionalDetails
-                  value={editedCustomFields}
-                  onChange={setEditedCustomFields}
-                  showUpfrontFields={false}
-                />
+                  </Stack>
+                </Paper>
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                    Additional details
+                  </Typography>
+                  <AdditionalDetails
+                    value={editedCustomFields}
+                    onChange={setEditedCustomFields}
+                    showUpfrontFields={false}
+                  />
+                </Paper>
               </Stack>
             </DialogContent>
             <DialogActions>

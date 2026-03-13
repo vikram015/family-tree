@@ -135,7 +135,8 @@ const dTree = {
         const height = groupBounds.height;
         const fullWidth = treeBuilder.svg.node().clientWidth;
         const fullHeight = treeBuilder.svg.node().clientHeight;
-        const scale = 0.95 / Math.max(width / fullWidth, height / fullHeight);
+        const rawScale = 0.95 / Math.max(width / fullWidth, height / fullHeight);
+        const scale = Math.min(rawScale, 1);
 
         treeBuilder.svg
           .transition()

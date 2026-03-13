@@ -127,6 +127,26 @@ export interface PredefinedPeopleField {
   showUpfront: boolean;
 }
 
+export interface TreeWriteScope {
+  treeId: string;
+  canWriteAll: boolean;
+  rootPersonIds: string[];
+}
+
+export interface TreeInvite {
+  id: string;
+  treeId: string;
+  personId: string | null;
+  personName?: string | null;
+  role: string;
+  invitedPhone: string | null;
+  status: "pending" | "accepted" | "revoked" | "expired";
+  expiresAt: string;
+  createdAt: string;
+  inviteToken?: string;
+  inviteLink?: string;
+}
+
 export const ApiService = {
   normalizeDateValue(value?: string): string | undefined {
     if (value == null) return undefined;
@@ -443,6 +463,37 @@ export const ApiService = {
     return backendApi.get<any>(`/api/tree/${treeId}`);
   },
 
+  async getTreeWriteScope(treeId: string): Promise<TreeWriteScope> {
+    return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
+  },
+
+  async getTreeInvites(treeId: string): Promise<TreeInvite[]> {
+    return backendApi.get<TreeInvite[]>(`/api/tree/${treeId}/invites`);
+  },
+
+  async createTreeInvite(
+    treeId: string,
+    payload: {
+      personId?: string | null;
+      role?: string;
+      invitedPhone?: string | null;
+      expiresInDays?: number;
+    },
+  ): Promise<TreeInvite> {
+    return backendApi.post<TreeInvite>(`/api/tree/${treeId}/invites`, payload);
+  },
+
+  async revokeTreeInvite(treeId: string, inviteId: string): Promise<{ success: boolean }> {
+    return backendApi.patch<{ success: boolean }>(`/api/tree/${treeId}/invites/${inviteId}/revoke`);
+  },
+
+  async acceptTreeInvite(token: string): Promise<{ success: boolean; treeId: string; personId: string | null; role: string }> {
+    return backendApi.post<{ success: boolean; treeId: string; personId: string | null; role: string }>(
+      "/api/tree/invites/accept",
+      { token },
+    );
+  },
+
   /**
    * Create a new tree
    */
@@ -675,14 +726,32 @@ export const ApiService = {
   },
 
   /**
-   * Search people by name in a village with parent hierarchy
-   * Returns person details including parent hierarchy up to 5 generations
+   * Search people by name with parent hierarchy.
+   * Supports village-scoped and tree-scoped search.
+   */
+  async searchPeopleWithHierarchy(
+    searchTerm: string,
+    options: {
+      villageId?: string;
+      treeId?: string;
+    },
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/people/search/by-village", {
+      searchTerm,
+      villageId: options.villageId,
+      treeId: options.treeId,
+    });
+  },
+
+  /**
+   * Search people by name in a village with parent hierarchy.
+   * Kept as a compatibility wrapper for existing callers.
    */
   async searchPeopleByVillageWithHierarchy(
     searchTerm: string,
     villageId: string
   ): Promise<any[]> {
-    return backendApi.get<any[]>('/api/people/search/by-village', { searchTerm, villageId });
+    return this.searchPeopleWithHierarchy(searchTerm, { villageId });
   },
 
   /**

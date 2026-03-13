@@ -22,11 +22,15 @@ import {
   InputLabel,
   Paper,
   Stack,
-  Divider,
   ToggleButton,
   ToggleButtonGroup,
   Switch,
+  Chip,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
+import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
+import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import dayjs from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
@@ -63,7 +67,7 @@ interface AddNodeProps {
   initialGender?: "male" | "female" | "other" | "";
 }
 
-const AddNode: React.FC<AddNodeProps> = ({
+export default function AddNode({
   targetId,
   onAdd,
   onCancel,
@@ -73,7 +77,7 @@ const AddNode: React.FC<AddNodeProps> = ({
   isFirstNode = false,
   initialRelation,
   initialGender,
-}) => {
+}: AddNodeProps) {
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
@@ -496,18 +500,51 @@ const AddNode: React.FC<AddNodeProps> = ({
   return (
     <Box
       component={noCard ? "div" : Paper}
-      sx={noCard ? {} : { p: 3, elevation: 2 }}
+      sx={
+        noCard
+          ? {}
+          : {
+              p: { xs: 2, sm: 3 },
+              borderRadius: 3,
+            }
+      }
     >
       {!noCard && step === 1 && (
-        <Typography variant="h6" gutterBottom>
-          {isFirstNode
-            ? "Add First Family Member"
-            : `Add Family Member to ${targetNode ? targetNode.name : "Tree"}`}
-        </Typography>
+        <Box sx={{ mb: 2.5 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 800 }}>
+            {isFirstNode
+              ? "Add First Family Member"
+              : `Add Family Member to ${targetNode ? targetNode.name : "Tree"}`}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Start with the essentials first. Extra details can be completed after the profile is created.
+          </Typography>
+        </Box>
       )}
 
       {step === 2 ? (
         <Stack spacing={3}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: { xs: 2, sm: 2.5 },
+              borderRadius: 3,
+              textAlign: "center",
+              background: (theme) =>
+                `linear-gradient(180deg, ${alpha(theme.palette.success.main, 0.08)} 0%, ${theme.palette.background.paper} 100%)`,
+            }}
+          >
+            <Chip
+              icon={<WorkOutlineOutlinedIcon sx={{ fontSize: 16 }} />}
+              label="Step 2 of 2"
+              color="success"
+              size="small"
+              sx={{ mb: 1.5 }}
+            />
+            <Typography variant="body2" color="text.secondary">
+              Add optional professional details now, or skip and come back later.
+            </Typography>
+          </Paper>
           <Box sx={{ textAlign: "center", mb: 1 }}>
             <Typography variant="h6" color="primary" gutterBottom>
               👍 Person Added!
@@ -520,18 +557,20 @@ const AddNode: React.FC<AddNodeProps> = ({
             </Typography>
           </Box>
 
-          <FormControl fullWidth>
-            <InputLabel>Occupation Type</InputLabel>
-            <Select
-              value={occupationType}
-              onChange={(e) => setOccupationType(e.target.value as any)}
-              label="Occupation Type"
-            >
-              <MenuItem value="business">Business Owner</MenuItem>
-              <MenuItem value="job">Salaried / Professional</MenuItem>
-              <MenuItem value="other">Student / Homemaker / Other</MenuItem>
-            </Select>
-          </FormControl>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+            <Stack spacing={2.25}>
+              <FormControl fullWidth>
+                <InputLabel>Occupation Type</InputLabel>
+                <Select
+                  value={occupationType}
+                  onChange={(e) => setOccupationType(e.target.value as any)}
+                  label="Occupation Type"
+                >
+                  <MenuItem value="business">Business Owner</MenuItem>
+                  <MenuItem value="job">Salaried / Professional</MenuItem>
+                  <MenuItem value="other">Student / Homemaker / Other</MenuItem>
+                </Select>
+              </FormControl>
 
           {occupationType === "business" && (
             <>
@@ -587,6 +626,8 @@ const AddNode: React.FC<AddNodeProps> = ({
               />
             </>
           )}
+            </Stack>
+          </Paper>
 
           <Box
             sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 4 }}
@@ -614,107 +655,153 @@ const AddNode: React.FC<AddNodeProps> = ({
         </Stack>
       ) : (
         <Stack spacing={3}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: { xs: 1.5, sm: 2 },
+              borderRadius: 3,
+              background: (theme) =>
+                `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              alignItems={{ xs: "flex-start", sm: "center" }}
+              justifyContent="space-between"
+            >
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                  {isFirstNode ? "Create a root person" : "Create or link a relative"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Fill the core profile first. Extra details can be added after save.
+                </Typography>
+              </Box>
+              <Chip
+                icon={
+                  mode === "link" ? (
+                    <LinkOutlinedIcon sx={{ fontSize: 16 }} />
+                  ) : (
+                    <PersonAddAlt1OutlinedIcon sx={{ fontSize: 16 }} />
+                  )
+                }
+                label={mode === "link" ? "Link existing profile" : "Create new profile"}
+                color={mode === "link" ? "info" : "primary"}
+                size="small"
+                variant="outlined"
+              />
+            </Stack>
+          </Paper>
+
           {!isFirstNode && (
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Relation</FormLabel>
-              <RadioGroup
-                row
-                value={relation}
-                onChange={(e) => setRelation(e.target.value as any)}
-              >
-                <FormControlLabel
-                  value="child"
-                  control={<Radio />}
-                  label="Child"
-                />
-                <FormControlLabel
-                  value="spouse"
-                  control={<Radio />}
-                  label="Spouse"
-                />
-                <FormControlLabel
-                  value="parent"
-                  control={<Radio />}
-                  label="Parent"
-                />
-              </RadioGroup>
-            </FormControl>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Relation</FormLabel>
+                <RadioGroup
+                  row
+                  value={relation}
+                  onChange={(e) => setRelation(e.target.value as any)}
+                >
+                  <FormControlLabel
+                    value="child"
+                    control={<Radio />}
+                    label="Child"
+                  />
+                  <FormControlLabel
+                    value="spouse"
+                    control={<Radio />}
+                    label="Spouse"
+                  />
+                  <FormControlLabel
+                    value="parent"
+                    control={<Radio />}
+                    label="Parent"
+                  />
+                </RadioGroup>
+              </FormControl>
+            </Paper>
           )}
 
           {!isFirstNode && (
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Relation Type</FormLabel>
-              <RadioGroup
-                row
-                value={selectedRelType}
-                onChange={(e) => {
-                  const nextType = e.target.value as RelType;
-                  setSelectedRelType(nextType);
-                  if (nextType !== RelType.divorced) {
-                    setRelationEndDate("");
-                  }
-                }}
-              >
-                {relTypes.map((type) => (
-                  <FormControlLabel
-                    key={type}
-                    value={type}
-                    control={<Radio />}
-                    label={type}
-                  />
-                ))}
-              </RadioGroup>
-            </FormControl>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Relation Type</FormLabel>
+                <RadioGroup
+                  row
+                  value={selectedRelType}
+                  onChange={(e) => {
+                    const nextType = e.target.value as RelType;
+                    setSelectedRelType(nextType);
+                    if (nextType !== RelType.divorced) {
+                      setRelationEndDate("");
+                    }
+                  }}
+                >
+                  {relTypes.map((type) => (
+                    <FormControlLabel
+                      key={type}
+                      value={type}
+                      control={<Radio />}
+                      label={type}
+                    />
+                  ))}
+                </RadioGroup>
+              </FormControl>
+            </Paper>
           )}
 
           {!isFirstNode && relation === "spouse" && (
-            <Stack spacing={2} sx={{ mb: 1 }}>
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Action
-                </Typography>
-                <ToggleButtonGroup
-                  color="primary"
-                  value={mode}
-                  exclusive
-                  onChange={(_, newMode) => newMode && setMode(newMode)}
-                  size="small"
-                  fullWidth
-                >
-                  <ToggleButton value="create">Create New Profile</ToggleButton>
-                  <ToggleButton value="link">Link Existing Profile</ToggleButton>
-                </ToggleButtonGroup>
-              </Box>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <Stack spacing={2} sx={{ mb: 1 }}>
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Action
+                  </Typography>
+                  <ToggleButtonGroup
+                    color="primary"
+                    value={mode}
+                    exclusive
+                    onChange={(_, newMode) => newMode && setMode(newMode)}
+                    size="small"
+                    fullWidth
+                  >
+                    <ToggleButton value="create">Create New Profile</ToggleButton>
+                    <ToggleButton value="link">Link Existing Profile</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
 
-              <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
-                <DatePicker
-                  label="Marriage Start Date (optional)"
-                  value={relationStartDate ? dayjs(relationStartDate) : null}
-                  onChange={(val) =>
-                    setRelationStartDate(val ? val.format("YYYY-MM-DD") : "")
-                  }
-                  slotProps={{ textField: { fullWidth: true } }}
-                  format="DD/MM/YYYY"
-                />
-              </Suspense>
-              {selectedRelType === RelType.divorced && (
-                <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
+                <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
                   <DatePicker
-                    label="Marriage End Date (optional)"
-                    value={relationEndDate ? dayjs(relationEndDate) : null}
+                    label="Marriage Start Date (optional)"
+                    value={relationStartDate ? dayjs(relationStartDate) : null}
                     onChange={(val) =>
-                      setRelationEndDate(val ? val.format("YYYY-MM-DD") : "")
+                      setRelationStartDate(val ? val.format("YYYY-MM-DD") : "")
                     }
                     slotProps={{ textField: { fullWidth: true } }}
                     format="DD/MM/YYYY"
                   />
                 </Suspense>
-              )}
-            </Stack>
+                {selectedRelType === RelType.divorced && (
+                  <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
+                    <DatePicker
+                      label="Marriage End Date (optional)"
+                      value={relationEndDate ? dayjs(relationEndDate) : null}
+                      onChange={(val) =>
+                        setRelationEndDate(val ? val.format("YYYY-MM-DD") : "")
+                      }
+                      slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY"
+                    />
+                  </Suspense>
+                )}
+              </Stack>
+            </Paper>
           )}
 
           {mode === "link" && relation === "spouse" ? (
-            <Stack spacing={2}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <Stack spacing={2.25}>
               <FormControl fullWidth>
                 <InputLabel>Select Village (Required)</InputLabel>
                 <Select
@@ -749,7 +836,7 @@ const AddNode: React.FC<AddNodeProps> = ({
                 <Typography
                   variant="caption"
                   color="text.secondary"
-                  sx={{ fontStyle: "italic", display: "block", my: 1 }}
+                  sx={{ fontStyle: "italic", display: "block", mt: -0.5 }}
                 >
                   Please select a village first to search for people.
                 </Typography>
@@ -758,7 +845,7 @@ const AddNode: React.FC<AddNodeProps> = ({
               {selectedPerson && (
                 <Paper
                   variant="outlined"
-                  sx={{ p: 2, bgcolor: "action.hover" }}
+                  sx={{ p: 2, bgcolor: "action.hover", borderRadius: 2.5 }}
                 >
                   <Typography variant="subtitle2">Selected Spouse:</Typography>
                   <Typography variant="body1" fontWeight="bold">
@@ -771,9 +858,11 @@ const AddNode: React.FC<AddNodeProps> = ({
                   </Typography>
                 </Paper>
               )}
-            </Stack>
+              </Stack>
+            </Paper>
           ) : (
-            <>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <Stack spacing={2.25}>
               {!isFirstNode && relation === "child" && (
                 <FormControl fullWidth>
                   <InputLabel>Other parent</InputLabel>
@@ -795,21 +884,23 @@ const AddNode: React.FC<AddNodeProps> = ({
                 </FormControl>
               )}
 
-              <Suspense fallback={<Box sx={{ height: 88 }} />}>
-                <ImageCropper
-                  currentPhoto={photoPreview}
-                  onCropped={(blob) => {
-                    setPhotoBlob(blob);
-                    setPhotoPreview(URL.createObjectURL(blob));
-                  }}
-                  onRemove={() => {
-                    setPhotoBlob(null);
-                    setPhotoPreview(undefined);
-                  }}
-                  uploading={photoUploading}
-                  previewSize={70}
-                />
-              </Suspense>
+              <Box sx={{ display: "flex", justifyContent: "center", py: 0.5 }}>
+                <Suspense fallback={<Box sx={{ height: 88 }} />}>
+                  <ImageCropper
+                    currentPhoto={photoPreview}
+                    onCropped={(blob) => {
+                      setPhotoBlob(blob);
+                      setPhotoPreview(URL.createObjectURL(blob));
+                    }}
+                    onRemove={() => {
+                      setPhotoBlob(null);
+                      setPhotoPreview(undefined);
+                    }}
+                    uploading={photoUploading}
+                    previewSize={70}
+                  />
+                </Suspense>
+              </Box>
 
               <TextField
                 label="Name"
@@ -860,6 +951,7 @@ const AddNode: React.FC<AddNodeProps> = ({
               </FormControl>
 
               <FormControlLabel
+                sx={{ m: 0 }}
                 control={
                   <Switch
                     checked={isAlive}
@@ -888,10 +980,11 @@ const AddNode: React.FC<AddNodeProps> = ({
                 </Suspense>
               )}
 
-              <FormControl>
-                <FormLabel>Gender</FormLabel>
+              <FormControl sx={{ m: 0 }}>
+                <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
                 <RadioGroup
                   row
+                  sx={{ gap: 1.5 }}
                   value={gender}
                   onChange={(e) =>
                     setGender(e.target.value as "male" | "female" | "other")
@@ -915,14 +1008,14 @@ const AddNode: React.FC<AddNodeProps> = ({
                 </RadioGroup>
               </FormControl>
 
-              <Divider />
-
               <AdditionalDetails
                 value={customFields}
                 onChange={setCustomFields}
                 showUpfrontFields={false}
+                showAdditionalSection={Object.keys(customFields).length > 0}
               />
-            </>
+              </Stack>
+            </Paper>
           )}
 
           <Box
@@ -951,7 +1044,5 @@ const AddNode: React.FC<AddNodeProps> = ({
       )}
     </Box>
   );
-};
-
-export default AddNode;
+}
 

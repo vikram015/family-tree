@@ -3,7 +3,7 @@ import { select } from "d3-selection";
 import { zoomIdentity, zoomTransform } from "d3-zoom";
 import "d3-transition";
 import MuiBox from "@mui/material/Box";
-import { Paper, Typography, Popper } from "@mui/material";
+import { Box, Button, Paper, Typography, Popper } from "@mui/material";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
@@ -38,6 +38,7 @@ interface DTreeComponentProps {
   nodes: FNode[];
   rootId: string;
   canEditTree?: boolean;
+  canEditNode?: (nodeId: string) => boolean;
   autoExpandNodeId?: string | null;
   onAutoExpandHandled?: () => void;
   onNodeClick: (nodeId: string) => void;
@@ -58,6 +59,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
   rootId,
   canEditTree = true,
+  canEditNode,
   autoExpandNodeId,
   onAutoExpandHandled,
   onNodeClick,
@@ -128,6 +130,14 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     mobileSheetNode?.treeId &&
     mobileSheetNode.treeId !== currentTreeId,
   );
+  const isNodeEditable = useCallback(
+    (nodeId?: string | null) => {
+      if (!canEditTree || !nodeId) return false;
+      return canEditNode ? canEditNode(nodeId) : true;
+    },
+    [canEditTree, canEditNode],
+  );
+  const canEditMobileNode = Boolean(mobileSheetNode && !isExternalNode && isNodeEditable(mobileSheetNode.id));
 
   const insertPlaceholdersNearMiddle = (
     list: DTreeNode[],
@@ -276,6 +286,28 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     centerOnNodeRef.current = centerOnNode;
   }, [centerOnNode]);
 
+  const fitTreeToViewport = useCallback((duration = 300) => {
+    if (!treeRef.current || typeof treeRef.current.zoomToFit !== "function") {
+      return;
+    }
+    try {
+      treeRef.current.zoomToFit(duration);
+    } catch (e) {
+      console.warn("Failed to fit tree to viewport:", e);
+    }
+  }, []);
+
+  const resetTreeViewport = useCallback((duration = 300) => {
+    if (!treeRef.current || typeof treeRef.current.resetZoom !== "function") {
+      return;
+    }
+    try {
+      treeRef.current.resetZoom(duration);
+    } catch (e) {
+      console.warn("Failed to reset tree viewport:", e);
+    }
+  }, []);
+
   const handleNodeTap = useCallback(
     (nodeId: string) => {
       // Check window width directly to ensure mobile check is always fresh
@@ -350,7 +382,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Placeholder "add relative" card clicked ---
       const placeholderTarget = target.closest(".placeholder-click-target");
-      if (placeholderTarget && canEditTree) {
+      if (placeholderTarget) {
         e.preventDefault();
         e.stopPropagation();
         const relType = placeholderTarget.getAttribute("data-rel-type") as
@@ -362,7 +394,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         const targetNodeId = placeholderTarget.getAttribute(
           "data-target-node-id",
         );
-        if (relType && targetNodeId && onAddRelative) {
+        if (relType && targetNodeId && isNodeEditable(targetNodeId) && onAddRelative) {
           setAddMenuNodeId(null);
           onAddRelative(targetNodeId, relType);
         }
@@ -371,11 +403,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Edit icon ---
       const editIcon = target.closest(".node-edit-icon");
-      if (editIcon && canEditTree) {
+      if (editIcon) {
         e.preventDefault();
         e.stopPropagation();
         const nodeId = editIcon.getAttribute("data-node-id");
-        if (nodeId && onEditNode) {
+        if (nodeId && isNodeEditable(nodeId) && onEditNode) {
           onEditNode(nodeId);
         }
         return;
@@ -383,11 +415,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Add icon (toggle placeholder nodes in tree) ---
       const addIcon = target.closest(".node-add-icon");
-      if (addIcon && canEditTree) {
+      if (addIcon) {
         e.preventDefault();
         e.stopPropagation();
         const nodeId = addIcon.getAttribute("data-node-id");
-        if (nodeId) {
+        if (nodeId && isNodeEditable(nodeId)) {
           setAddMenuNodeId((prev) => (prev === nodeId ? null : nodeId));
         }
         return;
@@ -514,7 +546,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         container.removeEventListener("mouseleave", handleContainerMouseLeave);
       }
     };
-  }, [onExternalTreeClick, onEditNode, onAddRelative, canEditTree, nodes]);
+  }, [onExternalTreeClick, onEditNode, onAddRelative, isNodeEditable, nodes]);
 
   // Helper: check if 'ancestorId' is an ancestor of 'targetId'
   // Traverses parent links AND spouse connections so that a spouse from
@@ -599,7 +631,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     // Check if this node has the add-menu open (placeholder nodes should appear)
     // On mobile, placeholders are skipped — the bottom sheet handles add-relative actions directly
     const showPlaceholders =
-      canEditTree && !isMobileRef.current && addMenuNodeIdRef.current === personId;
+      !isMobileRef.current &&
+      isNodeEditable(personId) &&
+      addMenuNodeIdRef.current === personId;
     const shouldWrapWithParentPlaceholders =
       showPlaceholders && (!person.parents || person.parents.length === 0);
     const addMenuChildId = addMenuNodeIdRef.current;
@@ -659,7 +693,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         // Inject child placeholders (son/daughter) into every marriage
         // when either the main person OR the spouse has their add-menu open
         const showSpousePlaceholders =
-          !isMobileRef.current && addMenuNodeIdRef.current === spouseNode.id;
+          !isMobileRef.current &&
+          isNodeEditable(spouseNode.id) &&
+          addMenuNodeIdRef.current === spouseNode.id;
         if (showPlaceholders || showSpousePlaceholders) {
           // Target the node whose add icon was clicked
           const placeholderTarget = showSpousePlaceholders
@@ -1054,7 +1090,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               isMain,
               isHighlighted,
               isMobileRef.current,
-              canEditTree,
+              isNodeEditable(extra?.id),
             );
           },
           nodeDblClick: (name: string, extra: any, id: string) => {
@@ -1092,7 +1128,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // Restore previous zoom/pan state after rebuild so collapsed-mode focus
       // changes don't jump to the default transform before centering.
-      if (currentZoom && treeRef.current) {
+      if (currentZoom && treeRef.current && !showFullTree) {
         try {
           if (typeof treeRef.current.getBuilder === "function") {
             const builder = treeRef.current.getBuilder();
@@ -1105,10 +1141,19 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         }
       }
 
+      if (showFullTree) {
+        setTimeout(() => {
+          resetTreeViewport(isMobileRef.current ? 0 : 250);
+          if (rootId) {
+            setTimeout(() => centerOnNodeRef.current(rootId), 0);
+          }
+        }, 0);
+      }
+
       // Auto-center on the focused mainId only when mainId actually changed.
       // Reuse the shared centering helper so full-tree and collapsed modes
       // follow identical pan/zoom behavior.
-      if (mainId && mainIdChanged) {
+      if (!showFullTree && mainId && mainIdChanged) {
         setTimeout(() => {
           centerOnNodeRef.current(mainId);
         }, 0);
@@ -1175,7 +1220,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       <label
         style={{
           position: "absolute",
-          top: isMobile ? 76 : 10,
+          top: 10,
           right: 10,
           left: isMobile ? 10 : "auto",
           width: isMobile ? "calc(100% - 20px)" : "auto",
@@ -1185,28 +1230,59 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           justifyContent: isMobile ? "space-between" : "flex-start",
           gap: 6,
           background: "rgba(255,255,255,0.92)",
-          padding: "4px 10px",
-          borderRadius: 6,
+          padding: isMobile ? "6px 8px" : "4px 10px",
+          borderRadius: 10,
           boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
           fontSize: 13,
-          cursor: "pointer",
           userSelect: "none",
         }}
       >
-        <input
-          type="checkbox"
-          checked={showFullTree}
-          onChange={(e) => {
-            const checked = e.target.checked;
-            setShowFullTree(checked);
-            if (checked) {
-              // Clear collapse focus so the full tree renders
-              setMainId(null);
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.75,
+            minWidth: 0,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showFullTree}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setShowFullTree(checked);
+              if (checked) {
+                setMainId(null);
+                setTimeout(() => {
+                  resetTreeViewport(isMobile ? 0 : 250);
+                  if (rootId) {
+                    setTimeout(() => centerOnNodeRef.current(rootId), 0);
+                  }
+                }, 0);
+              }
+            }}
+            style={{ cursor: "pointer" }}
+          />
+          <span style={{ fontWeight: 600, color: "#333" }}>Show Full Tree</span>
+        </Box>
+        <Button
+          size="small"
+          variant="text"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showFullTree) {
+              fitTreeToViewport(isMobile ? 0 : 250);
+            } else if (mainId) {
+              centerOnNodeRef.current(mainId);
+            } else if (rootId) {
+              centerOnNodeRef.current(rootId);
             }
           }}
-          style={{ cursor: "pointer" }}
-        />
-        Show Full Tree
+          sx={{ minWidth: 0, px: 1, py: 0.25 }}
+        >
+          {showFullTree ? "Fit" : "Center"}
+        </Button>
       </label>
       <div
         ref={containerRef}
@@ -1344,7 +1420,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  isExternalNode || !canEditTree ? "1fr 1fr" : "1fr 1fr 1fr",
+                  isExternalNode || !canEditMobileNode ? "1fr 1fr" : "1fr 1fr 1fr",
                 gap: 6,
               }}
             >
@@ -1366,7 +1442,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               >
                 View
               </button>
-              {isExternalNode || !canEditTree ? (
+              {isExternalNode || !canEditMobileNode ? (
                 <button
                   onClick={() => {
                     if (isExternalNode) {
@@ -1431,7 +1507,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                 </>
               )}
             </div>
-            {!isExternalNode && canEditTree && (
+            {canEditMobileNode && (
               <>
                 <div
                   style={{

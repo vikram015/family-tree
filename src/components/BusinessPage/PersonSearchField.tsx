@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Box,
   TextField,
@@ -29,8 +29,13 @@ interface PersonSearchFieldProps {
   onSearchValueChange: (value: string) => void;
   onPersonSelect: (person: PersonSearchResult) => void;
   selectedPerson?: PersonSearchResult | any | null;
-  villageId: string;
+  villageId?: string;
+  treeId?: string;
   disabled?: boolean;
+  autoSearch?: boolean;
+  minSearchLength?: number;
+  hideSearchButton?: boolean;
+  noResultsText?: string;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -41,25 +46,39 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   onPersonSelect,
   selectedPerson,
   villageId,
+  treeId,
   disabled = false,
+  autoSearch = false,
+  minSearchLength = 1,
+  hideSearchButton = false,
+  noResultsText = "No results found",
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const latestSearchRef = useRef(0);
 
-  const handleSearch = async () => {
-    if (!villageId || !searchValue.trim()) {
+  const handleSearch = useCallback(async () => {
+    const trimmedSearch = searchValue.trim();
+    const hasScope = Boolean(treeId || villageId);
+
+    if (!hasScope || trimmedSearch.length < minSearchLength) {
       setSearchResults([]);
       setShowResults(false);
       return;
     }
 
     setShowResults(true);
+    const searchId = ++latestSearchRef.current;
 
     try {
-      const results = await ApiService.searchPeopleByVillageWithHierarchy(
-        searchValue,
+      const results = await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
+        treeId,
         villageId,
-      );
+      });
+
+      if (searchId !== latestSearchRef.current) {
+        return;
+      }
 
       const peopleSearchResults: PersonSearchResult[] = results.map(
         (person: any) => ({
@@ -78,9 +97,11 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
       setSearchResults(peopleSearchResults);
     } catch (error) {
       console.error("Error searching people:", error);
-      setSearchResults([]);
+      if (searchId === latestSearchRef.current) {
+        setSearchResults([]);
+      }
     }
-  };
+  }, [minSearchLength, searchValue, treeId, villageId]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
     onPersonSelect(person);
@@ -94,6 +115,18 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
       handleSearch();
     }
   };
+
+  useEffect(() => {
+    if (!autoSearch) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      handleSearch();
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [autoSearch, handleSearch]);
 
   return (
     <Box sx={{ position: "relative", width: "100%", mb: 2 }}>
@@ -113,19 +146,21 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           autoComplete="off"
           disabled={disabled}
         />
-        <Button
-          variant="contained"
-          onClick={handleSearch}
-          disabled={disabled}
-          startIcon={<SearchIcon />}
-          sx={{
-            height: 56,
-            minWidth: 100,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Search
-        </Button>
+        {!hideSearchButton && (
+          <Button
+            variant="contained"
+            onClick={handleSearch}
+            disabled={disabled}
+            startIcon={<SearchIcon />}
+            sx={{
+              height: 56,
+              minWidth: 100,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Search
+          </Button>
+        )}
       </Stack>
 
       {/* Search Results Dropdown */}
@@ -204,7 +239,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           }}
         >
           <Typography variant="body2" color="textSecondary">
-            No results found
+            {noResultsText}
           </Typography>
         </Paper>
       )}

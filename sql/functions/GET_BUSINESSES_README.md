@@ -173,4 +173,4 @@ On click: Navigates to FamilyPage for that tree
 
 - **BusinessPage.tsx**: Main component using this function
 - **SupabaseService.ts**: `getBusinessesByVillageWithHierarchy()` wrapper method
-- **search_people_by_village.sql**: Similar function for searching people with hierarchy
+- People search hierarchy is now implemented in the Node backend service layer.
