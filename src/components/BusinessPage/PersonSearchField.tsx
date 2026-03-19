@@ -56,6 +56,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
   const latestSearchRef = useRef(0);
+  const skipNextAutoSearchRef = useRef(false);
 
   const handleSearch = useCallback(async () => {
     const trimmedSearch = searchValue.trim();
@@ -107,6 +108,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     onPersonSelect(person);
     setSearchResults([]);
     setShowResults(false);
+    skipNextAutoSearchRef.current = true;
     onSearchValueChange(person.name);
   };
 
@@ -118,6 +120,11 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
 
   useEffect(() => {
     if (!autoSearch) {
+      return;
+    }
+
+    if (skipNextAutoSearchRef.current) {
+      skipNextAutoSearchRef.current = false;
       return;
     }
 
@@ -246,4 +253,3 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     </Box>
   );
 };
-

@@ -15,6 +15,8 @@ import {
   CARD_DIM,
 } from "./NodeCard";
 
+const TREE_INTERACTION_HINT_KEY = "kinvia-tree-interaction-hint-dismissed";
+
 interface DTreeNode {
   name: string;
   class?: string;
@@ -110,6 +112,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     node: FNode;
     anchorEl: Element;
   } | null>(null);
+  const [showInteractionHint, setShowInteractionHint] = useState(false);
   const mobileSheetNode = mobileSheetNodeId
     ? nodes.find((n) => n.id === mobileSheetNodeId) || null
     : null;
@@ -195,6 +198,48 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     if (!onMobileSheetChange) return;
     onMobileSheetChange(Boolean(mobileSheetNodeId) && isMobileRef.current);
   }, [mobileSheetNodeId, onMobileSheetChange]);
+
+  useEffect(() => {
+    if (!rootId) return;
+
+    try {
+      const hasSeenHint = window.localStorage.getItem(TREE_INTERACTION_HINT_KEY);
+      if (!hasSeenHint) {
+        setShowInteractionHint(true);
+      }
+    } catch {
+      setShowInteractionHint(true);
+    }
+  }, [rootId]);
+
+  useEffect(() => {
+    if (!showInteractionHint) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const dismissHint = () => {
+      setShowInteractionHint(false);
+      try {
+        window.localStorage.setItem(TREE_INTERACTION_HINT_KEY, "1");
+      } catch {
+        // ignore storage failures
+      }
+    };
+
+    const autoHideTimer = window.setTimeout(dismissHint, 7000);
+
+    container.addEventListener("pointerdown", dismissHint, { once: true });
+    container.addEventListener("wheel", dismissHint, { once: true });
+    container.addEventListener("touchstart", dismissHint, { once: true });
+
+    return () => {
+      window.clearTimeout(autoHideTimer);
+      container.removeEventListener("pointerdown", dismissHint);
+      container.removeEventListener("wheel", dismissHint);
+      container.removeEventListener("touchstart", dismissHint);
+    };
+  }, [showInteractionHint]);
 
   // Keep refs in sync
   useEffect(() => {
@@ -1143,9 +1188,14 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       if (showFullTree) {
         setTimeout(() => {
-          resetTreeViewport(isMobileRef.current ? 0 : 250);
-          if (rootId) {
-            setTimeout(() => centerOnNodeRef.current(rootId), 0);
+          const initialFocusId = highlightedPersonId || rootId;
+          const resetDuration = highlightedPersonId ? 0 : isMobileRef.current ? 0 : 250;
+
+          resetTreeViewport(resetDuration);
+
+          if (initialFocusId) {
+            const centerDelay = resetDuration > 0 ? resetDuration : 0;
+            setTimeout(() => centerOnNodeRef.current(initialFocusId), centerDelay);
           }
         }, 0);
       }
@@ -1160,7 +1210,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       }
 
       // URL-driven focus (tree navigation/search) should center exactly once per key.
-      if (highlightedPersonId && shouldCenterOnHighlighted) {
+      if (!showFullTree && highlightedPersonId && shouldCenterOnHighlighted) {
         setTimeout(() => {
           centerOnNodeRef.current(highlightedPersonId);
         }, 0);
@@ -1295,6 +1345,37 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           cursor: "grab",
         }}
       />
+
+      {showInteractionHint && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: "absolute",
+            left: { xs: 12, sm: 16 },
+            right: { xs: 12, sm: "auto" },
+            bottom: { xs: 18, sm: 22 },
+            zIndex: 35,
+            maxWidth: 320,
+            px: 1.5,
+            py: 1.25,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "rgba(255,255,255,0.96)",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 14px 34px rgba(15, 23, 42, 0.14)",
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.25 }}>
+            Explore the tree
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", lineHeight: 1.35 }}>
+            {isMobile
+              ? "Drag to move around the tree. Pinch to zoom in or out."
+              : "Click and drag to move around the tree. Use your mouse wheel to zoom."}
+          </Typography>
+        </Paper>
+      )}
 
       {hoverInfo && !isMobile && (
         <Popper

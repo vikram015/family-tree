@@ -744,9 +744,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   );
 
   const handleShareTree = useCallback(async () => {
-    const shareUrl = treeId
-      ? `${window.location.origin}/families?tree=${treeId}`
-      : window.location.href;
+    const shareUrl = (() => {
+      if (!treeId) {
+        return window.location.href;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      const nextUrl = new URL(`${window.location.origin}/families`);
+      nextUrl.searchParams.set("tree", treeId);
+
+      const currentPersonId = currentUrl.searchParams.get("personId");
+      if (currentPersonId) {
+        nextUrl.searchParams.set("personId", currentPersonId);
+      }
+
+      return nextUrl.toString();
+    })();
 
     try {
       if (navigator.share) {
@@ -1444,4 +1457,3 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     </Box>
   );
 };
-

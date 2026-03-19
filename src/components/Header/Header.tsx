@@ -186,20 +186,27 @@ export const Header: React.FC = () => {
               mr: 2,
               display: "flex",
               alignItems: "center",
-              gap: 1.5,
+              gap: 1.25,
             }}
           >
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
-                marginLeft: "-23px",
+                justifyContent: "center",
+                width: { xs: 38, md: 42 },
+                height: { xs: 38, md: 42 },
+                p: "5px",
+                borderRadius: 2.5,
+                overflow: "hidden",
+                boxShadow: "0 10px 24px rgba(7, 28, 68, 0.22)",
+                backgroundColor: "#ffffff",
               }}
             >
               <img
-                src="/favicon.ico"
+                src="/favicon.png"
                 alt="Kinvia"
-                style={{ width: 64, height: 64 }}
+                style={{ width: "100%", height: "100%", display: "block" }}
               />
             </Box>
             <Box>
@@ -209,18 +216,6 @@ export const Header: React.FC = () => {
                 sx={{ m: 0, fontWeight: 700 }}
               >
                 Kinvia
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  display: "block",
-                  color: "rgba(255, 255, 255, 0.9)",
-                  fontSize: "0.7rem",
-                  lineHeight: 1,
-                  mt: 0.3,
-                }}
-              >
-                Connections that last
               </Typography>
             </Box>
           </Box>

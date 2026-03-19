@@ -20,9 +20,16 @@ import {
   Chip,
   ClickAwayListener,
   LinearProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 import PersonIcon from "@mui/icons-material/Person";
 import StoreIcon from "@mui/icons-material/Store";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
@@ -60,12 +67,16 @@ export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { userProfile, currentUser } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const suppressMobileSearchOpenRef = useRef(false);
 
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
@@ -139,6 +150,7 @@ export const HomePage: React.FC = () => {
 
   const handleResultClick = (result: SearchResult) => {
     setShowResults(false);
+    setSearchDialogOpen(false);
     setSearchQuery("");
     if (result.treeId) {
       const params = new URLSearchParams();
@@ -155,6 +167,95 @@ export const HomePage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
+
+  const closeSearchDialog = useCallback(() => {
+    suppressMobileSearchOpenRef.current = true;
+    setSearchDialogOpen(false);
+    setShowResults(false);
+
+    window.setTimeout(() => {
+      suppressMobileSearchOpenRef.current = false;
+    }, 250);
+  }, []);
+
+  const renderSearchResults = () => {
+    if (!showResults) return null;
+
+    return (
+      <Paper
+        elevation={8}
+        sx={{
+          position: isMobile ? "static" : "absolute",
+          top: isMobile ? "auto" : "100%",
+          left: 0,
+          right: 0,
+          zIndex: 1300,
+          maxHeight: isMobile ? "none" : 420,
+          overflow: "auto",
+          mt: isMobile ? 1.5 : 0.5,
+          borderRadius: 2,
+        }}
+      >
+        {searchResults.length > 0 ? (
+          <List dense disablePadding>
+            {searchResults.map((result) => (
+              <ListItem
+                key={`${result.type}-${result.id}`}
+                component="div"
+                onClick={() => handleResultClick(result)}
+                sx={{
+                  cursor: "pointer",
+                  "&:hover": { bgcolor: "action.hover" },
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  {result.type === "person" ? (
+                    <PersonIcon color="primary" />
+                  ) : result.type === "profession" ? (
+                    <TimelineIcon color="action" />
+                  ) : (
+                    <StoreIcon color="secondary" />
+                  )}
+                </ListItemIcon>
+                <ListItemText
+                  primary={result.name}
+                  secondary={result.extra || undefined}
+                  primaryTypographyProps={{ fontWeight: 600 }}
+                  secondaryTypographyProps={{ fontSize: "0.75rem" }}
+                />
+                <Chip
+                  label={
+                    result.type === "person"
+                      ? "Person"
+                      : result.type === "profession"
+                        ? "Profession"
+                        : "Business"
+                  }
+                  size="small"
+                  color={
+                    result.type === "person"
+                      ? "primary"
+                      : result.type === "business"
+                        ? "secondary"
+                        : "default"
+                  }
+                  variant="outlined"
+                />
+              </ListItem>
+            ))}
+          </List>
+        ) : !isSearching ? (
+          <Box sx={{ p: 2, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              No results found for "{searchQuery}"
+            </Typography>
+          </Box>
+        ) : null}
+      </Paper>
+    );
+  };
 
   const totalPeople = statistics?.totalPeople || 0;
   const totalTrees = statistics?.totalTrees || 0;
@@ -227,14 +328,26 @@ export const HomePage: React.FC = () => {
                 Every update you make today becomes heritage tomorrow.
               </Typography>
 
-              <ClickAwayListener onClickAway={() => setShowResults(false)}>
+              <ClickAwayListener onClickAway={() => !isMobile && setShowResults(false)}>
                 <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
                   <TextField
                     fullWidth
                     placeholder="Search family members, businesses..."
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
+                    onClick={() => {
+                      if (isMobile && !suppressMobileSearchOpenRef.current) {
+                        setSearchDialogOpen(true);
+                      }
+                    }}
                     onFocus={() => {
+                      if (isMobile) {
+                        if (suppressMobileSearchOpenRef.current) {
+                          return;
+                        }
+                        setSearchDialogOpen(true);
+                        return;
+                      }
                       if (searchResults.length > 0) setShowResults(true);
                     }}
                     onKeyPress={(e) => {
@@ -258,81 +371,11 @@ export const HomePage: React.FC = () => {
                       bgcolor: "white",
                       borderRadius: 2,
                     }}
+                    inputProps={{
+                      readOnly: isMobile,
+                    }}
                   />
-                  {showResults && (
-                    <Paper
-                      elevation={8}
-                      sx={{
-                        position: "absolute",
-                        top: "100%",
-                        left: 0,
-                        right: 0,
-                        zIndex: 1300,
-                        maxHeight: 420,
-                        overflow: "auto",
-                        mt: 0.5,
-                        borderRadius: 2,
-                      }}
-                    >
-                      {searchResults.length > 0 ? (
-                        <List dense disablePadding>
-                          {searchResults.map((result) => (
-                            <ListItem
-                              key={`${result.type}-${result.id}`}
-                              component="div"
-                              onClick={() => handleResultClick(result)}
-                              sx={{
-                                cursor: "pointer",
-                                "&:hover": { bgcolor: "action.hover" },
-                                borderBottom: "1px solid",
-                                borderColor: "divider",
-                              }}
-                            >
-                              <ListItemIcon sx={{ minWidth: 36 }}>
-                                {result.type === "person" ? (
-                                  <PersonIcon color="primary" />
-                                ) : result.type === "profession" ? (
-                                  <TimelineIcon color="action" />
-                                ) : (
-                                  <StoreIcon color="secondary" />
-                                )}
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={result.name}
-                                secondary={result.extra || undefined}
-                                primaryTypographyProps={{ fontWeight: 600 }}
-                                secondaryTypographyProps={{ fontSize: "0.75rem" }}
-                              />
-                              <Chip
-                                label={
-                                  result.type === "person"
-                                    ? "Person"
-                                    : result.type === "profession"
-                                      ? "Profession"
-                                      : "Business"
-                                }
-                                size="small"
-                                color={
-                                  result.type === "person"
-                                    ? "primary"
-                                    : result.type === "business"
-                                      ? "secondary"
-                                      : "default"
-                                }
-                                variant="outlined"
-                              />
-                            </ListItem>
-                          ))}
-                        </List>
-                      ) : !isSearching ? (
-                        <Box sx={{ p: 2, textAlign: "center" }}>
-                          <Typography variant="body2" color="text.secondary">
-                            No results found for "{searchQuery}"
-                          </Typography>
-                        </Box>
-                      ) : null}
-                    </Paper>
-                  )}
+                  {!isMobile && renderSearchResults()}
                 </Box>
               </ClickAwayListener>
 
@@ -393,6 +436,71 @@ export const HomePage: React.FC = () => {
           </Box>
         </Container>
       </Box>
+
+      <Dialog
+        open={searchDialogOpen}
+        onClose={closeSearchDialog}
+        fullScreen={isMobile}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            pl: 2,
+            pr: 1.5,
+            py: 1.5,
+          }}
+        >
+          Search
+          <IconButton
+            aria-label="Close search"
+            edge="end"
+            onClick={(event) => {
+              event.stopPropagation();
+              closeSearchDialog();
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1.5 }}>
+          <TextField
+            fullWidth
+            autoFocus
+            placeholder="Search family members, businesses..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => {
+              if (searchResults.length > 0) setShowResults(true);
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                performSearch(searchQuery);
+              }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                </InputAdornment>
+              ),
+              endAdornment: isSearching ? (
+                <InputAdornment position="end">
+                  <CircularProgress size={18} />
+                </InputAdornment>
+              ) : null,
+            }}
+            sx={{
+              bgcolor: "white",
+              borderRadius: 2,
+            }}
+          />
+          {renderSearchResults()}
+        </DialogContent>
+      </Dialog>
 
       <Container maxWidth="lg" sx={{ py: 6 }}>
         <Box
@@ -538,4 +646,3 @@ export const HomePage: React.FC = () => {
     </>
   );
 };
-
