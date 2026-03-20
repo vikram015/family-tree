@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   AppBar,
+  Avatar,
   Toolbar,
   Typography,
   IconButton,
@@ -22,21 +23,48 @@ import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
+import { ApiService } from "../../services/apiService";
 
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [villagePickerOpen, setVillagePickerOpen] = useState(false);
+  const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
   const navigate = useNavigate();
   const { selectedVillage, setSelectedVillage, villages } = useVillage();
   const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLinkedPersonPhoto = async () => {
+      if (!userProfile?.peopleId) {
+        setLinkedPersonPhoto("");
+        return;
+      }
+
+      try {
+        const person = await ApiService.getPersonById(userProfile.peopleId);
+        if (!active) return;
+        setLinkedPersonPhoto((person as any)?.photoUrl || "");
+      } catch (error) {
+        if (!active) return;
+        console.warn("Failed to load linked person photo:", error);
+        setLinkedPersonPhoto("");
+      }
+    };
+
+    loadLinkedPersonPhoto();
+    return () => {
+      active = false;
+    };
+  }, [userProfile?.peopleId]);
 
   const handleLogout = async () => {
     try {
@@ -129,7 +157,12 @@ export const Header: React.FC = () => {
                 },
               }}
             >
-              <AccountCircleIcon />
+              <Avatar
+                src={linkedPersonPhoto || undefined}
+                sx={{ width: 32, height: 32 }}
+              >
+                {userProfile?.displayName?.charAt(0) || "U"}
+              </Avatar>
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
                   {userProfile?.displayName || "User"}
@@ -306,7 +339,12 @@ export const Header: React.FC = () => {
                       mr: 1,
                     }}
                   >
-                    <AccountCircleIcon />
+                    <Avatar
+                      src={linkedPersonPhoto || undefined}
+                      sx={{ width: 30, height: 30 }}
+                    >
+                      {userProfile?.displayName?.charAt(0) || "U"}
+                    </Avatar>
                     <Box sx={{ textAlign: "left" }}>
                       <Typography variant="body2" fontWeight={600}>
                         {userProfile?.displayName || "User"}
