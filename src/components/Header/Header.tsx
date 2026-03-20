@@ -19,7 +19,6 @@ import {
   ListItemButton,
   ListItemText,
 } from "@mui/material";
-import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
@@ -419,8 +418,24 @@ export const Header: React.FC = () => {
                 color="inherit"
                 edge="end"
                 onClick={() => setDrawerOpen(!drawerOpen)}
+                sx={{ p: 0.25, ml: 1 }}
               >
-                <MenuIcon />
+                <Avatar
+                  src={linkedPersonPhoto || undefined}
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    border: "2px solid rgba(255,255,255,0.55)",
+                    bgcolor: "rgba(255,255,255,0.18)",
+                    color: "white",
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  {(userProfile?.displayName || currentUser?.email || "U")
+                    .charAt(0)
+                    .toUpperCase()}
+                </Avatar>
               </IconButton>
             </>
           )}
