@@ -284,7 +284,8 @@ export function renderNodeCardSvg(
   const actionIconsReservedWidth = hasActionIcons ? 50 : 0;
   const textRightPadding = 12 + actionIconsReservedWidth;
   const textMaxWidth = dim.w - dim.text_x - textRightPadding;
-  const displayName = truncateText(name, textMaxWidth);
+  const resolvedName = extra?.nameHindi || name;
+  const displayName = truncateText(resolvedName, textMaxWidth);
   const escapedName = escapeXml(displayName);
 
   // External tree link

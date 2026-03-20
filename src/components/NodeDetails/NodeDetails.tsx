@@ -34,7 +34,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import LinkIcon from "@mui/icons-material/Link";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import BloodtypeOutlinedIcon from "@mui/icons-material/BloodtypeOutlined";
@@ -43,6 +43,7 @@ import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
+import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService } from "../../services/apiService";
@@ -118,6 +119,7 @@ export const NodeDetails = memo(function NodeDetails({
 
   // Edit State
   const [editedName, setEditedName] = useState("");
+  const [editedNameHindi, setEditedNameHindi] = useState("");
   const [editedDob, setEditedDob] = useState("");
   const [editedGender, setEditedGender] = useState<Gender>(Gender.male);
   const [editedCustomFields, setEditedCustomFields] = useState<
@@ -143,6 +145,11 @@ export const NodeDetails = memo(function NodeDetails({
   const [displayCustomFields, setDisplayCustomFields] = useState<
     Record<string, string>
   >({});
+  const [mobileAddSaveAction, setMobileAddSaveAction] = useState<{
+    onClick: () => void;
+    disabled: boolean;
+    saving: boolean;
+  } | null>(null);
 
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
@@ -158,6 +165,7 @@ export const NodeDetails = memo(function NodeDetails({
     if (node) {
       setView(initialView || "details");
       setEditedName(node.name || "");
+      setEditedNameHindi(node.nameHindi || "");
       setEditedDob(node.dob || "");
       setEditedGender(node.gender || Gender.male);
 
@@ -240,6 +248,7 @@ export const NodeDetails = memo(function NodeDetails({
         setIsSavingEdit(true);
         const updates: Partial<FNode> = {
           name: editedName.trim(),
+          nameHindi: editedNameHindi.trim(),
           dob: editedDob.trim(),
           gender: editedGender,
           bloodGroup: editedBloodGroup || undefined,
@@ -262,6 +271,7 @@ export const NodeDetails = memo(function NodeDetails({
     isSavingEdit,
     node,
     editedName,
+    editedNameHindi,
     editedDob,
     editedGender,
     editedCustomFields,
@@ -775,10 +785,26 @@ export const NodeDetails = memo(function NodeDetails({
         {view === "edit" && (
           <>
             <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <IconButton onClick={() => setView("details")} size="small">
-                <ArrowBackIcon />
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                Edit {node.name}
+              </Typography>
+              {isMobile && (
+                <IconButton
+                  onClick={handleSaveEdit}
+                  size="small"
+                  color="primary"
+                  disabled={isSavingEdit || !editedName.trim()}
+                >
+                  {isSavingEdit ? (
+                    <CircularProgress size={18} color="inherit" />
+                  ) : (
+                    <SaveOutlinedIcon />
+                  )}
+                </IconButton>
+              )}
+              <IconButton onClick={closeHandler} size="small">
+                <CloseIcon />
               </IconButton>
-              Edit {node.name}
             </DialogTitle>
             <DialogContent dividers>
               <Stack spacing={2.5} sx={{ pt: 1 }}>
@@ -856,6 +882,11 @@ export const NodeDetails = memo(function NodeDetails({
                       onChange={(e) => setEditedName(e.target.value)}
                       fullWidth
                       required
+                    />
+                    <HindiNameInput
+                      sourceText={editedName}
+                      value={editedNameHindi}
+                      onChange={setEditedNameHindi}
                     />
                     <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
                       <DatePicker
@@ -989,6 +1020,20 @@ export const NodeDetails = memo(function NodeDetails({
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                 Add Relative to {node.name}
               </Typography>
+              {isMobile && mobileAddSaveAction && (
+                <IconButton
+                  onClick={mobileAddSaveAction.onClick}
+                  size="small"
+                  color="primary"
+                  disabled={mobileAddSaveAction.disabled}
+                >
+                  {mobileAddSaveAction.saving ? (
+                    <CircularProgress size={18} color="inherit" />
+                  ) : (
+                    <SaveOutlinedIcon />
+                  )}
+                </IconButton>
+              )}
               <IconButton onClick={closeHandler} size="small">
                 <CloseIcon />
               </IconButton>
@@ -999,6 +1044,7 @@ export const NodeDetails = memo(function NodeDetails({
                 nodes={nodes}
                 initialRelation={initialAddInfo?.relation}
                 initialGender={initialAddInfo?.gender as any}
+                onMobileSaveActionChange={setMobileAddSaveAction}
                 onAdd={async (
                   n,
                   r,
@@ -1025,10 +1071,12 @@ export const NodeDetails = memo(function NodeDetails({
         {view === "link-external" && (
           <>
             <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <IconButton onClick={() => setView("details")} size="small">
-                <ArrowBackIcon />
+              <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+                Link {node.name} to External Tree
+              </Typography>
+              <IconButton onClick={closeHandler} size="small">
+                <CloseIcon />
               </IconButton>
-              Link {node.name} to External Tree
             </DialogTitle>
             <DialogContent dividers>
               <Typography variant="body2" sx={{ mb: 2 }}>
@@ -1128,7 +1176,14 @@ export const NodeDetails = memo(function NodeDetails({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Edit Marriage Dates</DialogTitle>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Edit Marriage Dates
+          </Typography>
+          <IconButton onClick={() => setEditSpouseDatesOpen(false)} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
         <DialogContent dividers>
           <FormControl fullWidth sx={{ mb: 2 }}>
             <InputLabel>Spouse</InputLabel>
@@ -1269,5 +1324,3 @@ export const NodeDetails = memo(function NodeDetails({
     </>
   );
 });
-
-

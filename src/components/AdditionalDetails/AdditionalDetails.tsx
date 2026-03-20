@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
-  Typography,
   TextField,
-  IconButton,
-  Autocomplete,
   Stack,
-  Paper,
   MenuItem,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import AddIcon from "@mui/icons-material/Add";
 import { ApiService, PredefinedPeopleField } from "../../services/apiService";
 
 interface CustomFieldValue {
@@ -32,8 +26,6 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
   value,
   onChange,
   excludeFields = DEFAULT_EXCLUDE_FIELDS,
-  showUpfrontFields = true,
-  showAdditionalSection = true,
 }) => {
   const [availableFields, setAvailableFields] = useState<PredefinedPeopleField[]>([]);
   const [fieldValues, setFieldValues] = useState<CustomFieldValue[]>([]);
@@ -83,20 +75,16 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     (source: Record<string, string>): CustomFieldValue[] => {
       const filteredEntries = Object.entries(source).filter(([key]) => !excludeFields.includes(key));
       const valuesByField = new Map(filteredEntries);
-
-      const upfrontFields = availableFields
-        .filter((f) => f.showUpfront && !excludeFields.includes(f.fieldName))
+      const predefinedRows = availableFields
+        .filter((f) => !excludeFields.includes(f.fieldName))
         .sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999) || a.fieldName.localeCompare(b.fieldName));
-
-      const upfrontRows: CustomFieldValue[] = upfrontFields.map((f) => ({
+      const baseRows: CustomFieldValue[] = predefinedRows.map((f) => ({
         fieldName: f.fieldName,
         value: valuesByField.get(f.fieldName) || "",
       }));
-
-      const upfrontNames = new Set(upfrontRows.map((row) => row.fieldName.toLowerCase()));
-
-      const dynamicRows = filteredEntries
-        .filter(([fieldName]) => !upfrontNames.has(fieldName.toLowerCase()))
+      const knownNames = new Set(baseRows.map((row) => row.fieldName.toLowerCase()));
+      const extraRows = filteredEntries
+        .filter(([fieldName]) => !knownNames.has(fieldName.toLowerCase()))
         .sort(([nameA], [nameB]) => {
           const metaA = getFieldMeta(nameA);
           const metaB = getFieldMeta(nameB);
@@ -105,8 +93,7 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
           return orderA - orderB || nameA.localeCompare(nameB);
         })
         .map(([fieldName, fieldValue]) => ({ fieldName, value: fieldValue }));
-
-      return [...upfrontRows, ...dynamicRows];
+      return [...baseRows, ...extraRows];
     },
     [availableFields, excludeFields, getFieldMeta],
   );
@@ -128,30 +115,6 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     [onChange],
   );
 
-  const handleAddField = useCallback(() => {
-    const newFields = [...fieldValues, { fieldName: "", value: "" }];
-    setFieldValues(newFields);
-  }, [fieldValues]);
-
-  const handleRemoveField = useCallback(
-    (index: number) => {
-      const newFields = fieldValues.filter((_, i) => i !== index);
-      setFieldValues(newFields);
-      notifyChange(newFields);
-    },
-    [fieldValues, notifyChange],
-  );
-
-  const handleFieldNameChange = useCallback(
-    (index: number, newName: string | null) => {
-      const newFields = [...fieldValues];
-      newFields[index] = { ...newFields[index], fieldName: newName || "" };
-      setFieldValues(newFields);
-      notifyChange(newFields);
-    },
-    [fieldValues, notifyChange],
-  );
-
   const handleFieldValueChange = useCallback(
     (index: number, newValue: string) => {
       const newFields = [...fieldValues];
@@ -161,19 +124,6 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     },
     [fieldValues, notifyChange],
   );
-
-  const isUpfrontField = useCallback(
-    (fieldName: string) => {
-      const meta = getFieldMeta(fieldName);
-      return !!meta?.showUpfront;
-    },
-    [getFieldMeta],
-  );
-
-  const fieldOptions = availableFields
-    .filter((f) => !excludeFields.includes(f.fieldName))
-    .sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999) || a.fieldName.localeCompare(b.fieldName))
-    .map((f) => f.fieldName);
 
   const renderValueInput = (
     field: CustomFieldValue,
@@ -245,105 +195,21 @@ export const AdditionalDetails: React.FC<AdditionalDetailsProps> = ({
     );
   };
 
-  const upfrontRows = fieldValues.filter((field) => isUpfrontField(field.fieldName));
-  const additionalRows = fieldValues.filter((field) => !isUpfrontField(field.fieldName));
-
   return (
     <Box>
-      {showUpfrontFields && upfrontRows.length > 0 && (
-        <Stack spacing={2} sx={{ mb: 3 }}>
-          {upfrontRows.map((field) => {
-            const index = fieldValues.findIndex((f) => f === field);
-            if (index < 0) return null;
-            return (
-              <Box key={`upfront-${field.fieldName}`}>
-                {renderValueInput(field, index, {
-                  label: field.fieldName,
-                  marginTop: 0,
-                  size: "medium",
-                })}
-              </Box>
-            );
-          })}
-        </Stack>
-      )}
-
-      {showAdditionalSection && (
-        <>
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              mb: 2,
-            }}
-          >
-            <Typography variant="subtitle1" fontWeight="bold">
-              Additional Details
-            </Typography>
-            <IconButton size="small" color="primary" onClick={handleAddField}>
-              <AddIcon />
-            </IconButton>
-          </Box>
-
-          <Stack spacing={2}>
-            {additionalRows.map((field) => {
-              const index = fieldValues.findIndex((f) => f === field);
-              if (index < 0) return null;
-              return (
-                <Paper
-                  key={index}
-                  elevation={1}
-                  sx={{
-                    p: 2,
-                    display: "flex",
-                    gap: 1,
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <Box sx={{ flex: 1 }}>
-                    <Autocomplete
-                      options={fieldOptions}
-                      value={field.fieldName || null}
-                      onChange={(_, newValue) =>
-                        handleFieldNameChange(index, newValue)
-                      }
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Field Name"
-                          size="small"
-                          placeholder="Select a field"
-                        />
-                      )}
-                    />
-                    {renderValueInput(field, index, { marginTop: 1 })}
-                  </Box>
-                  <IconButton
-                    size="small"
-                    color="error"
-                    onClick={() => handleRemoveField(index)}
-                    sx={{ mt: 0.5 }}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Paper>
-              );
-            })}
-
-            {additionalRows.length === 0 && (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ textAlign: "center", py: 2 }}
-              >
-                No additional details added. Click + to add custom fields.
-              </Typography>
-            )}
-          </Stack>
-        </>
-      )}
+      <Stack spacing={2}>
+        {fieldValues.map((field, index) => {
+          return (
+            <Box key={`field-${field.fieldName || index}`}>
+              {renderValueInput(field, index, {
+                label: field.fieldName,
+                marginTop: 0,
+                size: "medium",
+              })}
+            </Box>
+          );
+        })}
+      </Stack>
     </Box>
   );
 };
-

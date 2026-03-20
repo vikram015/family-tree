@@ -1,6 +1,7 @@
 import type { ExtNode } from "relatives-tree/lib/types";
 export type FNode = ExtNode & {
   name: string;
+  nameHindi?: string;
   dob: string;
   dod?: string; // Date of Death (legacy)
   bloodGroup?: string; // Blood group (A+, B-, O+, etc.)

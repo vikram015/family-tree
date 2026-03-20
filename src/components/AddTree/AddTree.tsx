@@ -178,7 +178,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
               color="primary"
               aria-label="Create tree"
               onClick={openModal}
-              sx={{ display: { xs: "inline-flex", sm: "none" } }}
+              sx={{
+                display: { xs: "inline-flex", sm: "none" },
+                opacity: 1,
+                transition: "opacity 0.2s ease",
+                "&:hover": {
+                  opacity: 1,
+                },
+              }}
             >
               <AddIcon />
             </Fab>
@@ -188,7 +195,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
               variant="extended"
               color="primary"
               onClick={openModal}
-              sx={{ display: { xs: "none", sm: "inline-flex" } }}
+              sx={{
+                display: { xs: "none", sm: "inline-flex" },
+                opacity: 0.62,
+                transition: "opacity 0.2s ease",
+                "&:hover": {
+                  opacity: 1,
+                },
+              }}
             >
               <AddIcon sx={{ mr: 1 }} />
               Create tree
@@ -338,4 +352,3 @@ export const AddTree: React.FC<AddTreeProps> = ({
 };
 
 export default AddTree;
-

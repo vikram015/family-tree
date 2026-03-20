@@ -11,6 +11,7 @@ type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 interface PersonWithRelations {
   id: string;
   name: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   treeId: string;
@@ -27,6 +28,7 @@ interface UpdatePersonResponse {
   error?: string;
   personId?: string;
   name?: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   bloodGroup?: string;
@@ -40,6 +42,7 @@ interface UpdatePersonResponse {
 interface CompleteTreeNode {
   id: string;
   name: string;
+  nameHindi?: string;
   gender: string;
   dob?: string;
   createdAt: string;
@@ -53,6 +56,7 @@ interface CompleteTreeNode {
 interface AffectedNode {
   id: string;
   name: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   treeId: string;
@@ -69,6 +73,7 @@ export interface AddPersonResult {
   personId: string;
   autoCreatedSpouseId?: string | null;
   name: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   treeId: string;
@@ -237,6 +242,7 @@ export const ApiService = {
     const normalizedDeceasedDate = this.normalizeDateValue(coreUpdates.deceasedDate);
     const payload = {
       name: coreUpdates.name,
+      nameHindi: coreUpdates.nameHindi,
       gender: coreUpdates.gender,
       dob: normalizedDob,
       additionalFields: customFields && Object.keys(customFields).length > 0 ? customFields : undefined,
@@ -263,6 +269,7 @@ export const ApiService = {
       return {
         id: result.personId || personId,
         name: result.name || coreUpdates.name || "",
+        nameHindi: result.nameHindi || coreUpdates.nameHindi,
         gender: result.gender,
         dob: result.dob,
         treeId: result.treeId || "",
@@ -353,6 +360,7 @@ export const ApiService = {
   async addPersonToTree(
     treeId: string,
     name: string,
+    nameHindi?: string,
     gender?: string,
     dob?: string,
     relationType?: 'parent' | 'spouse',
@@ -376,6 +384,7 @@ export const ApiService = {
     return backendApi.post<AddPersonResult>("/api/people", {
       treeId,
       name,
+      nameHindi,
       gender,
       dob: normalizedDob,
       relationType,
@@ -850,4 +859,3 @@ export const ApiService = {
     await backendApi.delete(`/api/people/${personId}/photo`);
   },
 };
-

@@ -12,6 +12,8 @@ import {
   DialogContentText,
   Paper,
   Stack,
+  Tooltip,
+  IconButton,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
@@ -22,6 +24,8 @@ import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
+import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
@@ -265,6 +269,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             ({
               id: person.id,
               name: person.name,
+              nameHindi: person.nameHindi || undefined,
               gender: person.gender as Gender,
               dob: person.dob || "",
               parents:
@@ -460,6 +465,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           const fnode: FNode = {
             id: raw.id,
             name: raw.name,
+            nameHindi: raw.nameHindi || undefined,
             gender: (raw.gender as Gender) || ("" as any),
             dob: raw.dob || "",
             parents:
@@ -700,6 +706,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         const newPerson = await ApiService.addPersonToTree(
           treeId,
           coreNode.name || "Unnamed",
+          coreNode.nameHindi,
           coreNode.gender,
           coreNode.dob,
           relationType,
@@ -1082,11 +1089,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         treeId={treeId}
         treeStatus={treeStatus}
         statusAlerts={statusAlerts}
-        canManageInvites={canManageInvites}
         hasStats={nodes.length > 0 && !isLoading}
         statCards={statCards}
-        onShareTree={handleShareTree}
-        onOpenInviteDialog={handleOpenInviteDialog}
         onSourceChange={onSourceChange}
       />
       {(isSuperAdmin() || isApproved) && (
@@ -1164,6 +1168,69 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               backgroundColor: theme.palette.background.paper,
             }}
           >
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                position: "absolute",
+                left: { xs: 12, sm: 16 },
+                bottom: { xs: 12, sm: 16 },
+                zIndex: 2,
+              }}
+            >
+              {canManageInvites && (
+                <Tooltip title="Invite collaborator">
+                  <span>
+                    <IconButton
+                      aria-label="Invite collaborator"
+                      onClick={handleOpenInviteDialog}
+                      disabled={!treeId}
+                      size={isMobile ? "small" : "medium"}
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        backgroundColor: alpha(theme.palette.background.paper, 0.92),
+                        boxShadow: theme.shadows[2],
+                        opacity: { xs: 1, sm: 0.62 },
+                        transition: "opacity 0.2s ease, background-color 0.2s ease",
+                        "&:hover": {
+                          opacity: 1,
+                          backgroundColor: alpha(theme.palette.background.paper, 1),
+                        },
+                      }}
+                    >
+                      <PersonAddAltOutlinedIcon
+                        fontSize={isMobile ? "small" : "medium"}
+                      />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              <Tooltip title="Share tree">
+                <span>
+                  <IconButton
+                    aria-label="Share tree"
+                    onClick={handleShareTree}
+                    disabled={!treeId}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "divider",
+                      backgroundColor: alpha(theme.palette.background.paper, 0.92),
+                      boxShadow: theme.shadows[2],
+                      opacity: { xs: 1, sm: 0.62 },
+                      transition: "opacity 0.2s ease, background-color 0.2s ease",
+                      "&:hover": {
+                        opacity: 1,
+                        backgroundColor: alpha(theme.palette.background.paper, 1),
+                      },
+                    }}
+                  >
+                    <ShareOutlinedIcon fontSize={isMobile ? "small" : "medium"} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
             {rootId && nodes.find((n) => n.id === rootId) ? (
               <DTreeComponent
                 nodes={nodes}

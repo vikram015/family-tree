@@ -342,6 +342,36 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     }
   }, []);
 
+  const centerTreeInViewport = useCallback((duration = 300) => {
+    if (!containerRef.current || !treeRef.current) return;
+
+    try {
+      const svg = containerRef.current.querySelector("svg");
+      const builder =
+        typeof treeRef.current.getBuilder === "function"
+          ? treeRef.current.getBuilder()
+          : null;
+      if (!svg || !builder?.zoom || !builder?.svg || !builder?.g) return;
+
+      const currentTransform = zoomTransform(svg);
+      const scale = currentTransform.k;
+      const groupBounds = builder.g.node().getBBox();
+      const groupCenterX = groupBounds.x + groupBounds.width / 2;
+      const groupCenterY = groupBounds.y + groupBounds.height / 2;
+      const cw = containerRef.current.clientWidth;
+      const ch = containerRef.current.clientHeight;
+      const tx = cw / 2 - groupCenterX * scale;
+      const ty = ch / 2 - groupCenterY * scale;
+
+      builder.svg
+        .transition()
+        .duration(duration)
+        .call(builder.zoom.transform, zoomIdentity.translate(tx, ty).scale(scale));
+    } catch (e) {
+      console.warn("Failed to center tree in viewport:", e);
+    }
+  }, []);
+
   const resetTreeViewport = useCallback((duration = 300) => {
     if (!treeRef.current || typeof treeRef.current.resetZoom !== "function") {
       return;
@@ -650,7 +680,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       showFullTree || !mainId || isOnMainPath || isMainNode;
 
     const treeNode: DTreeNode = {
-      name: person.name,
+      name: person.nameHindi || person.name,
       class:
         person.gender === "male"
           ? "man"
@@ -661,6 +691,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       depthOffset: 0,
       extra: {
         id: person.id,
+        nameHindi: person.nameHindi,
         dob: person.dob,
         gender: person.gender,
         hierarchy: person.hierarchy,
@@ -786,7 +817,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               person.isAlive === false || spouseNode.isAlive === false,
           },
           spouse: {
-            name: spouseNode.name,
+            name: spouseNode.nameHindi || spouseNode.name,
             class:
               spouseNode.gender === "male"
                 ? "man"
@@ -796,6 +827,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             textClass: "nodeText",
             extra: {
               id: spouseNode.id,
+              nameHindi: spouseNode.nameHindi,
               dob: spouseNode.dob,
               gender: spouseNode.gender,
               hierarchy: spouseNode.hierarchy,
@@ -1188,14 +1220,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       if (showFullTree) {
         setTimeout(() => {
-          const initialFocusId = highlightedPersonId || rootId;
-          const resetDuration = highlightedPersonId ? 0 : isMobileRef.current ? 0 : 250;
-
-          resetTreeViewport(resetDuration);
-
-          if (initialFocusId) {
-            const centerDelay = resetDuration > 0 ? resetDuration : 0;
-            setTimeout(() => centerOnNodeRef.current(initialFocusId), centerDelay);
+          if (highlightedPersonId) {
+            resetTreeViewport(0);
+            setTimeout(() => centerOnNodeRef.current(highlightedPersonId), 0);
+          } else {
+            resetTreeViewport(isMobileRef.current ? 0 : 250);
           }
         }, 0);
       }
@@ -1305,9 +1334,6 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                 setMainId(null);
                 setTimeout(() => {
                   resetTreeViewport(isMobile ? 0 : 250);
-                  if (rootId) {
-                    setTimeout(() => centerOnNodeRef.current(rootId), 0);
-                  }
                 }, 0);
               }
             }}
@@ -1315,24 +1341,45 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           />
           <span style={{ fontWeight: 600, color: "#333" }}>Show Full Tree</span>
         </Box>
-        <Button
-          size="small"
-          variant="text"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showFullTree) {
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!showFullTree) return;
               fitTreeToViewport(isMobile ? 0 : 250);
-            } else if (mainId) {
-              centerOnNodeRef.current(mainId);
-            } else if (rootId) {
-              centerOnNodeRef.current(rootId);
-            }
-          }}
-          sx={{ minWidth: 0, px: 1, py: 0.25 }}
-        >
-          {showFullTree ? "Fit" : "Center"}
-        </Button>
+            }}
+            disabled={!showFullTree}
+            sx={{
+              minWidth: 0,
+              px: 1,
+              py: 0.25,
+              visibility: showFullTree ? "visible" : "hidden",
+            }}
+          >
+            Fit
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showFullTree) {
+                centerTreeInViewport(isMobile ? 0 : 250);
+              } else if (mainId) {
+                centerOnNodeRef.current(mainId);
+              } else if (rootId) {
+                centerOnNodeRef.current(rootId);
+              }
+            }}
+            sx={{ minWidth: 0, px: 1, py: 0.25 }}
+          >
+            Center
+          </Button>
+        </Box>
       </label>
       <div
         ref={containerRef}

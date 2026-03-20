@@ -34,6 +34,7 @@ import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import dayjs from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
+import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService } from "../../services/apiService";
@@ -65,6 +66,9 @@ interface AddNodeProps {
   initialRelation?: "child" | "spouse" | "parent";
   /** Pre-select a gender when opened from a placeholder node */
   initialGender?: "male" | "female" | "other" | "";
+  onMobileSaveActionChange?: (
+    action: { onClick: () => void; disabled: boolean; saving: boolean } | null,
+  ) => void;
 }
 
 export default function AddNode({
@@ -77,8 +81,10 @@ export default function AddNode({
   isFirstNode = false,
   initialRelation,
   initialGender,
+  onMobileSaveActionChange,
 }: AddNodeProps) {
   const [name, setName] = useState("");
+  const [nameHindi, setNameHindi] = useState("");
   const [dob, setDob] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
     initialGender || "male",
@@ -227,6 +233,7 @@ export default function AddNode({
     // reset local form
     setName("");
     setDob("");
+    setNameHindi("");
     setGender("");
     setRelation("child");
     setRelationStartDate("");
@@ -260,6 +267,7 @@ export default function AddNode({
     // reset local form
     setName("");
     setDob("");
+    setNameHindi("");
     setGender("");
     setRelation("child");
     setRelationStartDate("");
@@ -294,7 +302,7 @@ export default function AddNode({
     }
   }, [onComplete, onCancel]);
 
-  const handleSaveDetails = async () => {
+  const handleSaveDetails = useCallback(async () => {
     if (isSavingDetails) return;
     setIsSavingDetails(true);
     if (!savedNodeId) {
@@ -306,10 +314,10 @@ export default function AddNode({
     try {
       if (occupationType === "business") {
         if (businessName) {
-            await ApiService.createBusiness({
+          await ApiService.createBusiness({
             name: businessName,
             category: businessCategory,
-            address: businessAddress, // Use description or separate field if available, ApiService uses description
+            address: businessAddress,
             description: businessAddress,
             contact: businessContact || null,
             peopleId: savedNodeId,
@@ -317,7 +325,6 @@ export default function AddNode({
         }
       } else if (occupationType === "job") {
         if (jobTitle) {
-          // Try to find existing profession
           const existing = allProfessions.find(
             (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
           );
@@ -329,7 +336,6 @@ export default function AddNode({
               name: jobTitle.trim(),
               description: jobContact ? `Contact: ${jobContact}` : undefined,
             });
-            // Handle response which might be object or array
             profId = newProf?.id || (Array.isArray(newProf) && newProf[0]?.id);
           }
 
@@ -345,7 +351,19 @@ export default function AddNode({
     }
 
     handleFlowComplete();
-  };
+  }, [
+    allProfessions,
+    businessAddress,
+    businessCategory,
+    businessContact,
+    businessName,
+    handleFlowComplete,
+    isSavingDetails,
+    jobContact,
+    jobTitle,
+    occupationType,
+    savedNodeId,
+  ]);
 
   const handleSave = useCallback(async () => {
     if (isSaving) return;
@@ -413,6 +431,7 @@ export default function AddNode({
 
         const newNode: Partial<any> = {
           name: name.trim(),
+          nameHindi: nameHindi.trim() || undefined,
           dob: dob || undefined,
           gender: (gender as any) || undefined,
           bloodGroup: bloodGroup || undefined,
@@ -478,6 +497,7 @@ export default function AddNode({
     openLoginModal,
     name,
     dob,
+    nameHindi,
     gender,
     bloodGroup,
     isAlive,
@@ -495,6 +515,43 @@ export default function AddNode({
     relationEndDate,
     photoBlob,
     isSaving,
+  ]);
+
+  useEffect(() => {
+    if (!onMobileSaveActionChange) return;
+
+    if (step === 2) {
+      onMobileSaveActionChange({
+        onClick: handleSaveDetails,
+        disabled:
+          isSavingDetails ||
+          (occupationType === "business" && !businessName) ||
+          (occupationType === "job" && !jobTitle),
+        saving: isSavingDetails,
+      });
+      return () => onMobileSaveActionChange(null);
+    }
+
+    onMobileSaveActionChange({
+      onClick: handleSave,
+      disabled: isSaving || (mode === "create" ? !name.trim() : !selectedPerson),
+      saving: isSaving,
+    });
+
+    return () => onMobileSaveActionChange(null);
+  }, [
+    businessName,
+    handleSave,
+    handleSaveDetails,
+    isSaving,
+    isSavingDetails,
+    jobTitle,
+    mode,
+    name,
+    occupationType,
+    onMobileSaveActionChange,
+    selectedPerson,
+    step,
   ]);
 
   return (
@@ -910,6 +967,12 @@ export default function AddNode({
                 required
                 autoFocus
               />
+              <HindiNameInput
+                sourceText={name}
+                value={nameHindi}
+                onChange={setNameHindi}
+                disabled={mode === "link"}
+              />
 
               <Suspense
                 fallback={<TextField fullWidth label="Date of birth" />}
@@ -1045,4 +1108,3 @@ export default function AddNode({
     </Box>
   );
 }
-
