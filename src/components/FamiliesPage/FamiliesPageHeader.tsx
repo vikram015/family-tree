@@ -64,11 +64,13 @@ export function FamiliesPageHeader({
       }}
     >
       <Stack spacing={{ xs: 0.875, sm: 1.25 }}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          spacing={{ xs: 0.875, sm: 1.25 }}
-          alignItems={{ xs: "stretch", md: "center" }}
-          justifyContent="space-between"
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) auto minmax(0, 1fr)" },
+            alignItems: { xs: "stretch", md: "center" },
+            gap: { xs: 0.875, sm: 1.25 },
+          }}
         >
           <Box>
             <Stack
@@ -94,70 +96,70 @@ export function FamiliesPageHeader({
               </Typography>
             )}
           </Box>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={1}
-            alignItems={{ xs: "stretch", md: "center" }}
-            justifyContent="flex-end"
-            sx={{ width: { xs: "100%", md: "auto" }, ml: { md: "auto" } }}
-          >
-            {hasStats && (
-              <Box
-                sx={{
-                  display: { xs: "none", md: "grid" },
-                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                  gap: 0.75,
-                  minWidth: { md: 360, lg: 440 },
-                }}
-              >
-                {statCards.map((card) => (
-                  <Paper
-                    key={card.key}
-                    elevation={0}
-                    sx={{
-                      px: 1,
-                      py: 0.75,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: alpha(card.color, 0.18),
-                      backgroundColor: alpha(card.color, 0.06),
-                    }}
-                  >
-                    <Stack direction="row" spacing={0.75} alignItems="center">
-                      <Box sx={{ color: card.color, display: "flex", alignItems: "center" }}>
-                        {card.icon}
-                      </Box>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography
-                          variant="subtitle2"
-                          sx={{ fontWeight: 800, lineHeight: 1.1 }}
-                        >
-                          {card.value}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: "text.secondary",
-                            display: "block",
-                            lineHeight: 1.1,
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {card.label}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </Paper>
-                ))}
-              </Box>
-            )}
-            <Box sx={{ minWidth: { xs: "100%", sm: 260, md: 320 } }}>
-              <SourceSelect onChange={onSourceChange} />
+
+          {hasStats && (
+            <Box
+              sx={{
+                display: { xs: "none", md: "grid" },
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 0.75,
+                minWidth: { md: 360, lg: 440 },
+                justifySelf: "center",
+              }}
+            >
+              {statCards.map((card) => (
+                <Paper
+                  key={card.key}
+                  elevation={0}
+                  sx={{
+                    px: 1,
+                    py: 0.75,
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: alpha(card.color, 0.18),
+                    backgroundColor: alpha(card.color, 0.06),
+                  }}
+                >
+                  <Stack direction="row" spacing={0.75} alignItems="center">
+                    <Box sx={{ color: card.color, display: "flex", alignItems: "center" }}>
+                      {card.icon}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography
+                        variant="subtitle2"
+                        sx={{ fontWeight: 800, lineHeight: 1.1 }}
+                      >
+                        {card.value}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: "text.secondary",
+                          display: "block",
+                          lineHeight: 1.1,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {card.label}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+              ))}
             </Box>
-          </Stack>
-        </Stack>
+          )}
+
+          <Box
+            sx={{
+              minWidth: { xs: "100%", sm: 260, md: 320 },
+              justifySelf: { xs: "stretch", md: "end" },
+            }}
+          >
+            <SourceSelect onChange={onSourceChange} />
+          </Box>
+        </Box>
 
         {statusAlerts.length > 0 && (
           <Stack spacing={1}>
