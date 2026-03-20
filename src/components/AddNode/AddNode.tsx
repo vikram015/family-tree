@@ -31,7 +31,7 @@ import { alpha } from "@mui/material/styles";
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
 import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
 import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
-import dayjs from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
@@ -85,15 +85,15 @@ export default function AddNode({
 }: AddNodeProps) {
   const [name, setName] = useState("");
   const [nameHindi, setNameHindi] = useState("");
-  const [dob, setDob] = useState("");
+  const [dob, setDob] = useState<Dayjs | null>(null);
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
     initialGender || "male",
   );
   const [relation, setRelation] = useState<"child" | "spouse" | "parent">(
     initialRelation || "child",
   );
-  const [relationStartDate, setRelationStartDate] = useState("");
-  const [relationEndDate, setRelationEndDate] = useState("");
+  const [relationStartDate, setRelationStartDate] = useState<Dayjs | null>(null);
+  const [relationEndDate, setRelationEndDate] = useState<Dayjs | null>(null);
   const [selectedRelType, setSelectedRelType] = useState<RelType>(
     RelType.blood,
   );
@@ -133,7 +133,7 @@ export default function AddNode({
   // New person fields
   const [bloodGroup, setBloodGroup] = useState("");
   const [isAlive, setIsAlive] = useState(true);
-  const [deceasedDate, setDeceasedDate] = useState("");
+  const [deceasedDate, setDeceasedDate] = useState<Dayjs | null>(null);
 
   // Photo state
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
@@ -143,6 +143,11 @@ export default function AddNode({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+
+  const formatPickerDate = useCallback((value: Dayjs | null) => {
+    if (!value || !value.isValid()) return undefined;
+    return value.format("YYYY-MM-DD");
+  }, []);
 
   // Load villages for the search dropdown
   useEffect(() => {
@@ -158,8 +163,8 @@ export default function AddNode({
   useEffect(() => {
     if (relation !== "spouse") {
       setMode("create");
-      setRelationStartDate("");
-      setRelationEndDate("");
+      setRelationStartDate(null);
+      setRelationEndDate(null);
     }
   }, [relation]);
   const targetNode = useMemo(() => {
@@ -232,12 +237,12 @@ export default function AddNode({
     onCancel?.();
     // reset local form
     setName("");
-    setDob("");
+    setDob(null);
     setNameHindi("");
     setGender("");
     setRelation("child");
-    setRelationStartDate("");
-    setRelationEndDate("");
+    setRelationStartDate(null);
+    setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
     setSelectedPerson(null);
@@ -245,7 +250,7 @@ export default function AddNode({
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
-    setDeceasedDate("");
+    setDeceasedDate(null);
     setPhotoBlob(null);
     setPhotoPreview(undefined);
 
@@ -266,12 +271,12 @@ export default function AddNode({
   const handleFlowComplete = useCallback(() => {
     // reset local form
     setName("");
-    setDob("");
+    setDob(null);
     setNameHindi("");
     setGender("");
     setRelation("child");
-    setRelationStartDate("");
-    setRelationEndDate("");
+    setRelationStartDate(null);
+    setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
     setSelectedPerson(null);
@@ -279,7 +284,7 @@ export default function AddNode({
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
-    setDeceasedDate("");
+    setDeceasedDate(null);
     setPhotoBlob(null);
     setPhotoPreview(undefined);
 
@@ -375,7 +380,7 @@ export default function AddNode({
         relation === "spouse" &&
         relationStartDate &&
         relationEndDate &&
-        dayjs(relationEndDate).isBefore(dayjs(relationStartDate), "day")
+        relationEndDate.isBefore(relationStartDate, "day")
       ) {
         alert("Marriage end date cannot be before marriage start date.");
         return;
@@ -387,8 +392,8 @@ export default function AddNode({
             id: selectedPerson.id,
             name: selectedPerson.name,
             relationSubtype: selectedRelType,
-            relationStartDate: relationStartDate || undefined,
-            relationEndDate: relationEndDate || undefined,
+            relationStartDate: formatPickerDate(relationStartDate),
+            relationEndDate: formatPickerDate(relationEndDate),
           } as unknown as Partial<FNode>, // Pass existing ID
           relation,
           targetId,
@@ -411,7 +416,7 @@ export default function AddNode({
       relation === "spouse" &&
       relationStartDate &&
       relationEndDate &&
-      dayjs(relationEndDate).isBefore(dayjs(relationStartDate), "day")
+      relationEndDate.isBefore(relationStartDate, "day")
     ) {
       alert("Marriage end date cannot be before marriage start date.");
       return;
@@ -432,20 +437,25 @@ export default function AddNode({
         const newNode: Partial<any> = {
           name: name.trim(),
           nameHindi: nameHindi.trim() || undefined,
-          dob: dob || undefined,
+          dob: formatPickerDate(dob),
           gender: (gender as any) || undefined,
           bloodGroup: bloodGroup || undefined,
           isAlive: isAlive,
-          deceasedDate: !isAlive && deceasedDate ? deceasedDate : undefined,
+          deceasedDate:
+            !isAlive && deceasedDate ? formatPickerDate(deceasedDate) : undefined,
           children: [],
           parents: parents.length ? parents : undefined,
           spouses: [],
           customFields:
             Object.keys(customFields).length > 0 ? customFields : undefined,
           relationStartDate:
-            relation === "spouse" ? relationStartDate || undefined : undefined,
+            relation === "spouse"
+              ? formatPickerDate(relationStartDate)
+              : undefined,
           relationEndDate:
-            relation === "spouse" ? relationEndDate || undefined : undefined,
+            relation === "spouse"
+              ? formatPickerDate(relationEndDate)
+              : undefined,
         };
 
         const resultId = await onAdd?.(
@@ -497,6 +507,7 @@ export default function AddNode({
     openLoginModal,
     name,
     dob,
+    formatPickerDate,
     nameHindi,
     gender,
     bloodGroup,
@@ -791,7 +802,7 @@ export default function AddNode({
                     const nextType = e.target.value as RelType;
                     setSelectedRelType(nextType);
                     if (nextType !== RelType.divorced) {
-                      setRelationEndDate("");
+                      setRelationEndDate(null);
                     }
                   }}
                 >
@@ -831,10 +842,8 @@ export default function AddNode({
                 <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
                   <DatePicker
                     label="Marriage Start Date (optional)"
-                    value={relationStartDate ? dayjs(relationStartDate) : null}
-                    onChange={(val) =>
-                      setRelationStartDate(val ? val.format("YYYY-MM-DD") : "")
-                    }
+                    value={relationStartDate}
+                    onChange={(value) => setRelationStartDate(value)}
                     slotProps={{ textField: { fullWidth: true } }}
                     format="DD/MM/YYYY"
                   />
@@ -843,10 +852,8 @@ export default function AddNode({
                   <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
                     <DatePicker
                       label="Marriage End Date (optional)"
-                      value={relationEndDate ? dayjs(relationEndDate) : null}
-                      onChange={(val) =>
-                        setRelationEndDate(val ? val.format("YYYY-MM-DD") : "")
-                      }
+                      value={relationEndDate}
+                      onChange={(value) => setRelationEndDate(value)}
                       slotProps={{ textField: { fullWidth: true } }}
                       format="DD/MM/YYYY"
                     />
@@ -979,10 +986,8 @@ export default function AddNode({
               >
                 <DatePicker
                   label="Date of birth (optional)"
-                  value={dob ? dayjs(dob) : null}
-                  onChange={(val) =>
-                    setDob(val ? val.format("YYYY-MM-DD") : "")
-                  }
+                  value={dob}
+                  onChange={(value) => setDob(value)}
                   slotProps={{ textField: { fullWidth: true } }}
                   format="DD/MM/YYYY"
                 />
@@ -1020,7 +1025,7 @@ export default function AddNode({
                     checked={isAlive}
                     onChange={(e) => {
                       setIsAlive(e.target.checked);
-                      if (e.target.checked) setDeceasedDate("");
+                      if (e.target.checked) setDeceasedDate(null);
                     }}
                   />
                 }
@@ -1033,10 +1038,8 @@ export default function AddNode({
                 >
                   <DatePicker
                     label="Deceased Date"
-                    value={deceasedDate ? dayjs(deceasedDate) : null}
-                    onChange={(val) =>
-                      setDeceasedDate(val ? val.format("YYYY-MM-DD") : "")
-                    }
+                    value={deceasedDate}
+                    onChange={(value) => setDeceasedDate(value)}
                     slotProps={{ textField: { fullWidth: true } }}
                     format="DD/MM/YYYY"
                   />

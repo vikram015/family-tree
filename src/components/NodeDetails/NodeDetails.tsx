@@ -28,7 +28,7 @@ import {
   Chip,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
-import dayjs from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -88,11 +88,28 @@ export const NodeDetails = memo(function NodeDetails({
   initialAddInfo,
   ...props
 }: NodeDetailsProps) {
+  const {
+    onSelect,
+    onAdd,
+    onUpdate,
+    onDelete,
+    canEditNode,
+    treeId,
+  } = props;
   const formatDisplayDate = (value?: string) => {
     if (!value) return "";
     const parsed = dayjs(value);
     return parsed.isValid() ? parsed.format("DD/MM/YYYY") : value;
   };
+  const parsePickerValue = useCallback((value?: string) => {
+    if (!value) return null;
+    const parsed = dayjs(value);
+    return parsed;
+  }, []);
+  const formatPickerDate = useCallback((value: Dayjs | null) => {
+    if (!value || !value.isValid()) return undefined;
+    return value.format("YYYY-MM-DD");
+  }, []);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [view, setView] = useState<
@@ -107,20 +124,26 @@ export const NodeDetails = memo(function NodeDetails({
   const [externalSearchValue, setExternalSearchValue] = useState("");
   const [linkExternalRelationSubtype, setLinkExternalRelationSubtype] =
     useState<RelType>(RelType.married);
-  const [linkExternalStartDate, setLinkExternalStartDate] = useState("");
-  const [linkExternalEndDate, setLinkExternalEndDate] = useState("");
+  const [linkExternalStartDate, setLinkExternalStartDate] = useState<Dayjs | null>(
+    null,
+  );
+  const [linkExternalEndDate, setLinkExternalEndDate] = useState<Dayjs | null>(
+    null,
+  );
   const [editSpouseDatesOpen, setEditSpouseDatesOpen] = useState(false);
   const [editSpouseId, setEditSpouseId] = useState("");
   const [editSpouseRelationSubtype, setEditSpouseRelationSubtype] =
     useState<RelType>(RelType.married);
-  const [editSpouseStartDate, setEditSpouseStartDate] = useState("");
-  const [editSpouseEndDate, setEditSpouseEndDate] = useState("");
+  const [editSpouseStartDate, setEditSpouseStartDate] = useState<Dayjs | null>(
+    null,
+  );
+  const [editSpouseEndDate, setEditSpouseEndDate] = useState<Dayjs | null>(null);
   const [isSavingSpouseDates, setIsSavingSpouseDates] = useState(false);
 
   // Edit State
   const [editedName, setEditedName] = useState("");
   const [editedNameHindi, setEditedNameHindi] = useState("");
-  const [editedDob, setEditedDob] = useState("");
+  const [editedDob, setEditedDob] = useState<Dayjs | null>(null);
   const [editedGender, setEditedGender] = useState<Gender>(Gender.male);
   const [editedCustomFields, setEditedCustomFields] = useState<
     Record<string, string>
@@ -129,7 +152,7 @@ export const NodeDetails = memo(function NodeDetails({
   // New fields state
   const [editedBloodGroup, setEditedBloodGroup] = useState("");
   const [editedIsAlive, setEditedIsAlive] = useState(true);
-  const [editedDeceasedDate, setEditedDeceasedDate] = useState("");
+  const [editedDeceasedDate, setEditedDeceasedDate] = useState<Dayjs | null>(null);
 
   // Photo edit state
   const [editedPhotoPreview, setEditedPhotoPreview] = useState<
@@ -166,14 +189,14 @@ export const NodeDetails = memo(function NodeDetails({
       setView(initialView || "details");
       setEditedName(node.name || "");
       setEditedNameHindi(node.nameHindi || "");
-      setEditedDob(node.dob || "");
+      setEditedDob(parsePickerValue(node.dob));
       setEditedGender(node.gender || Gender.male);
 
       setEditedCustomFields(node.customFields || {});
       setDisplayCustomFields(node.customFields || {});
       setEditedBloodGroup(node.bloodGroup || "");
       setEditedIsAlive(node.isAlive !== false);
-      setEditedDeceasedDate(node.deceasedDate || "");
+      setEditedDeceasedDate(parsePickerValue(node.deceasedDate));
       setEditedPhotoPreview(node.photo || undefined);
 
       // Fetch latest custom fields separately
@@ -182,7 +205,7 @@ export const NodeDetails = memo(function NodeDetails({
         setDisplayCustomFields(fields);
       });
     }
-  }, [node, initialView]);
+  }, [node, initialView, parsePickerValue]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -190,7 +213,7 @@ export const NodeDetails = memo(function NodeDetails({
       window.history.pushState({ nodeDetailsOpen: true }, "");
 
       const handlePopState = () => {
-        props.onSelect(undefined);
+        onSelect(undefined);
         setView("details");
       };
 
@@ -200,16 +223,16 @@ export const NodeDetails = memo(function NodeDetails({
         window.removeEventListener("popstate", handlePopState);
       };
     }
-  }, [isOpen, props]);
+  }, [isOpen, onSelect]);
 
   const closeHandler = useCallback(() => {
     if (window.history.state?.nodeDetailsOpen) {
       window.history.back();
     } else {
-      props.onSelect(undefined);
+      onSelect(undefined);
       setView("details");
     }
-  }, [props]);
+  }, [onSelect]);
 
   const handleEditClick = useCallback(() => {
     if (!currentUser) {
@@ -243,23 +266,23 @@ export const NodeDetails = memo(function NodeDetails({
 
   const handleSaveEdit = useCallback(async () => {
     if (isSavingEdit) return;
-    if (node && props.onUpdate) {
+    if (node && onUpdate) {
       try {
         setIsSavingEdit(true);
         const updates: Partial<FNode> = {
           name: editedName.trim(),
           nameHindi: editedNameHindi.trim(),
-          dob: editedDob.trim(),
+          dob: formatPickerDate(editedDob),
           gender: editedGender,
           bloodGroup: editedBloodGroup || undefined,
           isAlive: editedIsAlive,
           deceasedDate:
             !editedIsAlive && editedDeceasedDate
-              ? editedDeceasedDate
+              ? formatPickerDate(editedDeceasedDate)
               : undefined,
           customFields: editedCustomFields,
         };
-        await props.onUpdate(node.id, updates);
+        await onUpdate(node.id, updates);
         setView("details");
       } catch (err) {
         console.error("NodeDetails: Error during update:", err);
@@ -278,29 +301,51 @@ export const NodeDetails = memo(function NodeDetails({
     editedBloodGroup,
     editedIsAlive,
     editedDeceasedDate,
-    props,
+    formatPickerDate,
+    onUpdate,
   ]);
 
   const handleConfirmDelete = useCallback(() => {
-    if (node && props.onDelete) {
-      props.onDelete(node.id);
+    if (node && onDelete) {
+      onDelete(node.id);
       closeHandler();
     }
-  }, [node, props, closeHandler]);
+  }, [node, onDelete, closeHandler]);
+
+  const handleAddNode = useCallback(
+    async (
+      n: Partial<FNode>,
+      r: "child" | "spouse" | "parent",
+      t?: string,
+      type?: RelType,
+      op?: string,
+    ): Promise<string | undefined> => {
+      if (!onAdd) {
+        return undefined;
+      }
+      const result = await onAdd(n, r, t, type, op);
+      return typeof result === "string" ? result : undefined;
+    },
+    [onAdd],
+  );
+
+  const handleAddComplete = useCallback(() => {
+    onSelect(undefined);
+  }, [onSelect]);
 
   const handleLinkExternalClick = useCallback(() => {
     if (!currentUser) {
       openLoginModal(() => {
         setLinkExternalRelationSubtype(RelType.married);
-        setLinkExternalStartDate("");
-        setLinkExternalEndDate("");
+        setLinkExternalStartDate(null);
+        setLinkExternalEndDate(null);
         setView("link-external");
       });
       return;
     }
     setLinkExternalRelationSubtype(RelType.married);
-    setLinkExternalStartDate("");
-    setLinkExternalEndDate("");
+    setLinkExternalStartDate(null);
+    setLinkExternalEndDate(null);
     setView("link-external");
   }, [currentUser, openLoginModal]);
 
@@ -309,7 +354,7 @@ export const NodeDetails = memo(function NodeDetails({
     if (
       linkExternalStartDate &&
       linkExternalEndDate &&
-      dayjs(linkExternalEndDate).isBefore(dayjs(linkExternalStartDate), "day")
+      linkExternalEndDate.isBefore(linkExternalStartDate, "day")
     ) {
       alert("Marriage end date cannot be before marriage start date.");
       return;
@@ -347,8 +392,8 @@ export const NodeDetails = memo(function NodeDetails({
         spouse.id,
         selectedExternalPerson.id,
         linkExternalRelationSubtype,
-        linkExternalStartDate || undefined,
-        linkExternalEndDate || undefined,
+        formatPickerDate(linkExternalStartDate),
+        formatPickerDate(linkExternalEndDate),
         node.id,
       );
 
@@ -371,8 +416,8 @@ export const NodeDetails = memo(function NodeDetails({
       setEditSpouseRelationSubtype(
         (firstSpouse.relationSubtype || firstSpouse.type || RelType.married) as RelType,
       );
-      setEditSpouseStartDate(firstSpouse.startDate || "");
-      setEditSpouseEndDate(firstSpouse.endDate || "");
+      setEditSpouseStartDate(parsePickerValue(firstSpouse.startDate));
+      setEditSpouseEndDate(parsePickerValue(firstSpouse.endDate));
       setEditSpouseDatesOpen(true);
     };
 
@@ -384,7 +429,7 @@ export const NodeDetails = memo(function NodeDetails({
     }
 
     openEditor();
-  }, [node, currentUser, openLoginModal]);
+  }, [node, currentUser, openLoginModal, parsePickerValue]);
 
   const handleChangeEditSpouse = useCallback(
     (spouseId: string) => {
@@ -394,10 +439,10 @@ export const NodeDetails = memo(function NodeDetails({
       setEditSpouseRelationSubtype(
         (relation?.relationSubtype || relation?.type || RelType.married) as RelType,
       );
-      setEditSpouseStartDate(relation?.startDate || "");
-      setEditSpouseEndDate(relation?.endDate || "");
+      setEditSpouseStartDate(parsePickerValue(relation?.startDate));
+      setEditSpouseEndDate(parsePickerValue(relation?.endDate));
     },
-    [node],
+    [node, parsePickerValue],
   );
 
   const handleSaveSpouseDates = useCallback(async () => {
@@ -405,7 +450,7 @@ export const NodeDetails = memo(function NodeDetails({
     if (
       editSpouseStartDate &&
       editSpouseEndDate &&
-      dayjs(editSpouseEndDate).isBefore(dayjs(editSpouseStartDate), "day")
+      editSpouseEndDate.isBefore(editSpouseStartDate, "day")
     ) {
       alert("Marriage end date cannot be before marriage start date.");
       return;
@@ -417,8 +462,8 @@ export const NodeDetails = memo(function NodeDetails({
         node.id,
         editSpouseId,
         editSpouseRelationSubtype,
-        editSpouseStartDate || undefined,
-        editSpouseEndDate || undefined,
+        formatPickerDate(editSpouseStartDate),
+        formatPickerDate(editSpouseEndDate),
       );
       setEditSpouseDatesOpen(false);
       window.location.reload();
@@ -457,7 +502,7 @@ export const NodeDetails = memo(function NodeDetails({
   const children = node.children?.map(relNodeMapper).filter(Boolean) || [];
   const siblings = node.siblings?.map(relNodeMapper).filter(Boolean) || [];
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
-  const canEditCurrentNode = props.canEditNode ? props.canEditNode(node.id) : true;
+  const canEditCurrentNode = canEditNode ? canEditNode(node.id) : true;
   const summaryItems = [
     {
       key: "gender",
@@ -660,7 +705,7 @@ export const NodeDetails = memo(function NodeDetails({
                       </Button>
                       {/* Only show "Link & Replace" if the node belongs to the current tree (is local/placeholder)
                         AND is a spouse (has accumulated no parents in this tree, but has a spouse) */}
-                      {(!props.treeId || node.treeId === props.treeId) &&
+                      {(!treeId || node.treeId === treeId) &&
                         (!node.parents || node.parents.length === 0) &&
                         node.spouses &&
                         node.spouses.length > 0 && (
@@ -891,10 +936,8 @@ export const NodeDetails = memo(function NodeDetails({
                     <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
                       <DatePicker
                         label="Date of Birth"
-                        value={editedDob ? dayjs(editedDob) : null}
-                        onChange={(val) =>
-                          setEditedDob(val ? val.format("YYYY-MM-DD") : "")
-                        }
+                        value={editedDob}
+                        onChange={(value) => setEditedDob(value)}
                         slotProps={{ textField: { fullWidth: true } }}
                         format="DD/MM/YYYY"
                       />
@@ -957,7 +1000,7 @@ export const NodeDetails = memo(function NodeDetails({
                       checked={editedIsAlive}
                       onChange={(e) => {
                         setEditedIsAlive(e.target.checked);
-                        if (e.target.checked) setEditedDeceasedDate("");
+                        if (e.target.checked) setEditedDeceasedDate(null);
                       }}
                     />
                   }
@@ -969,14 +1012,8 @@ export const NodeDetails = memo(function NodeDetails({
                   >
                     <DatePicker
                       label="Deceased Date"
-                      value={
-                        editedDeceasedDate ? dayjs(editedDeceasedDate) : null
-                      }
-                      onChange={(val) =>
-                        setEditedDeceasedDate(
-                          val ? val.format("YYYY-MM-DD") : "",
-                        )
-                      }
+                      value={editedDeceasedDate}
+                      onChange={(value) => setEditedDeceasedDate(value)}
                       slotProps={{ textField: { fullWidth: true } }}
                       format="DD/MM/YYYY"
                     />
@@ -1045,21 +1082,9 @@ export const NodeDetails = memo(function NodeDetails({
                 initialRelation={initialAddInfo?.relation}
                 initialGender={initialAddInfo?.gender as any}
                 onMobileSaveActionChange={setMobileAddSaveAction}
-                onAdd={async (
-                  n,
-                  r,
-                  t,
-                  type,
-                  op,
-                ): Promise<string | undefined> => {
-                  if (props.onAdd) {
-                    const result = await props.onAdd(n, r, t, type, op);
-                    return typeof result === "string" ? result : undefined;
-                  }
-                  return undefined;
-                }}
+                onAdd={handleAddNode}
                 onCancel={closeHandler}
-                onComplete={() => props.onSelect(undefined)}
+                onComplete={handleAddComplete}
                 noCard
               />
             </DialogContent>
@@ -1119,7 +1144,7 @@ export const NodeDetails = memo(function NodeDetails({
                     const next = e.target.value as RelType;
                     setLinkExternalRelationSubtype(next);
                     if (next !== RelType.divorced) {
-                      setLinkExternalEndDate("");
+                      setLinkExternalEndDate(() => null);
                     }
                   }}
                   label="Relation Type"
@@ -1132,10 +1157,8 @@ export const NodeDetails = memo(function NodeDetails({
               <Suspense fallback={<TextField fullWidth label="Marriage Start Date" sx={{ mt: 2 }} />}>
                 <DatePicker
                   label="Marriage Start Date (optional)"
-                  value={linkExternalStartDate ? dayjs(linkExternalStartDate) : null}
-                  onChange={(val) =>
-                    setLinkExternalStartDate(val ? val.format("YYYY-MM-DD") : "")
-                  }
+                  value={linkExternalStartDate}
+                  onChange={(value) => setLinkExternalStartDate(value)}
                   slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
                   format="DD/MM/YYYY"
                 />
@@ -1145,10 +1168,8 @@ export const NodeDetails = memo(function NodeDetails({
                 <Suspense fallback={<TextField fullWidth label="Marriage End Date" sx={{ mt: 2 }} />}>
                   <DatePicker
                     label="Marriage End Date (optional)"
-                    value={linkExternalEndDate ? dayjs(linkExternalEndDate) : null}
-                    onChange={(val) =>
-                      setLinkExternalEndDate(val ? val.format("YYYY-MM-DD") : "")
-                    }
+                    value={linkExternalEndDate}
+                    onChange={(value) => setLinkExternalEndDate(value)}
                     slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
                     format="DD/MM/YYYY"
                   />
@@ -1211,7 +1232,7 @@ export const NodeDetails = memo(function NodeDetails({
                 const next = e.target.value as RelType;
                 setEditSpouseRelationSubtype(next);
                 if (next !== RelType.divorced) {
-                  setEditSpouseEndDate("");
+                  setEditSpouseEndDate(() => null);
                 }
               }}
               label="Relation Type"
@@ -1224,10 +1245,8 @@ export const NodeDetails = memo(function NodeDetails({
           <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
             <DatePicker
               label="Marriage Start Date (optional)"
-              value={editSpouseStartDate ? dayjs(editSpouseStartDate) : null}
-              onChange={(val) =>
-                setEditSpouseStartDate(val ? val.format("YYYY-MM-DD") : "")
-              }
+              value={editSpouseStartDate}
+              onChange={(value) => setEditSpouseStartDate(value)}
               slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
               format="DD/MM/YYYY"
             />
@@ -1237,10 +1256,8 @@ export const NodeDetails = memo(function NodeDetails({
             <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
               <DatePicker
                 label="Marriage End Date (optional)"
-                value={editSpouseEndDate ? dayjs(editSpouseEndDate) : null}
-                onChange={(val) =>
-                  setEditSpouseEndDate(val ? val.format("YYYY-MM-DD") : "")
-                }
+                value={editSpouseEndDate}
+                onChange={(value) => setEditSpouseEndDate(value)}
                 slotProps={{ textField: { fullWidth: true } }}
                 format="DD/MM/YYYY"
               />

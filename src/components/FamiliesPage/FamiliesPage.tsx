@@ -115,18 +115,28 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const loadRequestIdRef = useRef(0);
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
+  const isSuperAdminUser = isSuperAdmin();
   const canWriteCurrentTree = hasPermission("admin", villageId);
   const canWriteAnyBranch =
     canWriteCurrentTree &&
-    Boolean(treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length);
-  const canCreateRootNode = canWriteCurrentTree && Boolean(treeWriteScope?.canWriteAll);
-  const canManageInvites = Boolean(canWriteCurrentTree && (isSuperAdmin() || treeWriteScope?.canWriteAll));
+    (isSuperAdminUser ||
+      Boolean(treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length));
+  const canCreateRootNode =
+    canWriteCurrentTree && (isSuperAdminUser || Boolean(treeWriteScope?.canWriteAll));
+  const canManageInvites = Boolean(
+    canWriteCurrentTree && (isSuperAdminUser || treeWriteScope?.canWriteAll),
+  );
   const showNoAccessAlert =
     isAdmin() && isApproved && !canWriteCurrentTree && !dismissNoAccessAlert;
 
   const editableNodeIds = useMemo(() => {
     const editable = new Set<string>();
-    if (!canWriteCurrentTree || !treeWriteScope) return editable;
+    if (!canWriteCurrentTree) return editable;
+    if (isSuperAdminUser) {
+      nodes.forEach((node) => editable.add(node.id));
+      return editable;
+    }
+    if (!treeWriteScope) return editable;
     if (treeWriteScope.canWriteAll) {
       nodes.forEach((node) => editable.add(node.id));
       return editable;
@@ -146,15 +156,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       });
     }
     return editable;
-  }, [canWriteCurrentTree, treeWriteScope, nodes]);
+  }, [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, nodes]);
 
   const canEditNode = useCallback(
     (nodeId?: string | null) => {
-      if (!nodeId || !canWriteCurrentTree || !treeWriteScope) return false;
+      if (!nodeId || !canWriteCurrentTree) return false;
+      if (isSuperAdminUser) return true;
+      if (!treeWriteScope) return false;
       if (treeWriteScope.canWriteAll) return true;
       return editableNodeIds.has(nodeId);
     },
-    [canWriteCurrentTree, treeWriteScope, editableNodeIds],
+    [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, editableNodeIds],
   );
 
   useEffect(() => {

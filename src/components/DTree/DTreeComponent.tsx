@@ -1270,6 +1270,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     rootId,
     mainId,
     addMenuNodeId,
+    isMobile,
+    isNodeEditable,
     currentTreeId,
     showFullTree,
     highlightedPersonId,
