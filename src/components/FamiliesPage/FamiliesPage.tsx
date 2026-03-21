@@ -1241,7 +1241,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 nodes={nodes}
                 rootId={rootId}
                 canEditTree={canWriteAnyBranch}
-                canEditNode={(nodeId) => canEditNode(nodeId)}
+                canEditNode={canEditNode}
                 autoExpandNodeId={autoExpandNodeId}
                 onAutoExpandHandled={() => setAutoExpandNodeId(null)}
                 onNodeClick={(id) => {
@@ -1520,7 +1520,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           onAdd={onAdd}
           onUpdate={onUpdate}
           onDelete={onDelete}
-          canEditNode={(nodeId) => canEditNode(nodeId)}
+          canEditNode={canEditNode}
           treeId={treeId}
           initialView={nodeDetailsInitialView}
           initialAddInfo={nodeDetailsAddInfo}
