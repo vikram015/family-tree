@@ -18,6 +18,7 @@ import {
   ListItemIcon,
   ListItemText,
   Chip,
+  Avatar,
   ClickAwayListener,
   LinearProgress,
   Dialog,
@@ -56,11 +57,59 @@ interface SearchResult {
   name: string;
   type: "person" | "business" | "profession";
   treeId?: string;
+  treeName?: string;
+  personPhotoUrl?: string;
+  gotra?: string;
   extra?: string;
   villageName?: string;
   casteName?: string;
   subCasteName?: string;
   parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
+}
+
+interface DashboardContributor {
+  personName: string;
+  peopleAdded: number;
+}
+
+function getInitials(value?: string): string {
+  if (!value) return "?";
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber" | "slate") {
+  if (!value) return null;
+
+  const styles =
+    accent === "teal"
+      ? { bg: "#ecfeff", color: "#0f766e" }
+      : accent === "amber"
+        ? { bg: "#fff7ed", color: "#b45309" }
+        : { bg: "#f1f5f9", color: "#475569" };
+
+  return (
+    <Box
+      key={`${label}-${value}`}
+      sx={{
+        px: 0.9,
+        py: 0.45,
+        borderRadius: 999,
+        bgcolor: styles.bg,
+        color: styles.color,
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1.2,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Box component="span">{value}</Box>
+    </Box>
+  );
 }
 
 export const HomePage: React.FC = () => {
@@ -118,14 +167,11 @@ export const HomePage: React.FC = () => {
           treeId: row.treeId,
           extra:
             row.entityType === "person"
-              ? [
-                  row.villageName ? `Village: ${row.villageName}` : null,
-                  row.treeName ? `Tree: ${row.treeName}` : "Family Member",
-                  lineageText ? `Lineage: ${lineageText}` : "Lineage: N/A",
-                ]
-                  .filter(Boolean)
-                  .join(" | ")
+              ? lineageText || "Lineage: N/A"
               : row.subtitle || undefined,
+          treeName: row.treeName || undefined,
+          personPhotoUrl: row.personPhotoUrl || undefined,
+          gotra: row.gotra || undefined,
           villageName: row.villageName || undefined,
           casteName: row.casteName || undefined,
           subCasteName: row.subCasteName || undefined,
@@ -212,7 +258,19 @@ export const HomePage: React.FC = () => {
               >
                 <ListItemIcon sx={{ minWidth: 36 }}>
                   {result.type === "person" ? (
-                    <PersonIcon color="primary" />
+                    <Avatar
+                      src={result.personPhotoUrl || undefined}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        bgcolor: "#e0f2fe",
+                        color: "#0369a1",
+                      }}
+                    >
+                      {getInitials(result.name)}
+                    </Avatar>
                   ) : result.type === "profession" ? (
                     <TimelineIcon color="action" />
                   ) : (
@@ -220,7 +278,21 @@ export const HomePage: React.FC = () => {
                   )}
                 </ListItemIcon>
                 <ListItemText
-                  primary={result.name}
+                  primary={
+                    <Stack spacing={0.75}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {result.name}
+                      </Typography>
+                      {result.type === "person" &&
+                        (result.villageName || result.gotra || result.casteName) && (
+                          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
+                            {renderMetaPill("Village", result.villageName, "teal")}
+                            {renderMetaPill("Caste", result.casteName, "slate")}
+                            {renderMetaPill("Sub caste", result.gotra, "slate")}
+                          </Stack>
+                        )}
+                    </Stack>
+                  }
                   secondary={result.extra || undefined}
                   primaryTypographyProps={{ fontWeight: 600 }}
                   secondaryTypographyProps={{ fontSize: "0.75rem" }}
@@ -261,6 +333,9 @@ export const HomePage: React.FC = () => {
   const totalTrees = statistics?.totalTrees || 0;
   const totalVillages = statistics?.totalVillages || 0;
   const totalBusinesses = statistics?.totalBusinesses || 0;
+  const topContributors = Array.isArray(statistics?.topContributors)
+    ? (statistics.topContributors as DashboardContributor[])
+    : [];
   const professionCoverage = totalPeople
     ? Math.round(((statistics?.peopleWithProfessions || 0) / totalPeople) * 100)
     : 0;
@@ -572,6 +647,66 @@ export const HomePage: React.FC = () => {
             gap: 2,
           }}
         >
+          <Card sx={{ borderRadius: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <PeopleIcon sx={{ color: "#b45309" }} />
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Top Contributors
+                </Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                People who have added the most family members.
+              </Typography>
+              <Stack spacing={1.2}>
+                {loadingStats ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Loading contributor statistics...
+                  </Typography>
+                ) : topContributors.length > 0 ? (
+                  topContributors.map((item, index) => (
+                    <Box
+                      key={`${item.personName}-${index}`}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 2,
+                        py: 1,
+                        borderBottom:
+                          index === topContributors.length - 1 ? "none" : "1px solid",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Stack direction="row" spacing={1.25} alignItems="center">
+                        <Chip
+                          label={`#${index + 1}`}
+                          size="small"
+                          sx={{
+                            bgcolor: "#fff7ed",
+                            color: "#b45309",
+                            fontWeight: 700,
+                            minWidth: 42,
+                          }}
+                        />
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {item.personName}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="body2" color="text.secondary">
+                        {item.peopleAdded} added
+                      </Typography>
+                    </Box>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No contributor statistics available yet.
+                  </Typography>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+
           <Card sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
