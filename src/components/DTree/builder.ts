@@ -171,7 +171,13 @@ class TreeBuilder {
         return !l.target.data.noParent;
       })
       .append('path')
-      .attr('class', opts.styles.linage)
+      .attr('class', function (l: any) {
+        const sourceReadOnly = l?.source?.data?.extra?.isReadOnly === true;
+        const targetReadOnly = l?.target?.data?.extra?.isReadOnly === true;
+        const classes = [opts.styles.linage];
+        if (sourceReadOnly && targetReadOnly) classes.push('readonly');
+        return classes.join(' ');
+      })
       .attr('d', this._elbow.bind(this))
       .style('opacity', duration === 0 ? 1 : 0);
 
@@ -196,9 +202,14 @@ class TreeBuilder {
         const relationType = d?.target?.marriageNode?.data?.extra?.relationType;
         const hasDeceasedPartner =
           d?.target?.marriageNode?.data?.extra?.hasDeceasedPartner === true;
+        const sourceReadOnly = d?.source?.data?.extra?.isReadOnly === true;
+        const targetReadOnly = d?.target?.data?.extra?.isReadOnly === true;
         const classes = [opts.styles.marriage];
         if (relationType === 'divorced') classes.push('divorced');
         if (hasDeceasedPartner) classes.push('deceased');
+        if (sourceReadOnly && targetReadOnly) {
+          classes.push('readonly');
+        }
         return classes.join(' ');
       })
       .attr('d', this._siblingLine.bind(this))
@@ -656,5 +667,3 @@ class TreeBuilder {
 }
 
 export default TreeBuilder;
-
-

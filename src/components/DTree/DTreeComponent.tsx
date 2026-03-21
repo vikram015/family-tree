@@ -513,6 +513,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       if (
         target.closest(".node-edit-icon") ||
         target.closest(".node-add-icon") ||
+        target.closest(".readonly-badge") ||
         target.closest(".external-tree-icon") ||
         target.closest(".placeholder-click-target")
       ) {
@@ -664,6 +665,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
     const person = nodes.find((n) => n.id === personId);
     if (!person) return null;
+    const canEditCurrentPerson = isNodeEditable(personId);
 
     // Determine if this node is the focused "main" node
     const isMainNode = mainId === personId;
@@ -701,6 +703,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         parentsCount: person.parents?.length || 0,
         childrenCount: person.children?.length || 0,
         spousesCount: person.spouses?.length || 0,
+        canEditNode: canEditCurrentPerson,
+        isReadOnly: !canEditCurrentPerson,
       },
     };
 
@@ -730,6 +734,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       person.spouses.forEach((spouse, index) => {
         const spouseNode = nodes.find((n) => n.id === spouse.id);
         if (!spouseNode) return;
+        const canEditSpouseNode = isNodeEditable(spouseNode.id);
 
         // Find children that belong to this specific marriage
         const marriageChildren: DTreeNode[] = [];
@@ -815,6 +820,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             relationType: spouse.type,
             hasDeceasedPartner:
               person.isAlive === false || spouseNode.isAlive === false,
+            isReadOnly: !canEditCurrentPerson || !canEditSpouseNode,
           },
           spouse: {
             name: spouseNode.nameHindi || spouseNode.name,
@@ -837,6 +843,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               parentsCount: spouseNode.parents?.length || 0,
               childrenCount: spouseNode.children?.length || 0,
               spousesCount: spouseNode.spouses?.length || 0,
+              canEditNode: canEditSpouseNode,
+              isReadOnly: !canEditSpouseNode,
             },
           },
           children: marriageChildren.length > 0 ? marriageChildren : undefined,

@@ -16,12 +16,24 @@
   opacity: 0.9;
 }
 
+.linage.readonly {
+  stroke: #c59a1a;
+  stroke-width: 1.9px;
+  opacity: 0.9;
+}
+
 .marriage {
   fill: none;
   stroke: var(--tree-marriage);
   stroke-width: 2px;
   stroke-linecap: round;
   stroke-linejoin: round;
+  opacity: 0.95;
+}
+
+.marriage.readonly {
+  stroke: #c59a1a;
+  stroke-width: 2px;
   opacity: 0.95;
 }
 

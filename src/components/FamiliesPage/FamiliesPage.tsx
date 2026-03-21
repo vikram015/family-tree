@@ -98,7 +98,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     targetTreeId: null,
     targetPersonId: null,
   });
-  const [dismissNoAccessAlert, setDismissNoAccessAlert] = useState(false);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(
     null,
@@ -116,7 +115,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
   const isSuperAdminUser = isSuperAdmin();
-  const canWriteCurrentTree = hasPermission("admin", villageId);
+  const hasVillageAdminAccess = hasPermission("admin", villageId);
+  const hasBranchWriteScope = Boolean(
+    treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length,
+  );
+  const canWriteCurrentTree = Boolean(
+    currentUser && (isSuperAdminUser || hasVillageAdminAccess || hasBranchWriteScope),
+  );
   const canWriteAnyBranch =
     canWriteCurrentTree &&
     (isSuperAdminUser ||
@@ -126,9 +131,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const canManageInvites = Boolean(
     canWriteCurrentTree && (isSuperAdminUser || treeWriteScope?.canWriteAll),
   );
-  const showNoAccessAlert =
-    isAdmin() && isApproved && !canWriteCurrentTree && !dismissNoAccessAlert;
-
   const editableNodeIds = useMemo(() => {
     const editable = new Set<string>();
     if (!canWriteCurrentTree) return editable;
@@ -172,7 +174,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   useEffect(() => {
     let active = true;
 
-    if (!treeId || !currentUser || !canWriteCurrentTree) {
+    if (!treeId || !currentUser) {
       setTreeWriteScope(null);
       return () => {
         active = false;
@@ -193,7 +195,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     return () => {
       active = false;
     };
-  }, [treeId, currentUser, canWriteCurrentTree]);
+  }, [treeId, currentUser]);
 
   useEffect(() => {
     if (!inviteToken || loading) {
@@ -457,7 +459,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setNodes([]);
     setRootId("");
     setSelectId(undefined);
-    setDismissNoAccessAlert(false);
     loadTreeData();
   }, [loadTreeData]);
 
@@ -1017,14 +1018,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               text: "Your account is pending approval. You can view trees but cannot make changes until a Super Admin approves your account.",
             }
           : null,
-        showNoAccessAlert
-          ? {
-              key: "no-village-access",
-              severity: "info" as const,
-              text: "You can view this tree but cannot make changes because you do not have village write access for this tree.",
-              onClose: () => setDismissNoAccessAlert(true),
-            }
-          : null,
         inviteAccepting
           ? {
               key: "invite-processing",
@@ -1033,7 +1026,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             }
           : null,
       ].filter(Boolean) as StatusAlert[],
-    [isAdmin, isApproved, showNoAccessAlert, inviteAccepting],
+    [isAdmin, isApproved, inviteAccepting],
   );
 
   const statCards = useMemo(

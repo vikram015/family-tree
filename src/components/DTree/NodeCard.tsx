@@ -179,6 +179,16 @@ function renderStatusAvatarBadge(
   );
 }
 
+function renderReadOnlyBadge(x: number, y: number): string {
+  return (
+    `<g class="readonly-badge">` +
+    `<title>Read-only node</title>` +
+    `<path d="M${x - 7.5} ${y} C${x - 4.5} ${y - 5}, ${x + 4.5} ${y - 5}, ${x + 7.5} ${y} C${x + 4.5} ${y + 5}, ${x - 4.5} ${y + 5}, ${x - 7.5} ${y}Z" fill="none" stroke="#d97706" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `<circle cx="${x}" cy="${y}" r="2.2" fill="#d97706"/>` +
+    `</g>`
+  );
+}
+
 /**
  * Male placeholder icon (person silhouette)
  */
@@ -262,6 +272,7 @@ export function renderNodeCardSvg(
 ): string {
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
+  const isReadOnly = extra?.isReadOnly === true;
   const genderBase =
     gender === "male" ? "male" : gender === "female" ? "female" : "person";
   const colorKey = isDeceased ? `${genderBase}_deceased` : genderBase;
@@ -434,10 +445,14 @@ export function renderNodeCardSvg(
     svg += `fill="none" stroke="#ff9800" stroke-width="3" pointer-events="none"/>`;
   }
 
+  if (isReadOnly && extra?.id && !extra?._placeholder) {
+    svg += renderReadOnlyBadge(2, 2);
+  }
+
   // === External tree link icon ===
   if (showExternalLink) {
-    const linkX = dim.w - 12;
-    const linkY = 12;
+    const linkX = dim.w - 6;
+    const linkY = 6;
     const linkR = 10;
     svg += `<g class="external-tree-icon" data-tree-id="${extra.treeId}" data-person-id="${extra.id}" cursor="pointer">`;
     svg += `<circle cx="${linkX}" cy="${linkY}" r="${linkR}" fill="#ffffff" stroke="${colors.accentEnd}" stroke-width="1.5"/>`;
