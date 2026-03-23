@@ -8,7 +8,6 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { runHierarchyMigrationForAllTrees } from "../../utils/hierarchyMigration";
-import { populateVillageInfoForAllNodes } from "../../utils/populateVillageInfo";
 import { MigrationService } from "../../services/migrationService";
 import { backendApi } from "../../services/backendApi";
 
@@ -79,29 +78,6 @@ export const DebugPage: React.FC = () => {
       setMigrationStatus("✅ Migration completed successfully!");
     } catch (err: any) {
       setMigrationStatus(`❌ Migration failed: ${err.message}`);
-      console.error(err);
-    } finally {
-      setMigrating(false);
-    }
-  };
-
-  const handlePopulateVillageInfo = async () => {
-    if (
-      !window.confirm(
-        "This will populate villageId and villageName for all family tree nodes based on their tree associations. Continue?",
-      )
-    ) {
-      return;
-    }
-
-    setMigrating(true);
-    setMigrationStatus("Starting village info population...");
-
-    try {
-      await populateVillageInfoForAllNodes();
-      setMigrationStatus("✅ Village info population completed successfully!");
-    } catch (err: any) {
-      setMigrationStatus(`❌ Population failed: ${err.message}`);
       console.error(err);
     } finally {
       setMigrating(false);
@@ -184,33 +160,6 @@ export const DebugPage: React.FC = () => {
                 {migrationStatus}
               </Alert>
             )}
-          </Box>
-
-          <Box sx={{ bgcolor: "#e3f2fd", p: 3, borderRadius: 1, mb: 4 }}>
-            <Typography variant="body1" gutterBottom sx={{ fontWeight: 600 }}>
-              Populate Village Information
-            </Typography>
-            <Typography variant="body2" paragraph>
-              Populate villageId and villageName for all family tree nodes. This
-              ensures each person is associated with their correct village for
-              better search and filtering.
-            </Typography>
-            <Button
-              variant="contained"
-              color="info"
-              onClick={handlePopulateVillageInfo}
-              disabled={migrating}
-              sx={{ mt: 2 }}
-            >
-              {migrating ? (
-                <>
-                  <CircularProgress size={20} sx={{ mr: 1 }} />
-                  Processing...
-                </>
-              ) : (
-                "Populate Village Info"
-              )}
-            </Button>
           </Box>
 
           <Box sx={{ bgcolor: "#f3e5f5", p: 3, borderRadius: 1, mb: 4 }}>

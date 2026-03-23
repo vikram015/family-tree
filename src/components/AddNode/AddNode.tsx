@@ -925,163 +925,189 @@ export default function AddNode({
               </Stack>
             </Paper>
           ) : (
-            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-              <Stack spacing={2.25}>
-              {!isFirstNode && relation === "child" && (
-                <FormControl fullWidth>
-                  <InputLabel>Other parent</InputLabel>
-                  <Select
-                    value={selectedOtherParentId}
-                    onChange={(e) => setSelectedOtherParentId(e.target.value)}
-                    label="Other parent"
+            <Stack spacing={2.25}>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  Identity
+                </Typography>
+                <Stack spacing={2}>
+                  {!isFirstNode && relation === "child" && (
+                    <FormControl fullWidth>
+                      <InputLabel>Other parent</InputLabel>
+                      <Select
+                        value={selectedOtherParentId}
+                        onChange={(e) => setSelectedOtherParentId(e.target.value)}
+                        label="Other parent"
+                      >
+                        <MenuItem value="">None</MenuItem>
+                        {spouseOptions.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>
+                            {s.name ||
+                              (targetNode?.name
+                                ? `${targetNode.name}'s Spouse`
+                                : s.id)}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+
+                  <Box
+                    sx={{
+                      p: { xs: 1.5, sm: 2 },
+                      borderRadius: 3,
+                      textAlign: "center",
+                      background: (muiTheme) =>
+                        `linear-gradient(180deg, ${alpha(muiTheme.palette.primary.main, 0.06)} 0%, ${muiTheme.palette.background.paper} 100%)`,
+                    }}
                   >
-                    <MenuItem value="">None</MenuItem>
-                    {spouseOptions.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        {s.name ||
-                          (targetNode?.name
-                            ? `${targetNode.name}'s Spouse`
-                            : s.id)}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
+                    <Stack spacing={1.5} alignItems="center">
+                      <Suspense fallback={<Box sx={{ height: 88 }} />}>
+                        <ImageCropper
+                          currentPhoto={photoPreview}
+                          previewVariant="rounded"
+                          onCropped={(blob) => {
+                            setPhotoBlob(blob);
+                            setPhotoPreview(URL.createObjectURL(blob));
+                          }}
+                          onRemove={() => {
+                            setPhotoBlob(null);
+                            setPhotoPreview(undefined);
+                          }}
+                          uploading={photoUploading}
+                          previewSize={88}
+                        />
+                      </Suspense>
+                      <Box>
+                        <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                          {name.trim() || "New family member"}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          Add the basic identity details and photo for this profile.
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
 
-              <Box sx={{ display: "flex", justifyContent: "center", py: 0.5 }}>
-                <Suspense fallback={<Box sx={{ height: 88 }} />}>
-                  <ImageCropper
-                    currentPhoto={photoPreview}
-                    onCropped={(blob) => {
-                      setPhotoBlob(blob);
-                      setPhotoPreview(URL.createObjectURL(blob));
-                    }}
-                    onRemove={() => {
-                      setPhotoBlob(null);
-                      setPhotoPreview(undefined);
-                    }}
-                    uploading={photoUploading}
-                    previewSize={70}
+                  <TextField
+                    label="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    fullWidth
+                    required
+                    autoFocus
                   />
-                </Suspense>
-              </Box>
+                  <HindiNameInput
+                    sourceText={name}
+                    value={nameHindi}
+                    onChange={setNameHindi}
+                    disabled={mode === "link"}
+                  />
 
-              <TextField
-                label="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                fullWidth
-                required
-                autoFocus
-              />
-              <HindiNameInput
-                sourceText={name}
-                value={nameHindi}
-                onChange={setNameHindi}
-                disabled={mode === "link"}
-              />
+                  <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
+                    <DatePicker
+                      label="Date of birth (optional)"
+                      value={dob}
+                      onChange={(value) => setDob(value)}
+                      slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY"
+                    />
+                  </Suspense>
 
-              <Suspense
-                fallback={<TextField fullWidth label="Date of birth" />}
-              >
-                <DatePicker
-                  label="Date of birth (optional)"
-                  value={dob}
-                  onChange={(value) => setDob(value)}
-                  slotProps={{ textField: { fullWidth: true } }}
-                  format="DD/MM/YYYY"
+                  <FormControl sx={{ m: 0 }}>
+                    <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
+                    <RadioGroup
+                      row
+                      sx={{ gap: 1.5 }}
+                      value={gender}
+                      onChange={(e) =>
+                        setGender(e.target.value as "male" | "female" | "other")
+                      }
+                    >
+                      <FormControlLabel
+                        value="male"
+                        control={<Radio />}
+                        label="Male"
+                      />
+                      <FormControlLabel
+                        value="female"
+                        control={<Radio />}
+                        label="Female"
+                      />
+                      <FormControlLabel
+                        value="other"
+                        control={<Radio />}
+                        label="Other"
+                      />
+                    </RadioGroup>
+                  </FormControl>
+                </Stack>
+              </Paper>
+
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  Life details
+                </Typography>
+                <Stack spacing={2}>
+                  <FormControl fullWidth>
+                    <InputLabel>Blood Group</InputLabel>
+                    <Select
+                      value={bloodGroup}
+                      onChange={(e) => setBloodGroup(e.target.value)}
+                      label="Blood Group"
+                    >
+                      <MenuItem value="">Unknown</MenuItem>
+                      <MenuItem value="A+">A+</MenuItem>
+                      <MenuItem value="A-">A−</MenuItem>
+                      <MenuItem value="B+">B+</MenuItem>
+                      <MenuItem value="B-">B−</MenuItem>
+                      <MenuItem value="AB+">AB+</MenuItem>
+                      <MenuItem value="AB-">AB−</MenuItem>
+                      <MenuItem value="O+">O+</MenuItem>
+                      <MenuItem value="O-">O−</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        checked={isAlive}
+                        onChange={(e) => {
+                          setIsAlive(e.target.checked);
+                          if (e.target.checked) setDeceasedDate(null);
+                        }}
+                      />
+                    }
+                    label="Is Alive"
+                  />
+
+                  {!isAlive && (
+                    <Suspense fallback={<TextField fullWidth label="Deceased Date" />}>
+                      <DatePicker
+                        label="Deceased Date"
+                        value={deceasedDate}
+                        onChange={(value) => setDeceasedDate(value)}
+                        slotProps={{ textField: { fullWidth: true } }}
+                        format="DD/MM/YYYY"
+                      />
+                    </Suspense>
+                  )}
+                </Stack>
+              </Paper>
+
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  Additional details
+                </Typography>
+                <AdditionalDetails
+                  value={customFields}
+                  onChange={setCustomFields}
+                  showUpfrontFields={false}
+                  showAdditionalSection
                 />
-              </Suspense>
-
-              <AdditionalDetails
-                value={customFields}
-                onChange={setCustomFields}
-                showAdditionalSection={false}
-              />
-
-              <FormControl fullWidth>
-                <InputLabel>Blood Group</InputLabel>
-                <Select
-                  value={bloodGroup}
-                  onChange={(e) => setBloodGroup(e.target.value)}
-                  label="Blood Group"
-                >
-                  <MenuItem value="">Unknown</MenuItem>
-                  <MenuItem value="A+">A+</MenuItem>
-                  <MenuItem value="A-">A−</MenuItem>
-                  <MenuItem value="B+">B+</MenuItem>
-                  <MenuItem value="B-">B−</MenuItem>
-                  <MenuItem value="AB+">AB+</MenuItem>
-                  <MenuItem value="AB-">AB−</MenuItem>
-                  <MenuItem value="O+">O+</MenuItem>
-                  <MenuItem value="O-">O−</MenuItem>
-                </Select>
-              </FormControl>
-
-              <FormControlLabel
-                sx={{ m: 0 }}
-                control={
-                  <Switch
-                    checked={isAlive}
-                    onChange={(e) => {
-                      setIsAlive(e.target.checked);
-                      if (e.target.checked) setDeceasedDate(null);
-                    }}
-                  />
-                }
-                label="Is Alive"
-              />
-
-              {!isAlive && (
-                <Suspense
-                  fallback={<TextField fullWidth label="Deceased Date" />}
-                >
-                  <DatePicker
-                    label="Deceased Date"
-                    value={deceasedDate}
-                    onChange={(value) => setDeceasedDate(value)}
-                    slotProps={{ textField: { fullWidth: true } }}
-                    format="DD/MM/YYYY"
-                  />
-                </Suspense>
-              )}
-
-              <FormControl sx={{ m: 0 }}>
-                <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
-                <RadioGroup
-                  row
-                  sx={{ gap: 1.5 }}
-                  value={gender}
-                  onChange={(e) =>
-                    setGender(e.target.value as "male" | "female" | "other")
-                  }
-                >
-                  <FormControlLabel
-                    value="male"
-                    control={<Radio />}
-                    label="Male"
-                  />
-                  <FormControlLabel
-                    value="female"
-                    control={<Radio />}
-                    label="Female"
-                  />
-                  <FormControlLabel
-                    value="other"
-                    control={<Radio />}
-                    label="Other"
-                  />
-                </RadioGroup>
-              </FormControl>
-
-              <AdditionalDetails
-                value={customFields}
-                onChange={setCustomFields}
-                showUpfrontFields={false}
-                showAdditionalSection={Object.keys(customFields).length > 0}
-              />
-              </Stack>
-            </Paper>
+              </Paper>
+            </Stack>
           )}
 
           <Box
