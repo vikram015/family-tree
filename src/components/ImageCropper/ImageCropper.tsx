@@ -106,6 +106,9 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     typeof navigator !== "undefined" &&
     !!navigator.mediaDevices &&
     typeof navigator.mediaDevices.getUserMedia === "function";
+  const prefersNativeCameraCapture =
+    typeof window !== "undefined" &&
+    window.matchMedia("(pointer: coarse)").matches;
 
   const onCropComplete = useCallback(
     (_croppedArea: Area, croppedPixels: Area) => {
@@ -163,7 +166,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   }, []);
 
   const handleOpenCamera = useCallback(async () => {
-    if (!supportsCameraApi) {
+    if (prefersNativeCameraCapture || !supportsCameraApi) {
       cameraInputRef.current?.click();
       return;
     }
@@ -203,17 +206,32 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     } finally {
       setIsStartingCamera(false);
     }
-  }, [stopCameraStream, supportsCameraApi]);
+  }, [prefersNativeCameraCapture, stopCameraStream, supportsCameraApi]);
 
   useEffect(() => {
     if (!cameraDialogOpen || !videoRef.current || !streamRef.current) {
       return;
     }
 
-    videoRef.current.srcObject = streamRef.current;
-    void videoRef.current.play().catch((error) => {
-      setCameraError(error instanceof Error ? error.message : "Unable to start camera preview");
-    });
+    const video = videoRef.current;
+    video.srcObject = streamRef.current;
+
+    const handleLoadedMetadata = () => {
+      void video.play().catch((error) => {
+        setCameraError(
+          error instanceof Error
+            ? error.message
+            : "Unable to start camera preview",
+        );
+      });
+    };
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.srcObject = null;
+    };
   }, [cameraDialogOpen]);
 
   const handleCloseCamera = useCallback(() => {
