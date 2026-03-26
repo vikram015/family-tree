@@ -427,13 +427,27 @@ class TreeBuilder {
     // Outer connections are lifted with extra clearance so they don't intersect
     // top-right UI affordances (e.g. external tree icon) on neighboring spouse cards.
     if (d.number > 1) {
-      const iconClearance = Math.round(nodeHeight / 2 + 16);
+      const multiSpouseIndex = Math.floor(d.number / 2); // 1 for 2&3, 2 for 4&5
+      const iconClearance = Math.round(nodeHeight / 2 + 16) + (multiSpouseIndex - 1) * 12;
       ny -= iconClearance;
+      
+      let upX = d.source.x + (isRight ? 20 + (multiSpouseIndex - 1) * 8 : -20 - (multiSpouseIndex - 1) * 8);
+      
+      let linedata = [
+        { x: d.source.x, y: d.source.y },
+        { x: upX, y: d.source.y },
+        { x: upX, y: ny },
+        { x: d.target.marriageNode.x, y: ny },
+        { x: d.target.marriageNode.x, y: d.target.y },
+        { x: d.target.x, y: d.target.y }
+      ];
+
+      return this._roundedOrthogonalPath(linedata, TreeBuilder.CONNECTOR_RADIUS);
     }
 
     // Determine horizontal offset from the node
-    // Inner marriages (0, 1) get smaller offset, Outer (2, 3...) get larger offset
-    let offsetX = d.number > 1 ? (nodeWidth * 8) / 10 : (nodeWidth * 6) / 10;
+    // Inner marriages (0, 1) get smaller offset
+    let offsetX = (nodeWidth * 6) / 10;
     
     // Apply direction to offset
     if (!isRight) {
