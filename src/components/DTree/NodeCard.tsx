@@ -132,7 +132,7 @@ function formatDisplayDate(value?: string): string {
  * Approximate: ~7px per character at 13px font-size, 600 weight.
  */
 function truncateText(text: string, maxWidth: number): string {
-  const charWidth = 7;
+  const charWidth = 6.5; // Adjusted average width per character
   const maxChars = Math.floor(maxWidth / charWidth);
   if (text.length <= maxChars) return text;
   return text.substring(0, maxChars - 1) + "…";
@@ -288,20 +288,23 @@ export function renderNodeCardSvg(
   const shadowId = `shadow-${id}`;
   const shineId = `shine-${id}`;
 
-  // Text
   const hasActionIcons = Boolean(
     canEditNode && extra?.id && !extra?._placeholder && !isMobile,
   );
-  const actionIconsReservedWidth = hasActionIcons ? 50 : 0;
-  const textRightPadding = 12 + actionIconsReservedWidth;
-  const textMaxWidth = dim.w - dim.text_x - textRightPadding;
-  const resolvedName = extra?.nameHindi || name;
-  const displayName = truncateText(resolvedName, textMaxWidth);
-  const escapedName = escapeXml(displayName);
-
   // External tree link
   const showExternalLink =
     currentTreeId && extra?.treeId && extra.treeId !== currentTreeId;
+
+  const actionIconsReservedWidth = hasActionIcons ? 50 : 0;
+  const externalLinkReservedWidth = showExternalLink ? 24 : 0;
+  
+  // Name and Subtitle are on upper rows, so they only need to avoid the external link icon (top right)
+  const textUpperRightPadding = 12 + externalLinkReservedWidth;
+  const textMaxWidth = dim.w - dim.text_x - textUpperRightPadding;
+  
+  const resolvedName = extra?.nameHindi || name;
+  const displayName = truncateText(resolvedName, textMaxWidth);
+  const escapedName = escapeXml(displayName);
 
   let svg = "";
 
@@ -389,7 +392,6 @@ export function renderNodeCardSvg(
   svg += escapedName;
   svg += `</text>`;
 
-  const subtitleMaxWidth = dim.w - dim.text_x - textRightPadding;
   const dobValue = extra?.dob ? formatDisplayDate(extra.dob) : "DOB unavailable";
   const deceasedDateValue =
     isDeceased && extra?.deceasedDate
@@ -398,7 +400,7 @@ export function renderNodeCardSvg(
   const metaLineRaw = deceasedDateValue
     ? `${dobValue} - ${deceasedDateValue}`
     : dobValue;
-  const metaLine = truncateText(metaLineRaw, Math.max(30, subtitleMaxWidth));
+  const metaLine = truncateText(metaLineRaw, Math.max(30, textMaxWidth));
   svg += `<text x="${dim.text_x}" y="${dim.text_y + 16}" `;
   svg += `font-family="'Manrope', 'Segoe UI', Roboto, sans-serif" `;
   svg += `font-size="10.5" fill="${colors.subtext}" opacity="0.95" `;
@@ -410,7 +412,7 @@ export function renderNodeCardSvg(
     typeof extra?.childrenCount === "number" ? extra.childrenCount : 0;
   let pillX = dim.text_x;
   const pillY = dim.h - 24;
-  const pillRowRightLimit = dim.w - textRightPadding;
+  const pillRowRightLimit = dim.w - (12 + actionIconsReservedWidth);
   if (childrenCount > 0) {
     const childrenLabel = `${childrenCount} ${childrenCount === 1 ? "child" : "children"}`;
     const childrenWidth = estimatePillWidth(childrenLabel);

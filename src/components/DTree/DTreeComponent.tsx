@@ -55,6 +55,8 @@ interface DTreeComponentProps {
   currentTreeId?: string;
   highlightedPersonId?: string;
   onMobileSheetChange?: (open: boolean) => void;
+  initialMainId?: string | null;
+  initialShowFullTree?: boolean;
 }
 
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
@@ -73,6 +75,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   currentTreeId,
   highlightedPersonId,
   onMobileSheetChange,
+  initialMainId = null,
+  initialShowFullTree = true,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<any>(null);
@@ -85,15 +89,28 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   // Track one-time URL focus requests so re-renders don't keep re-centering.
   const prevHighlightedFocusKeyRef = useRef<string | null>(null);
 
+  // Track if we have centered on the initial mainId in collapsed mode
+  const hasCenteredInitialRef = useRef(false);
+
   // Expand/collapse state: which node is the "main" focused node
-  const [mainId, setMainId] = useState<string | null>(null);
+  const [mainId, setMainId] = useState<string | null>(initialMainId);
   // Ref to track mainId for the renderer callback (avoids stale closure)
-  const mainIdRef = useRef<string | null>(null);
+  const mainIdRef = useRef<string | null>(initialMainId);
   // Track which node has placeholder "add relative" nodes shown in the tree
   const [addMenuNodeId, setAddMenuNodeId] = useState<string | null>(null);
   const addMenuNodeIdRef = useRef<string | null>(null);
   // When true, the full tree is shown without any collapse behaviour
-  const [showFullTree, setShowFullTree] = useState(true);
+  const [showFullTree, setShowFullTree] = useState(initialShowFullTree);
+
+  // Catch the asynchronously loaded profile ID and apply it once.
+  const hasAppliedInitialFocusRef = useRef(Boolean(initialMainId));
+  useEffect(() => {
+    if (initialMainId && !hasAppliedInitialFocusRef.current) {
+      setMainId(initialMainId);
+      setShowFullTree(initialShowFullTree);
+      hasAppliedInitialFocusRef.current = true;
+    }
+  }, [initialMainId, initialShowFullTree]);
 
   // Mobile detection — narrow viewport
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -1239,13 +1256,13 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         }
       }
 
-      // Auto-center on the focused mainId only when mainId actually changed.
-      // Reuse the shared centering helper so full-tree and collapsed modes
-      // follow identical pan/zoom behavior.
-      if (!showFullTree && mainId && mainIdChanged) {
+      // Auto-center on the focused mainId only when mainId actually changed,
+      // or if we have never successfully centered on it before.
+      if (!showFullTree && mainId && (mainIdChanged || !hasCenteredInitialRef.current)) {
         setTimeout(() => {
           centerOnNodeRef.current(mainId);
-        }, 0);
+          hasCenteredInitialRef.current = true;
+        }, 100);
       }
 
       // URL-driven focus (tree navigation/search) should center exactly once per key.
