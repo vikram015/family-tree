@@ -1213,7 +1213,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // Restore previous zoom/pan state after rebuild so collapsed-mode focus
       // changes don't jump to the default transform before centering.
-      if (currentZoom && treeRef.current && !showFullTree) {
+      if (currentZoom && treeRef.current) {
         try {
           if (typeof treeRef.current.getBuilder === "function") {
             const builder = treeRef.current.getBuilder();
@@ -1227,14 +1227,16 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       }
 
       if (showFullTree) {
-        setTimeout(() => {
-          if (highlightedPersonId) {
+        if (shouldCenterOnHighlighted) {
+          setTimeout(() => {
             resetTreeViewport(0);
             setTimeout(() => centerOnNodeRef.current(highlightedPersonId), 0);
-          } else {
+          }, 0);
+        } else if (shouldAnimate) {
+          setTimeout(() => {
             resetTreeViewport(isMobileRef.current ? 0 : 250);
-          }
-        }, 0);
+          }, 0);
+        }
       }
 
       // Auto-center on the focused mainId only when mainId actually changed.

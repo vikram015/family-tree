@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AppBar,
+  Autocomplete,
   Avatar,
   Toolbar,
   Typography,
@@ -12,12 +13,10 @@ import {
   ListItem,
   useTheme,
   useMediaQuery,
-  FormControl,
-  Select,
-  MenuItem,
   Dialog,
   ListItemButton,
   ListItemText,
+  TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
@@ -31,6 +30,7 @@ export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [villagePickerOpen, setVillagePickerOpen] = useState(false);
+  const [villageSearch, setVillageSearch] = useState("");
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -92,6 +92,16 @@ export const Header: React.FC = () => {
     return location.pathname.startsWith(path);
   };
 
+  const selectedVillageOption =
+    villages.find((village) => village.id === selectedVillage) || null;
+  const filteredVillages = useMemo(() => {
+    const search = villageSearch.trim().toLowerCase();
+    if (!search) return villages;
+    return villages.filter((village) =>
+      village.name.toLowerCase().includes(search),
+    );
+  }, [villageSearch, villages]);
+
   const drawerContent = (
     <Box sx={{ width: 300, p: 2 }}>
       <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
@@ -102,22 +112,15 @@ export const Header: React.FC = () => {
 
       {/* Village Selector for Mobile */}
       <Box sx={{ mb: 2, px: 2 }}>
-        <FormControl fullWidth size="small">
-          <Select
-            value={selectedVillage}
-            onChange={(e) => setSelectedVillage(e.target.value)}
-            displayEmpty
-          >
-            <MenuItem value="">
-              {villages.length === 0 ? "Loading villages..." : "Select Village"}
-            </MenuItem>
-            {villages.map((village) => (
-              <MenuItem key={village.id} value={village.id}>
-                {village.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Button
+          fullWidth
+          variant="outlined"
+          onClick={() => setVillagePickerOpen(true)}
+          sx={{ justifyContent: "flex-start", textTransform: "none" }}
+        >
+          {selectedVillageOption?.name ||
+            (villages.length === 0 ? "Loading villages..." : "Select Village")}
+        </Button>
       </Box>
 
       <List>
@@ -282,10 +285,17 @@ export const Header: React.FC = () => {
 
           {/* Village Selector */}
           {!isMobile && (
-            <FormControl
-              size="small"
+            <Autocomplete
+              options={villages}
+              value={selectedVillageOption}
+              onChange={(_event, value) => setSelectedVillage(value?.id || "")}
+              getOptionLabel={(option) => option.name}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              noOptionsText={
+                villages.length === 0 ? "Loading villages..." : "No villages found"
+              }
               sx={{
-                minWidth: 150,
+                minWidth: 240,
                 ml: 2,
                 "& .MuiOutlinedInput-root": {
                   color: "white",
@@ -299,26 +309,25 @@ export const Header: React.FC = () => {
                     borderColor: "white",
                   },
                 },
+                "& .MuiInputLabel-root": {
+                  color: "rgba(255,255,255,0.8)",
+                },
                 "& .MuiSvgIcon-root": {
                   color: "white",
                 },
+                "& .MuiAutocomplete-input::placeholder": {
+                  color: "rgba(255,255,255,0.8)",
+                  opacity: 1,
+                },
               }}
-            >
-              <Select
-                value={selectedVillage}
-                onChange={(e) => setSelectedVillage(e.target.value)}
-                displayEmpty
-              >
-                <MenuItem value="">
-                  {villages.length === 0 ? "Loading..." : "Select Village"}
-                </MenuItem>
-                {villages.map((village) => (
-                  <MenuItem key={village.id} value={village.id}>
-                    {village.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  size="small"
+                  placeholder={villages.length === 0 ? "Loading..." : "Search village"}
+                />
+              )}
+            />
           )}
 
           {/* Auth Buttons */}
@@ -450,30 +459,56 @@ export const Header: React.FC = () => {
         {drawerContent}
       </Drawer>
 
-      <Dialog fullScreen open={villagePickerOpen} onClose={() => setVillagePickerOpen(false)}>
+      <Dialog
+        fullScreen
+        open={villagePickerOpen}
+        onClose={() => {
+          setVillageSearch("");
+          setVillagePickerOpen(false);
+        }}
+      >
         <AppBar position="static" color="primary">
           <Toolbar>
             <Typography sx={{ flexGrow: 1 }} variant="h6">
               Select Village
             </Typography>
-            <IconButton color="inherit" onClick={() => setVillagePickerOpen(false)}>
+            <IconButton
+              color="inherit"
+              onClick={() => {
+                setVillageSearch("");
+                setVillagePickerOpen(false);
+              }}
+            >
               <CloseIcon />
             </IconButton>
           </Toolbar>
         </AppBar>
         <Box sx={{ p: 2 }}>
+          <TextField
+            fullWidth
+            placeholder="Search village"
+            value={villageSearch}
+            onChange={(e) => setVillageSearch(e.target.value)}
+            sx={{ mb: 2 }}
+          />
           <List>
             {villages.length === 0 && (
               <ListItem>
                 <ListItemText primary="Loading villages..." />
               </ListItem>
             )}
-            {villages.map((village) => (
+            {villages.length > 0 && filteredVillages.length === 0 && (
+              <ListItem>
+                <ListItemText primary="No villages found" />
+              </ListItem>
+            )}
+            {filteredVillages.map((village) => (
               <ListItem key={village.id} disablePadding>
                 <ListItemButton
                   selected={selectedVillage === village.id}
                   onClick={() => {
                     setSelectedVillage(village.id);
+                    setVillageSearch("");
                     setVillagePickerOpen(false);
                   }}
                 >
