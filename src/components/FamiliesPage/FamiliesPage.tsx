@@ -4,30 +4,44 @@ import {
   Box,
   Button,
   Typography,
-  Container,
   CircularProgress,
-  Fab,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   DialogContentText,
-  Alert,
+  Paper,
+  Stack,
+  Tooltip,
+  IconButton,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
-import ShareIcon from "@mui/icons-material/Share";
+import { alpha } from "@mui/material/styles";
+import GroupOutlinedIcon from "@mui/icons-material/GroupOutlined";
+import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
+import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
+import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
 import { getNodeHierarchy } from "../const";
 import { ApiService } from "../../services/apiService";
+import type { TreeWriteScope } from "../../services/apiService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
-import { SourceSelect } from "../SourceSelect/SourceSelect";
 import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useSearchParams } from "react-router-dom";
+import { FamiliesPageHeader } from "./FamiliesPageHeader";
+import type { StatusAlert } from "./FamiliesPageHeader";
+import { InviteCollaboratorDialog } from "./InviteCollaboratorDialog";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -42,12 +56,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   onSourceChange,
   onCreate,
 }) => {
-  const [searchParams] = useSearchParams();
-  const { currentUser, hasPermission, isApproved, isAdmin, isSuperAdmin } =
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { currentUser, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
     useAuth();
   const { setSelectedVillage } = useVillage();
   const { openLoginModal } = useLoginModal();
   const highlightedPersonId = searchParams.get("personId");
+  const inviteToken = searchParams.get("inviteToken");
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
@@ -81,12 +98,164 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     targetTreeId: null,
     targetPersonId: null,
   });
-  const [dismissNoAccessAlert, setDismissNoAccessAlert] = useState(false);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(
+    null,
+  );
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteRole, setInviteRole] = useState("write");
+  const [inviteScope, setInviteScope] = useState<"full" | "branch">("full");
+  const [invitePersonId, setInvitePersonId] = useState("");
+  const [invitePersonSearch, setInvitePersonSearch] = useState("");
+  const [inviteSelectedPersonName, setInviteSelectedPersonName] = useState("");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteAccepting, setInviteAccepting] = useState(false);
   const loadRequestIdRef = useRef(0);
-  const canWriteCurrentTree = hasPermission("admin", villageId);
-  const showNoAccessAlert =
-    isAdmin() && isApproved && !canWriteCurrentTree && !dismissNoAccessAlert;
+  const acceptedInviteTokenRef = useRef<string | null>(null);
+  const inviteLoginPromptedRef = useRef<string | null>(null);
+  const isSuperAdminUser = isSuperAdmin();
+  const hasVillageAdminAccess = hasPermission("admin", villageId);
+  const hasBranchWriteScope = Boolean(
+    treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length,
+  );
+  const canWriteCurrentTree = Boolean(
+    currentUser && (isSuperAdminUser || hasVillageAdminAccess || hasBranchWriteScope),
+  );
+  const canWriteAnyBranch =
+    canWriteCurrentTree &&
+    (isSuperAdminUser ||
+      Boolean(treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length));
+  const canCreateRootNode =
+    canWriteCurrentTree && (isSuperAdminUser || Boolean(treeWriteScope?.canWriteAll));
+  const canManageInvites = Boolean(
+    canWriteCurrentTree && (isSuperAdminUser || treeWriteScope?.canWriteAll),
+  );
+  const editableNodeIds = useMemo(() => {
+    const editable = new Set<string>();
+    if (!canWriteCurrentTree) return editable;
+    if (isSuperAdminUser) {
+      nodes.forEach((node) => editable.add(node.id));
+      return editable;
+    }
+    if (!treeWriteScope) return editable;
+    if (treeWriteScope.canWriteAll) {
+      nodes.forEach((node) => editable.add(node.id));
+      return editable;
+    }
+
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const queue = [...treeWriteScope.rootPersonIds];
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId || editable.has(currentId)) continue;
+      editable.add(currentId);
+      const current = nodeMap.get(currentId);
+      (current?.children || []).forEach((child) => {
+        if (child?.id && !editable.has(child.id)) {
+          queue.push(child.id);
+        }
+      });
+    }
+    return editable;
+  }, [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, nodes]);
+
+  const canEditNode = useCallback(
+    (nodeId?: string | null) => {
+      if (!nodeId || !canWriteCurrentTree) return false;
+      if (isSuperAdminUser) return true;
+      if (!treeWriteScope) return false;
+      if (treeWriteScope.canWriteAll) return true;
+      return editableNodeIds.has(nodeId);
+    },
+    [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, editableNodeIds],
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    if (!treeId || !currentUser) {
+      setTreeWriteScope(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    ApiService.getTreeWriteScope(treeId)
+      .then((scope) => {
+        if (!active) return;
+        setTreeWriteScope(scope);
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.warn("Failed to load tree write scope:", error);
+        setTreeWriteScope({ treeId, canWriteAll: false, rootPersonIds: [] });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [treeId, currentUser]);
+
+  useEffect(() => {
+    if (!inviteToken || loading) {
+      return;
+    }
+    if (!currentUser) {
+      if (inviteLoginPromptedRef.current !== inviteToken) {
+        inviteLoginPromptedRef.current = inviteToken;
+        openLoginModal();
+      }
+      return;
+    }
+    if (acceptedInviteTokenRef.current === inviteToken || inviteAccepting) {
+      return;
+    }
+
+    acceptedInviteTokenRef.current = inviteToken;
+    setInviteAccepting(true);
+    ApiService.acceptTreeInvite(inviteToken)
+      .then((result) => {
+        if (result?.treeId && result.treeId !== treeId) {
+          setTreeId(result.treeId);
+        }
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("inviteToken");
+          return next;
+        });
+        alert("Invite accepted. You now have access to this tree.");
+        return ApiService.getTreeWriteScope(result.treeId || treeId);
+      })
+      .then((scope) => {
+        if (scope) {
+          setTreeWriteScope(scope);
+        }
+        inviteLoginPromptedRef.current = null;
+      })
+      .catch((error) => {
+        console.error("Failed to accept invite:", error);
+        alert(`Failed to accept invite: ${error instanceof Error ? error.message : String(error)}`);
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("inviteToken");
+          return next;
+        });
+        inviteLoginPromptedRef.current = null;
+      })
+      .finally(() => {
+        setInviteAccepting(false);
+      });
+  }, [
+    inviteToken,
+    inviteAccepting,
+    currentUser,
+    loading,
+    treeId,
+    setTreeId,
+    setSearchParams,
+    openLoginModal,
+  ]);
 
   const loadTreeData = useCallback(
     async (keepRoot = false) => {
@@ -114,6 +283,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             ({
               id: person.id,
               name: person.name,
+              nameHindi: person.nameHindi || undefined,
               gender: person.gender as Gender,
               dob: person.dob || "",
               parents:
@@ -130,6 +300,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 person.spouses?.map((s: any) => ({
                   id: s.id,
                   type: (s.type || RelType.married) as RelType,
+                  relationSubtype: s.relationSubtype || s.type || RelType.married,
+                  startDate: s.startDate || undefined,
+                  endDate: s.endDate || undefined,
                 })) || [],
               siblings:
                 person.siblings?.map((s: any) => ({
@@ -286,7 +459,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setNodes([]);
     setRootId("");
     setSelectId(undefined);
-    setDismissNoAccessAlert(false);
     loadTreeData();
   }, [loadTreeData]);
 
@@ -306,6 +478,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           const fnode: FNode = {
             id: raw.id,
             name: raw.name,
+            nameHindi: raw.nameHindi || undefined,
             gender: (raw.gender as Gender) || ("" as any),
             dob: raw.dob || "",
             parents:
@@ -322,6 +495,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               raw.spouses?.map((s: any) => ({
                 id: s.id,
                 type: (s.type || RelType.married) as RelType,
+                relationSubtype: s.relationSubtype || s.type || RelType.married,
+                startDate: s.startDate || undefined,
+                endDate: s.endDate || undefined,
               })) || [],
             siblings:
               raw.siblings?.map((s: any) => ({
@@ -386,8 +562,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
-      if (!canWriteCurrentTree) {
-        alert("You don't have permission to edit this family tree.");
+      if (!canEditNode(nodeId)) {
+        alert("You don't have permission to edit this person.");
         return;
       }
 
@@ -407,13 +583,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [canWriteCurrentTree, treeId, loadTreeData, villageId],
+    [canEditNode, loadTreeData],
   );
 
   const onDelete = useCallback(
     async (nodeId: string, force: boolean = false) => {
-      if (!canWriteCurrentTree) {
-        alert("You don't have permission to delete from this family tree.");
+      if (!canEditNode(nodeId)) {
+        alert("You don't have permission to delete this person.");
         return;
       }
 
@@ -446,7 +622,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [canWriteCurrentTree, treeId, loadTreeData, nodes, villageId],
+    [canEditNode, loadTreeData, nodes],
   );
 
   const onAdd = useCallback(
@@ -457,8 +633,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       type?: RelType,
       otherParentId?: string,
     ): Promise<string | undefined> => {
-      if (!canWriteCurrentTree) {
-        alert("You don't have permission to add to this family tree.");
+      if (targetId && !canEditNode(targetId)) {
+        alert("You don't have permission to add relatives in this branch.");
+        return undefined;
+      }
+
+      if (!targetId && !canCreateRootNode) {
+        alert("You don't have permission to create a new root node in this tree.");
         return undefined;
       }
 
@@ -466,7 +647,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (node.id && relation === "spouse" && targetId) {
         try {
           setIsLoading(true);
-          await ApiService.addSpouse(targetId, node.id);
+          await ApiService.addSpouse(
+            targetId,
+            node.id,
+            node.relationSubtype,
+            node.relationStartDate,
+            node.relationEndDate,
+          );
           await loadTreeData(true);
           return node.id; // Return the linked person ID
         } catch (err) {
@@ -532,6 +719,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         const newPerson = await ApiService.addPersonToTree(
           treeId,
           coreNode.name || "Unnamed",
+          coreNode.nameHindi,
           coreNode.gender,
           coreNode.dob,
           relationType,
@@ -543,6 +731,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           coreNode.bloodGroup,
           coreNode.isAlive,
           coreNode.deceasedDate,
+          undefined,
+          coreNode.relationStartDate,
+          coreNode.relationEndDate,
         );
 
         // Efficiently merge affected nodes into existing state instead of full reload
@@ -569,13 +760,26 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
       return undefined;
     },
-    [canWriteCurrentTree, treeId, loadTreeData, villageId, nodes],
+    [canEditNode, canCreateRootNode, treeId, loadTreeData, nodes, mergeAffectedNodes],
   );
 
   const handleShareTree = useCallback(async () => {
-    const shareUrl = treeId
-      ? `${window.location.origin}/families?tree=${treeId}`
-      : window.location.href;
+    const shareUrl = (() => {
+      if (!treeId) {
+        return window.location.href;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      const nextUrl = new URL(`${window.location.origin}/families`);
+      nextUrl.searchParams.set("tree", treeId);
+
+      const currentPersonId = currentUrl.searchParams.get("personId");
+      if (currentPersonId) {
+        nextUrl.searchParams.set("personId", currentPersonId);
+      }
+
+      return nextUrl.toString();
+    })();
 
     try {
       if (navigator.share) {
@@ -591,6 +795,78 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     }
   }, [treeId]);
 
+  const handleOpenInviteDialog = useCallback(() => {
+    if (!currentUser) {
+      openLoginModal(() => setInviteDialogOpen(true));
+      return;
+    }
+    if (!canManageInvites) {
+      alert("You need full-tree access to invite collaborators.");
+      return;
+    }
+    const defaultPersonId = selectId || rootId || "";
+    const defaultPerson = nodes.find((node) => node.id === defaultPersonId);
+    setInvitePersonId(defaultPersonId);
+    setInviteSelectedPersonName(defaultPerson?.name || "");
+    setInvitePersonSearch(defaultPerson?.name || "");
+    setInviteDialogOpen(true);
+  }, [currentUser, openLoginModal, canManageInvites, selectId, rootId, nodes]);
+
+  const handleCreateInvite = useCallback(async () => {
+    if (!treeId) return;
+    if (!canManageInvites) {
+      alert("You need full-tree access to invite collaborators.");
+      return;
+    }
+
+    const selectedBranchId = invitePersonId || null;
+    const personId = inviteScope === "branch" ? selectedBranchId : null;
+    if (inviteScope === "branch" && !personId) {
+      alert("Select a person in the tree to invite for branch access.");
+      return;
+    }
+
+    const phoneDigits = invitePhone.replace(/\D/g, "").slice(0, 10);
+    const normalizedInvitePhone = phoneDigits ? `+91${phoneDigits}` : null;
+
+    try {
+      setInviteBusy(true);
+      const invite = await ApiService.createTreeInvite(treeId, {
+        role: inviteRole,
+        personId,
+        invitedPhone: normalizedInvitePhone,
+      });
+      const shareLink = invite.inviteLink || `${window.location.origin}/families?tree=${treeId}&inviteToken=${invite.inviteToken || ""}`;
+      const targetScope = personId ? `branch from ${nodes.find((n) => n.id === personId)?.name || "selected person"}` : "full tree";
+      const targetPhone = normalizedInvitePhone ? `Phone: ${normalizedInvitePhone}\n` : "";
+      const shareText = `You are invited to edit the family tree (${targetScope}).\n${targetPhone}${shareLink}`;
+
+      if (navigator.share) {
+        await navigator.share({
+          title: "Family Tree Invite",
+          text: shareText,
+          url: shareLink,
+        });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        alert("Invite link copied to clipboard. Share it via SMS/WhatsApp.");
+      }
+
+      setInviteDialogOpen(false);
+      setInvitePhone("");
+      setInviteRole("write");
+      setInviteScope("full");
+      setInvitePersonId("");
+      setInvitePersonSearch("");
+      setInviteSelectedPersonName("");
+    } catch (error) {
+      console.error("Failed to create invite:", error);
+      alert(`Failed to create invite: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setInviteBusy(false);
+    }
+  }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes]);
+
   // Handler for "View Details" — opens NodeDetails in details view
   const handleViewDetails = useCallback((nodeId: string) => {
     setNodeDetailsInitialView("details");
@@ -601,8 +877,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   // Handler for edit icon on tree nodes — opens NodeDetails in edit view
   const handleEditNode = useCallback(
     (nodeId: string) => {
-      if (!canWriteCurrentTree) {
-        alert("You don't have permission to edit this family tree.");
+      if (!canEditNode(nodeId)) {
+        alert("You don't have permission to edit this person.");
         return;
       }
       if (!currentUser) {
@@ -617,7 +893,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodeDetailsAddInfo(undefined);
       setSelectId(nodeId);
     },
-    [canWriteCurrentTree, currentUser, openLoginModal],
+    [canEditNode, currentUser, openLoginModal],
   );
 
   // Handler for placeholder "add relative" nodes in the tree
@@ -626,8 +902,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       nodeId: string,
       relType: "father" | "mother" | "spouse" | "son" | "daughter",
     ) => {
-      if (!canWriteCurrentTree) {
-        alert("You don't have permission to add to this family tree.");
+      if (!canEditNode(nodeId)) {
+        alert("You don't have permission to add relatives in this branch.");
         return;
       }
       // Map family-chart relTypes to onAdd's relation + gender
@@ -670,7 +946,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodeDetailsAddInfo({ relation, gender });
       setSelectId(nodeId);
     },
-    [canWriteCurrentTree, currentUser, openLoginModal],
+    [canEditNode, currentUser, openLoginModal],
   );
 
   // Calculate tree statistics
@@ -695,6 +971,97 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       generations,
     };
   }, [nodes]);
+
+  const treeStatus = useMemo(() => {
+    if (!currentUser) {
+      return {
+        label: "View only",
+        description: "Sign in to edit this tree or manage invites.",
+        color: "default" as const,
+        icon: <LockOutlinedIcon sx={{ fontSize: 18 }} />,
+      };
+    }
+
+    if (!canWriteAnyBranch) {
+      return {
+        label: "Read only",
+        description: "You can browse this tree but cannot change people in it.",
+        color: "default" as const,
+        icon: <LockOutlinedIcon sx={{ fontSize: 18 }} />,
+      };
+    }
+
+    if (treeWriteScope?.canWriteAll) {
+      return {
+        label: "Full edit access",
+        description: "You can create roots, edit any branch, and manage invites.",
+        color: "success" as const,
+        icon: <EditOutlinedIcon sx={{ fontSize: 18 }} />,
+      };
+    }
+
+    return {
+      label: "Branch edit access",
+      description: "You can edit only the branches assigned to your account.",
+      color: "info" as const,
+      icon: <EditOutlinedIcon sx={{ fontSize: 18 }} />,
+    };
+  }, [currentUser, canWriteAnyBranch, treeWriteScope]);
+
+  const statusAlerts = useMemo<StatusAlert[]>(
+    () =>
+      [
+        isAdmin() && !isApproved
+          ? {
+              key: "pending-approval",
+              severity: "info" as const,
+              text: "Your account is pending approval. You can view trees but cannot make changes until a Super Admin approves your account.",
+            }
+          : null,
+        inviteAccepting
+          ? {
+              key: "invite-processing",
+              severity: "info" as const,
+              text: "Processing invite link...",
+            }
+          : null,
+      ].filter(Boolean) as StatusAlert[],
+    [isAdmin, isApproved, inviteAccepting],
+  );
+
+  const statCards = useMemo(
+    () => [
+      {
+        key: "people",
+        label: "People",
+        value: statistics.totalPeople,
+        icon: <GroupOutlinedIcon sx={{ fontSize: 18 }} />,
+        color: theme.palette.primary.main,
+      },
+      {
+        key: "female",
+        label: "Women",
+        value: statistics.femaleCount,
+        icon: <FemaleOutlinedIcon sx={{ fontSize: 18 }} />,
+        color: theme.palette.error.main,
+      },
+      {
+        key: "male",
+        label: "Men",
+        value: statistics.maleCount,
+        icon: <MaleOutlinedIcon sx={{ fontSize: 18 }} />,
+        color: theme.palette.info.main,
+      },
+      {
+        key: "generations",
+        label: "Generations",
+        value: statistics.generations,
+        icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
+        color: theme.palette.success.main,
+      },
+    ],
+    [statistics, theme.palette],
+  );
 
   return (
     <Box
@@ -722,6 +1089,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           content="View and manage your interactive family tree with Kinvia."
         />
       </Helmet>
+      <FamiliesPageHeader
+        isMobile={isMobile}
+        treeId={treeId}
+        treeStatus={treeStatus}
+        statusAlerts={statusAlerts}
+        hasStats={nodes.length > 0 && !isLoading}
+        statCards={statCards}
+        onSourceChange={onSourceChange}
+      />
       {(isSuperAdmin() || isApproved) && (
         <Box
           sx={{
@@ -747,160 +1123,19 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       )}
       <Box
         sx={{
-          position: "fixed",
-          left: { xs: 16, sm: 24 },
-          bottom: { xs: 16, sm: 24 },
-          zIndex: 1200,
-          display: { xs: "flex", sm: "none" },
-          opacity: isMobileSheetOpen ? 0 : 1,
-          pointerEvents: isMobileSheetOpen ? "none" : "auto",
-          transition: "opacity 0.2s ease",
-        }}
-      >
-        <Fab
-          color="primary"
-          size="medium"
-          aria-label="Share tree"
-          onClick={handleShareTree}
-          disabled={!treeId}
-        >
-          <ShareIcon />
-        </Fab>
-      </Box>
-      {isAdmin() && !isApproved && (
-        <Alert severity="info" sx={{ mx: 2, mt: 1 }}>
-          Your account is pending approval. You can view trees but cannot make
-          changes until a Super Admin approves your account.
-        </Alert>
-      )}
-      {showNoAccessAlert && (
-        <Alert
-          severity="info"
-          sx={{ mx: 2, mt: 1 }}
-          onClose={() => setDismissNoAccessAlert(true)}
-        >
-          You can view this tree but cannot make changes because you don&apos;t
-          have village write access for this tree.
-        </Alert>
-      )}
-      {nodes.length > 0 && !isLoading && (
-        <Box
-          sx={{
-            display: { xs: "none", sm: "flex" },
-            gap: 2,
-            p: 1.5,
-            px: 2,
-            borderBottom: 1,
-            borderColor: "divider",
-            alignItems: "center",
-            justifyContent: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              variant="h6"
-              sx={{ fontWeight: 700, color: "primary.main" }}
-            >
-              {statistics.totalPeople}
-            </Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              People
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              width: "1px",
-              height: 20,
-              borderLeft: "1px solid",
-              borderColor: "divider",
-            }}
-          />
-
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              variant="h6"
-              sx={{ fontWeight: 700, color: "error.main" }}
-            >
-              {statistics.femaleCount}
-            </Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              Female
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              width: "1px",
-              height: 20,
-              borderLeft: "1px solid",
-              borderColor: "divider",
-            }}
-          />
-
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              variant="h6"
-              sx={{ fontWeight: 700, color: "info.main" }}
-            >
-              {statistics.maleCount}
-            </Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              Male
-            </Typography>
-          </Box>
-
-          <Box
-            sx={{
-              width: "1px",
-              height: 20,
-              borderLeft: "1px solid",
-              borderColor: "divider",
-            }}
-          />
-
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Typography
-              variant="h6"
-              sx={{ fontWeight: 700, color: "success.main" }}
-            >
-              {statistics.generations}
-            </Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              Generations
-            </Typography>
-          </Box>
-        </Box>
-      )}
-      <Box
-        sx={{
           position: "relative",
           display: "flex",
           flexDirection: "column",
           flex: 1,
           minHeight: 0,
           overflow: "hidden",
+          px: { xs: 0.5, sm: 2, md: 3 },
+          py: { xs: 0.5, sm: 1.5 },
         }}
       >
-        <Box
-          sx={{
-            position: "absolute",
-            top: 10,
-            left: 10,
-            right: { xs: 10, sm: "auto" },
-            width: { xs: "calc(100% - 20px)", sm: "auto" },
-            zIndex: 20,
-            background: "rgba(255,255,255,0.92)",
-            padding: "4px 8px",
-            borderRadius: 1,
-            boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
-          }}
-        >
-          <SourceSelect onChange={onSourceChange} />
-        </Box>
         {isLoading ? (
-          <Box
+          <Paper
+            elevation={0}
             sx={{
               flex: 1,
               display: "flex",
@@ -908,28 +1143,105 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               alignItems: "center",
               flexDirection: "column",
               gap: 2,
+              borderRadius: 4,
+              border: "1px solid",
+              borderColor: "divider",
+              background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${theme.palette.background.paper} 100%)`,
             }}
           >
             <CircularProgress />
             <Typography variant="body1" sx={{ color: "text.secondary" }}>
               Loading tree...
             </Typography>
-          </Box>
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>
+              Building relationships, permissions, and branch data.
+            </Typography>
+          </Paper>
         ) : nodes.length > 0 ? (
-          <Box
+          <Paper
+            elevation={0}
             sx={{
               flex: 1,
               position: "relative",
               overflow: "hidden",
               display: "flex",
               flexDirection: "column",
+              minHeight: 0,
+              borderRadius: { xs: 3, md: 4 },
+              border: "1px solid",
+              borderColor: "divider",
+              backgroundColor: theme.palette.background.paper,
             }}
           >
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                position: "absolute",
+                left: { xs: 12, sm: 16 },
+                bottom: { xs: 12, sm: 16 },
+                zIndex: 2,
+              }}
+            >
+              {canManageInvites && (
+                <Tooltip title="Invite collaborator">
+                  <span>
+                    <IconButton
+                      aria-label="Invite collaborator"
+                      onClick={handleOpenInviteDialog}
+                      disabled={!treeId}
+                      size={isMobile ? "small" : "medium"}
+                      sx={{
+                        border: "1px solid",
+                        borderColor: "divider",
+                        backgroundColor: alpha(theme.palette.background.paper, 0.92),
+                        boxShadow: theme.shadows[2],
+                        opacity: { xs: 1, sm: 0.62 },
+                        transition: "opacity 0.2s ease, background-color 0.2s ease",
+                        "&:hover": {
+                          opacity: 1,
+                          backgroundColor: alpha(theme.palette.background.paper, 1),
+                        },
+                      }}
+                    >
+                      <PersonAddAltOutlinedIcon
+                        fontSize={isMobile ? "small" : "medium"}
+                      />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              <Tooltip title="Share tree">
+                <span>
+                  <IconButton
+                    aria-label="Share tree"
+                    onClick={handleShareTree}
+                    disabled={!treeId}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "divider",
+                      backgroundColor: alpha(theme.palette.background.paper, 0.92),
+                      boxShadow: theme.shadows[2],
+                      opacity: { xs: 1, sm: 0.62 },
+                      transition: "opacity 0.2s ease, background-color 0.2s ease",
+                      "&:hover": {
+                        opacity: 1,
+                        backgroundColor: alpha(theme.palette.background.paper, 1),
+                      },
+                    }}
+                  >
+                    <ShareOutlinedIcon fontSize={isMobile ? "small" : "medium"} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Stack>
             {rootId && nodes.find((n) => n.id === rootId) ? (
               <DTreeComponent
                 nodes={nodes}
                 rootId={rootId}
-                canEditTree={canWriteCurrentTree}
+                canEditTree={canWriteAnyBranch}
+                canEditNode={canEditNode}
                 autoExpandNodeId={autoExpandNodeId}
                 onAutoExpandHandled={() => setAutoExpandNodeId(null)}
                 onNodeClick={(id) => {
@@ -966,34 +1278,62 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 </Typography>
               </Box>
             )}
-          </Box>
+          </Paper>
         ) : (
           treeId &&
           treeId !== "" && (
-            <Container
-              maxWidth="sm"
-              sx={{ mt: { xs: 14, sm: 8 }, textAlign: "center" }}
+            <Paper
+              elevation={0}
+              sx={{
+                maxWidth: 680,
+                mx: "auto",
+                mt: { xs: 2, sm: 3 },
+                px: { xs: 2, sm: 3 },
+                py: { xs: 3, sm: 4 },
+                textAlign: "center",
+                borderRadius: 4,
+                border: "1px solid",
+                borderColor: "divider",
+                background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+              }}
             >
-              <Typography variant="h5" gutterBottom>
-                This tree is empty.
+              <Typography variant="overline" sx={{ color: "text.secondary" }}>
+                Empty Tree
               </Typography>
-              <Box
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 800 }}>
+                Start this family tree with the first person
+              </Typography>
+              <Typography
+                variant="body1"
+                sx={{ color: "text.secondary", maxWidth: 520, mx: "auto" }}
+              >
+                Create the root person first. After that, you can add parents, spouses,
+                children, branch invites, and detailed profile information.
+              </Typography>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1.5}
                 sx={{
                   mt: 3,
-                  display: "flex",
-                  gap: 2,
                   justifyContent: "center",
+                  alignItems: "center",
                 }}
               >
                 <Button
                   variant="contained"
+                  size="large"
                   onClick={() => setShowAddStartingNode(true)}
-                  disabled={!canWriteCurrentTree}
+                  disabled={!canCreateRootNode}
                 >
                   Create First Node
                 </Button>
-              </Box>
-            </Container>
+                {!canCreateRootNode && (
+                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                    Full-tree write access is required to create the root node.
+                  </Typography>
+                )}
+              </Stack>
+            </Paper>
           )
         )}
       </Box>
@@ -1127,6 +1467,47 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         </DialogActions>
       </Dialog>
 
+      <InviteCollaboratorDialog
+        open={inviteDialogOpen}
+        busy={inviteBusy}
+        invitePhone={invitePhone}
+        inviteRole={inviteRole}
+        inviteScope={inviteScope}
+        invitePersonId={invitePersonId}
+        invitePersonSearch={invitePersonSearch}
+        treeId={treeId}
+        selectedBranchPersonName={inviteSelectedPersonName || nodes.find((n) => n.id === invitePersonId)?.name || undefined}
+        onClose={() => setInviteDialogOpen(false)}
+        onInvitePhoneChange={(value) => {
+          const digits = value.replace(/\D/g, "").slice(0, 10);
+          setInvitePhone(digits);
+        }}
+        onInviteRoleChange={setInviteRole}
+        onInviteScopeChange={(scope) => {
+          setInviteScope(scope);
+          if (scope === "branch" && !invitePersonId) {
+            const defaultPersonId = selectId || rootId || "";
+            const defaultPerson = nodes.find((node) => node.id === defaultPersonId);
+            setInvitePersonId(defaultPersonId);
+            setInviteSelectedPersonName(defaultPerson?.name || "");
+            setInvitePersonSearch(defaultPerson?.name || "");
+          }
+        }}
+        onInvitePersonIdChange={(value) => {
+          setInvitePersonId(value);
+          if (!value) {
+            setInviteSelectedPersonName("");
+          }
+        }}
+        onInvitePersonSearchChange={setInvitePersonSearch}
+        onInvitePersonSelect={(person) => {
+          setInvitePersonId(person?.id || "");
+          setInviteSelectedPersonName(person?.name || "");
+          setInvitePersonSearch(person?.name || "");
+        }}
+        onCreateInvite={handleCreateInvite}
+      />
+
       {selected && (
         <NodeDetails
           node={selected}
@@ -1139,6 +1520,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           onAdd={onAdd}
           onUpdate={onUpdate}
           onDelete={onDelete}
+          canEditNode={canEditNode}
           treeId={treeId}
           initialView={nodeDetailsInitialView}
           initialAddInfo={nodeDetailsAddInfo}
@@ -1147,4 +1529,3 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     </Box>
   );
 };
-

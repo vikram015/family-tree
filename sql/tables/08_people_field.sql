@@ -4,6 +4,9 @@
 CREATE TABLE IF NOT EXISTS people_field (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   field_name VARCHAR(255) NOT NULL,
+  type VARCHAR(20) NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'textarea', 'number', 'date', 'boolean', 'email', 'phone')),
+  sort_order INTEGER NOT NULL DEFAULT 9999,
+  show_upfront BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT now(),
   modified_at TIMESTAMP DEFAULT now(),
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,

@@ -11,6 +11,7 @@ type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 interface PersonWithRelations {
   id: string;
   name: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   treeId: string;
@@ -27,6 +28,7 @@ interface UpdatePersonResponse {
   error?: string;
   personId?: string;
   name?: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   bloodGroup?: string;
@@ -40,6 +42,7 @@ interface UpdatePersonResponse {
 interface CompleteTreeNode {
   id: string;
   name: string;
+  nameHindi?: string;
   gender: string;
   dob?: string;
   createdAt: string;
@@ -53,6 +56,7 @@ interface CompleteTreeNode {
 interface AffectedNode {
   id: string;
   name: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   treeId: string;
@@ -69,6 +73,7 @@ export interface AddPersonResult {
   personId: string;
   autoCreatedSpouseId?: string | null;
   name: string;
+  nameHindi?: string;
   gender?: string;
   dob?: string;
   treeId: string;
@@ -109,6 +114,42 @@ interface CompleteTreeResponse {
     femaleCount: number;
     totalRelations: number;
   };
+}
+
+export type PeopleFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "date"
+  | "boolean"
+  | "email"
+  | "phone";
+
+export interface PredefinedPeopleField {
+  fieldName: string;
+  type: PeopleFieldType;
+  sortOrder: number;
+  showUpfront: boolean;
+}
+
+export interface TreeWriteScope {
+  treeId: string;
+  canWriteAll: boolean;
+  rootPersonIds: string[];
+}
+
+export interface TreeInvite {
+  id: string;
+  treeId: string;
+  personId: string | null;
+  personName?: string | null;
+  role: string;
+  invitedPhone: string | null;
+  status: "pending" | "accepted" | "revoked" | "expired";
+  expiresAt: string;
+  createdAt: string;
+  inviteToken?: string;
+  inviteLink?: string;
 }
 
 export const ApiService = {
@@ -201,6 +242,7 @@ export const ApiService = {
     const normalizedDeceasedDate = this.normalizeDateValue(coreUpdates.deceasedDate);
     const payload = {
       name: coreUpdates.name,
+      nameHindi: coreUpdates.nameHindi,
       gender: coreUpdates.gender,
       dob: normalizedDob,
       additionalFields: customFields && Object.keys(customFields).length > 0 ? customFields : undefined,
@@ -227,6 +269,7 @@ export const ApiService = {
       return {
         id: result.personId || personId,
         name: result.name || coreUpdates.name || "",
+        nameHindi: result.nameHindi || coreUpdates.nameHindi,
         gender: result.gender,
         dob: result.dob,
         treeId: result.treeId || "",
@@ -254,11 +297,43 @@ export const ApiService = {
   /**
    * Add a spouse relationship (bidirectional) and link children
    */
-  async addSpouse(personId: string, spouseId: string, placeholderId?: string): Promise<void> {
+  async addSpouse(
+    personId: string,
+    spouseId: string,
+    relationSubtype?: string,
+    relationStartDate?: string,
+    relationEndDate?: string,
+    placeholderId?: string,
+  ): Promise<void> {
+    const normalizedStartDate = this.normalizeDateValue(relationStartDate);
+    const normalizedEndDate = this.normalizeDateValue(relationEndDate);
+
     await backendApi.post(`/api/people/spouse-link`, {
       personId1: personId,
       personId2: spouseId,
+      relationSubtype: relationSubtype || undefined,
+      relationStartDate: normalizedStartDate,
+      relationEndDate: normalizedEndDate,
       replacePersonId: placeholderId || undefined,
+    });
+  },
+
+  async updateSpouseRelationDates(
+    personId1: string,
+    personId2: string,
+    relationSubtype?: string,
+    relationStartDate?: string,
+    relationEndDate?: string,
+  ): Promise<void> {
+    const normalizedStartDate = this.normalizeDateValue(relationStartDate);
+    const normalizedEndDate = this.normalizeDateValue(relationEndDate);
+
+    await backendApi.patch(`/api/people/spouse-relation`, {
+      personId1,
+      personId2,
+      relationSubtype: relationSubtype || undefined,
+      relationStartDate: normalizedStartDate || null,
+      relationEndDate: normalizedEndDate || null,
     });
   },
 
@@ -285,6 +360,7 @@ export const ApiService = {
   async addPersonToTree(
     treeId: string,
     name: string,
+    nameHindi?: string,
     gender?: string,
     dob?: string,
     relationType?: 'parent' | 'spouse',
@@ -296,14 +372,19 @@ export const ApiService = {
     bloodGroup?: string,
     isAlive?: boolean,
     deceasedDate?: string,
-    photoUrl?: string
+    photoUrl?: string,
+    relationStartDate?: string,
+    relationEndDate?: string,
   ): Promise<AddPersonResult> {
     const normalizedDob = this.normalizeDateValue(dob);
     const normalizedDeceasedDate = this.normalizeDateValue(deceasedDate);
+    const normalizedRelationStartDate = this.normalizeDateValue(relationStartDate);
+    const normalizedRelationEndDate = this.normalizeDateValue(relationEndDate);
 
     return backendApi.post<AddPersonResult>("/api/people", {
       treeId,
       name,
+      nameHindi,
       gender,
       dob: normalizedDob,
       relationType,
@@ -316,6 +397,8 @@ export const ApiService = {
       isAlive,
       deceasedDate: normalizedDeceasedDate,
       photoUrl,
+      relationStartDate: normalizedRelationStartDate,
+      relationEndDate: normalizedRelationEndDate,
     });
   },
 
@@ -323,8 +406,8 @@ export const ApiService = {
    * Get all predefined field names from people_field table
    * Used for field dropdown in additional details
    */
-  async getPredefinedFields(): Promise<string[]> {
-    return backendApi.get<string[]>('/api/people/predefined-fields');
+  async getPredefinedFields(): Promise<PredefinedPeopleField[]> {
+    return backendApi.get<PredefinedPeopleField[]>('/api/people/predefined-fields');
   },
 
   /**
@@ -387,6 +470,37 @@ export const ApiService = {
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
     return backendApi.get<any>(`/api/tree/${treeId}`);
+  },
+
+  async getTreeWriteScope(treeId: string): Promise<TreeWriteScope> {
+    return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
+  },
+
+  async getTreeInvites(treeId: string): Promise<TreeInvite[]> {
+    return backendApi.get<TreeInvite[]>(`/api/tree/${treeId}/invites`);
+  },
+
+  async createTreeInvite(
+    treeId: string,
+    payload: {
+      personId?: string | null;
+      role?: string;
+      invitedPhone?: string | null;
+      expiresInDays?: number;
+    },
+  ): Promise<TreeInvite> {
+    return backendApi.post<TreeInvite>(`/api/tree/${treeId}/invites`, payload);
+  },
+
+  async revokeTreeInvite(treeId: string, inviteId: string): Promise<{ success: boolean }> {
+    return backendApi.patch<{ success: boolean }>(`/api/tree/${treeId}/invites/${inviteId}/revoke`);
+  },
+
+  async acceptTreeInvite(token: string): Promise<{ success: boolean; treeId: string; personId: string | null; role: string }> {
+    return backendApi.post<{ success: boolean; treeId: string; personId: string | null; role: string }>(
+      "/api/tree/invites/accept",
+      { token },
+    );
   },
 
   /**
@@ -621,14 +735,32 @@ export const ApiService = {
   },
 
   /**
-   * Search people by name in a village with parent hierarchy
-   * Returns person details including parent hierarchy up to 5 generations
+   * Search people by name with parent hierarchy.
+   * Supports village-scoped and tree-scoped search.
+   */
+  async searchPeopleWithHierarchy(
+    searchTerm: string,
+    options: {
+      villageId?: string;
+      treeId?: string;
+    },
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/people/search/by-village", {
+      searchTerm,
+      villageId: options.villageId,
+      treeId: options.treeId,
+    });
+  },
+
+  /**
+   * Search people by name in a village with parent hierarchy.
+   * Kept as a compatibility wrapper for existing callers.
    */
   async searchPeopleByVillageWithHierarchy(
     searchTerm: string,
     villageId: string
   ): Promise<any[]> {
-    return backendApi.get<any[]>('/api/people/search/by-village', { searchTerm, villageId });
+    return this.searchPeopleWithHierarchy(searchTerm, { villageId });
   },
 
   /**
@@ -727,4 +859,3 @@ export const ApiService = {
     await backendApi.delete(`/api/people/${personId}/photo`);
   },
 };
-

@@ -29,7 +29,7 @@ export const LoginPage: React.FC = () => {
       currentUser &&
       (needsProfileCompletion || needsLink || needsVillageRequest)
     ) {
-      navigate("/profile", { replace: true });
+      navigate("/", { replace: true });
     } else {
       navigate(from, { replace: true });
     }

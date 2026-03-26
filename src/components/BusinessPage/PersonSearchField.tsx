@@ -1,12 +1,5 @@
-import React, { useState } from "react";
-import {
-  Box,
-  TextField,
-  Button,
-  Paper,
-  Typography,
-  Stack,
-} from "@mui/material";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Box, TextField, Button, Paper, Typography, Stack, Avatar } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { ApiService } from "../../services/apiService";
 
@@ -15,11 +8,54 @@ interface PersonSearchResult {
   name: string;
   gender?: string;
   dob?: string;
+  photoUrl?: string;
   treeId: string;
+  treeName?: string;
   hierarchy: any[];
+  gotra?: string;
   villageName?: string;
   casteName?: string;
   subCasteName?: string;
+}
+
+function getInitials(value?: string): string {
+  if (!value) return "?";
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber" | "slate") {
+  if (!value) return null;
+
+  const styles =
+    accent === "teal"
+      ? { bg: "#ecfeff", color: "#0f766e" }
+      : accent === "amber"
+        ? { bg: "#fff7ed", color: "#b45309" }
+        : { bg: "#f1f5f9", color: "#475569" };
+
+  return (
+    <Box
+      key={`${label}-${value}`}
+      sx={{
+        px: 0.9,
+        py: 0.45,
+        borderRadius: 999,
+        bgcolor: styles.bg,
+        color: styles.color,
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1.2,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Box component="span">{value}</Box>
+    </Box>
+  );
 }
 
 interface PersonSearchFieldProps {
@@ -29,8 +65,13 @@ interface PersonSearchFieldProps {
   onSearchValueChange: (value: string) => void;
   onPersonSelect: (person: PersonSearchResult) => void;
   selectedPerson?: PersonSearchResult | any | null;
-  villageId: string;
+  villageId?: string;
+  treeId?: string;
   disabled?: boolean;
+  autoSearch?: boolean;
+  minSearchLength?: number;
+  hideSearchButton?: boolean;
+  noResultsText?: string;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -41,25 +82,40 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   onPersonSelect,
   selectedPerson,
   villageId,
+  treeId,
   disabled = false,
+  autoSearch = false,
+  minSearchLength = 1,
+  hideSearchButton = false,
+  noResultsText = "No results found",
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const latestSearchRef = useRef(0);
+  const skipNextAutoSearchRef = useRef(false);
 
-  const handleSearch = async () => {
-    if (!villageId || !searchValue.trim()) {
+  const handleSearch = useCallback(async () => {
+    const trimmedSearch = searchValue.trim();
+    const hasScope = Boolean(treeId || villageId);
+
+    if (!hasScope || trimmedSearch.length < minSearchLength) {
       setSearchResults([]);
       setShowResults(false);
       return;
     }
 
     setShowResults(true);
+    const searchId = ++latestSearchRef.current;
 
     try {
-      const results = await ApiService.searchPeopleByVillageWithHierarchy(
-        searchValue,
+      const results = await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
+        treeId,
         villageId,
-      );
+      });
+
+      if (searchId !== latestSearchRef.current) {
+        return;
+      }
 
       const peopleSearchResults: PersonSearchResult[] = results.map(
         (person: any) => ({
@@ -67,8 +123,11 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           name: person.personName,
           gender: person.gender,
           dob: person.dob,
+          photoUrl: person.photoUrl,
           treeId: person.treeId,
+          treeName: person.treeName,
           hierarchy: person.parentHierarchy || [],
+          gotra: person.gotra,
           villageName: person.villageName,
           casteName: person.casteName,
           subCasteName: person.subCasteName,
@@ -78,14 +137,17 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
       setSearchResults(peopleSearchResults);
     } catch (error) {
       console.error("Error searching people:", error);
-      setSearchResults([]);
+      if (searchId === latestSearchRef.current) {
+        setSearchResults([]);
+      }
     }
-  };
+  }, [minSearchLength, searchValue, treeId, villageId]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
     onPersonSelect(person);
     setSearchResults([]);
     setShowResults(false);
+    skipNextAutoSearchRef.current = true;
     onSearchValueChange(person.name);
   };
 
@@ -94,6 +156,23 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
       handleSearch();
     }
   };
+
+  useEffect(() => {
+    if (!autoSearch) {
+      return;
+    }
+
+    if (skipNextAutoSearchRef.current) {
+      skipNextAutoSearchRef.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      handleSearch();
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [autoSearch, handleSearch]);
 
   return (
     <Box sx={{ position: "relative", width: "100%", mb: 2 }}>
@@ -113,19 +192,21 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           autoComplete="off"
           disabled={disabled}
         />
-        <Button
-          variant="contained"
-          onClick={handleSearch}
-          disabled={disabled}
-          startIcon={<SearchIcon />}
-          sx={{
-            height: 56,
-            minWidth: 100,
-            whiteSpace: "nowrap",
-          }}
-        >
-          Search
-        </Button>
+        {!hideSearchButton && (
+          <Button
+            variant="contained"
+            onClick={handleSearch}
+            disabled={disabled}
+            startIcon={<SearchIcon />}
+            sx={{
+              height: 56,
+              minWidth: 100,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Search
+          </Button>
+        )}
       </Stack>
 
       {/* Search Results Dropdown */}
@@ -163,29 +244,45 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
                 "&:last-child": { borderBottom: "none" },
               }}
             >
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                {person.name}
-                {[person.villageName, person.casteName, person.subCasteName]
-                  .filter(Boolean)
-                  .join(" • ") && (
-                  <>
-                    {" "}
-                    •{" "}
-                    {[person.villageName, person.casteName, person.subCasteName]
-                      .filter(Boolean)
-                      .join(" • ")}
-                  </>
-                )}
-              </Typography>
-              <Typography variant="caption" sx={{ color: "#999", mt: 0.5 }}>
-                🧬{" "}
-                {person.hierarchy && person.hierarchy.length > 0
-                  ? person.hierarchy
-                      .slice(-5)
-                      .map((a: any) => a.name)
-                      .join(" → ")
-                  : "No ancestry data"}
-              </Typography>
+              <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                <Avatar
+                  src={person.photoUrl || undefined}
+                  sx={{
+                    width: 42,
+                    height: 42,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    bgcolor: person.gender === "female" ? "#ffe4ef" : "#e0f2fe",
+                    color: person.gender === "female" ? "#be185d" : "#0369a1",
+                    mt: 0.25,
+                  }}
+                >
+                  {getInitials(person.name)}
+                </Avatar>
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.75 }}>
+                    {person.name}
+                  </Typography>
+                  <Stack
+                    direction="row"
+                    spacing={0.75}
+                    sx={{ flexWrap: "wrap", rowGap: 0.75, mb: 0.75 }}
+                  >
+                    {renderMetaPill("Village", person.villageName, "teal")}
+                    {renderMetaPill("Caste", person.casteName, "slate")}
+                    {renderMetaPill("Sub caste", person.gotra || person.subCasteName, "slate")}
+                  </Stack>
+                  <Typography variant="caption" sx={{ color: "#999", mt: 0.5 }}>
+                    🧬{" "}
+                    {person.hierarchy && person.hierarchy.length > 0
+                      ? person.hierarchy
+                          .slice(-5)
+                          .map((a: any) => a.name)
+                          .join(" → ")
+                      : "No ancestry data"}
+                  </Typography>
+                </Box>
+              </Stack>
             </Box>
           ))}
         </Paper>
@@ -204,11 +301,10 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           }}
         >
           <Typography variant="body2" color="textSecondary">
-            No results found
+            {noResultsText}
           </Typography>
         </Paper>
       )}
     </Box>
   );
 };
-

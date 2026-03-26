@@ -8,7 +8,6 @@ This directory contains SQL scripts for setting up the Supabase database for the
 sql/functions/
 ├── README.md (this file)
 ├── schema.sql (deprecated - use tables/ instead)
-├── search_people_by_village.sql (Database function for searching people)
 ├── add_person_to_tree.sql
 ├── update_person_in_tree.sql
 ├── delete_person_from_tree.sql
@@ -48,7 +47,6 @@ See [tables/README.md](tables/README.md) for detailed information about table st
 
 Execute the following function files:
 
-1. `search_people_by_village.sql` - Search people by name with parent hierarchy
 2. `add_person_to_tree.sql` - Add new person to family tree
 3. `update_person_in_tree.sql` - Update person details
 4. `delete_person_from_tree.sql` - Delete person from tree

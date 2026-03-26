@@ -1,6 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AppBar,
+  Autocomplete,
+  Avatar,
   Toolbar,
   Typography,
   IconButton,
@@ -11,32 +13,57 @@ import {
   ListItem,
   useTheme,
   useMediaQuery,
-  FormControl,
-  Select,
-  MenuItem,
   Dialog,
   ListItemButton,
   ListItemText,
+  TextField,
 } from "@mui/material";
-import MenuIcon from "@mui/icons-material/Menu";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
+import { ApiService } from "../../services/apiService";
 
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [villagePickerOpen, setVillagePickerOpen] = useState(false);
+  const [villageSearch, setVillageSearch] = useState("");
+  const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
   const navigate = useNavigate();
   const { selectedVillage, setSelectedVillage, villages } = useVillage();
   const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLinkedPersonPhoto = async () => {
+      if (!userProfile?.peopleId) {
+        setLinkedPersonPhoto("");
+        return;
+      }
+
+      try {
+        const person = await ApiService.getPersonById(userProfile.peopleId);
+        if (!active) return;
+        setLinkedPersonPhoto((person as any)?.photoUrl || "");
+      } catch (error) {
+        if (!active) return;
+        console.warn("Failed to load linked person photo:", error);
+        setLinkedPersonPhoto("");
+      }
+    };
+
+    loadLinkedPersonPhoto();
+    return () => {
+      active = false;
+    };
+  }, [userProfile?.peopleId]);
 
   const handleLogout = async () => {
     try {
@@ -65,6 +92,16 @@ export const Header: React.FC = () => {
     return location.pathname.startsWith(path);
   };
 
+  const selectedVillageOption =
+    villages.find((village) => village.id === selectedVillage) || null;
+  const filteredVillages = useMemo(() => {
+    const search = villageSearch.trim().toLowerCase();
+    if (!search) return villages;
+    return villages.filter((village) =>
+      village.name.toLowerCase().includes(search),
+    );
+  }, [villageSearch, villages]);
+
   const drawerContent = (
     <Box sx={{ width: 300, p: 2 }}>
       <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
@@ -75,22 +112,15 @@ export const Header: React.FC = () => {
 
       {/* Village Selector for Mobile */}
       <Box sx={{ mb: 2, px: 2 }}>
-        <FormControl fullWidth size="small">
-          <Select
-            value={selectedVillage}
-            onChange={(e) => setSelectedVillage(e.target.value)}
-            displayEmpty
-          >
-            <MenuItem value="">
-              {villages.length === 0 ? "Loading villages..." : "Select Village"}
-            </MenuItem>
-            {villages.map((village) => (
-              <MenuItem key={village.id} value={village.id}>
-                {village.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Button
+          fullWidth
+          variant="outlined"
+          onClick={() => setVillagePickerOpen(true)}
+          sx={{ justifyContent: "flex-start", textTransform: "none" }}
+        >
+          {selectedVillageOption?.name ||
+            (villages.length === 0 ? "Loading villages..." : "Select Village")}
+        </Button>
       </Box>
 
       <List>
@@ -129,7 +159,12 @@ export const Header: React.FC = () => {
                 },
               }}
             >
-              <AccountCircleIcon />
+              <Avatar
+                src={linkedPersonPhoto || undefined}
+                sx={{ width: 32, height: 32 }}
+              >
+                {userProfile?.displayName?.charAt(0) || "U"}
+              </Avatar>
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
                   {userProfile?.displayName || "User"}
@@ -186,20 +221,27 @@ export const Header: React.FC = () => {
               mr: 2,
               display: "flex",
               alignItems: "center",
-              gap: 1.5,
+              gap: 1.25,
             }}
           >
             <Box
               sx={{
                 display: "flex",
                 alignItems: "center",
-                marginLeft: "-23px",
+                justifyContent: "center",
+                width: { xs: 38, md: 42 },
+                height: { xs: 38, md: 42 },
+                p: "5px",
+                borderRadius: 2.5,
+                overflow: "hidden",
+                boxShadow: "0 10px 24px rgba(7, 28, 68, 0.22)",
+                backgroundColor: "#ffffff",
               }}
             >
               <img
-                src="/favicon.ico"
+                src="/favicon.png"
                 alt="Kinvia"
-                style={{ width: 64, height: 64 }}
+                style={{ width: "100%", height: "100%", display: "block" }}
               />
             </Box>
             <Box>
@@ -209,18 +251,6 @@ export const Header: React.FC = () => {
                 sx={{ m: 0, fontWeight: 700 }}
               >
                 Kinvia
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  display: "block",
-                  color: "rgba(255, 255, 255, 0.9)",
-                  fontSize: "0.7rem",
-                  lineHeight: 1,
-                  mt: 0.3,
-                }}
-              >
-                Connections that last
               </Typography>
             </Box>
           </Box>
@@ -255,10 +285,17 @@ export const Header: React.FC = () => {
 
           {/* Village Selector */}
           {!isMobile && (
-            <FormControl
-              size="small"
+            <Autocomplete
+              options={villages}
+              value={selectedVillageOption}
+              onChange={(_event, value) => setSelectedVillage(value?.id || "")}
+              getOptionLabel={(option) => option.name}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              noOptionsText={
+                villages.length === 0 ? "Loading villages..." : "No villages found"
+              }
               sx={{
-                minWidth: 150,
+                minWidth: 240,
                 ml: 2,
                 "& .MuiOutlinedInput-root": {
                   color: "white",
@@ -272,26 +309,25 @@ export const Header: React.FC = () => {
                     borderColor: "white",
                   },
                 },
+                "& .MuiInputLabel-root": {
+                  color: "rgba(255,255,255,0.8)",
+                },
                 "& .MuiSvgIcon-root": {
                   color: "white",
                 },
+                "& .MuiAutocomplete-input::placeholder": {
+                  color: "rgba(255,255,255,0.8)",
+                  opacity: 1,
+                },
               }}
-            >
-              <Select
-                value={selectedVillage}
-                onChange={(e) => setSelectedVillage(e.target.value)}
-                displayEmpty
-              >
-                <MenuItem value="">
-                  {villages.length === 0 ? "Loading..." : "Select Village"}
-                </MenuItem>
-                {villages.map((village) => (
-                  <MenuItem key={village.id} value={village.id}>
-                    {village.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  size="small"
+                  placeholder={villages.length === 0 ? "Loading..." : "Search village"}
+                />
+              )}
+            />
           )}
 
           {/* Auth Buttons */}
@@ -311,7 +347,12 @@ export const Header: React.FC = () => {
                       mr: 1,
                     }}
                   >
-                    <AccountCircleIcon />
+                    <Avatar
+                      src={linkedPersonPhoto || undefined}
+                      sx={{ width: 30, height: 30 }}
+                    >
+                      {userProfile?.displayName?.charAt(0) || "U"}
+                    </Avatar>
                     <Box sx={{ textAlign: "left" }}>
                       <Typography variant="body2" fontWeight={600}>
                         {userProfile?.displayName || "User"}
@@ -386,8 +427,24 @@ export const Header: React.FC = () => {
                 color="inherit"
                 edge="end"
                 onClick={() => setDrawerOpen(!drawerOpen)}
+                sx={{ p: 0.25, ml: 1 }}
               >
-                <MenuIcon />
+                <Avatar
+                  src={linkedPersonPhoto || undefined}
+                  sx={{
+                    width: 34,
+                    height: 34,
+                    border: "2px solid rgba(255,255,255,0.55)",
+                    bgcolor: "rgba(255,255,255,0.18)",
+                    color: "white",
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  {(userProfile?.displayName || currentUser?.email || "U")
+                    .charAt(0)
+                    .toUpperCase()}
+                </Avatar>
               </IconButton>
             </>
           )}
@@ -402,30 +459,56 @@ export const Header: React.FC = () => {
         {drawerContent}
       </Drawer>
 
-      <Dialog fullScreen open={villagePickerOpen} onClose={() => setVillagePickerOpen(false)}>
+      <Dialog
+        fullScreen
+        open={villagePickerOpen}
+        onClose={() => {
+          setVillageSearch("");
+          setVillagePickerOpen(false);
+        }}
+      >
         <AppBar position="static" color="primary">
           <Toolbar>
             <Typography sx={{ flexGrow: 1 }} variant="h6">
               Select Village
             </Typography>
-            <IconButton color="inherit" onClick={() => setVillagePickerOpen(false)}>
+            <IconButton
+              color="inherit"
+              onClick={() => {
+                setVillageSearch("");
+                setVillagePickerOpen(false);
+              }}
+            >
               <CloseIcon />
             </IconButton>
           </Toolbar>
         </AppBar>
         <Box sx={{ p: 2 }}>
+          <TextField
+            fullWidth
+            placeholder="Search village"
+            value={villageSearch}
+            onChange={(e) => setVillageSearch(e.target.value)}
+            sx={{ mb: 2 }}
+          />
           <List>
             {villages.length === 0 && (
               <ListItem>
                 <ListItemText primary="Loading villages..." />
               </ListItem>
             )}
-            {villages.map((village) => (
+            {villages.length > 0 && filteredVillages.length === 0 && (
+              <ListItem>
+                <ListItemText primary="No villages found" />
+              </ListItem>
+            )}
+            {filteredVillages.map((village) => (
               <ListItem key={village.id} disablePadding>
                 <ListItemButton
                   selected={selectedVillage === village.id}
                   onClick={() => {
                     setSelectedVillage(village.id);
+                    setVillageSearch("");
                     setVillagePickerOpen(false);
                   }}
                 >

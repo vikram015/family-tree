@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import Cropper, { Area } from "react-easy-crop";
 import {
   Dialog,
@@ -11,6 +11,7 @@ import {
   Typography,
   IconButton,
   CircularProgress,
+  Alert,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import CameraAltIcon from "@mui/icons-material/CameraAlt";
@@ -76,6 +77,8 @@ interface ImageCropperProps {
   uploading?: boolean;
   /** Size of the preview circle */
   previewSize?: number;
+  /** Visual style for the preview */
+  previewVariant?: "circle" | "rounded";
 }
 
 const ImageCropper: React.FC<ImageCropperProps> = ({
@@ -84,19 +87,28 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   onRemove,
   uploading = false,
   previewSize = 80,
+  previewVariant = "circle",
 }) => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [cameraDialogOpen, setCameraDialogOpen] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [isStartingCamera, setIsStartingCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
-  // Detect mobile/touch device for showing camera button
-  const isTouchDevice =
+  const supportsCameraApi =
+    typeof navigator !== "undefined" &&
+    !!navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getUserMedia === "function";
+  const prefersNativeCameraCapture =
     typeof window !== "undefined" &&
-    ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    window.matchMedia("(pointer: coarse)").matches;
 
   const onCropComplete = useCallback(
     (_croppedArea: Area, croppedPixels: Area) => {
@@ -104,6 +116,17 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     },
     [],
   );
+
+  const stopCameraStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopCameraStream();
+    };
+  }, [stopCameraStream]);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,6 +165,112 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
     setImageSrc(null);
   }, []);
 
+  const handleOpenCamera = useCallback(async () => {
+    if (prefersNativeCameraCapture || !supportsCameraApi) {
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    setCameraError("");
+    setIsStartingCamera(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "user" },
+        },
+        audio: false,
+      });
+
+      stopCameraStream();
+      streamRef.current = stream;
+      setCameraDialogOpen(true);
+    } catch (primaryError) {
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+        stopCameraStream();
+        streamRef.current = fallbackStream;
+        setCameraDialogOpen(true);
+      } catch (fallbackError) {
+        const error =
+          fallbackError instanceof Error
+            ? fallbackError
+            : primaryError instanceof Error
+              ? primaryError
+              : new Error("Unable to access camera");
+        setCameraError(error.message || "Unable to access camera");
+      }
+    } finally {
+      setIsStartingCamera(false);
+    }
+  }, [prefersNativeCameraCapture, stopCameraStream, supportsCameraApi]);
+
+  useEffect(() => {
+    if (!cameraDialogOpen || !videoRef.current || !streamRef.current) {
+      return;
+    }
+
+    const video = videoRef.current;
+    video.srcObject = streamRef.current;
+
+    const handleLoadedMetadata = () => {
+      void video.play().catch((error) => {
+        setCameraError(
+          error instanceof Error
+            ? error.message
+            : "Unable to start camera preview",
+        );
+      });
+    };
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.srcObject = null;
+    };
+  }, [cameraDialogOpen]);
+
+  const handleCloseCamera = useCallback(() => {
+    setCameraDialogOpen(false);
+    stopCameraStream();
+  }, [stopCameraStream]);
+
+  const handleCapturePhoto = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+      setCameraError("Camera preview is not ready yet. Please try again.");
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      setCameraError("Unable to capture image from camera.");
+      return;
+    }
+
+    context.drawImage(video, 0, 0, width, height);
+    const captured = canvas.toDataURL("image/jpeg", 0.92);
+    setImageSrc(captured);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setDialogOpen(true);
+    handleCloseCamera();
+  }, [handleCloseCamera]);
+
+  const previewRadius = previewVariant === "rounded" ? "24px" : "50%";
+
   return (
     <>
       {/* Preview + Upload trigger */}
@@ -167,7 +296,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
               style={{
                 width: previewSize,
                 height: previewSize,
-                borderRadius: "50%",
+                borderRadius: previewRadius,
                 objectFit: "cover",
                 border: "2px solid #e0e0e0",
               }}
@@ -177,7 +306,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
               sx={{
                 width: previewSize,
                 height: previewSize,
-                borderRadius: "50%",
+                borderRadius: previewRadius,
                 bgcolor: "action.hover",
                 display: "flex",
                 alignItems: "center",
@@ -197,7 +326,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 left: 0,
                 width: previewSize,
                 height: previewSize,
-                borderRadius: "50%",
+                borderRadius: previewRadius,
                 bgcolor: "rgba(255,255,255,0.7)",
                 display: "flex",
                 alignItems: "center",
@@ -228,18 +357,15 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
             {currentPhoto ? "Change" : "Gallery"}
           </Button>
 
-          {/* Camera button — only shown on touch devices */}
-          {isTouchDevice && (
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={<CameraAltIcon />}
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={uploading}
-            >
-              Camera
-            </Button>
-          )}
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<CameraAltIcon />}
+            onClick={handleOpenCamera}
+            disabled={uploading || isStartingCamera}
+          >
+            Camera
+          </Button>
 
           {currentPhoto && onRemove && (
             <IconButton
@@ -267,11 +393,68 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
           ref={cameraInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
+          capture="user"
           style={{ display: "none" }}
           onChange={handleFileChange}
         />
       </Box>
+
+      <Dialog
+        open={cameraDialogOpen}
+        onClose={handleCloseCamera}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { overflow: "hidden" } }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <Typography variant="h6">Take Photo</Typography>
+          <IconButton onClick={handleCloseCamera} size="small">
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <Box
+            sx={{
+              position: "relative",
+              width: "100%",
+              bgcolor: "#111",
+              minHeight: 320,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: "100%",
+                maxHeight: 420,
+                objectFit: "cover",
+              }}
+            />
+          </Box>
+          {cameraError && (
+            <Box sx={{ p: 2 }}>
+              <Alert severity="error">{cameraError}</Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCamera}>Cancel</Button>
+          <Button onClick={handleCapturePhoto} variant="contained">
+            Capture
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Crop Dialog */}
       <Dialog

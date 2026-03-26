@@ -21,6 +21,31 @@ import {
 } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
 
+const OTP_RESEND_BASE_DELAY_SECONDS = 30;
+const OTP_RESEND_MAX_DELAY_SECONDS = 5 * 60;
+
+function getOtpResendDelaySeconds(sendCount: number) {
+  if (sendCount <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    OTP_RESEND_BASE_DELAY_SECONDS * 2 ** (sendCount - 1),
+    OTP_RESEND_MAX_DELAY_SECONDS,
+  );
+}
+
+function formatCooldown(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (minutes === 0) {
+    return `${remainingSeconds}s`;
+  }
+
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
@@ -39,47 +64,82 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [confirmationResult, setConfirmationResult] =
     useState<ConfirmationResult | null>(null);
+  const [otpSendCount, setOtpSendCount] = useState(0);
+  const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
 
+  const clearRecaptcha = () => {
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+  };
+
   const initializeRecaptcha = async () => {
     if (!recaptchaContainerRef.current) {
       throw new Error("reCAPTCHA container not ready. Please try again.");
     }
 
-    if (!recaptchaRef.current) {
-      recaptchaRef.current = new RecaptchaVerifier(
-        firebaseAuth,
-        recaptchaContainerRef.current,
-        {
-          size: "invisible",
-          callback: () => {},
-          "expired-callback": () => {
-            setError("reCAPTCHA expired. Please try again.");
-          },
+    // Firebase app-verification tokens are one-time use, so create a fresh
+    // verifier for each OTP send/resend attempt.
+    clearRecaptcha();
+
+    recaptchaRef.current = new RecaptchaVerifier(
+      firebaseAuth,
+      recaptchaContainerRef.current,
+      {
+        size: "invisible",
+        callback: () => {},
+        "expired-callback": () => {
+          setError("reCAPTCHA expired. Please try again.");
+          clearRecaptcha();
         },
-      );
-    }
+      },
+    );
 
     await recaptchaRef.current.render();
   };
 
   useEffect(() => {
     return () => {
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
+      clearRecaptcha();
     };
   }, []);
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (resendCooldownSeconds <= 0) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setResendCooldownSeconds((currentSeconds) =>
+        currentSeconds > 0 ? currentSeconds - 1 : 0,
+      );
+    }, 1000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [resendCooldownSeconds]);
+
+  const resetOtpFlow = () => {
+    setOtp("");
+    setConfirmationResult(null);
+    setOtpSendCount(0);
+    setResendCooldownSeconds(0);
+  };
+
+  const sendOtp = async () => {
+    if (confirmationResult && resendCooldownSeconds > 0) {
+      setError(
+        `Please wait ${formatCooldown(resendCooldownSeconds)} before requesting another OTP.`,
+      );
+      return;
+    }
 
     if (!/^\d{10}$/.test(phone)) {
       setError("Please enter a valid 10-digit mobile number");
-      return;
+      return false;
     }
 
     const fullPhoneNumber = `+91${phone}`;
@@ -101,8 +161,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         recaptchaRef.current,
       );
       setConfirmationResult(result);
-      setSuccessMessage("OTP sent successfully.");
+      const nextSendCount = otpSendCount + 1;
+      const nextCooldownSeconds = getOtpResendDelaySeconds(nextSendCount);
+      setOtpSendCount(nextSendCount);
+      setResendCooldownSeconds(nextCooldownSeconds);
+      setSuccessMessage(
+        nextSendCount === 1
+          ? "OTP sent successfully."
+          : `OTP resent successfully. You can request another code in ${formatCooldown(nextCooldownSeconds)}.`,
+      );
+      return true;
     } catch (err: any) {
+      clearRecaptcha();
       const code = err?.code || "";
       const message = err?.message || "Failed to send OTP";
       // Keep detailed error visible for debugging auth misconfiguration issues.
@@ -129,9 +199,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       } else {
         setError(code ? `${code}: ${message}` : message);
       }
+      return false;
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendOtp();
+  };
+
+  const handleResendOtp = async () => {
+    await sendOtp();
   };
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
@@ -155,8 +235,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       await confirmationResult.confirm(otp.trim());
 
       setPhone("");
-      setOtp("");
-      setConfirmationResult(null);
+      resetOtpFlow();
       onSuccess?.();
     } catch (err: any) {
       setError(err?.message || "Invalid OTP");
@@ -166,13 +245,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   };
 
   const handleClose = () => {
-    recaptchaRef.current?.clear();
-    recaptchaRef.current = null;
+    clearRecaptcha();
     setPhone("");
-    setOtp("");
     setError("");
     setSuccessMessage("");
-    setConfirmationResult(null);
+    resetOtpFlow();
     onClose();
   };
 
@@ -262,19 +339,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </Button>
 
             {confirmationResult && (
-              <Button
-                variant="text"
-                fullWidth
-                onClick={() => {
-                  setConfirmationResult(null);
-                  setOtp("");
-                  setSuccessMessage("");
-                  setError("");
-                }}
-                disabled={loading}
-              >
-                Use different phone number
-              </Button>
+              <>
+                <Button
+                  variant="text"
+                  fullWidth
+                  onClick={handleResendOtp}
+                  disabled={loading || resendCooldownSeconds > 0}
+                >
+                  {resendCooldownSeconds > 0
+                    ? `Resend OTP in ${formatCooldown(resendCooldownSeconds)}`
+                    : "Resend OTP"}
+                </Button>
+
+                <Button
+                  variant="text"
+                  fullWidth
+                  onClick={() => {
+                    resetOtpFlow();
+                    setSuccessMessage("");
+                    setError("");
+                  }}
+                  disabled={loading}
+                >
+                  Use different phone number
+                </Button>
+              </>
             )}
           </form>
 

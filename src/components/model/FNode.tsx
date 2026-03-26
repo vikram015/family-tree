@@ -1,6 +1,7 @@
 import type { ExtNode } from "relatives-tree/lib/types";
 export type FNode = ExtNode & {
   name: string;
+  nameHindi?: string;
   dob: string;
   dod?: string; // Date of Death (legacy)
   bloodGroup?: string; // Blood group (A+, B-, O+, etc.)
@@ -15,4 +16,7 @@ export type FNode = ExtNode & {
   villageId?: string; // Village ID this node belongs to
   villageName?: string; // Village name
   name_lowercase?: string; // Lowercase name for case-insensitive search
+  relationStartDate?: string; // Optional relation start date when creating/linking spouse
+  relationEndDate?: string; // Optional relation end date when creating/linking spouse
+  relationSubtype?: string; // Optional spouse relation subtype (married/divorced)
 };

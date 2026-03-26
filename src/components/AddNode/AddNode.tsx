@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Node, RelType } from "relatives-tree/lib/types";
+import { RelType } from "relatives-tree/lib/types";
 import {
   Box,
   Typography,
@@ -22,14 +22,19 @@ import {
   InputLabel,
   Paper,
   Stack,
-  Divider,
   ToggleButton,
   ToggleButtonGroup,
   Switch,
+  Chip,
 } from "@mui/material";
-import dayjs from "dayjs";
+import { alpha } from "@mui/material/styles";
+import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
+import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
+import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
+import dayjs, { Dayjs } from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
+import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService } from "../../services/apiService";
@@ -61,11 +66,12 @@ interface AddNodeProps {
   initialRelation?: "child" | "spouse" | "parent";
   /** Pre-select a gender when opened from a placeholder node */
   initialGender?: "male" | "female" | "other" | "";
+  onMobileSaveActionChange?: (
+    action: { onClick: () => void; disabled: boolean; saving: boolean } | null,
+  ) => void;
 }
 
-const EXCLUDED_FIELDS = ["Gotra", "Village"];
-
-const AddNode: React.FC<AddNodeProps> = ({
+export default function AddNode({
   targetId,
   onAdd,
   onCancel,
@@ -75,17 +81,19 @@ const AddNode: React.FC<AddNodeProps> = ({
   isFirstNode = false,
   initialRelation,
   initialGender,
-}) => {
+  onMobileSaveActionChange,
+}: AddNodeProps) {
   const [name, setName] = useState("");
-  const [dob, setDob] = useState("");
+  const [nameHindi, setNameHindi] = useState("");
+  const [dob, setDob] = useState<Dayjs | null>(null);
   const [gender, setGender] = useState<"male" | "female" | "other" | "">(
     initialGender || "male",
   );
-  const [gotra, setGotra] = useState("");
-  const [village, setVillage] = useState("");
   const [relation, setRelation] = useState<"child" | "spouse" | "parent">(
     initialRelation || "child",
   );
+  const [relationStartDate, setRelationStartDate] = useState<Dayjs | null>(null);
+  const [relationEndDate, setRelationEndDate] = useState<Dayjs | null>(null);
   const [selectedRelType, setSelectedRelType] = useState<RelType>(
     RelType.blood,
   );
@@ -125,7 +133,7 @@ const AddNode: React.FC<AddNodeProps> = ({
   // New person fields
   const [bloodGroup, setBloodGroup] = useState("");
   const [isAlive, setIsAlive] = useState(true);
-  const [deceasedDate, setDeceasedDate] = useState("");
+  const [deceasedDate, setDeceasedDate] = useState<Dayjs | null>(null);
 
   // Photo state
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
@@ -135,6 +143,11 @@ const AddNode: React.FC<AddNodeProps> = ({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+
+  const formatPickerDate = useCallback((value: Dayjs | null) => {
+    if (!value || !value.isValid()) return undefined;
+    return value.format("YYYY-MM-DD");
+  }, []);
 
   // Load villages for the search dropdown
   useEffect(() => {
@@ -150,6 +163,8 @@ const AddNode: React.FC<AddNodeProps> = ({
   useEffect(() => {
     if (relation !== "spouse") {
       setMode("create");
+      setRelationStartDate(null);
+      setRelationEndDate(null);
     }
   }, [relation]);
   const targetNode = useMemo(() => {
@@ -222,11 +237,12 @@ const AddNode: React.FC<AddNodeProps> = ({
     onCancel?.();
     // reset local form
     setName("");
-    setDob("");
+    setDob(null);
+    setNameHindi("");
     setGender("");
-    setGotra("");
-    setVillage("");
     setRelation("child");
+    setRelationStartDate(null);
+    setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
     setSelectedPerson(null);
@@ -234,7 +250,7 @@ const AddNode: React.FC<AddNodeProps> = ({
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
-    setDeceasedDate("");
+    setDeceasedDate(null);
     setPhotoBlob(null);
     setPhotoPreview(undefined);
 
@@ -255,11 +271,12 @@ const AddNode: React.FC<AddNodeProps> = ({
   const handleFlowComplete = useCallback(() => {
     // reset local form
     setName("");
-    setDob("");
+    setDob(null);
+    setNameHindi("");
     setGender("");
-    setGotra("");
-    setVillage("");
     setRelation("child");
+    setRelationStartDate(null);
+    setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
     setSelectedPerson(null);
@@ -267,7 +284,7 @@ const AddNode: React.FC<AddNodeProps> = ({
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
-    setDeceasedDate("");
+    setDeceasedDate(null);
     setPhotoBlob(null);
     setPhotoPreview(undefined);
 
@@ -290,7 +307,7 @@ const AddNode: React.FC<AddNodeProps> = ({
     }
   }, [onComplete, onCancel]);
 
-  const handleSaveDetails = async () => {
+  const handleSaveDetails = useCallback(async () => {
     if (isSavingDetails) return;
     setIsSavingDetails(true);
     if (!savedNodeId) {
@@ -302,10 +319,10 @@ const AddNode: React.FC<AddNodeProps> = ({
     try {
       if (occupationType === "business") {
         if (businessName) {
-            await ApiService.createBusiness({
+          await ApiService.createBusiness({
             name: businessName,
             category: businessCategory,
-            address: businessAddress, // Use description or separate field if available, ApiService uses description
+            address: businessAddress,
             description: businessAddress,
             contact: businessContact || null,
             peopleId: savedNodeId,
@@ -313,7 +330,6 @@ const AddNode: React.FC<AddNodeProps> = ({
         }
       } else if (occupationType === "job") {
         if (jobTitle) {
-          // Try to find existing profession
           const existing = allProfessions.find(
             (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
           );
@@ -325,7 +341,6 @@ const AddNode: React.FC<AddNodeProps> = ({
               name: jobTitle.trim(),
               description: jobContact ? `Contact: ${jobContact}` : undefined,
             });
-            // Handle response which might be object or array
             profId = newProf?.id || (Array.isArray(newProf) && newProf[0]?.id);
           }
 
@@ -341,7 +356,19 @@ const AddNode: React.FC<AddNodeProps> = ({
     }
 
     handleFlowComplete();
-  };
+  }, [
+    allProfessions,
+    businessAddress,
+    businessCategory,
+    businessContact,
+    businessName,
+    handleFlowComplete,
+    isSavingDetails,
+    jobContact,
+    jobTitle,
+    occupationType,
+    savedNodeId,
+  ]);
 
   const handleSave = useCallback(async () => {
     if (isSaving) return;
@@ -349,12 +376,24 @@ const AddNode: React.FC<AddNodeProps> = ({
     // If linking existing person
     if (mode === "link") {
       if (!selectedPerson) return;
+      if (
+        relation === "spouse" &&
+        relationStartDate &&
+        relationEndDate &&
+        relationEndDate.isBefore(relationStartDate, "day")
+      ) {
+        alert("Marriage end date cannot be before marriage start date.");
+        return;
+      }
       setIsSaving(true);
       try {
         await onAdd?.(
           {
             id: selectedPerson.id,
             name: selectedPerson.name,
+            relationSubtype: selectedRelType,
+            relationStartDate: formatPickerDate(relationStartDate),
+            relationEndDate: formatPickerDate(relationEndDate),
           } as unknown as Partial<FNode>, // Pass existing ID
           relation,
           targetId,
@@ -373,11 +412,15 @@ const AddNode: React.FC<AddNodeProps> = ({
       return;
     }
 
-    const mergedFields = {
-      ...customFields,
-      Gotra: gotra.trim(),
-      Village: village.trim(),
-    };
+    if (
+      relation === "spouse" &&
+      relationStartDate &&
+      relationEndDate &&
+      relationEndDate.isBefore(relationStartDate, "day")
+    ) {
+      alert("Marriage end date cannot be before marriage start date.");
+      return;
+    }
 
     const processAdd = async () => {
       setIsSaving(true);
@@ -393,16 +436,26 @@ const AddNode: React.FC<AddNodeProps> = ({
 
         const newNode: Partial<any> = {
           name: name.trim(),
-          dob: dob || undefined,
+          nameHindi: nameHindi.trim() || undefined,
+          dob: formatPickerDate(dob),
           gender: (gender as any) || undefined,
           bloodGroup: bloodGroup || undefined,
           isAlive: isAlive,
-          deceasedDate: !isAlive && deceasedDate ? deceasedDate : undefined,
+          deceasedDate:
+            !isAlive && deceasedDate ? formatPickerDate(deceasedDate) : undefined,
           children: [],
           parents: parents.length ? parents : undefined,
           spouses: [],
           customFields:
-            Object.keys(mergedFields).length > 0 ? mergedFields : undefined,
+            Object.keys(customFields).length > 0 ? customFields : undefined,
+          relationStartDate:
+            relation === "spouse"
+              ? formatPickerDate(relationStartDate)
+              : undefined,
+          relationEndDate:
+            relation === "spouse"
+              ? formatPickerDate(relationEndDate)
+              : undefined,
         };
 
         const resultId = await onAdd?.(
@@ -454,12 +507,12 @@ const AddNode: React.FC<AddNodeProps> = ({
     openLoginModal,
     name,
     dob,
+    formatPickerDate,
+    nameHindi,
     gender,
     bloodGroup,
     isAlive,
     deceasedDate,
-    gotra,
-    village,
     customFields,
     relation,
     targetId,
@@ -469,25 +522,97 @@ const AddNode: React.FC<AddNodeProps> = ({
     selectedRelType,
     mode,
     selectedPerson,
+    relationStartDate,
+    relationEndDate,
     photoBlob,
     isSaving,
+  ]);
+
+  useEffect(() => {
+    if (!onMobileSaveActionChange) return;
+
+    if (step === 2) {
+      onMobileSaveActionChange({
+        onClick: handleSaveDetails,
+        disabled:
+          isSavingDetails ||
+          (occupationType === "business" && !businessName) ||
+          (occupationType === "job" && !jobTitle),
+        saving: isSavingDetails,
+      });
+      return () => onMobileSaveActionChange(null);
+    }
+
+    onMobileSaveActionChange({
+      onClick: handleSave,
+      disabled: isSaving || (mode === "create" ? !name.trim() : !selectedPerson),
+      saving: isSaving,
+    });
+
+    return () => onMobileSaveActionChange(null);
+  }, [
+    businessName,
+    handleSave,
+    handleSaveDetails,
+    isSaving,
+    isSavingDetails,
+    jobTitle,
+    mode,
+    name,
+    occupationType,
+    onMobileSaveActionChange,
+    selectedPerson,
+    step,
   ]);
 
   return (
     <Box
       component={noCard ? "div" : Paper}
-      sx={noCard ? {} : { p: 3, elevation: 2 }}
+      sx={
+        noCard
+          ? {}
+          : {
+              p: { xs: 2, sm: 3 },
+              borderRadius: 3,
+            }
+      }
     >
       {!noCard && step === 1 && (
-        <Typography variant="h6" gutterBottom>
-          {isFirstNode
-            ? "Add First Family Member"
-            : `Add Family Member to ${targetNode ? targetNode.name : "Tree"}`}
-        </Typography>
+        <Box sx={{ mb: 2.5 }}>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 800 }}>
+            {isFirstNode
+              ? "Add First Family Member"
+              : `Add Family Member to ${targetNode ? targetNode.name : "Tree"}`}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Start with the essentials first. Extra details can be completed after the profile is created.
+          </Typography>
+        </Box>
       )}
 
       {step === 2 ? (
         <Stack spacing={3}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: { xs: 2, sm: 2.5 },
+              borderRadius: 3,
+              textAlign: "center",
+              background: (theme) =>
+                `linear-gradient(180deg, ${alpha(theme.palette.success.main, 0.08)} 0%, ${theme.palette.background.paper} 100%)`,
+            }}
+          >
+            <Chip
+              icon={<WorkOutlineOutlinedIcon sx={{ fontSize: 16 }} />}
+              label="Step 2 of 2"
+              color="success"
+              size="small"
+              sx={{ mb: 1.5 }}
+            />
+            <Typography variant="body2" color="text.secondary">
+              Add optional professional details now, or skip and come back later.
+            </Typography>
+          </Paper>
           <Box sx={{ textAlign: "center", mb: 1 }}>
             <Typography variant="h6" color="primary" gutterBottom>
               👍 Person Added!
@@ -500,18 +625,20 @@ const AddNode: React.FC<AddNodeProps> = ({
             </Typography>
           </Box>
 
-          <FormControl fullWidth>
-            <InputLabel>Occupation Type</InputLabel>
-            <Select
-              value={occupationType}
-              onChange={(e) => setOccupationType(e.target.value as any)}
-              label="Occupation Type"
-            >
-              <MenuItem value="business">Business Owner</MenuItem>
-              <MenuItem value="job">Salaried / Professional</MenuItem>
-              <MenuItem value="other">Student / Homemaker / Other</MenuItem>
-            </Select>
-          </FormControl>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+            <Stack spacing={2.25}>
+              <FormControl fullWidth>
+                <InputLabel>Occupation Type</InputLabel>
+                <Select
+                  value={occupationType}
+                  onChange={(e) => setOccupationType(e.target.value as any)}
+                  label="Occupation Type"
+                >
+                  <MenuItem value="business">Business Owner</MenuItem>
+                  <MenuItem value="job">Salaried / Professional</MenuItem>
+                  <MenuItem value="other">Student / Homemaker / Other</MenuItem>
+                </Select>
+              </FormControl>
 
           {occupationType === "business" && (
             <>
@@ -567,6 +694,8 @@ const AddNode: React.FC<AddNodeProps> = ({
               />
             </>
           )}
+            </Stack>
+          </Paper>
 
           <Box
             sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 4 }}
@@ -594,74 +723,149 @@ const AddNode: React.FC<AddNodeProps> = ({
         </Stack>
       ) : (
         <Stack spacing={3}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: { xs: 1.5, sm: 2 },
+              borderRadius: 3,
+              background: (theme) =>
+                `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+            }}
+          >
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1}
+              alignItems={{ xs: "flex-start", sm: "center" }}
+              justifyContent="space-between"
+            >
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                  {isFirstNode ? "Create a root person" : "Create or link a relative"}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Fill the core profile first. Extra details can be added after save.
+                </Typography>
+              </Box>
+              <Chip
+                icon={
+                  mode === "link" ? (
+                    <LinkOutlinedIcon sx={{ fontSize: 16 }} />
+                  ) : (
+                    <PersonAddAlt1OutlinedIcon sx={{ fontSize: 16 }} />
+                  )
+                }
+                label={mode === "link" ? "Link existing profile" : "Create new profile"}
+                color={mode === "link" ? "info" : "primary"}
+                size="small"
+                variant="outlined"
+              />
+            </Stack>
+          </Paper>
+
           {!isFirstNode && (
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Relation</FormLabel>
-              <RadioGroup
-                row
-                value={relation}
-                onChange={(e) => setRelation(e.target.value as any)}
-              >
-                <FormControlLabel
-                  value="child"
-                  control={<Radio />}
-                  label="Child"
-                />
-                <FormControlLabel
-                  value="spouse"
-                  control={<Radio />}
-                  label="Spouse"
-                />
-                <FormControlLabel
-                  value="parent"
-                  control={<Radio />}
-                  label="Parent"
-                />
-              </RadioGroup>
-            </FormControl>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Relation</FormLabel>
+                <RadioGroup
+                  row
+                  value={relation}
+                  onChange={(e) => setRelation(e.target.value as any)}
+                >
+                  <FormControlLabel
+                    value="child"
+                    control={<Radio />}
+                    label="Child"
+                  />
+                  <FormControlLabel
+                    value="spouse"
+                    control={<Radio />}
+                    label="Spouse"
+                  />
+                  <FormControlLabel
+                    value="parent"
+                    control={<Radio />}
+                    label="Parent"
+                  />
+                </RadioGroup>
+              </FormControl>
+            </Paper>
           )}
 
           {!isFirstNode && (
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Relation Type</FormLabel>
-              <RadioGroup
-                row
-                value={selectedRelType}
-                onChange={(e) => setSelectedRelType(e.target.value as RelType)}
-              >
-                {relTypes.map((type) => (
-                  <FormControlLabel
-                    key={type}
-                    value={type}
-                    control={<Radio />}
-                    label={type}
-                  />
-                ))}
-              </RadioGroup>
-            </FormControl>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <FormControl component="fieldset">
+                <FormLabel component="legend">Relation Type</FormLabel>
+                <RadioGroup
+                  row
+                  value={selectedRelType}
+                  onChange={(e) => {
+                    const nextType = e.target.value as RelType;
+                    setSelectedRelType(nextType);
+                    if (nextType !== RelType.divorced) {
+                      setRelationEndDate(null);
+                    }
+                  }}
+                >
+                  {relTypes.map((type) => (
+                    <FormControlLabel
+                      key={type}
+                      value={type}
+                      control={<Radio />}
+                      label={type}
+                    />
+                  ))}
+                </RadioGroup>
+              </FormControl>
+            </Paper>
           )}
 
           {!isFirstNode && relation === "spouse" && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Action
-              </Typography>
-              <ToggleButtonGroup
-                color="primary"
-                value={mode}
-                exclusive
-                onChange={(_, newMode) => newMode && setMode(newMode)}
-                size="small"
-                fullWidth
-              >
-                <ToggleButton value="create">Create New Profile</ToggleButton>
-                <ToggleButton value="link">Link Existing Profile</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <Stack spacing={2} sx={{ mb: 1 }}>
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Action
+                  </Typography>
+                  <ToggleButtonGroup
+                    color="primary"
+                    value={mode}
+                    exclusive
+                    onChange={(_, newMode) => newMode && setMode(newMode)}
+                    size="small"
+                    fullWidth
+                  >
+                    <ToggleButton value="create">Create New Profile</ToggleButton>
+                    <ToggleButton value="link">Link Existing Profile</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+
+                <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
+                  <DatePicker
+                    label="Marriage Start Date (optional)"
+                    value={relationStartDate}
+                    onChange={(value) => setRelationStartDate(value)}
+                    slotProps={{ textField: { fullWidth: true } }}
+                    format="DD/MM/YYYY"
+                  />
+                </Suspense>
+                {selectedRelType === RelType.divorced && (
+                  <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
+                    <DatePicker
+                      label="Marriage End Date (optional)"
+                      value={relationEndDate}
+                      onChange={(value) => setRelationEndDate(value)}
+                      slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY"
+                    />
+                  </Suspense>
+                )}
+              </Stack>
+            </Paper>
           )}
 
           {mode === "link" && relation === "spouse" ? (
-            <Stack spacing={2}>
+            <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+              <Stack spacing={2.25}>
               <FormControl fullWidth>
                 <InputLabel>Select Village (Required)</InputLabel>
                 <Select
@@ -696,7 +900,7 @@ const AddNode: React.FC<AddNodeProps> = ({
                 <Typography
                   variant="caption"
                   color="text.secondary"
-                  sx={{ fontStyle: "italic", display: "block", my: 1 }}
+                  sx={{ fontStyle: "italic", display: "block", mt: -0.5 }}
                 >
                   Please select a village first to search for people.
                 </Typography>
@@ -705,7 +909,7 @@ const AddNode: React.FC<AddNodeProps> = ({
               {selectedPerson && (
                 <Paper
                   variant="outlined"
-                  sx={{ p: 2, bgcolor: "action.hover" }}
+                  sx={{ p: 2, bgcolor: "action.hover", borderRadius: 2.5 }}
                 >
                   <Typography variant="subtitle2">Selected Spouse:</Typography>
                   <Typography variant="body1" fontWeight="bold">
@@ -718,166 +922,192 @@ const AddNode: React.FC<AddNodeProps> = ({
                   </Typography>
                 </Paper>
               )}
-            </Stack>
+              </Stack>
+            </Paper>
           ) : (
-            <>
-              {!isFirstNode && relation === "child" && (
-                <FormControl fullWidth>
-                  <InputLabel>Other parent</InputLabel>
-                  <Select
-                    value={selectedOtherParentId}
-                    onChange={(e) => setSelectedOtherParentId(e.target.value)}
-                    label="Other parent"
-                  >
-                    <MenuItem value="">None</MenuItem>
-                    {spouseOptions.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        {s.name ||
-                          (targetNode?.name
-                            ? `${targetNode.name}'s Spouse`
-                            : s.id)}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
+            <Stack spacing={2.25}>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  Identity
+                </Typography>
+                <Stack spacing={2}>
+                  {!isFirstNode && relation === "child" && (
+                    <FormControl fullWidth>
+                      <InputLabel>Other parent</InputLabel>
+                      <Select
+                        value={selectedOtherParentId}
+                        onChange={(e) => setSelectedOtherParentId(e.target.value)}
+                        label="Other parent"
+                      >
+                        <MenuItem value="">None</MenuItem>
+                        {spouseOptions.map((s) => (
+                          <MenuItem key={s.id} value={s.id}>
+                            {s.name ||
+                              (targetNode?.name
+                                ? `${targetNode.name}'s Spouse`
+                                : s.id)}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
 
-              <Suspense fallback={<Box sx={{ height: 88 }} />}>
-                <ImageCropper
-                  currentPhoto={photoPreview}
-                  onCropped={(blob) => {
-                    setPhotoBlob(blob);
-                    setPhotoPreview(URL.createObjectURL(blob));
-                  }}
-                  onRemove={() => {
-                    setPhotoBlob(null);
-                    setPhotoPreview(undefined);
-                  }}
-                  uploading={photoUploading}
-                  previewSize={70}
-                />
-              </Suspense>
-
-              <TextField
-                label="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                fullWidth
-                required
-                autoFocus
-              />
-
-              <Suspense
-                fallback={<TextField fullWidth label="Date of birth" />}
-              >
-                <DatePicker
-                  label="Date of birth (optional)"
-                  value={dob ? dayjs(dob) : null}
-                  onChange={(val) =>
-                    setDob(val ? val.format("YYYY-MM-DD") : "")
-                  }
-                  slotProps={{ textField: { fullWidth: true } }}
-                  format="DD/MM/YYYY"
-                />
-              </Suspense>
-
-              <TextField
-                label="Gotra"
-                value={gotra}
-                onChange={(e) => setGotra(e.target.value)}
-                fullWidth
-              />
-
-              <TextField
-                label="Village"
-                value={village}
-                onChange={(e) => setVillage(e.target.value)}
-                fullWidth
-              />
-
-              <FormControl fullWidth>
-                <InputLabel>Blood Group</InputLabel>
-                <Select
-                  value={bloodGroup}
-                  onChange={(e) => setBloodGroup(e.target.value)}
-                  label="Blood Group"
-                >
-                  <MenuItem value="">Unknown</MenuItem>
-                  <MenuItem value="A+">A+</MenuItem>
-                  <MenuItem value="A-">A−</MenuItem>
-                  <MenuItem value="B+">B+</MenuItem>
-                  <MenuItem value="B-">B−</MenuItem>
-                  <MenuItem value="AB+">AB+</MenuItem>
-                  <MenuItem value="AB-">AB−</MenuItem>
-                  <MenuItem value="O+">O+</MenuItem>
-                  <MenuItem value="O-">O−</MenuItem>
-                </Select>
-              </FormControl>
-
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={isAlive}
-                    onChange={(e) => {
-                      setIsAlive(e.target.checked);
-                      if (e.target.checked) setDeceasedDate("");
+                  <Box
+                    sx={{
+                      p: { xs: 1.5, sm: 2 },
+                      borderRadius: 3,
+                      textAlign: "center",
+                      background: (muiTheme) =>
+                        `linear-gradient(180deg, ${alpha(muiTheme.palette.primary.main, 0.06)} 0%, ${muiTheme.palette.background.paper} 100%)`,
                     }}
-                  />
-                }
-                label="Is Alive"
-              />
+                  >
+                    <Stack spacing={1.5} alignItems="center">
+                      <Suspense fallback={<Box sx={{ height: 88 }} />}>
+                        <ImageCropper
+                          currentPhoto={photoPreview}
+                          previewVariant="rounded"
+                          onCropped={(blob) => {
+                            setPhotoBlob(blob);
+                            setPhotoPreview(URL.createObjectURL(blob));
+                          }}
+                          onRemove={() => {
+                            setPhotoBlob(null);
+                            setPhotoPreview(undefined);
+                          }}
+                          uploading={photoUploading}
+                          previewSize={88}
+                        />
+                      </Suspense>
+                      <Box>
+                        <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                          {name.trim() || "New family member"}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          Add the basic identity details and photo for this profile.
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
 
-              {!isAlive && (
-                <Suspense
-                  fallback={<TextField fullWidth label="Deceased Date" />}
-                >
-                  <DatePicker
-                    label="Deceased Date"
-                    value={deceasedDate ? dayjs(deceasedDate) : null}
-                    onChange={(val) =>
-                      setDeceasedDate(val ? val.format("YYYY-MM-DD") : "")
+                  <TextField
+                    label="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    fullWidth
+                    required
+                    autoFocus
+                  />
+                  <HindiNameInput
+                    sourceText={name}
+                    value={nameHindi}
+                    onChange={setNameHindi}
+                    disabled={mode === "link"}
+                  />
+
+                  <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
+                    <DatePicker
+                      label="Date of birth (optional)"
+                      value={dob}
+                      onChange={(value) => setDob(value)}
+                      slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY"
+                    />
+                  </Suspense>
+
+                  <FormControl sx={{ m: 0 }}>
+                    <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
+                    <RadioGroup
+                      row
+                      sx={{ gap: 1.5 }}
+                      value={gender}
+                      onChange={(e) =>
+                        setGender(e.target.value as "male" | "female" | "other")
+                      }
+                    >
+                      <FormControlLabel
+                        value="male"
+                        control={<Radio />}
+                        label="Male"
+                      />
+                      <FormControlLabel
+                        value="female"
+                        control={<Radio />}
+                        label="Female"
+                      />
+                      <FormControlLabel
+                        value="other"
+                        control={<Radio />}
+                        label="Other"
+                      />
+                    </RadioGroup>
+                  </FormControl>
+                </Stack>
+              </Paper>
+
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  Life details
+                </Typography>
+                <Stack spacing={2}>
+                  <FormControl fullWidth>
+                    <InputLabel>Blood Group</InputLabel>
+                    <Select
+                      value={bloodGroup}
+                      onChange={(e) => setBloodGroup(e.target.value)}
+                      label="Blood Group"
+                    >
+                      <MenuItem value="">Unknown</MenuItem>
+                      <MenuItem value="A+">A+</MenuItem>
+                      <MenuItem value="A-">A−</MenuItem>
+                      <MenuItem value="B+">B+</MenuItem>
+                      <MenuItem value="B-">B−</MenuItem>
+                      <MenuItem value="AB+">AB+</MenuItem>
+                      <MenuItem value="AB-">AB−</MenuItem>
+                      <MenuItem value="O+">O+</MenuItem>
+                      <MenuItem value="O-">O−</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControlLabel
+                    sx={{ m: 0 }}
+                    control={
+                      <Switch
+                        checked={isAlive}
+                        onChange={(e) => {
+                          setIsAlive(e.target.checked);
+                          if (e.target.checked) setDeceasedDate(null);
+                        }}
+                      />
                     }
-                    slotProps={{ textField: { fullWidth: true } }}
-                    format="DD/MM/YYYY"
+                    label="Is Alive"
                   />
-                </Suspense>
-              )}
 
-              <FormControl>
-                <FormLabel>Gender</FormLabel>
-                <RadioGroup
-                  row
-                  value={gender}
-                  onChange={(e) =>
-                    setGender(e.target.value as "male" | "female" | "other")
-                  }
-                >
-                  <FormControlLabel
-                    value="male"
-                    control={<Radio />}
-                    label="Male"
-                  />
-                  <FormControlLabel
-                    value="female"
-                    control={<Radio />}
-                    label="Female"
-                  />
-                  <FormControlLabel
-                    value="other"
-                    control={<Radio />}
-                    label="Other"
-                  />
-                </RadioGroup>
-              </FormControl>
+                  {!isAlive && (
+                    <Suspense fallback={<TextField fullWidth label="Deceased Date" />}>
+                      <DatePicker
+                        label="Deceased Date"
+                        value={deceasedDate}
+                        onChange={(value) => setDeceasedDate(value)}
+                        slotProps={{ textField: { fullWidth: true } }}
+                        format="DD/MM/YYYY"
+                      />
+                    </Suspense>
+                  )}
+                </Stack>
+              </Paper>
 
-              <Divider />
-
-              <AdditionalDetails
-                value={customFields}
-                onChange={setCustomFields}
-                excludeFields={EXCLUDED_FIELDS}
-              />
-            </>
+              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
+                  Additional details
+                </Typography>
+                <AdditionalDetails
+                  value={customFields}
+                  onChange={setCustomFields}
+                  showUpfrontFields={false}
+                  showAdditionalSection
+                />
+              </Paper>
+            </Stack>
           )}
 
           <Box
@@ -906,7 +1136,4 @@ const AddNode: React.FC<AddNodeProps> = ({
       )}
     </Box>
   );
-};
-
-export default AddNode;
-
+}

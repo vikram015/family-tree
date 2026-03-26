@@ -8,7 +8,6 @@
     "@mui/material": "^7.3.6",
     "@mui/x-date-pickers": "^8.27.0",
     "@reduxjs/toolkit": "^2.11.2",
-    "@supabase/supabase-js": "^2.91.1",
     "@types/react-router-dom": "^5.3.3",
     "classnames": "2.3.2",
     "d3-hierarchy": "^3.1.2",
@@ -53,8 +52,8 @@
     "analyze": "source-map-explorer build/static/js/*.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
-    "firebase:clean": "powershell -ExecutionPolicy Bypass -Command \"Remove-Item -Recurse -Force .firebase -ErrorAction Ignore\"",
-    "deploy:firebase": "npm run build && npm run firebase:clean && npx --yes firebase-tools@latest deploy --only hosting --project kinvia-fe353"
+    "firebase:clean": "rm -rf .firebase",
+    "deploy:firebase": "bash ./scripts/deploy-firebase.sh"
   },
   "eslintConfig": {
     "extends": "react-app"

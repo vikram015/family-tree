@@ -11,6 +11,7 @@ import {
   Chip,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import dayjs from "dayjs";
 
 interface RelationsProps {
   title: string;
@@ -28,6 +29,25 @@ export const Relations = memo(function Relations({
     [onSelect],
   );
 
+  const formatRelationDate = (value?: string) => {
+    if (!value) return null;
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format("DD/MM/YYYY") : value;
+  };
+
+  const getSecondaryText = (item: any) => {
+    const relationType = item?.type || "";
+    const startDate = formatRelationDate(item?.startDate);
+    const endDate = formatRelationDate(item?.endDate);
+
+    if (startDate || endDate) {
+      const relationRange = `${startDate || "Unknown"} - ${endDate || "Present"}`;
+      return relationType ? `${relationType} | ${relationRange}` : relationRange;
+    }
+
+    return relationType;
+  };
+
   return (
     <Accordion>
       <AccordionSummary
@@ -44,7 +64,7 @@ export const Relations = memo(function Relations({
             {items.map((item, idx) => (
               <ListItem key={idx} disablePadding>
                 <ListItemButton onClick={selectHandler(item.id)}>
-                  <ListItemText primary={item.name} secondary={item.type} />
+                  <ListItemText primary={item.name} secondary={getSecondaryText(item)} />
                 </ListItemButton>
               </ListItem>
             ))}

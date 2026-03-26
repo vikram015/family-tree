@@ -171,7 +171,13 @@ class TreeBuilder {
         return !l.target.data.noParent;
       })
       .append('path')
-      .attr('class', opts.styles.linage)
+      .attr('class', function (l: any) {
+        const sourceReadOnly = l?.source?.data?.extra?.isReadOnly === true;
+        const targetReadOnly = l?.target?.data?.extra?.isReadOnly === true;
+        const classes = [opts.styles.linage];
+        if (sourceReadOnly && targetReadOnly) classes.push('readonly');
+        return classes.join(' ');
+      })
       .attr('d', this._elbow.bind(this))
       .style('opacity', duration === 0 ? 1 : 0);
 
@@ -196,9 +202,14 @@ class TreeBuilder {
         const relationType = d?.target?.marriageNode?.data?.extra?.relationType;
         const hasDeceasedPartner =
           d?.target?.marriageNode?.data?.extra?.hasDeceasedPartner === true;
+        const sourceReadOnly = d?.source?.data?.extra?.isReadOnly === true;
+        const targetReadOnly = d?.target?.data?.extra?.isReadOnly === true;
         const classes = [opts.styles.marriage];
         if (relationType === 'divorced') classes.push('divorced');
         if (hasDeceasedPartner) classes.push('deceased');
+        if (sourceReadOnly && targetReadOnly) {
+          classes.push('readonly');
+        }
         return classes.join(' ');
       })
       .attr('d', this._siblingLine.bind(this))
@@ -416,13 +427,27 @@ class TreeBuilder {
     // Outer connections are lifted with extra clearance so they don't intersect
     // top-right UI affordances (e.g. external tree icon) on neighboring spouse cards.
     if (d.number > 1) {
-      const iconClearance = Math.round(nodeHeight / 2 + 16);
+      const multiSpouseIndex = Math.floor(d.number / 2); // 1 for 2&3, 2 for 4&5
+      const iconClearance = Math.round(nodeHeight / 2 + 16) + (multiSpouseIndex - 1) * 12;
       ny -= iconClearance;
+      
+      let upX = d.source.x + (isRight ? 20 + (multiSpouseIndex - 1) * 8 : -20 - (multiSpouseIndex - 1) * 8);
+      
+      let linedata = [
+        { x: d.source.x, y: d.source.y },
+        { x: upX, y: d.source.y },
+        { x: upX, y: ny },
+        { x: d.target.marriageNode.x, y: ny },
+        { x: d.target.marriageNode.x, y: d.target.y },
+        { x: d.target.x, y: d.target.y }
+      ];
+
+      return this._roundedOrthogonalPath(linedata, TreeBuilder.CONNECTOR_RADIUS);
     }
 
     // Determine horizontal offset from the node
-    // Inner marriages (0, 1) get smaller offset, Outer (2, 3...) get larger offset
-    let offsetX = d.number > 1 ? (nodeWidth * 8) / 10 : (nodeWidth * 6) / 10;
+    // Inner marriages (0, 1) get smaller offset
+    let offsetX = (nodeWidth * 6) / 10;
     
     // Apply direction to offset
     if (!isRight) {
@@ -656,5 +681,3 @@ class TreeBuilder {
 }
 
 export default TreeBuilder;
-
-

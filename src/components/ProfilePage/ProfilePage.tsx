@@ -378,6 +378,7 @@ export const ProfilePage: React.FC = () => {
             </Tooltip>
 
             <Avatar
+              src={linkedPersonDetails?.photoUrl || undefined}
               sx={{
                 width: 100,
                 height: 100,
@@ -1109,4 +1110,3 @@ export const ProfilePage: React.FC = () => {
     </Container>
   );
 };
-

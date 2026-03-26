@@ -7,12 +7,15 @@ CREATE TABLE IF NOT EXISTS people_relations (
   related_person_id UUID NOT NULL REFERENCES people(id) ON DELETE CASCADE,
   relation_type VARCHAR(50) NOT NULL,
   relation_subtype VARCHAR(50),
+  start_date DATE,
+  end_date DATE,
   created_at TIMESTAMP DEFAULT now(),
   modified_at TIMESTAMP DEFAULT now(),
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   modified_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   CONSTRAINT valid_relation_type CHECK (relation_type IN ('parent', 'spouse')),
-  CONSTRAINT valid_relation_subtype CHECK (relation_subtype IN ('blood', 'adopted', 'married', 'divorced', NULL))
+  CONSTRAINT valid_relation_subtype CHECK (relation_subtype IN ('blood', 'adopted', 'married', 'divorced', NULL)),
+  CONSTRAINT valid_relation_date_order CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
 
 -- =====================================================
@@ -22,6 +25,8 @@ CREATE INDEX IF NOT EXISTS idx_people_relations_person ON people_relations(perso
 CREATE INDEX IF NOT EXISTS idx_people_relations_related ON people_relations(related_person_id, relation_type);
 CREATE INDEX IF NOT EXISTS idx_people_relations_person_id ON people_relations(person_id);
 CREATE INDEX IF NOT EXISTS idx_people_relations_related_person_id ON people_relations(related_person_id);
+CREATE INDEX IF NOT EXISTS idx_people_relations_start_date ON people_relations(start_date);
+CREATE INDEX IF NOT EXISTS idx_people_relations_end_date ON people_relations(end_date);
 
 -- =====================================================
 -- ROW LEVEL SECURITY FOR PEOPLE_RELATIONS TABLE

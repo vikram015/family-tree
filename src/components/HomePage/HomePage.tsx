@@ -18,11 +18,19 @@ import {
   ListItemIcon,
   ListItemText,
   Chip,
+  Avatar,
   ClickAwayListener,
   LinearProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 import PersonIcon from "@mui/icons-material/Person";
 import StoreIcon from "@mui/icons-material/Store";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
@@ -49,6 +57,9 @@ interface SearchResult {
   name: string;
   type: "person" | "business" | "profession";
   treeId?: string;
+  treeName?: string;
+  personPhotoUrl?: string;
+  gotra?: string;
   extra?: string;
   villageName?: string;
   casteName?: string;
@@ -56,16 +67,65 @@ interface SearchResult {
   parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
 }
 
+interface DashboardContributor {
+  personName: string;
+  peopleAdded: number;
+}
+
+function getInitials(value?: string): string {
+  if (!value) return "?";
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber" | "slate") {
+  if (!value) return null;
+
+  const styles =
+    accent === "teal"
+      ? { bg: "#ecfeff", color: "#0f766e" }
+      : accent === "amber"
+        ? { bg: "#fff7ed", color: "#b45309" }
+        : { bg: "#f1f5f9", color: "#475569" };
+
+  return (
+    <Box
+      key={`${label}-${value}`}
+      sx={{
+        px: 0.9,
+        py: 0.45,
+        borderRadius: 999,
+        bgcolor: styles.bg,
+        color: styles.color,
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1.2,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <Box component="span">{value}</Box>
+    </Box>
+  );
+}
+
 export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { userProfile, currentUser } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const suppressMobileSearchOpenRef = useRef(false);
 
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
@@ -107,14 +167,11 @@ export const HomePage: React.FC = () => {
           treeId: row.treeId,
           extra:
             row.entityType === "person"
-              ? [
-                  row.villageName ? `Village: ${row.villageName}` : null,
-                  row.treeName ? `Tree: ${row.treeName}` : "Family Member",
-                  lineageText ? `Lineage: ${lineageText}` : "Lineage: N/A",
-                ]
-                  .filter(Boolean)
-                  .join(" | ")
+              ? lineageText || "Lineage: N/A"
               : row.subtitle || undefined,
+          treeName: row.treeName || undefined,
+          personPhotoUrl: row.personPhotoUrl || undefined,
+          gotra: row.gotra || undefined,
           villageName: row.villageName || undefined,
           casteName: row.casteName || undefined,
           subCasteName: row.subCasteName || undefined,
@@ -139,6 +196,7 @@ export const HomePage: React.FC = () => {
 
   const handleResultClick = (result: SearchResult) => {
     setShowResults(false);
+    setSearchDialogOpen(false);
     setSearchQuery("");
     if (result.treeId) {
       const params = new URLSearchParams();
@@ -156,10 +214,128 @@ export const HomePage: React.FC = () => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
 
+  const closeSearchDialog = useCallback(() => {
+    suppressMobileSearchOpenRef.current = true;
+    setSearchDialogOpen(false);
+    setShowResults(false);
+
+    window.setTimeout(() => {
+      suppressMobileSearchOpenRef.current = false;
+    }, 250);
+  }, []);
+
+  const renderSearchResults = () => {
+    if (!showResults) return null;
+
+    return (
+      <Paper
+        elevation={8}
+        sx={{
+          position: isMobile ? "static" : "absolute",
+          top: isMobile ? "auto" : "100%",
+          left: 0,
+          right: 0,
+          zIndex: 1300,
+          maxHeight: isMobile ? "none" : 420,
+          overflow: "auto",
+          mt: isMobile ? 1.5 : 0.5,
+          borderRadius: 2,
+        }}
+      >
+        {searchResults.length > 0 ? (
+          <List dense disablePadding>
+            {searchResults.map((result) => (
+              <ListItem
+                key={`${result.type}-${result.id}`}
+                component="div"
+                onClick={() => handleResultClick(result)}
+                sx={{
+                  cursor: "pointer",
+                  "&:hover": { bgcolor: "action.hover" },
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  {result.type === "person" ? (
+                    <Avatar
+                      src={result.personPhotoUrl || undefined}
+                      sx={{
+                        width: 28,
+                        height: 28,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        bgcolor: "#e0f2fe",
+                        color: "#0369a1",
+                      }}
+                    >
+                      {getInitials(result.name)}
+                    </Avatar>
+                  ) : result.type === "profession" ? (
+                    <TimelineIcon color="action" />
+                  ) : (
+                    <StoreIcon color="secondary" />
+                  )}
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <Stack spacing={0.75}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {result.name}
+                      </Typography>
+                      {result.type === "person" &&
+                        (result.villageName || result.gotra || result.casteName) && (
+                          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
+                            {renderMetaPill("Village", result.villageName, "teal")}
+                            {renderMetaPill("Caste", result.casteName, "slate")}
+                            {renderMetaPill("Sub caste", result.gotra, "slate")}
+                          </Stack>
+                        )}
+                    </Stack>
+                  }
+                  secondary={result.extra || undefined}
+                  primaryTypographyProps={{ fontWeight: 600 }}
+                  secondaryTypographyProps={{ fontSize: "0.75rem" }}
+                />
+                <Chip
+                  label={
+                    result.type === "person"
+                      ? "Person"
+                      : result.type === "profession"
+                        ? "Profession"
+                        : "Business"
+                  }
+                  size="small"
+                  color={
+                    result.type === "person"
+                      ? "primary"
+                      : result.type === "business"
+                        ? "secondary"
+                        : "default"
+                  }
+                  variant="outlined"
+                />
+              </ListItem>
+            ))}
+          </List>
+        ) : !isSearching ? (
+          <Box sx={{ p: 2, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              No results found for "{searchQuery}"
+            </Typography>
+          </Box>
+        ) : null}
+      </Paper>
+    );
+  };
+
   const totalPeople = statistics?.totalPeople || 0;
   const totalTrees = statistics?.totalTrees || 0;
   const totalVillages = statistics?.totalVillages || 0;
   const totalBusinesses = statistics?.totalBusinesses || 0;
+  const topContributors = Array.isArray(statistics?.topContributors)
+    ? (statistics.topContributors as DashboardContributor[])
+    : [];
   const professionCoverage = totalPeople
     ? Math.round(((statistics?.peopleWithProfessions || 0) / totalPeople) * 100)
     : 0;
@@ -227,14 +403,26 @@ export const HomePage: React.FC = () => {
                 Every update you make today becomes heritage tomorrow.
               </Typography>
 
-              <ClickAwayListener onClickAway={() => setShowResults(false)}>
+              <ClickAwayListener onClickAway={() => !isMobile && setShowResults(false)}>
                 <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
                   <TextField
                     fullWidth
                     placeholder="Search family members, businesses..."
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
+                    onClick={() => {
+                      if (isMobile && !suppressMobileSearchOpenRef.current) {
+                        setSearchDialogOpen(true);
+                      }
+                    }}
                     onFocus={() => {
+                      if (isMobile) {
+                        if (suppressMobileSearchOpenRef.current) {
+                          return;
+                        }
+                        setSearchDialogOpen(true);
+                        return;
+                      }
                       if (searchResults.length > 0) setShowResults(true);
                     }}
                     onKeyPress={(e) => {
@@ -258,81 +446,11 @@ export const HomePage: React.FC = () => {
                       bgcolor: "white",
                       borderRadius: 2,
                     }}
+                    inputProps={{
+                      readOnly: isMobile,
+                    }}
                   />
-                  {showResults && (
-                    <Paper
-                      elevation={8}
-                      sx={{
-                        position: "absolute",
-                        top: "100%",
-                        left: 0,
-                        right: 0,
-                        zIndex: 1300,
-                        maxHeight: 420,
-                        overflow: "auto",
-                        mt: 0.5,
-                        borderRadius: 2,
-                      }}
-                    >
-                      {searchResults.length > 0 ? (
-                        <List dense disablePadding>
-                          {searchResults.map((result) => (
-                            <ListItem
-                              key={`${result.type}-${result.id}`}
-                              component="div"
-                              onClick={() => handleResultClick(result)}
-                              sx={{
-                                cursor: "pointer",
-                                "&:hover": { bgcolor: "action.hover" },
-                                borderBottom: "1px solid",
-                                borderColor: "divider",
-                              }}
-                            >
-                              <ListItemIcon sx={{ minWidth: 36 }}>
-                                {result.type === "person" ? (
-                                  <PersonIcon color="primary" />
-                                ) : result.type === "profession" ? (
-                                  <TimelineIcon color="action" />
-                                ) : (
-                                  <StoreIcon color="secondary" />
-                                )}
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={result.name}
-                                secondary={result.extra || undefined}
-                                primaryTypographyProps={{ fontWeight: 600 }}
-                                secondaryTypographyProps={{ fontSize: "0.75rem" }}
-                              />
-                              <Chip
-                                label={
-                                  result.type === "person"
-                                    ? "Person"
-                                    : result.type === "profession"
-                                      ? "Profession"
-                                      : "Business"
-                                }
-                                size="small"
-                                color={
-                                  result.type === "person"
-                                    ? "primary"
-                                    : result.type === "business"
-                                      ? "secondary"
-                                      : "default"
-                                }
-                                variant="outlined"
-                              />
-                            </ListItem>
-                          ))}
-                        </List>
-                      ) : !isSearching ? (
-                        <Box sx={{ p: 2, textAlign: "center" }}>
-                          <Typography variant="body2" color="text.secondary">
-                            No results found for "{searchQuery}"
-                          </Typography>
-                        </Box>
-                      ) : null}
-                    </Paper>
-                  )}
+                  {!isMobile && renderSearchResults()}
                 </Box>
               </ClickAwayListener>
 
@@ -393,6 +511,71 @@ export const HomePage: React.FC = () => {
           </Box>
         </Container>
       </Box>
+
+      <Dialog
+        open={searchDialogOpen}
+        onClose={closeSearchDialog}
+        fullScreen={isMobile}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            pl: 2,
+            pr: 1.5,
+            py: 1.5,
+          }}
+        >
+          Search
+          <IconButton
+            aria-label="Close search"
+            edge="end"
+            onClick={(event) => {
+              event.stopPropagation();
+              closeSearchDialog();
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1.5 }}>
+          <TextField
+            fullWidth
+            autoFocus
+            placeholder="Search family members, businesses..."
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => {
+              if (searchResults.length > 0) setShowResults(true);
+            }}
+            onKeyPress={(e) => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                performSearch(searchQuery);
+              }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                </InputAdornment>
+              ),
+              endAdornment: isSearching ? (
+                <InputAdornment position="end">
+                  <CircularProgress size={18} />
+                </InputAdornment>
+              ) : null,
+            }}
+            sx={{
+              bgcolor: "white",
+              borderRadius: 2,
+            }}
+          />
+          {renderSearchResults()}
+        </DialogContent>
+      </Dialog>
 
       <Container maxWidth="lg" sx={{ py: 6 }}>
         <Box
@@ -467,6 +650,66 @@ export const HomePage: React.FC = () => {
           <Card sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <PeopleIcon sx={{ color: "#b45309" }} />
+                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                  Top Contributors
+                </Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                People who have added the most family members.
+              </Typography>
+              <Stack spacing={1.2}>
+                {loadingStats ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Loading contributor statistics...
+                  </Typography>
+                ) : topContributors.length > 0 ? (
+                  topContributors.map((item, index) => (
+                    <Box
+                      key={`${item.personName}-${index}`}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 2,
+                        py: 1,
+                        borderBottom:
+                          index === topContributors.length - 1 ? "none" : "1px solid",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Stack direction="row" spacing={1.25} alignItems="center">
+                        <Chip
+                          label={`#${index + 1}`}
+                          size="small"
+                          sx={{
+                            bgcolor: "#fff7ed",
+                            color: "#b45309",
+                            fontWeight: 700,
+                            minWidth: 42,
+                          }}
+                        />
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {item.personName}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="body2" color="text.secondary">
+                        {item.peopleAdded} added
+                      </Typography>
+                    </Box>
+                  ))
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    No contributor statistics available yet.
+                  </Typography>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ borderRadius: 3 }}>
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
                 <TimelineIcon sx={{ color: "#0f766e" }} />
                 <Typography variant="h6" sx={{ fontWeight: 800 }}>
                   Family Pulse
@@ -538,4 +781,3 @@ export const HomePage: React.FC = () => {
     </>
   );
 };
-

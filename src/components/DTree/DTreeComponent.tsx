@@ -3,7 +3,7 @@ import { select } from "d3-selection";
 import { zoomIdentity, zoomTransform } from "d3-zoom";
 import "d3-transition";
 import MuiBox from "@mui/material/Box";
-import { Paper, Typography, Popper } from "@mui/material";
+import { Box, Button, Paper, Typography, Popper } from "@mui/material";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
@@ -14,6 +14,8 @@ import {
   renderPlaceholderCardSvg,
   CARD_DIM,
 } from "./NodeCard";
+
+const TREE_INTERACTION_HINT_KEY = "kinvia-tree-interaction-hint-dismissed";
 
 interface DTreeNode {
   name: string;
@@ -38,6 +40,7 @@ interface DTreeComponentProps {
   nodes: FNode[];
   rootId: string;
   canEditTree?: boolean;
+  canEditNode?: (nodeId: string) => boolean;
   autoExpandNodeId?: string | null;
   onAutoExpandHandled?: () => void;
   onNodeClick: (nodeId: string) => void;
@@ -58,6 +61,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
   rootId,
   canEditTree = true,
+  canEditNode,
   autoExpandNodeId,
   onAutoExpandHandled,
   onNodeClick,
@@ -108,6 +112,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     node: FNode;
     anchorEl: Element;
   } | null>(null);
+  const [showInteractionHint, setShowInteractionHint] = useState(false);
   const mobileSheetNode = mobileSheetNodeId
     ? nodes.find((n) => n.id === mobileSheetNodeId) || null
     : null;
@@ -128,6 +133,14 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     mobileSheetNode?.treeId &&
     mobileSheetNode.treeId !== currentTreeId,
   );
+  const isNodeEditable = useCallback(
+    (nodeId?: string | null) => {
+      if (!canEditTree || !nodeId) return false;
+      return canEditNode ? canEditNode(nodeId) : true;
+    },
+    [canEditTree, canEditNode],
+  );
+  const canEditMobileNode = Boolean(mobileSheetNode && !isExternalNode && isNodeEditable(mobileSheetNode.id));
 
   const insertPlaceholdersNearMiddle = (
     list: DTreeNode[],
@@ -185,6 +198,48 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     if (!onMobileSheetChange) return;
     onMobileSheetChange(Boolean(mobileSheetNodeId) && isMobileRef.current);
   }, [mobileSheetNodeId, onMobileSheetChange]);
+
+  useEffect(() => {
+    if (!rootId) return;
+
+    try {
+      const hasSeenHint = window.localStorage.getItem(TREE_INTERACTION_HINT_KEY);
+      if (!hasSeenHint) {
+        setShowInteractionHint(true);
+      }
+    } catch {
+      setShowInteractionHint(true);
+    }
+  }, [rootId]);
+
+  useEffect(() => {
+    if (!showInteractionHint) return;
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const dismissHint = () => {
+      setShowInteractionHint(false);
+      try {
+        window.localStorage.setItem(TREE_INTERACTION_HINT_KEY, "1");
+      } catch {
+        // ignore storage failures
+      }
+    };
+
+    const autoHideTimer = window.setTimeout(dismissHint, 7000);
+
+    container.addEventListener("pointerdown", dismissHint, { once: true });
+    container.addEventListener("wheel", dismissHint, { once: true });
+    container.addEventListener("touchstart", dismissHint, { once: true });
+
+    return () => {
+      window.clearTimeout(autoHideTimer);
+      container.removeEventListener("pointerdown", dismissHint);
+      container.removeEventListener("wheel", dismissHint);
+      container.removeEventListener("touchstart", dismissHint);
+    };
+  }, [showInteractionHint]);
 
   // Keep refs in sync
   useEffect(() => {
@@ -276,6 +331,58 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     centerOnNodeRef.current = centerOnNode;
   }, [centerOnNode]);
 
+  const fitTreeToViewport = useCallback((duration = 300) => {
+    if (!treeRef.current || typeof treeRef.current.zoomToFit !== "function") {
+      return;
+    }
+    try {
+      treeRef.current.zoomToFit(duration);
+    } catch (e) {
+      console.warn("Failed to fit tree to viewport:", e);
+    }
+  }, []);
+
+  const centerTreeInViewport = useCallback((duration = 300) => {
+    if (!containerRef.current || !treeRef.current) return;
+
+    try {
+      const svg = containerRef.current.querySelector("svg");
+      const builder =
+        typeof treeRef.current.getBuilder === "function"
+          ? treeRef.current.getBuilder()
+          : null;
+      if (!svg || !builder?.zoom || !builder?.svg || !builder?.g) return;
+
+      const currentTransform = zoomTransform(svg);
+      const scale = currentTransform.k;
+      const groupBounds = builder.g.node().getBBox();
+      const groupCenterX = groupBounds.x + groupBounds.width / 2;
+      const groupCenterY = groupBounds.y + groupBounds.height / 2;
+      const cw = containerRef.current.clientWidth;
+      const ch = containerRef.current.clientHeight;
+      const tx = cw / 2 - groupCenterX * scale;
+      const ty = ch / 2 - groupCenterY * scale;
+
+      builder.svg
+        .transition()
+        .duration(duration)
+        .call(builder.zoom.transform, zoomIdentity.translate(tx, ty).scale(scale));
+    } catch (e) {
+      console.warn("Failed to center tree in viewport:", e);
+    }
+  }, []);
+
+  const resetTreeViewport = useCallback((duration = 300) => {
+    if (!treeRef.current || typeof treeRef.current.resetZoom !== "function") {
+      return;
+    }
+    try {
+      treeRef.current.resetZoom(duration);
+    } catch (e) {
+      console.warn("Failed to reset tree viewport:", e);
+    }
+  }, []);
+
   const handleNodeTap = useCallback(
     (nodeId: string) => {
       // Check window width directly to ensure mobile check is always fresh
@@ -350,7 +457,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Placeholder "add relative" card clicked ---
       const placeholderTarget = target.closest(".placeholder-click-target");
-      if (placeholderTarget && canEditTree) {
+      if (placeholderTarget) {
         e.preventDefault();
         e.stopPropagation();
         const relType = placeholderTarget.getAttribute("data-rel-type") as
@@ -362,7 +469,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         const targetNodeId = placeholderTarget.getAttribute(
           "data-target-node-id",
         );
-        if (relType && targetNodeId && onAddRelative) {
+        if (relType && targetNodeId && isNodeEditable(targetNodeId) && onAddRelative) {
           setAddMenuNodeId(null);
           onAddRelative(targetNodeId, relType);
         }
@@ -371,11 +478,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Edit icon ---
       const editIcon = target.closest(".node-edit-icon");
-      if (editIcon && canEditTree) {
+      if (editIcon) {
         e.preventDefault();
         e.stopPropagation();
         const nodeId = editIcon.getAttribute("data-node-id");
-        if (nodeId && onEditNode) {
+        if (nodeId && isNodeEditable(nodeId) && onEditNode) {
           onEditNode(nodeId);
         }
         return;
@@ -383,11 +490,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
       // --- Add icon (toggle placeholder nodes in tree) ---
       const addIcon = target.closest(".node-add-icon");
-      if (addIcon && canEditTree) {
+      if (addIcon) {
         e.preventDefault();
         e.stopPropagation();
         const nodeId = addIcon.getAttribute("data-node-id");
-        if (nodeId) {
+        if (nodeId && isNodeEditable(nodeId)) {
           setAddMenuNodeId((prev) => (prev === nodeId ? null : nodeId));
         }
         return;
@@ -406,6 +513,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       if (
         target.closest(".node-edit-icon") ||
         target.closest(".node-add-icon") ||
+        target.closest(".readonly-badge") ||
         target.closest(".external-tree-icon") ||
         target.closest(".placeholder-click-target")
       ) {
@@ -514,7 +622,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         container.removeEventListener("mouseleave", handleContainerMouseLeave);
       }
     };
-  }, [onExternalTreeClick, onEditNode, onAddRelative, canEditTree, nodes]);
+  }, [onExternalTreeClick, onEditNode, onAddRelative, isNodeEditable, nodes]);
 
   // Helper: check if 'ancestorId' is an ancestor of 'targetId'
   // Traverses parent links AND spouse connections so that a spouse from
@@ -557,6 +665,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
 
     const person = nodes.find((n) => n.id === personId);
     if (!person) return null;
+    const canEditCurrentPerson = isNodeEditable(personId);
 
     // Determine if this node is the focused "main" node
     const isMainNode = mainId === personId;
@@ -573,7 +682,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       showFullTree || !mainId || isOnMainPath || isMainNode;
 
     const treeNode: DTreeNode = {
-      name: person.name,
+      name: person.nameHindi || person.name,
       class:
         person.gender === "male"
           ? "man"
@@ -584,6 +693,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       depthOffset: 0,
       extra: {
         id: person.id,
+        nameHindi: person.nameHindi,
         dob: person.dob,
         gender: person.gender,
         hierarchy: person.hierarchy,
@@ -593,13 +703,17 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         parentsCount: person.parents?.length || 0,
         childrenCount: person.children?.length || 0,
         spousesCount: person.spouses?.length || 0,
+        canEditNode: canEditCurrentPerson,
+        isReadOnly: !canEditCurrentPerson,
       },
     };
 
     // Check if this node has the add-menu open (placeholder nodes should appear)
     // On mobile, placeholders are skipped — the bottom sheet handles add-relative actions directly
     const showPlaceholders =
-      canEditTree && !isMobileRef.current && addMenuNodeIdRef.current === personId;
+      !isMobileRef.current &&
+      isNodeEditable(personId) &&
+      addMenuNodeIdRef.current === personId;
     const shouldWrapWithParentPlaceholders =
       showPlaceholders && (!person.parents || person.parents.length === 0);
     const addMenuChildId = addMenuNodeIdRef.current;
@@ -620,6 +734,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       person.spouses.forEach((spouse, index) => {
         const spouseNode = nodes.find((n) => n.id === spouse.id);
         if (!spouseNode) return;
+        const canEditSpouseNode = isNodeEditable(spouseNode.id);
 
         // Find children that belong to this specific marriage
         const marriageChildren: DTreeNode[] = [];
@@ -659,7 +774,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         // Inject child placeholders (son/daughter) into every marriage
         // when either the main person OR the spouse has their add-menu open
         const showSpousePlaceholders =
-          !isMobileRef.current && addMenuNodeIdRef.current === spouseNode.id;
+          !isMobileRef.current &&
+          isNodeEditable(spouseNode.id) &&
+          addMenuNodeIdRef.current === spouseNode.id;
         if (showPlaceholders || showSpousePlaceholders) {
           // Target the node whose add icon was clicked
           const placeholderTarget = showSpousePlaceholders
@@ -703,9 +820,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             relationType: spouse.type,
             hasDeceasedPartner:
               person.isAlive === false || spouseNode.isAlive === false,
+            isReadOnly: !canEditCurrentPerson || !canEditSpouseNode,
           },
           spouse: {
-            name: spouseNode.name,
+            name: spouseNode.nameHindi || spouseNode.name,
             class:
               spouseNode.gender === "male"
                 ? "man"
@@ -715,6 +833,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             textClass: "nodeText",
             extra: {
               id: spouseNode.id,
+              nameHindi: spouseNode.nameHindi,
               dob: spouseNode.dob,
               gender: spouseNode.gender,
               hierarchy: spouseNode.hierarchy,
@@ -724,6 +843,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               parentsCount: spouseNode.parents?.length || 0,
               childrenCount: spouseNode.children?.length || 0,
               spousesCount: spouseNode.spouses?.length || 0,
+              canEditNode: canEditSpouseNode,
+              isReadOnly: !canEditSpouseNode,
             },
           },
           children: marriageChildren.length > 0 ? marriageChildren : undefined,
@@ -1054,7 +1175,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               isMain,
               isHighlighted,
               isMobileRef.current,
-              canEditTree,
+              isNodeEditable(extra?.id),
             );
           },
           nodeDblClick: (name: string, extra: any, id: string) => {
@@ -1105,17 +1226,30 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         }
       }
 
+      if (showFullTree) {
+        if (shouldCenterOnHighlighted) {
+          setTimeout(() => {
+            resetTreeViewport(0);
+            setTimeout(() => centerOnNodeRef.current(highlightedPersonId), 0);
+          }, 0);
+        } else if (shouldAnimate) {
+          setTimeout(() => {
+            resetTreeViewport(isMobileRef.current ? 0 : 250);
+          }, 0);
+        }
+      }
+
       // Auto-center on the focused mainId only when mainId actually changed.
       // Reuse the shared centering helper so full-tree and collapsed modes
       // follow identical pan/zoom behavior.
-      if (mainId && mainIdChanged) {
+      if (!showFullTree && mainId && mainIdChanged) {
         setTimeout(() => {
           centerOnNodeRef.current(mainId);
         }, 0);
       }
 
       // URL-driven focus (tree navigation/search) should center exactly once per key.
-      if (highlightedPersonId && shouldCenterOnHighlighted) {
+      if (!showFullTree && highlightedPersonId && shouldCenterOnHighlighted) {
         setTimeout(() => {
           centerOnNodeRef.current(highlightedPersonId);
         }, 0);
@@ -1146,6 +1280,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     rootId,
     mainId,
     addMenuNodeId,
+    isMobile,
+    isNodeEditable,
     currentTreeId,
     showFullTree,
     highlightedPersonId,
@@ -1175,7 +1311,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       <label
         style={{
           position: "absolute",
-          top: isMobile ? 76 : 10,
+          top: 10,
           right: 10,
           left: isMobile ? 10 : "auto",
           width: isMobile ? "calc(100% - 20px)" : "auto",
@@ -1185,28 +1321,77 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           justifyContent: isMobile ? "space-between" : "flex-start",
           gap: 6,
           background: "rgba(255,255,255,0.92)",
-          padding: "4px 10px",
-          borderRadius: 6,
+          padding: isMobile ? "6px 8px" : "4px 10px",
+          borderRadius: 10,
           boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
           fontSize: 13,
-          cursor: "pointer",
           userSelect: "none",
         }}
       >
-        <input
-          type="checkbox"
-          checked={showFullTree}
-          onChange={(e) => {
-            const checked = e.target.checked;
-            setShowFullTree(checked);
-            if (checked) {
-              // Clear collapse focus so the full tree renders
-              setMainId(null);
-            }
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.75,
+            minWidth: 0,
           }}
-          style={{ cursor: "pointer" }}
-        />
-        Show Full Tree
+        >
+          <input
+            type="checkbox"
+            checked={showFullTree}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setShowFullTree(checked);
+              if (checked) {
+                setMainId(null);
+                setTimeout(() => {
+                  resetTreeViewport(isMobile ? 0 : 250);
+                }, 0);
+              }
+            }}
+            style={{ cursor: "pointer" }}
+          />
+          <span style={{ fontWeight: 600, color: "#333" }}>Show Full Tree</span>
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!showFullTree) return;
+              fitTreeToViewport(isMobile ? 0 : 250);
+            }}
+            disabled={!showFullTree}
+            sx={{
+              minWidth: 0,
+              px: 1,
+              py: 0.25,
+              visibility: showFullTree ? "visible" : "hidden",
+            }}
+          >
+            Fit
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showFullTree) {
+                centerTreeInViewport(isMobile ? 0 : 250);
+              } else if (mainId) {
+                centerOnNodeRef.current(mainId);
+              } else if (rootId) {
+                centerOnNodeRef.current(rootId);
+              }
+            }}
+            sx={{ minWidth: 0, px: 1, py: 0.25 }}
+          >
+            Center
+          </Button>
+        </Box>
       </label>
       <div
         ref={containerRef}
@@ -1219,6 +1404,37 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           cursor: "grab",
         }}
       />
+
+      {showInteractionHint && (
+        <Paper
+          elevation={8}
+          sx={{
+            position: "absolute",
+            left: { xs: 12, sm: 16 },
+            right: { xs: 12, sm: "auto" },
+            bottom: { xs: 18, sm: 22 },
+            zIndex: 35,
+            maxWidth: 320,
+            px: 1.5,
+            py: 1.25,
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "rgba(255,255,255,0.96)",
+            backdropFilter: "blur(8px)",
+            boxShadow: "0 14px 34px rgba(15, 23, 42, 0.14)",
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 0.25 }}>
+            Explore the tree
+          </Typography>
+          <Typography variant="body2" sx={{ color: "text.secondary", lineHeight: 1.35 }}>
+            {isMobile
+              ? "Drag to move around the tree. Pinch to zoom in or out."
+              : "Click and drag to move around the tree. Use your mouse wheel to zoom."}
+          </Typography>
+        </Paper>
+      )}
 
       {hoverInfo && !isMobile && (
         <Popper
@@ -1344,7 +1560,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               style={{
                 display: "grid",
                 gridTemplateColumns:
-                  isExternalNode || !canEditTree ? "1fr 1fr" : "1fr 1fr 1fr",
+                  isExternalNode || !canEditMobileNode ? "1fr 1fr" : "1fr 1fr 1fr",
                 gap: 6,
               }}
             >
@@ -1366,7 +1582,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
               >
                 View
               </button>
-              {isExternalNode || !canEditTree ? (
+              {isExternalNode || !canEditMobileNode ? (
                 <button
                   onClick={() => {
                     if (isExternalNode) {
@@ -1431,7 +1647,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
                 </>
               )}
             </div>
-            {!isExternalNode && canEditTree && (
+            {canEditMobileNode && (
               <>
                 <div
                   style={{
