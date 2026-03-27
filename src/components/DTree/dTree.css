@@ -51,6 +51,11 @@
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08));
 }
 
+.marriage-marker.anniversary {
+  pointer-events: auto;
+  cursor: help;
+}
+
 .marriage-marker-circle {
   stroke-width: 1.2px;
 }
@@ -58,6 +63,12 @@
 .marriage-marker-circle.married {
   fill: #fff1f3;
   stroke: #be123c;
+}
+
+.marriage-marker-circle.anniversary {
+  animation: anniversaryHeartBeat 1s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 .marriage-marker-circle.divorced {
@@ -80,12 +91,39 @@
   fill: #be123c;
 }
 
+.marriage-marker-icon.anniversary {
+  animation: anniversaryHeartBeat 1s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .marriage-marker-icon.divorced {
   fill: #334155;
 }
 
 .marriage-marker-icon.deceased {
   opacity: 0.7;
+}
+
+@keyframes anniversaryHeartBeat {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  35% {
+    opacity: 0.45;
+    transform: scale(1.22);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.birthday-badge {
+  animation: anniversaryHeartBeat 1s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 /* === Node Group Styles === */

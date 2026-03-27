@@ -127,6 +127,30 @@ function formatDisplayDate(value?: string): string {
   return value;
 }
 
+function isMonthDayToday(value?: string): boolean {
+  if (!value) return false;
+
+  const raw = String(value).trim();
+  const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
+  const exactMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  let month: number | undefined;
+  let day: number | undefined;
+
+  if (exactMatch) {
+    month = Number(exactMatch[2]);
+    day = Number(exactMatch[3]);
+  } else {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return false;
+    month = parsed.getMonth() + 1;
+    day = parsed.getDate();
+  }
+
+  const today = new Date();
+  return month === today.getMonth() + 1 && day === today.getDate();
+}
+
 /**
  * Truncate text to fit within a given pixel width.
  * Approximate: ~7px per character at 13px font-size, 600 weight.
@@ -185,6 +209,16 @@ function renderReadOnlyBadge(x: number, y: number): string {
     `<title>Read-only node</title>` +
     `<path d="M${x - 7.5} ${y} C${x - 4.5} ${y - 5}, ${x + 4.5} ${y - 5}, ${x + 7.5} ${y} C${x + 4.5} ${y + 5}, ${x - 4.5} ${y + 5}, ${x - 7.5} ${y}Z" fill="none" stroke="#d97706" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>` +
     `<circle cx="${x}" cy="${y}" r="2.2" fill="#d97706"/>` +
+    `</g>`
+  );
+}
+
+function renderBirthdayBadge(x: number, y: number): string {
+  return (
+    `<g class="birthday-badge">` +
+    `<title>Birthday today</title>` +
+    `<rect x="${x - 11}" y="${y - 11}" width="22" height="22" rx="8" fill="#fff7ed" stroke="#fb923c" stroke-width="1.2"/>` +
+    `<text x="${x}" y="${y + 0.5}" text-anchor="middle" dominant-baseline="central" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="12">🎂</text>` +
     `</g>`
   );
 }
@@ -273,6 +307,7 @@ export function renderNodeCardSvg(
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
   const isReadOnly = extra?.isReadOnly === true;
+  const isBirthdayToday = !isDeceased && isMonthDayToday(extra?.dob);
   const genderBase =
     gender === "male" ? "male" : gender === "female" ? "female" : "person";
   const colorKey = isDeceased ? `${genderBase}_deceased` : genderBase;
@@ -449,6 +484,12 @@ export function renderNodeCardSvg(
 
   if (isReadOnly && extra?.id && !extra?._placeholder) {
     svg += renderReadOnlyBadge(2, 2);
+  }
+
+  if (isBirthdayToday) {
+    const birthdayBadgeX = dim.w;
+    const birthdayBadgeY = dim.h / 2;
+    svg += renderBirthdayBadge(birthdayBadgeX, birthdayBadgeY);
   }
 
   // === External tree link icon ===

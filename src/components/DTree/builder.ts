@@ -543,18 +543,24 @@ class TreeBuilder {
       .map((s: any) => {
         const marriageNode = s.target.marriageNode;
         const relationType = marriageNode?.data?.extra?.relationType;
+        const isAnniversary = marriageNode?.data?.extra?.isAnniversary === true;
         const hasDeceasedPartner =
           marriageNode?.data?.extra?.hasDeceasedPartner === true;
         const isDivorced = relationType === 'divorced';
         const stateClass = isDivorced ? 'divorced' : 'married';
         const deceasedClass = hasDeceasedPartner ? ' deceased' : '';
+        const anniversaryClass =
+          !isDivorced && !hasDeceasedPartner && isAnniversary ? ' anniversary' : '';
 
         return {
           id: marriageNode?.data?.id ?? `m-${s.source?.id}-${s.target?.id}`,
           x: marriageNode.x,
           y: marriageNode.y,
           icon: isDivorced ? '\u{1F494}' : '\u2764',
-          className: `marriage-marker ${stateClass}${deceasedClass}`
+          className: `marriage-marker ${stateClass}${deceasedClass}${anniversaryClass}`,
+          tooltip: anniversaryClass
+            ? 'Blinking heart: today is this couple\'s anniversary.'
+            : null
         };
       })
       .filter((m: any, index: number, arr: any[]) => {
@@ -576,7 +582,8 @@ class TreeBuilder {
         const base = d.className.includes('divorced')
           ? 'marriage-marker-circle divorced'
           : 'marriage-marker-circle married';
-        return d.className.includes('deceased') ? `${base} deceased` : base;
+        const withState = d.className.includes('deceased') ? `${base} deceased` : base;
+        return d.className.includes('anniversary') ? `${withState} anniversary` : withState;
       })
       .attr('r', 8);
 
@@ -586,11 +593,17 @@ class TreeBuilder {
         const base = d.className.includes('divorced')
           ? 'marriage-marker-icon divorced'
           : 'marriage-marker-icon married';
-        return d.className.includes('deceased') ? `${base} deceased` : base;
+        const withState = d.className.includes('deceased') ? `${base} deceased` : base;
+        return d.className.includes('anniversary') ? `${withState} anniversary` : withState;
       })
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
       .text((d: any) => d.icon);
+
+    markers
+      .filter((d: any) => Boolean(d.tooltip))
+      .append('title')
+      .text((d: any) => d.tooltip);
 
     if (duration > 0) {
       markers

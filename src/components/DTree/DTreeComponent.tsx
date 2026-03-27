@@ -3,7 +3,18 @@ import { select } from "d3-selection";
 import { zoomIdentity, zoomTransform } from "d3-zoom";
 import "d3-transition";
 import MuiBox from "@mui/material/Box";
-import { Box, Button, Paper, Typography, Popper } from "@mui/material";
+import {
+  Box,
+  Button,
+  Paper,
+  Typography,
+  Popper,
+  Popover,
+  IconButton,
+  FormControlLabel,
+  Switch,
+} from "@mui/material";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { FNode } from "../model/FNode";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
@@ -36,6 +47,14 @@ interface DTreeNode {
   extra?: any;
 }
 
+type SpouseRelation = Readonly<{
+  id: string;
+  type: string;
+  relationSubtype?: string;
+  startDate?: string;
+  endDate?: string;
+}>;
+
 interface DTreeComponentProps {
   nodes: FNode[];
   rootId: string;
@@ -58,6 +77,29 @@ interface DTreeComponentProps {
   initialMainId?: string | null;
   initialShowFullTree?: boolean;
 }
+
+const isAnniversaryToday = (dateValue?: string) => {
+  if (!dateValue) return false;
+
+  const normalized = dateValue.trim();
+  const dateOnlyMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  let month: number | undefined;
+  let day: number | undefined;
+
+  if (dateOnlyMatch) {
+    month = Number(dateOnlyMatch[2]);
+    day = Number(dateOnlyMatch[3]);
+  } else {
+    const parsedDate = new Date(normalized);
+    if (Number.isNaN(parsedDate.getTime())) return false;
+    month = parsedDate.getMonth() + 1;
+    day = parsedDate.getDate();
+  }
+
+  const today = new Date();
+  return month === today.getMonth() + 1 && day === today.getDate();
+};
 
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
@@ -101,6 +143,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const addMenuNodeIdRef = useRef<string | null>(null);
   // When true, the full tree is shown without any collapse behaviour
   const [showFullTree, setShowFullTree] = useState(initialShowFullTree);
+  const [showSpouses, setShowSpouses] = useState(false);
+  const [treeControlsAnchorEl, setTreeControlsAnchorEl] =
+    useState<HTMLElement | null>(null);
 
   // Catch the asynchronously loaded profile ID and apply it once.
   const hasAppliedInitialFocusRef = useRef(Boolean(initialMainId));
@@ -158,6 +203,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     [canEditTree, canEditNode],
   );
   const canEditMobileNode = Boolean(mobileSheetNode && !isExternalNode && isNodeEditable(mobileSheetNode.id));
+  const isTreeControlsOpen = Boolean(treeControlsAnchorEl);
 
   const insertPlaceholdersNearMiddle = (
     list: DTreeNode[],
@@ -658,12 +704,14 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         if (parent.id === ancestorId) return true;
         queue.push(parent.id);
       }
-      // Also traverse spouse connections — if this node is a spouse of
-      // someone else, that partner is an implicit path to the root.
-      for (const n of nodes) {
-        if (n.spouses?.some((s) => s.id === currentId) && !visited.has(n.id)) {
-          if (n.id === ancestorId) return true;
-          queue.push(n.id);
+      if (showSpouses) {
+        // Also traverse spouse connections — if this node is a spouse of
+        // someone else, that partner is an implicit path to the root.
+        for (const n of nodes) {
+          if (n.spouses?.some((s) => s.id === currentId) && !visited.has(n.id)) {
+            if (n.id === ancestorId) return true;
+            queue.push(n.id);
+          }
         }
       }
     }
@@ -683,6 +731,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     const person = nodes.find((n) => n.id === personId);
     if (!person) return null;
     const canEditCurrentPerson = isNodeEditable(personId);
+    const visibleSpouses = showSpouses ? person.spouses || [] : [];
 
     // Determine if this node is the focused "main" node
     const isMainNode = mainId === personId;
@@ -745,10 +794,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     );
 
     // If person has spouses, create marriages with children
-    if (person.spouses && person.spouses.length > 0) {
+    if (visibleSpouses.length > 0) {
       treeNode.marriages = [];
 
-      person.spouses.forEach((spouse, index) => {
+      visibleSpouses.forEach((spouse: SpouseRelation, index) => {
         const spouseNode = nodes.find((n) => n.id === spouse.id);
         if (!spouseNode) return;
         const canEditSpouseNode = isNodeEditable(spouseNode.id);
@@ -835,6 +884,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         treeNode.marriages.push({
           extra: {
             relationType: spouse.type,
+            isAnniversary: spouse.type === "married" && isAnniversaryToday(spouse.startDate),
             hasDeceasedPartner:
               person.isAlive === false || spouseNode.isAlive === false,
             isReadOnly: !canEditCurrentPerson || !canEditSpouseNode,
@@ -869,7 +919,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       });
 
       // Add a placeholder spouse marriage if placeholders are shown
-      if (showPlaceholders) {
+      if (showPlaceholders && showSpouses) {
         const spouseClass = person.gender === "female" ? "man" : "woman";
         treeNode.marriages.push({
           extra: {
@@ -961,7 +1011,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           treeNode.children = children;
         }
       } else if (children.length > 0) {
-        if (showPlaceholders) {
+        if (showPlaceholders && showSpouses) {
           const spouseClass = person.gender === "female" ? "man" : "woman";
           treeNode.marriages = [
             {
@@ -986,7 +1036,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     // No spouses and no children — inject all placeholders as a single marriage
     // with son/daughter as children of that marriage (avoids layout conflicts
     // from having both treeNode.marriages and treeNode.children simultaneously)
-    else if (showPlaceholders) {
+    else if (showPlaceholders && showSpouses) {
       const spouseClass = person.gender === "female" ? "man" : "woman";
       const parentPlaceholders = shouldWrapWithParentPlaceholders
         ? []
@@ -1028,6 +1078,34 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           children: [...parentPlaceholders, ...childPlaceholders],
         },
       ];
+    }
+    else if (showPlaceholders) {
+      const parentPlaceholders = shouldWrapWithParentPlaceholders
+        ? []
+        : buildParentPlaceholders(personId);
+      const childPlaceholders: DTreeNode[] = [
+        {
+          name: "Add Son",
+          class: "man",
+          textClass: "nodeText",
+          extra: {
+            _placeholder: true,
+            _placeholderType: "son",
+            _targetNodeId: personId,
+          },
+        },
+        {
+          name: "Add Daughter",
+          class: "woman",
+          textClass: "nodeText",
+          extra: {
+            _placeholder: true,
+            _placeholderType: "daughter",
+            _targetNodeId: personId,
+          },
+        },
+      ];
+      treeNode.children = [...parentPlaceholders, ...childPlaceholders];
     }
 
     // If we used parent placeholders above, do not also add them in child lists
@@ -1301,6 +1379,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     isNodeEditable,
     currentTreeId,
     showFullTree,
+    showSpouses,
     highlightedPersonId,
   ]);
 
@@ -1336,7 +1415,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           display: "flex",
           alignItems: "center",
           justifyContent: isMobile ? "space-between" : "flex-start",
-          gap: 6,
+          gap: 8,
           background: "rgba(255,255,255,0.92)",
           padding: isMobile ? "6px 8px" : "4px 10px",
           borderRadius: 10,
@@ -1408,8 +1487,54 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           >
             Center
           </Button>
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setTreeControlsAnchorEl(e.currentTarget);
+            }}
+            sx={{ ml: 0.25 }}
+          >
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
         </Box>
       </label>
+      <Popover
+        open={isTreeControlsOpen}
+        anchorEl={treeControlsAnchorEl}
+        onClose={() => setTreeControlsAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            mt: 0.75,
+            minWidth: 220,
+            borderRadius: 2,
+            p: 1,
+          },
+        }}
+      >
+        <Typography
+          variant="subtitle2"
+          sx={{ px: 1, pt: 0.5, pb: 0.75, fontWeight: 700 }}
+        >
+          More tree controls
+        </Typography>
+        <FormControlLabel
+          sx={{ mx: 0, px: 1, width: "100%", justifyContent: "space-between" }}
+          labelPlacement="start"
+          control={
+            <Switch
+              checked={showSpouses}
+              onChange={(e) => {
+                setShowSpouses(e.target.checked);
+              }}
+            />
+          }
+          label="Show Spouse"
+        />
+      </Popover>
       <div
         ref={containerRef}
         style={{
