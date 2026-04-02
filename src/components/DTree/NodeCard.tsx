@@ -127,12 +127,36 @@ function formatDisplayDate(value?: string): string {
   return value;
 }
 
+function isMonthDayToday(value?: string): boolean {
+  if (!value) return false;
+
+  const raw = String(value).trim();
+  const datePart = raw.includes("T") ? raw.split("T")[0] : raw;
+  const exactMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  let month: number | undefined;
+  let day: number | undefined;
+
+  if (exactMatch) {
+    month = Number(exactMatch[2]);
+    day = Number(exactMatch[3]);
+  } else {
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return false;
+    month = parsed.getMonth() + 1;
+    day = parsed.getDate();
+  }
+
+  const today = new Date();
+  return month === today.getMonth() + 1 && day === today.getDate();
+}
+
 /**
  * Truncate text to fit within a given pixel width.
  * Approximate: ~7px per character at 13px font-size, 600 weight.
  */
 function truncateText(text: string, maxWidth: number): string {
-  const charWidth = 7;
+  const charWidth = 6.5; // Adjusted average width per character
   const maxChars = Math.floor(maxWidth / charWidth);
   if (text.length <= maxChars) return text;
   return text.substring(0, maxChars - 1) + "…";
@@ -185,6 +209,16 @@ function renderReadOnlyBadge(x: number, y: number): string {
     `<title>Read-only node</title>` +
     `<path d="M${x - 7.5} ${y} C${x - 4.5} ${y - 5}, ${x + 4.5} ${y - 5}, ${x + 7.5} ${y} C${x + 4.5} ${y + 5}, ${x - 4.5} ${y + 5}, ${x - 7.5} ${y}Z" fill="none" stroke="#d97706" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>` +
     `<circle cx="${x}" cy="${y}" r="2.2" fill="#d97706"/>` +
+    `</g>`
+  );
+}
+
+function renderBirthdayBadge(x: number, y: number): string {
+  return (
+    `<g class="birthday-badge">` +
+    `<title>Birthday today</title>` +
+    `<rect x="${x - 11}" y="${y - 11}" width="22" height="22" rx="8" fill="#fff7ed" stroke="#fb923c" stroke-width="1.2"/>` +
+    `<text x="${x}" y="${y + 0.5}" text-anchor="middle" dominant-baseline="central" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="12">🎂</text>` +
     `</g>`
   );
 }
@@ -273,6 +307,7 @@ export function renderNodeCardSvg(
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
   const isReadOnly = extra?.isReadOnly === true;
+  const isBirthdayToday = !isDeceased && isMonthDayToday(extra?.dob);
   const genderBase =
     gender === "male" ? "male" : gender === "female" ? "female" : "person";
   const colorKey = isDeceased ? `${genderBase}_deceased` : genderBase;
@@ -288,20 +323,23 @@ export function renderNodeCardSvg(
   const shadowId = `shadow-${id}`;
   const shineId = `shine-${id}`;
 
-  // Text
   const hasActionIcons = Boolean(
     canEditNode && extra?.id && !extra?._placeholder && !isMobile,
   );
-  const actionIconsReservedWidth = hasActionIcons ? 50 : 0;
-  const textRightPadding = 12 + actionIconsReservedWidth;
-  const textMaxWidth = dim.w - dim.text_x - textRightPadding;
-  const resolvedName = extra?.nameHindi || name;
-  const displayName = truncateText(resolvedName, textMaxWidth);
-  const escapedName = escapeXml(displayName);
-
   // External tree link
   const showExternalLink =
     currentTreeId && extra?.treeId && extra.treeId !== currentTreeId;
+
+  const actionIconsReservedWidth = hasActionIcons ? 50 : 0;
+  const externalLinkReservedWidth = showExternalLink ? 24 : 0;
+  
+  // Name and Subtitle are on upper rows, so they only need to avoid the external link icon (top right)
+  const textUpperRightPadding = 12 + externalLinkReservedWidth;
+  const textMaxWidth = dim.w - dim.text_x - textUpperRightPadding;
+  
+  const resolvedName = extra?.nameHindi || name;
+  const displayName = truncateText(resolvedName, textMaxWidth);
+  const escapedName = escapeXml(displayName);
 
   let svg = "";
 
@@ -389,7 +427,6 @@ export function renderNodeCardSvg(
   svg += escapedName;
   svg += `</text>`;
 
-  const subtitleMaxWidth = dim.w - dim.text_x - textRightPadding;
   const dobValue = extra?.dob ? formatDisplayDate(extra.dob) : "DOB unavailable";
   const deceasedDateValue =
     isDeceased && extra?.deceasedDate
@@ -398,7 +435,7 @@ export function renderNodeCardSvg(
   const metaLineRaw = deceasedDateValue
     ? `${dobValue} - ${deceasedDateValue}`
     : dobValue;
-  const metaLine = truncateText(metaLineRaw, Math.max(30, subtitleMaxWidth));
+  const metaLine = truncateText(metaLineRaw, Math.max(30, textMaxWidth));
   svg += `<text x="${dim.text_x}" y="${dim.text_y + 16}" `;
   svg += `font-family="'Manrope', 'Segoe UI', Roboto, sans-serif" `;
   svg += `font-size="10.5" fill="${colors.subtext}" opacity="0.95" `;
@@ -410,7 +447,7 @@ export function renderNodeCardSvg(
     typeof extra?.childrenCount === "number" ? extra.childrenCount : 0;
   let pillX = dim.text_x;
   const pillY = dim.h - 24;
-  const pillRowRightLimit = dim.w - textRightPadding;
+  const pillRowRightLimit = dim.w - (12 + actionIconsReservedWidth);
   if (childrenCount > 0) {
     const childrenLabel = `${childrenCount} ${childrenCount === 1 ? "child" : "children"}`;
     const childrenWidth = estimatePillWidth(childrenLabel);
@@ -447,6 +484,12 @@ export function renderNodeCardSvg(
 
   if (isReadOnly && extra?.id && !extra?._placeholder) {
     svg += renderReadOnlyBadge(2, 2);
+  }
+
+  if (isBirthdayToday) {
+    const birthdayBadgeX = dim.w;
+    const birthdayBadgeY = dim.h / 2;
+    svg += renderBirthdayBadge(birthdayBadgeX, birthdayBadgeY);
   }
 
   // === External tree link icon ===

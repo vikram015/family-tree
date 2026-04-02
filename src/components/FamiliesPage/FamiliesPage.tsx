@@ -59,7 +59,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
+  const { currentUser, userProfile, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
     useAuth();
   const { setSelectedVillage } = useVillage();
   const { openLoginModal } = useLoginModal();
@@ -1237,33 +1237,42 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               </Tooltip>
             </Stack>
             {rootId && nodes.find((n) => n.id === rootId) ? (
-              <DTreeComponent
-                nodes={nodes}
-                rootId={rootId}
-                canEditTree={canWriteAnyBranch}
-                canEditNode={canEditNode}
-                autoExpandNodeId={autoExpandNodeId}
-                onAutoExpandHandled={() => setAutoExpandNodeId(null)}
-                onNodeClick={(id) => {
-                  setNodeDetailsInitialView(undefined);
-                  setNodeDetailsAddInfo(undefined);
-                  setSelectId(id);
-                }}
-                onEditNode={handleEditNode}
-                onDelete={onDelete}
-                onAddRelative={handleAddRelative}
-                onViewDetails={handleViewDetails}
-                currentTreeId={treeId}
-                highlightedPersonId={highlightedPersonId || undefined}
-                onMobileSheetChange={setIsMobileSheetOpen}
-                onExternalTreeClick={(tid, pid) => {
-                  setExternalTreeConfirm({
-                    open: true,
-                    targetTreeId: tid,
-                    targetPersonId: pid || null,
-                  });
-                }}
-              />
+              (() => {
+                const initialFocusId = highlightedPersonId || userProfile?.peopleId;
+                const isInitialFocusInTree = Boolean(initialFocusId && nodes.find((n) => n.id === initialFocusId));
+
+                return (
+                  <DTreeComponent
+                    nodes={nodes}
+                    rootId={rootId}
+                    canEditTree={canWriteAnyBranch}
+                    canEditNode={canEditNode}
+                    autoExpandNodeId={autoExpandNodeId}
+                    onAutoExpandHandled={() => setAutoExpandNodeId(null)}
+                    onNodeClick={(id) => {
+                      setNodeDetailsInitialView(undefined);
+                      setNodeDetailsAddInfo(undefined);
+                      setSelectId(id);
+                    }}
+                    onEditNode={handleEditNode}
+                    onDelete={onDelete}
+                    onAddRelative={handleAddRelative}
+                    onViewDetails={handleViewDetails}
+                    currentTreeId={treeId}
+                    highlightedPersonId={highlightedPersonId || undefined}
+                    onMobileSheetChange={setIsMobileSheetOpen}
+                    initialMainId={isInitialFocusInTree ? initialFocusId : null}
+                    initialShowFullTree={!isInitialFocusInTree}
+                    onExternalTreeClick={(tid, pid) => {
+                      setExternalTreeConfirm({
+                        open: true,
+                        targetTreeId: tid,
+                        targetPersonId: pid || null,
+                      });
+                    }}
+                  />
+                );
+              })()
             ) : (
               <Box
                 sx={{

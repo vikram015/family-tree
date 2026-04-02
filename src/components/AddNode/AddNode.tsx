@@ -115,6 +115,7 @@ export default function AddNode({
   // Step 2 State (Business/Profession)
   const [step, setStep] = useState(1);
   const [savedNodeId, setSavedNodeId] = useState<string | null>(null);
+  const [flowTargetId, setFlowTargetId] = useState<string | undefined>(targetId);
   const [occupationType, setOccupationType] = useState<
     "business" | "job" | "other"
   >("business");
@@ -144,6 +145,30 @@ export default function AddNode({
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
 
+  const stickyFooterSx = {
+    position: "sticky",
+    bottom: 0,
+    zIndex: 2,
+    display: "flex",
+    gap: 2,
+    justifyContent: "flex-end",
+    mt: 2,
+    pt: 2,
+    pb: 0.5,
+    background: (theme: any) =>
+      `linear-gradient(180deg, ${alpha(theme.palette.background.paper, 0)} 0%, ${alpha(
+        theme.palette.background.paper,
+        0.94,
+      )} 24%, ${theme.palette.background.paper} 100%)`,
+    backdropFilter: "blur(6px)",
+  } as const;
+
+  useEffect(() => {
+    setFlowTargetId(targetId);
+  }, [targetId]);
+
+  const effectiveTargetId = flowTargetId ?? targetId;
+
   const formatPickerDate = useCallback((value: Dayjs | null) => {
     if (!value || !value.isValid()) return undefined;
     return value.format("YYYY-MM-DD");
@@ -168,19 +193,19 @@ export default function AddNode({
     }
   }, [relation]);
   const targetNode = useMemo(() => {
-    if (!nodes || !targetId) return null;
-    return nodes.find((n) => n.id === targetId);
-  }, [nodes, targetId]);
+    if (!nodes || !effectiveTargetId) return null;
+    return nodes.find((n) => n.id === effectiveTargetId);
+  }, [effectiveTargetId, nodes]);
 
   // other-parent selection for child relation
   const spouseOptions = useMemo(() => {
-    if (!nodes || !targetId) return [];
-    const target = nodes.find((n) => n.id === targetId);
+    if (!nodes || !effectiveTargetId) return [];
+    const target = nodes.find((n) => n.id === effectiveTargetId);
     if (!target || !Array.isArray(target.spouses)) return [];
     return target.spouses
       .map((s) => nodes.find((n) => n.id === s.id))
       .filter(Boolean) as FNode[];
-  }, [nodes, targetId]);
+  }, [effectiveTargetId, nodes]);
 
   const [selectedOtherParentId, setSelectedOtherParentId] = useState<string>(
     () => "",
@@ -291,6 +316,7 @@ export default function AddNode({
     // Reset Step 2
     setStep(1);
     setSavedNodeId(null);
+    setFlowTargetId(targetId);
     setBusinessName("");
     setBusinessCategory("");
     setBusinessAddress("");
@@ -305,9 +331,41 @@ export default function AddNode({
     } else {
       onCancel?.();
     }
-  }, [onComplete, onCancel]);
+  }, [onComplete, onCancel, targetId]);
 
-  const handleSaveDetails = useCallback(async () => {
+  const handleContinueWithSon = useCallback(() => {
+    setName("");
+    setDob(null);
+    setNameHindi("");
+    setGender("male");
+    setRelation("child");
+    setRelationStartDate(null);
+    setRelationEndDate(null);
+    setSelectedRelType(RelType.blood);
+    setCustomFields({});
+    setMode("create");
+    setSelectedPerson(null);
+    setSearchVillageId("");
+    setPersonSearchValue("");
+    setBloodGroup("");
+    setIsAlive(true);
+    setDeceasedDate(null);
+    setPhotoBlob(null);
+    setPhotoPreview(undefined);
+
+    setStep(1);
+    setSavedNodeId(null);
+    setFlowTargetId(targetId);
+    setBusinessName("");
+    setBusinessCategory("");
+    setBusinessAddress("");
+    setBusinessContact("");
+    setJobTitle("");
+    setJobContact("");
+    setOccupationType("business");
+  }, [targetId]);
+
+  const handleSaveDetails = useCallback(async (nextAction?: "add-son") => {
     if (isSavingDetails) return;
     setIsSavingDetails(true);
     if (!savedNodeId) {
@@ -355,6 +413,11 @@ export default function AddNode({
       setIsSavingDetails(false);
     }
 
+    if (nextAction === "add-son") {
+      handleContinueWithSon();
+      return;
+    }
+
     handleFlowComplete();
   }, [
     allProfessions,
@@ -362,6 +425,7 @@ export default function AddNode({
     businessCategory,
     businessContact,
     businessName,
+    handleContinueWithSon,
     handleFlowComplete,
     isSavingDetails,
     jobContact,
@@ -396,7 +460,7 @@ export default function AddNode({
             relationEndDate: formatPickerDate(relationEndDate),
           } as unknown as Partial<FNode>, // Pass existing ID
           relation,
-          targetId,
+          effectiveTargetId,
           selectedRelType,
           selectedOtherParentId,
         );
@@ -427,9 +491,9 @@ export default function AddNode({
       // prepare parents array: include targetId (if adding child) and optional other parent
       try {
         let parents: Array<{ id: string; type?: RelType }> = [];
-        if (relation === "child" && targetId) {
-          parents.push({ id: targetId, type: selectedRelType });
-          if (selectedOtherParentId && selectedOtherParentId !== targetId) {
+        if (relation === "child" && effectiveTargetId) {
+          parents.push({ id: effectiveTargetId, type: selectedRelType });
+          if (selectedOtherParentId && selectedOtherParentId !== effectiveTargetId) {
             parents.push({ id: selectedOtherParentId, type: selectedRelType });
           }
         }
@@ -461,7 +525,7 @@ export default function AddNode({
         const resultId = await onAdd?.(
           newNode,
           relation,
-          targetId,
+          effectiveTargetId,
           selectedRelType,
           selectedOtherParentId,
         );
@@ -515,7 +579,7 @@ export default function AddNode({
     deceasedDate,
     customFields,
     relation,
-    targetId,
+    effectiveTargetId,
     onAdd,
     handleCancel,
     selectedOtherParentId,
@@ -698,13 +762,26 @@ export default function AddNode({
           </Paper>
 
           <Box
-            sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 4 }}
+            sx={{
+              ...stickyFooterSx,
+              mt: 4,
+            }}
           >
             <Button onClick={handleFlowComplete} color="inherit">
               Skip
             </Button>
             <Button
-              onClick={handleSaveDetails}
+              onClick={() => {
+                if (savedNodeId) {
+                  handleContinueWithSon();
+                }
+              }}
+              variant="outlined"
+            >
+              Add Another Son
+            </Button>
+            <Button
+              onClick={() => void handleSaveDetails()}
               variant="contained"
               startIcon={
                 isSavingDetails ? (
@@ -1111,7 +1188,7 @@ export default function AddNode({
           )}
 
           <Box
-            sx={{ display: "flex", gap: 2, justifyContent: "flex-end", mt: 2 }}
+            sx={stickyFooterSx}
           >
             <Button onClick={handleCancel} variant="outlined">
               Cancel
