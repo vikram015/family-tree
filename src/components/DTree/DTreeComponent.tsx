@@ -143,7 +143,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const addMenuNodeIdRef = useRef<string | null>(null);
   // When true, the full tree is shown without any collapse behaviour
   const [showFullTree, setShowFullTree] = useState(initialShowFullTree);
-  const [showSpouses, setShowSpouses] = useState(false);
+  const [showSpouses, setShowSpouses] = useState(true);
   const [treeControlsAnchorEl, setTreeControlsAnchorEl] =
     useState<HTMLElement | null>(null);
 

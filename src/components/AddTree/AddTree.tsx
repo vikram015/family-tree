@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { ApiService } from "../../services/apiService";
 import {
   Button,
@@ -10,17 +10,17 @@ import {
   Alert,
   CircularProgress,
   Box,
+  Chip,
   Fab,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
   Autocomplete,
   Tooltip,
   useMediaQuery,
   useTheme,
+  createFilterOptions,
+  type FilterOptionsState,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
@@ -35,6 +35,71 @@ import {
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
   variant?: "button" | "fab";
+}
+
+type LookupOption = {
+  id: string;
+  name: string;
+  casteId?: string;
+};
+
+type CreateOption = {
+  id: string;
+  name: string;
+  inputValue: string;
+  isCreateOption: true;
+};
+
+type AutocompleteOption = LookupOption | CreateOption;
+
+const filter = createFilterOptions<AutocompleteOption>();
+
+function isCreateOption(option: AutocompleteOption): option is CreateOption {
+  return "isCreateOption" in option;
+}
+
+function renderLookupOption(
+  props: React.HTMLAttributes<HTMLLIElement> & { key: React.Key },
+  option: AutocompleteOption,
+) {
+  if (!isCreateOption(option)) {
+    return <li {...props}>{option.name}</li>;
+  }
+
+  const { key, ...rest } = props;
+  return (
+    <Box
+      component="li"
+      key={key}
+      {...rest}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 1,
+        px: 1.5,
+        py: 1,
+        borderLeft: "4px solid",
+        borderColor: "success.main",
+        bgcolor: "success.50",
+        color: "success.dark",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <AddCircleOutlineIcon fontSize="small" color="success" />
+        <Box component="span" sx={{ fontWeight: 600 }}>
+          {option.name}
+        </Box>
+      </Box>
+      <Chip
+        label="New"
+        size="small"
+        color="success"
+        variant="filled"
+        sx={{ fontWeight: 700 }}
+      />
+    </Box>
+  );
 }
 
 export const AddTree: React.FC<AddTreeProps> = ({
@@ -55,11 +120,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const [selectedCaste, setSelectedCaste] = useState<string>("");
   const [selectedSubCaste, setSelectedSubCaste] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const modalHistoryRef = useRef(false);
   const [selectedVillageId, setSelectedVillageId] = useState<string>("");
+  const [casteInputValue, setCasteInputValue] = useState("");
+  const [subCasteInputValue, setSubCasteInputValue] = useState("");
   const filteredSubCastes = useMemo(
     () => subCastes.filter((s) => !selectedCaste || s.casteId === selectedCaste),
     [subCastes, selectedCaste],
@@ -83,7 +151,102 @@ export const AddTree: React.FC<AddTreeProps> = ({
   // Reset selected sub-caste when caste changes
   useEffect(() => {
     setSelectedSubCaste("");
+    setSubCasteInputValue("");
   }, [selectedCaste]);
+
+  const selectedCasteOption = useMemo(
+    () => castes.find((caste) => caste.id === selectedCaste) || null,
+    [castes, selectedCaste],
+  );
+
+  const selectedSubCasteOption = useMemo(
+    () =>
+      filteredSubCastes.find((subCaste) => subCaste.id === selectedSubCaste) || null,
+    [filteredSubCastes, selectedSubCaste],
+  );
+
+  const createOptionLabel = (input: string, label: string) =>
+    `Add "${input.trim()}" as new ${label}`;
+
+  const buildCreatableOptions = useCallback(
+    (
+      options: LookupOption[],
+      params: FilterOptionsState<AutocompleteOption>,
+      label: string,
+    ): AutocompleteOption[] => {
+      const trimmedValue = params.inputValue.trim();
+      const filtered = filter(options, params);
+
+      if (!trimmedValue) {
+        return filtered;
+      }
+
+      const hasExactMatch = options.some(
+        (option) => option.name.trim().toLowerCase() === trimmedValue.toLowerCase(),
+      );
+
+      if (!hasExactMatch) {
+        filtered.push({
+          id: `create-${label}-${trimmedValue}`,
+          name: createOptionLabel(trimmedValue, label),
+          inputValue: trimmedValue,
+          isCreateOption: true,
+        });
+      }
+
+      return filtered;
+    },
+    [],
+  );
+
+  const handleCreateCaste = useCallback(
+    async (nameToCreate: string) => {
+      const trimmedName = nameToCreate.trim();
+      if (!trimmedName) {
+        return;
+      }
+
+      setError(null);
+      setLookupLoading(true);
+      try {
+        const created = await ApiService.createCaste({ name: trimmedName });
+        await dispatch(fetchCastes()).unwrap();
+        setSelectedCaste(created.id);
+        setCasteInputValue(created.name);
+      } catch (err: any) {
+        setError(err?.message ?? String(err));
+      } finally {
+        setLookupLoading(false);
+      }
+    },
+    [dispatch],
+  );
+
+  const handleCreateSubCaste = useCallback(
+    async (nameToCreate: string) => {
+      const trimmedName = nameToCreate.trim();
+      if (!trimmedName || !selectedCaste) {
+        return;
+      }
+
+      setError(null);
+      setLookupLoading(true);
+      try {
+        const created = await ApiService.createSubCaste({
+          name: trimmedName,
+          casteId: selectedCaste,
+        });
+        await dispatch(fetchAllSubCastes()).unwrap();
+        setSelectedSubCaste(created.id);
+        setSubCasteInputValue(created.name);
+      } catch (err: any) {
+        setError(err?.message ?? String(err));
+      } finally {
+        setLookupLoading(false);
+      }
+    },
+    [dispatch, selectedCaste],
+  );
 
   useEffect(() => {
     if (!showModal) return;
@@ -150,6 +313,8 @@ export const AddTree: React.FC<AddTreeProps> = ({
     setDescription("");
     setSelectedCaste("");
     setSelectedSubCaste("");
+    setCasteInputValue("");
+    setSubCasteInputValue("");
     setSelectedVillageId(selectedVillage || "");
     setShowModal(true);
   };
@@ -266,41 +431,103 @@ export const AddTree: React.FC<AddTreeProps> = ({
             sx={{ mt: 1, mb: 2 }}
           />
 
-          <FormControl fullWidth sx={{ mb: 2 }} required>
-            <InputLabel id="caste-select-label">Caste</InputLabel>
-            <Select
-              labelId="caste-select-label"
-              id="caste-select"
-              value={selectedCaste}
-              label="Caste"
-              onChange={(e) => setSelectedCaste(e.target.value)}
-              disabled={loading}
-            >
-              {castes.map((caste) => (
-                <MenuItem key={caste.id} value={caste.id}>
-                  {caste.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            options={castes}
+            value={selectedCasteOption}
+            inputValue={casteInputValue}
+            onInputChange={(_event, newInputValue) => {
+              setCasteInputValue(newInputValue);
+            }}
+            onChange={async (_event, newValue) => {
+              if (!newValue) {
+                setSelectedCaste("");
+                setCasteInputValue("");
+                return;
+              }
 
-          <FormControl fullWidth sx={{ mb: 2 }} required>
-            <InputLabel id="subcaste-select-label">Sub-Caste</InputLabel>
-            <Select
-              labelId="subcaste-select-label"
-              id="subcaste-select"
-              value={selectedSubCaste}
-              label="Sub-Caste"
-              onChange={(e) => setSelectedSubCaste(e.target.value)}
-              disabled={loading || !selectedCaste}
-            >
-              {filteredSubCastes.map((subCaste) => (
-                <MenuItem key={subCaste.id} value={subCaste.id}>
-                  {subCaste.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              if (isCreateOption(newValue)) {
+                await handleCreateCaste(newValue.inputValue);
+                return;
+              }
+
+              setSelectedCaste(newValue.id);
+              setCasteInputValue(newValue.name);
+            }}
+            disabled={loading || lookupLoading}
+            selectOnFocus
+            clearOnBlur
+            handleHomeEndKeys
+            getOptionLabel={(option) =>
+              isCreateOption(option) ? option.name : option.name
+            }
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            filterOptions={(options, params) =>
+              buildCreatableOptions(options, params, "caste")
+            }
+            renderOption={renderLookupOption}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                margin="dense"
+                label="Caste"
+                placeholder="Search or create caste..."
+                variant="outlined"
+                required
+              />
+            )}
+            sx={{ mb: 2 }}
+          />
+
+          <Autocomplete
+            options={filteredSubCastes}
+            value={selectedSubCasteOption}
+            inputValue={subCasteInputValue}
+            onInputChange={(_event, newInputValue) => {
+              setSubCasteInputValue(newInputValue);
+            }}
+            onChange={async (_event, newValue) => {
+              if (!newValue) {
+                setSelectedSubCaste("");
+                setSubCasteInputValue("");
+                return;
+              }
+
+              if (isCreateOption(newValue)) {
+                await handleCreateSubCaste(newValue.inputValue);
+                return;
+              }
+
+              setSelectedSubCaste(newValue.id);
+              setSubCasteInputValue(newValue.name);
+            }}
+            disabled={loading || lookupLoading || !selectedCaste}
+            selectOnFocus
+            clearOnBlur
+            handleHomeEndKeys
+            getOptionLabel={(option) =>
+              isCreateOption(option) ? option.name : option.name
+            }
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            filterOptions={(options, params) =>
+              buildCreatableOptions(options, params, "sub-caste")
+            }
+            renderOption={renderLookupOption}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                margin="dense"
+                label="Sub-Caste"
+                placeholder={
+                  selectedCaste
+                    ? "Search or create sub-caste..."
+                    : "Select caste first"
+                }
+                variant="outlined"
+                required
+              />
+            )}
+            sx={{ mb: 2 }}
+          />
 
           <TextField
             margin="dense"
