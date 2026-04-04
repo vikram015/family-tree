@@ -11,14 +11,26 @@ import {
   Popper,
   Popover,
   IconButton,
+  FormControl,
   FormControlLabel,
+  InputLabel,
+  MenuItem,
+  Select,
   Switch,
 } from "@mui/material";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { FNode } from "../model/FNode";
+import { useAuth } from "../hooks/useAuth";
 import dTree from "./dTree";
 import TreeBuilder from "./builder";
 import "./dTree.css";
+import { useAppDispatch, useAppSelector } from "../../store/hooks";
+import {
+  fetchUserPreference,
+  selectUserPreference,
+  selectUserPreferenceLoaded,
+  updateUserPreference,
+} from "../../store/slices/userPreferenceSlice";
 import {
   renderNodeCardSvg,
   renderMarriageNodeSvg,
@@ -27,6 +39,16 @@ import {
 } from "./NodeCard";
 
 const TREE_INTERACTION_HINT_KEY = "kinvia-tree-interaction-hint-dismissed";
+
+type TreeLanguage = "hindi" | "english";
+
+function normalizePreferenceLanguage(language?: string | null): TreeLanguage {
+  return language?.trim().toLowerCase() === "english" ? "english" : "hindi";
+}
+
+function serializePreferenceLanguage(language: TreeLanguage): "Hindi" | "English" {
+  return language === "english" ? "English" : "Hindi";
+}
 
 interface DTreeNode {
   name: string;
@@ -120,6 +142,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   initialMainId = null,
   initialShowFullTree = true,
 }) => {
+  const dispatch = useAppDispatch();
+  const { currentUser } = useAuth();
+  const userPreference = useAppSelector(selectUserPreference);
+  const userPreferenceLoaded = useAppSelector(selectUserPreferenceLoaded);
   const containerRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<any>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -130,6 +156,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   const prevMainIdRef = useRef<string | null>(null);
   // Track one-time URL focus requests so re-renders don't keep re-centering.
   const prevHighlightedFocusKeyRef = useRef<string | null>(null);
+  const preferenceLoadedRef = useRef(false);
+  const preferenceSnapshotRef = useRef<string>("");
+  const preferenceStoreSnapshotRef = useRef<string>("");
 
   // Track if we have centered on the initial mainId in collapsed mode
   const hasCenteredInitialRef = useRef(false);
@@ -144,6 +173,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   // When true, the full tree is shown without any collapse behaviour
   const [showFullTree, setShowFullTree] = useState(initialShowFullTree);
   const [showSpouses, setShowSpouses] = useState(true);
+  const [treeLanguage, setTreeLanguage] = useState<TreeLanguage>("hindi");
   const [treeControlsAnchorEl, setTreeControlsAnchorEl] =
     useState<HTMLElement | null>(null);
 
@@ -204,6 +234,129 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   );
   const canEditMobileNode = Boolean(mobileSheetNode && !isExternalNode && isNodeEditable(mobileSheetNode.id));
   const isTreeControlsOpen = Boolean(treeControlsAnchorEl);
+
+  const buildPreferenceSnapshot = useCallback(
+    (
+      nextShowFullTree: boolean,
+      nextShowSpouses: boolean,
+      nextLanguage: TreeLanguage,
+    ) =>
+      JSON.stringify({
+        showFullTree: nextShowFullTree,
+        showSpouse: nextShowSpouses,
+        language: serializePreferenceLanguage(nextLanguage),
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    if (!currentUser) {
+      preferenceLoadedRef.current = false;
+      preferenceSnapshotRef.current = "";
+      preferenceStoreSnapshotRef.current = "";
+      return;
+    }
+
+    dispatch(fetchUserPreference());
+  }, [currentUser, dispatch]);
+
+  useEffect(() => {
+    if (!currentUser || !userPreferenceLoaded) {
+      return;
+    }
+
+    const nextLanguage = normalizePreferenceLanguage(userPreference?.language);
+    const nextShowSpouses =
+      typeof userPreference?.showSpouse === "boolean"
+        ? userPreference.showSpouse
+        : true;
+    const nextShowFullTree =
+      typeof userPreference?.showFullTree === "boolean"
+        ? userPreference.showFullTree
+        : true;
+    const incomingStoreSnapshot = buildPreferenceSnapshot(
+      nextShowFullTree,
+      nextShowSpouses,
+      nextLanguage,
+    );
+
+    if (incomingStoreSnapshot === preferenceStoreSnapshotRef.current) {
+      preferenceLoadedRef.current = true;
+      return;
+    }
+
+    preferenceStoreSnapshotRef.current = incomingStoreSnapshot;
+
+    setShowSpouses(nextShowSpouses);
+    setTreeLanguage(nextLanguage);
+
+    // Keep explicit person-focused navigation as the stronger first-load
+    // signal, so slow preference hydration doesn't expand away from the
+    // user-selected target.
+    if (!highlightedPersonId && !initialMainId) {
+      setShowFullTree(nextShowFullTree);
+    }
+
+    preferenceSnapshotRef.current = buildPreferenceSnapshot(
+      highlightedPersonId || initialMainId ? showFullTree : nextShowFullTree,
+      nextShowSpouses,
+      nextLanguage,
+    );
+    preferenceLoadedRef.current = true;
+  }, [
+    currentUser,
+    userPreference,
+    userPreferenceLoaded,
+    highlightedPersonId,
+    initialMainId,
+    buildPreferenceSnapshot,
+    showFullTree,
+  ]);
+
+  useEffect(() => {
+    if (!currentUser || !preferenceLoadedRef.current) {
+      return;
+    }
+
+    const nextSnapshot = buildPreferenceSnapshot(
+      showFullTree,
+      showSpouses,
+      treeLanguage,
+    );
+
+    if (nextSnapshot === preferenceSnapshotRef.current) {
+      return;
+    }
+
+    preferenceSnapshotRef.current = nextSnapshot;
+    dispatch(
+      updateUserPreference({
+        showFullTree,
+        showSpouse: showSpouses,
+        language: serializePreferenceLanguage(treeLanguage),
+      }),
+    ).catch((updateError: any) => {
+      console.warn("Failed to save user preference:", updateError);
+    });
+  }, [
+    currentUser,
+    showFullTree,
+    showSpouses,
+    treeLanguage,
+    buildPreferenceSnapshot,
+    dispatch,
+  ]);
+
+  const getPreferredName = useCallback(
+    (person?: Pick<FNode, "name" | "nameHindi"> | null) => {
+      if (!person) return "";
+      if (treeLanguage === "hindi") {
+        return person.nameHindi?.trim() || person.name?.trim() || "";
+      }
+      return person.name?.trim() || person.nameHindi?.trim() || "";
+    },
+    [treeLanguage],
+  );
 
   const insertPlaceholdersNearMiddle = (
     list: DTreeNode[],
@@ -748,7 +901,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       showFullTree || !mainId || isOnMainPath || isMainNode;
 
     const treeNode: DTreeNode = {
-      name: person.nameHindi || person.name,
+      name: getPreferredName(person),
       class:
         person.gender === "male"
           ? "man"
@@ -759,7 +912,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       depthOffset: 0,
       extra: {
         id: person.id,
+        nameEnglish: person.name,
         nameHindi: person.nameHindi,
+        preferredName: getPreferredName(person),
         dob: person.dob,
         gender: person.gender,
         hierarchy: person.hierarchy,
@@ -890,7 +1045,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             isReadOnly: !canEditCurrentPerson || !canEditSpouseNode,
           },
           spouse: {
-            name: spouseNode.nameHindi || spouseNode.name,
+            name: getPreferredName(spouseNode),
             class:
               spouseNode.gender === "male"
                 ? "man"
@@ -900,7 +1055,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
             textClass: "nodeText",
             extra: {
               id: spouseNode.id,
+              nameEnglish: spouseNode.name,
               nameHindi: spouseNode.nameHindi,
+              preferredName: getPreferredName(spouseNode),
               dob: spouseNode.dob,
               gender: spouseNode.gender,
               hierarchy: spouseNode.hierarchy,
@@ -1380,6 +1537,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     currentTreeId,
     showFullTree,
     showSpouses,
+    treeLanguage,
     highlightedPersonId,
   ]);
 
@@ -1521,6 +1679,24 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
         >
           More tree controls
         </Typography>
+        <FormControl
+          size="small"
+          fullWidth
+          sx={{ px: 1, pb: 1, pt: 0.25 }}
+        >
+          <InputLabel id="tree-language-label">Language</InputLabel>
+          <Select
+            labelId="tree-language-label"
+            value={treeLanguage}
+            label="Language"
+            onChange={(event) => {
+              setTreeLanguage(event.target.value as TreeLanguage);
+            }}
+          >
+            <MenuItem value="hindi">Hindi</MenuItem>
+            <MenuItem value="english">English</MenuItem>
+          </Select>
+        </FormControl>
         <FormControlLabel
           sx={{ mx: 0, px: 1, width: "100%", justifyContent: "space-between" }}
           labelPlacement="start"

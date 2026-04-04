@@ -6,6 +6,7 @@ import professionReducer from './slices/professionSlice';
 import statisticsReducer from './slices/statisticsSlice';
 import locationReducer from './slices/locationSlice';
 import casteReducer from './slices/casteSlice';
+import userPreferenceReducer from './slices/userPreferenceSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,6 +17,7 @@ export const store = configureStore({
     statistics: statisticsReducer,
     location: locationReducer,
     caste: casteReducer,
+    userPreference: userPreferenceReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -337,7 +337,8 @@ export function renderNodeCardSvg(
   const textUpperRightPadding = 12 + externalLinkReservedWidth;
   const textMaxWidth = dim.w - dim.text_x - textUpperRightPadding;
   
-  const resolvedName = extra?.nameHindi || name;
+  const resolvedName =
+    extra?.preferredName || name || extra?.nameEnglish || extra?.nameHindi || "";
   const displayName = truncateText(resolvedName, textMaxWidth);
   const escapedName = escapeXml(displayName);
 

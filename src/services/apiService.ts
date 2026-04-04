@@ -8,6 +8,22 @@ import { backendApi } from './backendApi';
 
 type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 
+export interface UserPreference {
+  showFullTree: boolean;
+  showSpouse: boolean;
+  language: string;
+}
+
+export interface UserPreferenceResponse {
+  id: string;
+  userId: string;
+  preference: UserPreference;
+  createdAt: string;
+  modifiedAt: string;
+  createdBy: string | null;
+  modifiedBy: string | null;
+}
+
 interface PersonWithRelations {
   id: string;
   name: string;
@@ -731,6 +747,18 @@ export const ApiService = {
     return backendApi.post<any>('/api/lookup/sub-castes', {
       name: subCaste.name,
       casteId: subCaste.casteId,
+    });
+  },
+
+  async getUserPreference(): Promise<UserPreferenceResponse> {
+    return backendApi.get<UserPreferenceResponse>('/api/user/preference');
+  },
+
+  async updateUserPreference(
+    preference: Partial<UserPreference>,
+  ): Promise<UserPreferenceResponse> {
+    return backendApi.patch<UserPreferenceResponse>('/api/user/preference', {
+      preference,
     });
   },
 

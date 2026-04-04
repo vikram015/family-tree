@@ -45,6 +45,7 @@ export const SourceSelect = memo(function SourceSelect({
   const [trees, setTrees] = React.useState<any[]>([]);
   const [searchText, setSearchText] = useState<string>("");
   const [value, setValue] = React.useState<string>(urlTreeId);
+  const [selectedTreePreview, setSelectedTreePreview] = useState<TreeItem | null>(null);
   const valueRef = useRef(value);
   const { selectedVillage, setSelectedVillage } = useVillage();
   const castes = useAppSelector(selectCastes);
@@ -60,6 +61,8 @@ export const SourceSelect = memo(function SourceSelect({
   const initNotifiedTreeRef = useRef<string | null>(null);
   const sharedTreeResolvedRef = useRef<string | null>(null);
   const resolveSharedTreeOnInitRef = useRef(true);
+  const previousUrlTreeIdRef = useRef<string>(urlTreeId);
+  const loadRequestIdRef = useRef(0);
   const onChangeRef = useRef(onChange);
 
   useEffect(() => {
@@ -67,6 +70,13 @@ export const SourceSelect = memo(function SourceSelect({
   }, [onChange]);
 
   useEffect(() => {
+    if (previousUrlTreeIdRef.current !== urlTreeId) {
+      previousUrlTreeIdRef.current = urlTreeId;
+      sharedTreeResolvedRef.current = null;
+      resolveSharedTreeOnInitRef.current = Boolean(urlTreeId);
+      setSelectedTreePreview(null);
+    }
+
     if (urlTreeId !== value) {
       setValue(urlTreeId);
     }
@@ -103,6 +113,7 @@ export const SourceSelect = memo(function SourceSelect({
 
   useEffect(() => {
     const loadTrees = async () => {
+      const requestId = ++loadRequestIdRef.current;
       try {
         // If a shared tree link points to a tree in a different village,
         // switch village first so that tree appears in the filtered tree list.
@@ -114,6 +125,19 @@ export const SourceSelect = memo(function SourceSelect({
         ) {
           try {
             const targetTree = await ApiService.getTreeWithDetails(urlTreeId);
+            if (loadRequestIdRef.current !== requestId) {
+              return;
+            }
+            if (targetTree?.id) {
+              setSelectedTreePreview({
+                id: targetTree.id,
+                name: targetTree.name || "Selected tree",
+                caste: casteMap.get(targetTree.caste) || targetTree.caste,
+                subCaste:
+                  subCasteMap.get(targetTree.subCaste) || targetTree.subCaste,
+                villageName: targetTree.village?.name,
+              });
+            }
             if (
               targetTree?.villageId &&
               targetTree.villageId !== selectedVillage
@@ -126,6 +150,9 @@ export const SourceSelect = memo(function SourceSelect({
             sharedTreeResolvedRef.current = urlTreeId;
             resolveSharedTreeOnInitRef.current = false;
           } catch (err) {
+            if (loadRequestIdRef.current !== requestId) {
+              return;
+            }
             console.warn("Could not resolve shared tree village:", err);
             sharedTreeResolvedRef.current = urlTreeId;
             resolveSharedTreeOnInitRef.current = false;
@@ -137,7 +164,13 @@ export const SourceSelect = memo(function SourceSelect({
         }
 
         const sourceTrees = await ApiService.getTrees(selectedVillage);
+        if (loadRequestIdRef.current !== requestId) {
+          return;
+        }
         setTrees(sourceTrees);
+        if (valueRef.current && sourceTrees.some((s) => s.id === valueRef.current)) {
+          setSelectedTreePreview(null);
+        }
 
         let nextValue = valueRef.current;
         let notifyValue: string | null = null;
@@ -147,7 +180,7 @@ export const SourceSelect = memo(function SourceSelect({
         if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
           nextValue = urlTreeId;
         }
-        // Otherwise auto-select first only once and notify parent
+        // Otherwise auto-select first only once and notify parent.
         else if (sourceTrees.length > 0) {
           const first = sourceTrees[0];
           const currentExists = Boolean(
@@ -179,19 +212,30 @@ export const SourceSelect = memo(function SourceSelect({
           onChangeRef.current(notifyValue, []);
         }
       } catch (error) {
+        if (loadRequestIdRef.current !== requestId) {
+          return;
+        }
         console.error("Failed to load trees:", error);
         setTrees([]);
       }
     };
 
     loadTrees();
-  }, [autoNotifyOnInit, selectedVillage, setSelectedVillage, urlTreeId]);
+  }, [
+    autoNotifyOnInit,
+    casteMap,
+    selectedVillage,
+    setSelectedVillage,
+    subCasteMap,
+    urlTreeId,
+  ]);
 
   const changeHandler = useCallback(
     (event: any) => {
       const id = event.target.value;
       if (id === value) return;
       setValue(id);
+      setSelectedTreePreview(null);
       // pass the selected id; second param (nodes) is not available here so pass an empty array
       onChangeRef.current(id, []);
     },
@@ -224,6 +268,7 @@ export const SourceSelect = memo(function SourceSelect({
   );
 
   const selectedItem = getSelectedItem();
+  const renderItem = selectedItem || selectedTreePreview;
 
   return (
     <FormControl
@@ -250,8 +295,14 @@ export const SourceSelect = memo(function SourceSelect({
               </Typography>
             );
           }
-          const item = selectedItem;
-          if (!item) return selected;
+          const item = renderItem;
+          if (!item) {
+            return (
+              <Typography sx={{ color: "text.secondary" }}>
+                Loading selected tree...
+              </Typography>
+            );
+          }
           return (
             <Box>
               <Typography
