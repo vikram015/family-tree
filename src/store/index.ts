@@ -7,6 +7,7 @@ import statisticsReducer from './slices/statisticsSlice';
 import locationReducer from './slices/locationSlice';
 import casteReducer from './slices/casteSlice';
 import userPreferenceReducer from './slices/userPreferenceSlice';
+import userOnboardingReducer from './slices/userOnboardingSlice';
 
 export const store = configureStore({
   reducer: {
@@ -18,6 +19,7 @@ export const store = configureStore({
     location: locationReducer,
     caste: casteReducer,
     userPreference: userPreferenceReducer,
+    userOnboarding: userOnboardingReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -24,6 +24,101 @@ export interface UserPreferenceResponse {
   modifiedBy: string | null;
 }
 
+export type OnboardingStatus = "in_progress" | "completed";
+export type OnboardingCurrentStep =
+  | "profile"
+  | "location"
+  | "match"
+  | "complete";
+
+export interface UserOnboardingData {
+  status: OnboardingStatus;
+  currentStep: OnboardingCurrentStep;
+  profile: {
+    name: string;
+    email: string;
+    completedAt: string | null;
+  };
+  location: {
+    stateId: string | null;
+    districtId: string | null;
+    villageId: string | null;
+    casteId: string | null;
+    subCasteId: string | null;
+    completedAt: string | null;
+  };
+  match: {
+    searchName: string;
+    searchedAt: string | null;
+    selectedTreeId: string | null;
+    selectedPersonId: string | null;
+    action: "link" | "create_tree" | null;
+  };
+  completion: {
+    completedAt: string | null;
+    result: "linked" | "created_tree" | null;
+  };
+}
+
+export interface UserOnboardingDataUpdate {
+  status?: OnboardingStatus;
+  currentStep?: OnboardingCurrentStep;
+  profile?: Partial<UserOnboardingData["profile"]>;
+  location?: Partial<UserOnboardingData["location"]>;
+  match?: Partial<UserOnboardingData["match"]>;
+  completion?: Partial<UserOnboardingData["completion"]>;
+}
+
+export interface UserOnboardingResponse {
+  id: string;
+  userId: string;
+  onboardingData: UserOnboardingData | null;
+  effectiveOnboardingData: UserOnboardingData;
+  createdAt: string;
+  modifiedAt: string;
+  createdBy: string | null;
+  modifiedBy: string | null;
+}
+
+export interface UserOnboardingMatchedPerson {
+  personId: string;
+  name: string;
+  nameHindi: string | null;
+  gender: string | null;
+  dob: string | null;
+  photoUrl: string | null;
+  parentHierarchy: Array<{
+    id: string;
+    name: string;
+    generation: number;
+  }>;
+}
+
+export interface UserOnboardingTreeMatch {
+  treeId: string;
+  treeName: string;
+  villageId: string;
+  villageName: string;
+  casteId: string | null;
+  casteName: string | null;
+  subCasteId: string | null;
+  subCasteName: string | null;
+  totalNodes: number;
+  ownerUserId: string | null;
+  ownerName: string;
+  matchedPeople: UserOnboardingMatchedPerson[];
+}
+
+export interface LocationCombinationOption {
+  stateId: string;
+  stateName: string;
+  districtId: string;
+  districtName: string;
+  villageId: string;
+  villageName: string;
+  label: string;
+}
+
 interface PersonWithRelations {
   id: string;
   name: string;
@@ -560,6 +655,21 @@ export const ApiService = {
     return backendApi.get<any[]>('/api/lookup/villages', { districtId });
   },
 
+  async searchLocationCombinations(params: {
+    query?: string;
+    villageId?: string;
+    limit?: number;
+  }): Promise<LocationCombinationOption[]> {
+    return backendApi.get<LocationCombinationOption[]>(
+      "/api/lookup/location-combinations",
+      {
+        query: params.query,
+        villageId: params.villageId,
+        limit: params.limit,
+      },
+    );
+  },
+
   /**
    * Get all castes
    */
@@ -760,6 +870,30 @@ export const ApiService = {
     return backendApi.patch<UserPreferenceResponse>('/api/user/preference', {
       preference,
     });
+  },
+
+  async getUserOnboarding(): Promise<UserOnboardingResponse> {
+    return backendApi.get<UserOnboardingResponse>("/api/user/onboarding");
+  },
+
+  async updateUserOnboarding(
+    onboardingData: UserOnboardingDataUpdate,
+  ): Promise<UserOnboardingResponse> {
+    return backendApi.patch<UserOnboardingResponse>("/api/user/onboarding", {
+      onboardingData,
+    });
+  },
+
+  async searchUserOnboardingMatches(payload: {
+    searchName?: string | null;
+    villageId: string;
+    casteId?: string | null;
+    subCasteId?: string | null;
+  }): Promise<UserOnboardingTreeMatch[]> {
+    return backendApi.post<UserOnboardingTreeMatch[]>(
+      "/api/user/onboarding/matches/search",
+      payload,
+    );
   },
 
   /**

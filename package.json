@@ -53,7 +53,8 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "firebase:clean": "rm -rf .firebase",
-    "deploy:firebase": "bash ./scripts/deploy-firebase.sh"
+    "deploy:firebase": "bash ./scripts/deploy-firebase.sh",
+    "deploy:firebase:prod": "bash ./scripts/deploy-firebase.sh hotelmanager-c833b"
   },
   "eslintConfig": {
     "extends": "react-app"

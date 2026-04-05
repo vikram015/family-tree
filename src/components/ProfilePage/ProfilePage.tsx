@@ -460,6 +460,7 @@ export const ProfilePage: React.FC = () => {
         </Grid>
 
         {/* Tree Linking Section */}
+        {false && (
         <Grid size={{ xs: 12, md: 8 }}>
           <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
             <Box
@@ -649,6 +650,7 @@ export const ProfilePage: React.FC = () => {
             )}
           </Paper>
         </Grid>
+        )}
 
         {/* Business & Professional Details Section */}
         {userProfile?.peopleId && (
@@ -802,7 +804,7 @@ export const ProfilePage: React.FC = () => {
           </Grid>
         )}
 
-        {userProfile?.role === "admin" && (
+        {false && userProfile?.role === "admin" && (
           <Grid size={{ xs: 12 }}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>

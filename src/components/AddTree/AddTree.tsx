@@ -35,6 +35,13 @@ import {
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
   variant?: "button" | "fab";
+  hideTrigger?: boolean;
+  open?: boolean;
+  onClose?: () => void;
+  initialVillageId?: string;
+  initialCasteId?: string;
+  initialSubCasteId?: string;
+  title?: string;
 }
 
 type LookupOption = {
@@ -105,6 +112,13 @@ function renderLookupOption(
 export const AddTree: React.FC<AddTreeProps> = ({
   onCreate,
   variant = "button",
+  hideTrigger = false,
+  open,
+  onClose,
+  initialVillageId,
+  initialCasteId,
+  initialSubCasteId,
+  title = "Create a new tree",
 }) => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
@@ -125,6 +139,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const modalHistoryRef = useRef(false);
+  const previousSelectedCasteRef = useRef("");
   const [selectedVillageId, setSelectedVillageId] = useState<string>("");
   const [casteInputValue, setCasteInputValue] = useState("");
   const [subCasteInputValue, setSubCasteInputValue] = useState("");
@@ -135,10 +150,12 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const { villages, selectedVillage, setSelectedVillage } = useVillage();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
+  const isControlledOpen = typeof open === "boolean";
+  const isModalOpen = isControlledOpen ? Boolean(open) : showModal;
 
   // Load castes when modal opens
   useEffect(() => {
-    if (showModal) {
+    if (isModalOpen) {
       if (castes.length === 0) {
         dispatch(fetchCastes());
       }
@@ -146,12 +163,18 @@ export const AddTree: React.FC<AddTreeProps> = ({
         dispatch(fetchAllSubCastes());
       }
     }
-  }, [showModal, castes.length, subCastes.length, dispatch]);
+  }, [isModalOpen, castes.length, subCastes.length, dispatch]);
 
   // Reset selected sub-caste when caste changes
   useEffect(() => {
-    setSelectedSubCaste("");
-    setSubCasteInputValue("");
+    if (
+      previousSelectedCasteRef.current &&
+      previousSelectedCasteRef.current !== selectedCaste
+    ) {
+      setSelectedSubCaste("");
+      setSubCasteInputValue("");
+    }
+    previousSelectedCasteRef.current = selectedCaste;
   }, [selectedCaste]);
 
   const selectedCasteOption = useMemo(
@@ -249,7 +272,48 @@ export const AddTree: React.FC<AddTreeProps> = ({
   );
 
   useEffect(() => {
-    if (!showModal) return;
+    if (!isModalOpen) {
+      return;
+    }
+
+    setSelectedVillageId(initialVillageId || selectedVillage || "");
+    setSelectedCaste(initialCasteId || "");
+    setSelectedSubCaste(initialSubCasteId || "");
+    setCasteInputValue("");
+    setSubCasteInputValue("");
+    setError(null);
+    setCreatedId(null);
+    previousSelectedCasteRef.current = initialCasteId || "";
+  }, [
+    isModalOpen,
+    initialVillageId,
+    initialCasteId,
+    initialSubCasteId,
+    selectedVillage,
+  ]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (selectedCasteOption) {
+      setCasteInputValue(selectedCasteOption.name);
+    }
+  }, [isModalOpen, selectedCasteOption]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (selectedSubCasteOption) {
+      setSubCasteInputValue(selectedSubCasteOption.name);
+    }
+  }, [isModalOpen, selectedSubCasteOption]);
+
+  useEffect(() => {
+    if (!isModalOpen || isControlledOpen) return;
 
     if (!modalHistoryRef.current) {
       window.history.pushState({ modal: "create-tree" }, "");
@@ -266,7 +330,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [showModal]);
+  }, [isModalOpen, isControlledOpen]);
 
   const submit = async () => {
     setError(null);
@@ -289,7 +353,10 @@ export const AddTree: React.FC<AddTreeProps> = ({
       setDescription("");
       setSelectedCaste("");
       setSelectedSubCaste("");
-      setShowModal(false);
+      if (!isControlledOpen) {
+        setShowModal(false);
+      }
+      onClose?.();
       if (onCreate) onCreate(treeId);
     } catch (err: any) {
       setError(err?.message ?? String(err));
@@ -311,16 +378,43 @@ export const AddTree: React.FC<AddTreeProps> = ({
     setCreatedId(null);
     setName("");
     setDescription("");
-    setSelectedCaste("");
-    setSelectedSubCaste("");
+    setSelectedCaste(initialCasteId || "");
+    setSelectedSubCaste(initialSubCasteId || "");
     setCasteInputValue("");
     setSubCasteInputValue("");
-    setSelectedVillageId(selectedVillage || "");
-    setShowModal(true);
+    setSelectedVillageId(initialVillageId || selectedVillage || "");
+    previousSelectedCasteRef.current = initialCasteId || "";
+    if (!isControlledOpen) {
+      setShowModal(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!isControlledOpen) {
+      return;
+    }
+
+    if (open && !currentUser) {
+      onClose?.();
+      openLoginModal();
+    }
+  }, [currentUser, isControlledOpen, onClose, open, openLoginModal]);
+
+  const handleRequestOpen = () => {
+    if (isControlledOpen) {
+      openModal();
+      return;
+    }
+    openModal();
   };
 
   const closeModal = () => {
     if (loading) return;
+    if (isControlledOpen) {
+      onClose?.();
+      return;
+    }
+
     setShowModal(false);
     if (modalHistoryRef.current) {
       modalHistoryRef.current = false;
@@ -336,13 +430,13 @@ export const AddTree: React.FC<AddTreeProps> = ({
 
   return (
     <Box>
-      {variant === "fab" ? (
+      {!hideTrigger && variant === "fab" ? (
         <>
           <Tooltip title="Create tree" placement="left">
             <Fab
               color="primary"
               aria-label="Create tree"
-              onClick={openModal}
+              onClick={handleRequestOpen}
               sx={{
                 display: { xs: "inline-flex", sm: "none" },
                 opacity: 1,
@@ -359,7 +453,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
             <Fab
               variant="extended"
               color="primary"
-              onClick={openModal}
+              onClick={handleRequestOpen}
               sx={{
                 display: { xs: "none", sm: "inline-flex" },
                 opacity: 0.62,
@@ -374,25 +468,25 @@ export const AddTree: React.FC<AddTreeProps> = ({
             </Fab>
           </Tooltip>
         </>
-      ) : (
+      ) : !hideTrigger ? (
         <Button
           variant="contained"
           color="primary"
           startIcon={<AddIcon />}
-          onClick={openModal}
+          onClick={handleRequestOpen}
         >
           Create tree
         </Button>
-      )}
+      ) : null}
 
       <Dialog
-        open={showModal}
+        open={isModalOpen}
         onClose={closeModal}
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Create a new tree</DialogTitle>
+        <DialogTitle>{title}</DialogTitle>
         <DialogContent>
           <Autocomplete
             options={villages}

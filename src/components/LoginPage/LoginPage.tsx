@@ -6,7 +6,7 @@ import { useAuth } from "../hooks/useAuth";
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, userProfile, loading } = useAuth();
+  const { currentUser, loading } = useAuth();
   const from = (location.state as any)?.from?.pathname || "/families";
   const [open, setOpen] = useState(true);
   const [pendingPostLogin, setPendingPostLogin] = useState(false);
@@ -16,21 +16,7 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    const isAdmin = userProfile?.role === "admin";
-    const needsProfileCompletion =
-      !userProfile?.name?.trim() ||
-      !userProfile?.email?.trim() ||
-      !userProfile?.privacyPolicyAccepted;
-    const needsLink = isAdmin && !userProfile?.peopleId;
-    const needsVillageRequest =
-      isAdmin && (userProfile?.villages || []).length === 0;
-
-    if (
-      currentUser &&
-      (needsProfileCompletion || needsLink || needsVillageRequest)
-    ) {
-      navigate("/", { replace: true });
-    } else {
+    if (currentUser) {
       navigate(from, { replace: true });
     }
 
@@ -39,15 +25,8 @@ export const LoginPage: React.FC = () => {
     pendingPostLogin,
     loading,
     currentUser,
-    userProfile?.role,
-    userProfile?.name,
-    userProfile?.email,
-    userProfile?.privacyPolicyAccepted,
-    userProfile?.peopleId,
-    userProfile?.villages,
     from,
     navigate,
-    userProfile,
   ]);
 
   const handleClose = useCallback(() => {

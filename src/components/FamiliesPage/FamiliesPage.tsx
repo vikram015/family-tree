@@ -65,6 +65,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const { openLoginModal } = useLoginModal();
   const highlightedPersonId = searchParams.get("personId");
   const inviteToken = searchParams.get("inviteToken");
+  const shouldCreateRootFromQuery = searchParams.get("createRoot") === "1";
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
@@ -255,6 +256,30 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setTreeId,
     setSearchParams,
     openLoginModal,
+  ]);
+
+  useEffect(() => {
+    if (!shouldCreateRootFromQuery || isLoading) {
+      return;
+    }
+
+    if (!treeId || nodes.length > 0 || !canCreateRootNode) {
+      return;
+    }
+
+    setShowAddStartingNode(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("createRoot");
+      return next;
+    });
+  }, [
+    canCreateRootNode,
+    isLoading,
+    nodes.length,
+    setSearchParams,
+    shouldCreateRootFromQuery,
+    treeId,
   ]);
 
   const loadTreeData = useCallback(

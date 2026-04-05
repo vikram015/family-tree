@@ -1,0 +1,88 @@
+import React, { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "./hooks/useAuth";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
+import {
+  fetchUserOnboarding,
+  selectEffectiveUserOnboardingData,
+  selectUserOnboardingLoaded,
+  selectUserOnboardingLoading,
+} from "../store/slices/userOnboardingSlice";
+
+export const UserOnboardingRouteGuard: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { currentUser, userProfile, loading } = useAuth();
+  const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
+  const onboardingLoaded = useAppSelector(selectUserOnboardingLoaded);
+  const onboardingLoading = useAppSelector(selectUserOnboardingLoading);
+
+  useEffect(() => {
+    if (!currentUser || loading || userProfile?.role !== "admin") {
+      return;
+    }
+
+    if (!onboardingLoaded && !onboardingLoading) {
+      dispatch(fetchUserOnboarding());
+    }
+  }, [
+    currentUser,
+    loading,
+    userProfile?.role,
+    onboardingLoaded,
+    onboardingLoading,
+    dispatch,
+  ]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    if (!currentUser) {
+      if (location.pathname === "/onboarding") {
+        navigate("/login", {
+          replace: true,
+          state: { from: { pathname: "/onboarding" } },
+        });
+      }
+      return;
+    }
+
+    if (userProfile?.role !== "admin") {
+      if (location.pathname === "/onboarding") {
+        navigate("/families", { replace: true });
+      }
+      return;
+    }
+
+    if (!onboardingLoaded || onboardingLoading) {
+      return;
+    }
+
+    const needsOnboarding =
+      !userProfile?.peopleId && onboarding.status !== "completed";
+
+    if (needsOnboarding && location.pathname !== "/onboarding") {
+      navigate("/onboarding", { replace: true });
+      return;
+    }
+
+    if (!needsOnboarding && location.pathname === "/onboarding") {
+      navigate("/families", { replace: true });
+    }
+  }, [
+    currentUser,
+    loading,
+    location.pathname,
+    navigate,
+    onboarding.status,
+    onboardingLoaded,
+    onboardingLoading,
+    userProfile?.peopleId,
+    userProfile?.role,
+  ]);
+
+  return null;
+};

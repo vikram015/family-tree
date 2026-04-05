@@ -28,9 +28,10 @@ import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
-import { LinkNodeDialog } from "../LinkNodeDialog/LinkNodeDialog";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
+import { UserOnboardingPage } from "../UserOnboardingPage";
+import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
 
 // Lazy load FamiliesPage
 const FamiliesPage = React.lazy(() =>
@@ -115,7 +116,7 @@ function AppContent() {
         },
       }}
     >
-      <LinkNodeDialog />
+      <UserOnboardingRouteGuard />
       <Header />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box sx={{ flex: 1, minHeight: 0, width: "100%" }}>
@@ -123,6 +124,7 @@ function AppContent() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/onboarding" element={<UserOnboardingPage />} />
               <Route
                 path="/families"
                 element={
