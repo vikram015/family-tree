@@ -1426,11 +1426,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                     canEditNode={canEditNode}
                     autoExpandNodeId={autoExpandNodeId}
                     onAutoExpandHandled={() => setAutoExpandNodeId(null)}
-                    onNodeClick={(id) => {
-                      setNodeDetailsInitialView(undefined);
-                      setNodeDetailsAddInfo(undefined);
-                      setSelectId(id);
-                    }}
+                    onNodeClick={() => {}}
                     onEditNode={handleEditNode}
                     onDelete={onDelete}
                     onAddRelative={handleAddRelative}
