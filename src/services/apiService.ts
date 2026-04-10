@@ -119,6 +119,34 @@ export interface LocationCombinationOption {
   label: string;
 }
 
+export type LinkRequestType = "user_to_tree_node";
+export type LinkRequestStatus = "pending" | "approved" | "rejected";
+
+export interface LinkRequest {
+  id: string;
+  requestType: LinkRequestType;
+  status: LinkRequestStatus;
+  requesterUserId: string;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  sourceUserId: string | null;
+  sourcePersonId: string | null;
+  sourceTreeId: string | null;
+  targetUserId: string | null;
+  targetPersonId: string | null;
+  targetPersonName: string | null;
+  targetTreeId: string | null;
+  targetTreeName: string | null;
+  requestMessage: string | null;
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  modifiedAt: string;
+  payload: Record<string, any> | null;
+}
+
 interface PersonWithRelations {
   id: string;
   name: string;
@@ -892,6 +920,36 @@ export const ApiService = {
   }): Promise<UserOnboardingTreeMatch[]> {
     return backendApi.post<UserOnboardingTreeMatch[]>(
       "/api/user/onboarding/matches/search",
+      payload,
+    );
+  },
+
+  async getMyLinkRequests(requestType?: LinkRequestType): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>("/api/link-requests/my", {
+      requestType,
+    });
+  },
+
+  async createUserNodeLinkRequest(payload: {
+    targetPersonId: string;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/user-node", payload);
+  },
+
+  async getPendingTreeLinkRequests(treeId: string): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>(`/api/link-requests/tree/${treeId}/pending`);
+  },
+
+  async reviewLinkRequest(
+    requestId: string,
+    payload: {
+      action: "approved" | "rejected";
+      reviewNote?: string | null;
+    },
+  ): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>(
+      `/api/link-requests/${requestId}/review`,
       payload,
     );
   },

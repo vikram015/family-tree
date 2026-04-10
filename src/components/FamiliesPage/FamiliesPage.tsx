@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Helmet } from "react-helmet-async";
 import {
+  Alert,
   Box,
   Button,
   Typography,
@@ -31,7 +32,7 @@ import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
 import { getNodeHierarchy } from "../const";
 import { ApiService } from "../../services/apiService";
-import type { TreeWriteScope } from "../../services/apiService";
+import type { LinkRequest, TreeWriteScope } from "../../services/apiService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import AddTree from "../AddTree/AddTree";
@@ -112,6 +113,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [inviteSelectedPersonName, setInviteSelectedPersonName] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteAccepting, setInviteAccepting] = useState(false);
+  const [pendingLinkRequests, setPendingLinkRequests] = useState<LinkRequest[]>([]);
+  const [linkRequestsLoading, setLinkRequestsLoading] = useState(false);
+  const [reviewingLinkRequestId, setReviewingLinkRequestId] = useState<string | null>(
+    null,
+  );
+  const [linkRequestReviewError, setLinkRequestReviewError] = useState("");
+  const [linkRequestReviewSuccess, setLinkRequestReviewSuccess] = useState("");
   const loadRequestIdRef = useRef(0);
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
@@ -172,6 +180,35 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, editableNodeIds],
   );
 
+  const loadPendingLinkRequests = useCallback(async () => {
+    if (!currentUser || !treeId) {
+      setPendingLinkRequests([]);
+      return;
+    }
+
+    try {
+      setLinkRequestsLoading(true);
+      setLinkRequestReviewError("");
+      const rows = await ApiService.getPendingTreeLinkRequests(treeId);
+      setPendingLinkRequests(rows || []);
+    } catch (error: any) {
+      console.error("Failed to load pending link requests:", error);
+      setPendingLinkRequests([]);
+      if (
+        error?.message &&
+        String(error.message).toLowerCase().includes("permission denied")
+      ) {
+        setLinkRequestReviewError("");
+      } else {
+        setLinkRequestReviewError(
+          error?.message || "Failed to load pending profile link requests.",
+        );
+      }
+    } finally {
+      setLinkRequestsLoading(false);
+    }
+  }, [currentUser, treeId]);
+
   useEffect(() => {
     let active = true;
 
@@ -197,6 +234,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       active = false;
     };
   }, [treeId, currentUser]);
+
+  useEffect(() => {
+    void loadPendingLinkRequests();
+  }, [loadPendingLinkRequests]);
 
   useEffect(() => {
     if (!inviteToken || loading) {
@@ -892,6 +933,30 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     }
   }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes]);
 
+  const handleReviewLinkRequest = useCallback(
+    async (requestId: string, action: "approved" | "rejected") => {
+      setLinkRequestReviewError("");
+      setLinkRequestReviewSuccess("");
+      setReviewingLinkRequestId(requestId);
+
+      try {
+        await ApiService.reviewLinkRequest(requestId, { action });
+        setLinkRequestReviewSuccess(
+          `Profile link request ${action === "approved" ? "approved" : "rejected"} successfully.`,
+        );
+        await loadPendingLinkRequests();
+      } catch (error: any) {
+        console.error("Failed to review link request:", error);
+        setLinkRequestReviewError(
+          error?.message || "Failed to review profile link request.",
+        );
+      } finally {
+        setReviewingLinkRequestId(null);
+      }
+    },
+    [loadPendingLinkRequests],
+  );
+
   // Handler for "View Details" — opens NodeDetails in details view
   const handleViewDetails = useCallback((nodeId: string) => {
     setNodeDetailsInitialView("details");
@@ -1158,6 +1223,93 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           py: { xs: 0.5, sm: 1.5 },
         }}
       >
+        {currentUser && treeId && (
+          <Stack spacing={1.5} sx={{ mb: pendingLinkRequests.length > 0 || linkRequestReviewError || linkRequestReviewSuccess ? 1.5 : 0 }}>
+            {linkRequestReviewError && (
+              <Alert severity="error">{linkRequestReviewError}</Alert>
+            )}
+            {linkRequestReviewSuccess && (
+              <Alert severity="success">{linkRequestReviewSuccess}</Alert>
+            )}
+            {linkRequestsLoading && (
+              <Alert severity="info">Loading pending profile link requests...</Alert>
+            )}
+            {!linkRequestsLoading && pendingLinkRequests.length > 0 && (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 1.5, sm: 2 },
+                  borderRadius: { xs: 3, md: 4 },
+                  border: "1px solid",
+                  borderColor: "warning.light",
+                  backgroundColor: alpha(theme.palette.warning.light, 0.08),
+                }}
+              >
+                <Stack spacing={1.5}>
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      Pending profile link requests
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      Review requests from users who want to link themselves to people in this tree.
+                    </Typography>
+                  </Box>
+                  {pendingLinkRequests.map((request) => (
+                    <Paper
+                      key={request.id}
+                      variant="outlined"
+                      sx={{
+                        p: { xs: 1.25, sm: 1.5 },
+                        borderRadius: 3,
+                      }}
+                    >
+                      <Stack
+                        direction={{ xs: "column", md: "row" }}
+                        spacing={1.5}
+                        justifyContent="space-between"
+                        alignItems={{ xs: "stretch", md: "center" }}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                            {request.requesterName || request.requesterEmail || "Unknown requester"}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                            Wants to link to {request.targetPersonName || "selected profile"}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5 }}>
+                            Requested {new Date(request.createdAt).toLocaleString()}
+                          </Typography>
+                        </Box>
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          spacing={1}
+                          sx={{ flexShrink: 0 }}
+                        >
+                          <Button
+                            variant="contained"
+                            color="success"
+                            disabled={reviewingLinkRequestId === request.id}
+                            onClick={() => void handleReviewLinkRequest(request.id, "approved")}
+                          >
+                            {reviewingLinkRequestId === request.id ? "Saving..." : "Approve"}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            disabled={reviewingLinkRequestId === request.id}
+                            onClick={() => void handleReviewLinkRequest(request.id, "rejected")}
+                          >
+                            Reject
+                          </Button>
+                        </Stack>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
+          </Stack>
+        )}
         {isLoading ? (
           <Paper
             elevation={0}

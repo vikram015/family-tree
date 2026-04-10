@@ -61,8 +61,7 @@ export const UserOnboardingRouteGuard: React.FC = () => {
       return;
     }
 
-    const needsOnboarding =
-      !userProfile?.peopleId && onboarding.status !== "completed";
+    const needsOnboarding = onboarding.status !== "completed";
 
     if (needsOnboarding && location.pathname !== "/onboarding") {
       navigate("/onboarding", { replace: true });
@@ -80,7 +79,6 @@ export const UserOnboardingRouteGuard: React.FC = () => {
     onboarding.status,
     onboardingLoaded,
     onboardingLoading,
-    userProfile?.peopleId,
     userProfile?.role,
   ]);
 

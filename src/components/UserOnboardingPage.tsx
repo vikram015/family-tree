@@ -56,6 +56,7 @@ import {
 } from "../store/slices/userOnboardingSlice";
 import {
   ApiService,
+  LinkRequest,
   LocationCombinationOption,
 } from "../services/apiService";
 
@@ -156,6 +157,11 @@ export const UserOnboardingPage: React.FC = () => {
     useState<LocationCombinationOption | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [linkRequestSuccess, setLinkRequestSuccess] = useState("");
+  const [myLinkRequests, setMyLinkRequests] = useState<LinkRequest[]>([]);
+  const [linkRequestLoading, setLinkRequestLoading] = useState(false);
+  const [linkRequestSubmittingPersonId, setLinkRequestSubmittingPersonId] =
+    useState<string | null>(null);
   const [createTreeOpen, setCreateTreeOpen] = useState(false);
   const [stepOverride, setStepOverride] = useState<null | "profile" | "location" | "match">(null);
   const hydratedSnapshotRef = useRef("");
@@ -202,6 +208,15 @@ export const UserOnboardingPage: React.FC = () => {
       ) || null,
     [filteredSubCastes, selectedSubCasteId],
   );
+  const pendingUserNodeLinkRequest = useMemo(
+    () =>
+      myLinkRequests.find(
+        (request) =>
+          request.requestType === "user_to_tree_node" &&
+          request.status === "pending",
+      ) || null,
+    [myLinkRequests],
+  );
 
   useEffect(() => {
     if (!currentUser || loading || userProfile?.role !== "admin") {
@@ -234,6 +249,39 @@ export const UserOnboardingPage: React.FC = () => {
     subCastes.length,
     subCastesLoading,
   ]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setMyLinkRequests([]);
+      return;
+    }
+
+    let active = true;
+    setLinkRequestLoading(true);
+
+    ApiService.getMyLinkRequests("user_to_tree_node")
+      .then((rows) => {
+        if (!active) {
+          return;
+        }
+        setMyLinkRequests(rows || []);
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+        console.error("Failed to load link requests:", error);
+      })
+      .finally(() => {
+        if (active) {
+          setLinkRequestLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     const snapshot = JSON.stringify(onboarding);
@@ -587,6 +635,27 @@ export const UserOnboardingPage: React.FC = () => {
     }
   };
 
+  const handleCreateLinkRequest = async (personId: string) => {
+    setLocalError("");
+    setLinkRequestSuccess("");
+    setLinkRequestSubmittingPersonId(personId);
+
+    try {
+      const created = await ApiService.createUserNodeLinkRequest({
+        targetPersonId: personId,
+      });
+      const rows = await ApiService.getMyLinkRequests("user_to_tree_node");
+      setMyLinkRequests(rows || []);
+      setLinkRequestSuccess(
+        `Link request sent for ${created.targetPersonName || "the selected profile"}. A tree reviewer can approve or reject it.`,
+      );
+    } catch (error: any) {
+      setLocalError(error?.message || "Failed to create link request.");
+    } finally {
+      setLinkRequestSubmittingPersonId(null);
+    }
+  };
+
   const handleOpenCreateTree = async () => {
     setLocalError("");
     await dispatch(
@@ -681,17 +750,25 @@ export const UserOnboardingPage: React.FC = () => {
       <AccordionDetails sx={{ bgcolor: "background.default" }}>
         {tree.matchedPeople.length > 0 ? (
           <Stack spacing={2}>
-            {tree.matchedPeople.map((person) => (
-              <Box
-                key={person.personId}
-                sx={{
-                  p: { xs: 1.25, sm: 2 },
-                  borderRadius: 2,
-                  border: "1px solid",
-                  borderColor: "divider",
-                  bgcolor: "background.paper",
-                }}
-              >
+            {tree.matchedPeople.map((person) => {
+              const isPendingForThisPerson =
+                pendingUserNodeLinkRequest?.targetPersonId === person.personId;
+              const isBlockedByAnotherPendingRequest = Boolean(
+                pendingUserNodeLinkRequest &&
+                  pendingUserNodeLinkRequest.targetPersonId !== person.personId,
+              );
+
+              return (
+                <Box
+                  key={person.personId}
+                  sx={{
+                    p: { xs: 1.25, sm: 2 },
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    bgcolor: "background.paper",
+                  }}
+                >
                 <Stack
                   direction={{ xs: "column", sm: "row" }}
                   spacing={2}
@@ -785,8 +862,42 @@ export const UserOnboardingPage: React.FC = () => {
                     </Stack>
                   </Box>
                 )}
+
+                {!userProfile?.peopleId && (
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    spacing={1}
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    justifyContent="space-between"
+                    sx={{ mt: 2 }}
+                  >
+                    <Typography variant="body2" color="text.secondary">
+                      Request approval from this tree’s owner or editor to link this
+                      profile.
+                    </Typography>
+                    <Button
+                      variant={isPendingForThisPerson ? "outlined" : "contained"}
+                      disabled={
+                        linkRequestLoading ||
+                        Boolean(linkRequestSubmittingPersonId) ||
+                        isPendingForThisPerson ||
+                        isBlockedByAnotherPendingRequest
+                      }
+                      onClick={() => void handleCreateLinkRequest(person.personId)}
+                    >
+                      {linkRequestSubmittingPersonId === person.personId
+                        ? "Sending..."
+                        : isPendingForThisPerson
+                          ? "Request pending"
+                          : isBlockedByAnotherPendingRequest
+                            ? "Another request pending"
+                            : "Link profile"}
+                    </Button>
+                  </Stack>
+                )}
               </Box>
-            ))}
+              );
+            })}
           </Stack>
         ) : (
           <Typography variant="body2" color="text.secondary">
@@ -1125,6 +1236,26 @@ export const UserOnboardingPage: React.FC = () => {
 
                       {!matchesLoading && (
                         <Stack spacing={2}>
+                          {pendingUserNodeLinkRequest && (
+                            <Alert severity="info">
+                              Your link request for{" "}
+                              <strong>
+                                {pendingUserNodeLinkRequest.targetPersonName ||
+                                  "the selected profile"}
+                              </strong>{" "}
+                              in{" "}
+                              <strong>
+                                {pendingUserNodeLinkRequest.targetTreeName ||
+                                  "the selected tree"}
+                              </strong>{" "}
+                              is pending review.
+                            </Alert>
+                          )}
+
+                          {linkRequestSuccess && (
+                            <Alert severity="success">{linkRequestSuccess}</Alert>
+                          )}
+
                           {matchResults.length === 0 && (
                             <Alert severity="info">
                               No matching tree was found yet. You can go back
