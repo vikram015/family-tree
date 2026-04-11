@@ -1455,7 +1455,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         if (shouldCenterOnHighlighted) {
           setTimeout(() => {
             resetTreeViewport(0);
-            setTimeout(() => centerOnNodeRef.current(highlightedPersonId), 0);
+            setTimeout(() => centerOnNodeRef.current(highlightedPersonId), 500); // Allow D3 to render nodes
           }, 0);
         } else if (shouldAnimate) {
           setTimeout(() => {
@@ -1470,14 +1470,14 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         setTimeout(() => {
           centerOnNodeRef.current(mainId);
           hasCenteredInitialRef.current = true;
-        }, 100);
+        }, 500); // Allow D3 to render nodes
       }
 
       // URL-driven focus (tree navigation/search) should center exactly once per key.
       if (!showFullTree && highlightedPersonId && shouldCenterOnHighlighted) {
         setTimeout(() => {
           centerOnNodeRef.current(highlightedPersonId);
-        }, 0);
+        }, 500); // Allow D3 to render nodes
       }
 
       // Update refs to current state

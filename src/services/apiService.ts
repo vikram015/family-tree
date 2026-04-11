@@ -119,7 +119,7 @@ export interface LocationCombinationOption {
   label: string;
 }
 
-export type LinkRequestType = "user_to_tree_node";
+export type LinkRequestType = "user_to_tree_node" | "branch_access_request";
 export type LinkRequestStatus = "pending" | "approved" | "rejected";
 
 export interface LinkRequest {
@@ -935,6 +935,14 @@ export const ApiService = {
     requestMessage?: string | null;
   }): Promise<LinkRequest> {
     return backendApi.post<LinkRequest>("/api/link-requests/user-node", payload);
+  },
+
+  async createBranchAccessRequest(payload: {
+    targetTreeId: string;
+    targetPersonId?: string | null;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/branch-access", payload);
   },
 
   async getPendingTreeLinkRequests(treeId: string): Promise<LinkRequest[]> {

@@ -27,7 +27,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import AddTree from "./AddTree/AddTree";
 import { useAuth } from "./hooks/useAuth";
 import { useVillage } from "./hooks/useVillage";
@@ -59,6 +59,7 @@ import {
   LinkRequest,
   LocationCombinationOption,
 } from "../services/apiService";
+import { OnboardingTreePreviewDialog } from "./OnboardingTreePreviewDialog";
 
 const STEP_INDEX: Record<string, number> = {
   profile: 0,
@@ -116,6 +117,7 @@ function renderHighlightedText(value: string, searchTerm: string) {
 export const UserOnboardingPage: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { currentUser, userProfile, loading, updateUserProfile } = useAuth();
@@ -163,6 +165,9 @@ export const UserOnboardingPage: React.FC = () => {
   const [linkRequestSubmittingPersonId, setLinkRequestSubmittingPersonId] =
     useState<string | null>(null);
   const [createTreeOpen, setCreateTreeOpen] = useState(false);
+  const previewTreeId = searchParams.get("previewTreeId");
+  const previewTreeName = searchParams.get("previewTreeName");
+  const previewPersonId = searchParams.get("previewPersonId");
   const [stepOverride, setStepOverride] = useState<null | "profile" | "location" | "match">(null);
   const hydratedSnapshotRef = useRef("");
   const lastSearchKeyRef = useRef("");
@@ -259,7 +264,7 @@ export const UserOnboardingPage: React.FC = () => {
     let active = true;
     setLinkRequestLoading(true);
 
-    ApiService.getMyLinkRequests("user_to_tree_node")
+    ApiService.getMyLinkRequests()
       .then((rows) => {
         if (!active) {
           return;
@@ -715,7 +720,25 @@ export const UserOnboardingPage: React.FC = () => {
           sx={{ width: "100%", pr: 1 }}
         >
           <Box>
-            <Typography variant="h6">{tree.treeName}</Typography>
+            <Typography 
+              variant="h6"
+              color="primary"
+              sx={{
+                cursor: "pointer",
+                display: "inline-block",
+                "&:hover": { textDecoration: "underline" }
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const newParams = new URLSearchParams(searchParams);
+                newParams.set("previewTreeId", tree.treeId);
+                newParams.set("previewTreeName", tree.treeName || "");
+                newParams.delete("previewPersonId");
+                setSearchParams(newParams, { replace: true });
+              }}
+            >
+              {tree.treeName}
+            </Typography>
             <Stack
               direction="row"
               spacing={1}
@@ -748,6 +771,7 @@ export const UserOnboardingPage: React.FC = () => {
         </Stack>
       </AccordionSummary>
       <AccordionDetails sx={{ bgcolor: "background.default" }}>
+
         {tree.matchedPeople.length > 0 ? (
           <Stack spacing={2}>
             {tree.matchedPeople.map((person) => {
@@ -782,7 +806,23 @@ export const UserOnboardingPage: React.FC = () => {
                     {person.name.charAt(0).toUpperCase()}
                   </Avatar>
                   <Box sx={{ flex: 1 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    <Typography
+                      variant="subtitle1"
+                      color="primary"
+                      sx={{
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "inline-block",
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                      onClick={() => {
+                        const newParams = new URLSearchParams(searchParams);
+                        newParams.set("previewTreeId", tree.treeId);
+                        newParams.set("previewTreeName", tree.treeName || "");
+                        newParams.set("previewPersonId", person.personId);
+                        setSearchParams(newParams, { replace: true });
+                      }}
+                    >
                       {renderHighlightedText(person.name, searchDisplayName)}
                     </Typography>
                     {person.nameHindi && (
@@ -1405,6 +1445,21 @@ export const UserOnboardingPage: React.FC = () => {
         }
         title="Create your family tree"
         onCreate={handleTreeCreated}
+      />
+
+      <OnboardingTreePreviewDialog
+        open={Boolean(previewTreeId)}
+        treeId={previewTreeId!}
+        treeName={previewTreeName}
+        personId={previewPersonId}
+        myLinkRequests={myLinkRequests}
+        onClose={() => {
+          const newParams = new URLSearchParams(searchParams);
+          newParams.delete("previewTreeId");
+          newParams.delete("previewTreeName");
+          newParams.delete("previewPersonId");
+          setSearchParams(newParams, { replace: true });
+        }}
       />
     </>
   );
