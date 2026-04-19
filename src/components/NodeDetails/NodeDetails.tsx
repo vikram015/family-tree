@@ -101,6 +101,13 @@ export const NodeDetails = memo(function NodeDetails({
     const parsed = dayjs(value);
     return parsed.isValid() ? parsed.format("DD/MM/YYYY") : value;
   };
+  const formatDisplayDateTime = (value?: string) => {
+    if (!value) return "";
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format("DD/MM/YYYY hh:mm A") : value;
+  };
+  const createdByLabel =
+    node?.createdByName?.trim() || node?.createdBy?.trim() || "";
   const parsePickerValue = useCallback((value?: string) => {
     if (!value) return null;
     const parsed = dayjs(value);
@@ -737,6 +744,16 @@ export const NodeDetails = memo(function NodeDetails({
                     Profile details
                   </Typography>
                   <Stack spacing={1.25}>
+                    {node.createdAt && (
+                      <Typography variant="body2">
+                        <strong>Created on:</strong> {formatDisplayDateTime(node.createdAt)}
+                      </Typography>
+                    )}
+                    {createdByLabel && (
+                      <Typography variant="body2">
+                        <strong>Created by:</strong> {createdByLabel}
+                      </Typography>
+                    )}
                     {node.dod && (
                       <Typography variant="body2">
                         <strong>Died:</strong> {node.dod}

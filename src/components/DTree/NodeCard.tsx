@@ -113,6 +113,20 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
+const DEVANAGARI_REGEX = /[\u0900-\u097F]/;
+const DEVANAGARI_FONT_STACK =
+  "'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Noto Sans Devanagari', 'Nirmala UI', 'Mangal', sans-serif";
+const DEFAULT_FONT_STACK =
+  "'Manrope', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+
+function normalizeDisplayText(text: string): string {
+  return text.normalize("NFC");
+}
+
+function hasDevanagari(text: string): boolean {
+  return DEVANAGARI_REGEX.test(text);
+}
+
 function formatDisplayDate(value?: string): string {
   if (!value) return "";
   const raw = String(value).trim();
@@ -159,7 +173,24 @@ function truncateText(text: string, maxWidth: number): string {
   const charWidth = 6.5; // Adjusted average width per character
   const maxChars = Math.floor(maxWidth / charWidth);
   if (text.length <= maxChars) return text;
-  return text.substring(0, maxChars - 1) + "…";
+
+  const normalizedText = normalizeDisplayText(text);
+  const safeMaxChars = Math.max(1, maxChars - 1);
+  const graphemes =
+    typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+      ? Array.from(
+          new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(
+            normalizedText,
+          ),
+          (segment) => segment.segment,
+        )
+      : Array.from(normalizedText);
+
+  if (graphemes.length <= maxChars) {
+    return normalizedText;
+  }
+
+  return graphemes.slice(0, safeMaxChars).join("") + "…";
 }
 
 function estimatePillWidth(label: string): number {
@@ -339,8 +370,12 @@ export function renderNodeCardSvg(
   
   const resolvedName =
     extra?.preferredName || name || extra?.nameEnglish || extra?.nameHindi || "";
-  const displayName = truncateText(resolvedName, textMaxWidth);
+  const normalizedName = normalizeDisplayText(resolvedName);
+  const displayName = truncateText(normalizedName, textMaxWidth);
   const escapedName = escapeXml(displayName);
+  const nameFontFamily = hasDevanagari(normalizedName)
+    ? DEVANAGARI_FONT_STACK
+    : DEFAULT_FONT_STACK;
 
   let svg = "";
 
@@ -422,7 +457,7 @@ export function renderNodeCardSvg(
   svg += renderStatusAvatarBadge(dim.img_x + dim.img_w - 2, dim.img_y + 3, isDeceased);
 
   svg += `<text x="${dim.text_x}" y="${dim.text_y}" `;
-  svg += `font-family="'Manrope', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" `;
+  svg += `font-family="${nameFontFamily}" `;
   svg += `font-size="14" font-weight="700" fill="${colors.text}" `;
   svg += `dominant-baseline="auto" cursor="pointer">`;
   svg += escapedName;

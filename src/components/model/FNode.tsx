@@ -10,6 +10,9 @@ export type FNode = ExtNode & {
   place?: string; // Place (birthplace or current location)
   notes?: string; // Additional notes
   photo?: string; // Photo URL
+  createdAt?: string; // Created timestamp
+  createdBy?: string; // User ID who created this person
+  createdByName?: string; // Display name/email of the creator
   customFields?: Record<string, string>; // Dynamic custom fields
   hierarchy?: Array<{ name: string; id: string }>; // Complete parent chain hierarchy
   treeId?: string; // Tree ID this node belongs to

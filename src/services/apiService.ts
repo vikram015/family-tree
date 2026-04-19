@@ -156,6 +156,8 @@ interface PersonWithRelations {
   treeId: string;
   createdAt?: string;
   modifiedAt?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents?: Array<{ id: string; type: RelationType }>;
   children?: Array<{ id: string; type: RelationType }>;
   spouses?: Array<{ id: string; type: RelationType }>;
@@ -185,6 +187,8 @@ interface CompleteTreeNode {
   gender: string;
   dob?: string;
   createdAt: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents: PersonWithRelations[];
   children: PersonWithRelations[];
   spouses: PersonWithRelations[];
@@ -200,6 +204,8 @@ interface AffectedNode {
   dob?: string;
   treeId: string;
   createdAt?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
   children: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
   spouses: Array<{ id: string; name?: string; gender?: string; dob?: string }>;

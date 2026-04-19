@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import type { VirtualElement } from "@popperjs/core";
 import { select } from "d3-selection";
 import { zoomIdentity, zoomTransform } from "d3-zoom";
@@ -136,40 +136,48 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     useState<TreeViewerLanguage>(initialLanguage);
   const [treeControlsAnchorEl, setTreeControlsAnchorEl] =
     useState<HTMLElement | null>(null);
-  const effectiveFeatures: Required<TreeViewerFeatureFlags> = {
-    allowToolbar: features?.allowToolbar ?? true,
-    allowShowFullTreeToggle: features?.allowShowFullTreeToggle ?? true,
-    allowShowSpousesToggle: features?.allowShowSpousesToggle ?? true,
-    allowLanguageToggle: features?.allowLanguageToggle ?? true,
-    allowFitControl: features?.allowFitControl ?? true,
-    allowCenterControl: features?.allowCenterControl ?? true,
-    allowHoverPreview: features?.allowHoverPreview ?? true,
-    allowMobileActions: features?.allowMobileActions ?? true,
-    allowPlaceholderActions: features?.allowPlaceholderActions ?? true,
-    allowExternalTreeNavigation: features?.allowExternalTreeNavigation ?? true,
-    allowEditAction: features?.allowEditAction ?? true,
-    allowDeleteAction: features?.allowDeleteAction ?? true,
-    allowViewDetailsAction: features?.allowViewDetailsAction ?? true,
-  };
-  const effectiveRenderers: TreeViewerRenderers = {
-    renderNodeCardSvg: renderers?.renderNodeCardSvg ?? ((name, extra, id, nodeClass, context) =>
-      renderNodeCardSvg(
-        name,
-        extra,
-        id,
-        nodeClass,
-        context.currentTreeId,
-        context.isMain,
-        context.isHighlighted,
-        context.isMobile,
-        context.canEditNode ?? true,
-      )),
-    renderPlaceholderCardSvg:
-      renderers?.renderPlaceholderCardSvg ?? renderPlaceholderCardSvg,
-    renderMarriageNodeSvg:
-      renderers?.renderMarriageNodeSvg ?? renderMarriageNodeSvg,
-    renderHoverContent: renderers?.renderHoverContent,
-  };
+  const effectiveFeatures: Required<TreeViewerFeatureFlags> = useMemo(
+    () => ({
+      allowToolbar: features?.allowToolbar ?? true,
+      allowShowFullTreeToggle: features?.allowShowFullTreeToggle ?? true,
+      allowShowSpousesToggle: features?.allowShowSpousesToggle ?? true,
+      allowLanguageToggle: features?.allowLanguageToggle ?? true,
+      allowFitControl: features?.allowFitControl ?? true,
+      allowCenterControl: features?.allowCenterControl ?? true,
+      allowHoverPreview: features?.allowHoverPreview ?? true,
+      allowMobileActions: features?.allowMobileActions ?? true,
+      allowPlaceholderActions: features?.allowPlaceholderActions ?? true,
+      allowExternalTreeNavigation: features?.allowExternalTreeNavigation ?? true,
+      allowEditAction: features?.allowEditAction ?? true,
+      allowDeleteAction: features?.allowDeleteAction ?? true,
+      allowViewDetailsAction: features?.allowViewDetailsAction ?? true,
+    }),
+    [features],
+  );
+  const effectiveRenderers: TreeViewerRenderers = useMemo(
+    () => ({
+      renderNodeCardSvg:
+        renderers?.renderNodeCardSvg ??
+        ((name, extra, id, nodeClass, context) =>
+          renderNodeCardSvg(
+            name,
+            extra,
+            id,
+            nodeClass,
+            context.currentTreeId,
+            context.isMain,
+            context.isHighlighted,
+            context.isMobile,
+            context.canEditNode ?? true,
+          )),
+      renderPlaceholderCardSvg:
+        renderers?.renderPlaceholderCardSvg ?? renderPlaceholderCardSvg,
+      renderMarriageNodeSvg:
+        renderers?.renderMarriageNodeSvg ?? renderMarriageNodeSvg,
+      renderHoverContent: renderers?.renderHoverContent,
+    }),
+    [renderers],
+  );
 
   // Catch the asynchronously loaded profile ID and apply it once.
   const hasAppliedInitialFocusRef = useRef(Boolean(initialMainId));

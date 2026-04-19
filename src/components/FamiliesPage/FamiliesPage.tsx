@@ -160,6 +160,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (!currentId || editable.has(currentId)) continue;
       editable.add(currentId);
       const current = nodeMap.get(currentId);
+      (current?.spouses || []).forEach((spouse) => {
+        if (spouse?.id) {
+          editable.add(spouse.id);
+        }
+      });
       (current?.children || []).forEach((child) => {
         if (child?.id && !editable.has(child.id)) {
           queue.push(child.id);
@@ -377,6 +382,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 })) || [],
               treeId: person.treeId || treeId,
               photo: person.photoUrl || undefined,
+              createdAt: person.createdAt || undefined,
+              createdBy: person.createdBy || undefined,
+              createdByName: person.createdByName || undefined,
               bloodGroup: person.bloodGroup || undefined,
               isAlive: person.isAlive !== false,
               deceasedDate: person.deceasedDate || undefined,
@@ -572,6 +580,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               })) || [],
             treeId: raw.treeId || treeId,
             photo: raw.photoUrl || undefined,
+            createdAt: raw.createdAt || undefined,
+            createdBy: raw.createdBy || undefined,
+            createdByName: raw.createdByName || undefined,
             bloodGroup: raw.bloodGroup || undefined,
             isAlive: raw.isAlive !== false,
             deceasedDate: raw.deceasedDate || undefined,
