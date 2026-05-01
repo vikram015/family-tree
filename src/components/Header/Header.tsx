@@ -3,11 +3,14 @@ import {
   AppBar,
   Autocomplete,
   Avatar,
+  Badge,
   Toolbar,
   Typography,
   IconButton,
   Button,
   Box,
+  Menu,
+  MenuItem,
   Drawer,
   List,
   ListItem,
@@ -21,6 +24,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
 import LogoutIcon from "@mui/icons-material/Logout";
+import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
@@ -32,6 +37,8 @@ export const Header: React.FC = () => {
   const [villagePickerOpen, setVillagePickerOpen] = useState(false);
   const [villageSearch, setVillageSearch] = useState("");
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
+  const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [actionableRequestCount, setActionableRequestCount] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
@@ -64,6 +71,46 @@ export const Header: React.FC = () => {
       active = false;
     };
   }, [userProfile?.peopleId]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadActionableRequests = async () => {
+      if (!currentUser) {
+        setActionableRequestCount(0);
+        return;
+      }
+
+      try {
+        const rows = await ApiService.getActionableLinkRequests();
+        if (!active) return;
+        setActionableRequestCount((rows || []).length);
+      } catch (error) {
+        if (!active) return;
+        console.warn("Failed to load actionable requests:", error);
+        setActionableRequestCount(0);
+      }
+    };
+
+    void loadActionableRequests();
+    window.addEventListener("link-requests-updated", loadActionableRequests);
+
+    return () => {
+      active = false;
+      window.removeEventListener("link-requests-updated", loadActionableRequests);
+    };
+  }, [currentUser, location.pathname]);
+
+  const hasPendingActionRequests = actionableRequestCount > 0;
+  const isAvatarMenuOpen = Boolean(avatarMenuAnchorEl);
+
+  const handleOpenAvatarMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAvatarMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseAvatarMenu = () => {
+    setAvatarMenuAnchorEl(null);
+  };
 
   const handleLogout = async () => {
     try {
@@ -144,27 +191,25 @@ export const Header: React.FC = () => {
         {currentUser ? (
           <>
             <Box
-              component={Link}
-              to="/profile"
-              onClick={() => setDrawerOpen(false)}
               sx={{
                 display: "flex",
                 alignItems: "center",
                 gap: 1,
                 mb: 2,
-                textDecoration: "none",
-                color: "inherit",
-                "&:hover": {
-                  textDecoration: "underline",
-                },
               }}
             >
-              <Avatar
-                src={linkedPersonPhoto || undefined}
-                sx={{ width: 32, height: 32 }}
+              <Badge
+                color="error"
+                overlap="circular"
+                variant={hasPendingActionRequests ? "dot" : undefined}
               >
-                {userProfile?.displayName?.charAt(0) || "U"}
-              </Avatar>
+                <Avatar
+                  src={linkedPersonPhoto || undefined}
+                  sx={{ width: 32, height: 32 }}
+                >
+                  {userProfile?.displayName?.charAt(0) || "U"}
+                </Avatar>
+              </Badge>
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
                   {userProfile?.displayName || "User"}
@@ -183,6 +228,33 @@ export const Header: React.FC = () => {
                 )}
               </Box>
             </Box>
+            <List disablePadding sx={{ mb: 2 }}>
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/requests"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <ListItemText
+                    primary="Requests"
+                    secondary={
+                      hasPendingActionRequests
+                        ? `${actionableRequestCount} pending request${actionableRequestCount === 1 ? "" : "s"}`
+                        : "No pending requests"
+                    }
+                  />
+                </ListItemButton>
+              </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/profile"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <ListItemText primary="Profile" />
+                </ListItemButton>
+              </ListItem>
+            </List>
             <Button
               fullWidth
               variant="outlined"
@@ -336,9 +408,8 @@ export const Header: React.FC = () => {
               {currentUser ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Button
-                    component={Link}
-                    to="/profile"
                     color="inherit"
+                    onClick={handleOpenAvatarMenu}
                     sx={{
                       textTransform: "none",
                       display: "flex",
@@ -347,12 +418,18 @@ export const Header: React.FC = () => {
                       mr: 1,
                     }}
                   >
-                    <Avatar
-                      src={linkedPersonPhoto || undefined}
-                      sx={{ width: 30, height: 30 }}
+                    <Badge
+                      color="error"
+                      overlap="circular"
+                      badgeContent={hasPendingActionRequests ? actionableRequestCount : 0}
                     >
-                      {userProfile?.displayName?.charAt(0) || "U"}
-                    </Avatar>
+                      <Avatar
+                        src={linkedPersonPhoto || undefined}
+                        sx={{ width: 30, height: 30 }}
+                      >
+                        {userProfile?.displayName?.charAt(0) || "U"}
+                      </Avatar>
+                    </Badge>
                     <Box sx={{ textAlign: "left" }}>
                       <Typography variant="body2" fontWeight={600}>
                         {userProfile?.displayName || "User"}
@@ -371,6 +448,33 @@ export const Header: React.FC = () => {
                       )}
                     </Box>
                   </Button>
+                  <Menu
+                    anchorEl={avatarMenuAnchorEl}
+                    open={isAvatarMenuOpen}
+                    onClose={handleCloseAvatarMenu}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                    transformOrigin={{ vertical: "top", horizontal: "right" }}
+                  >
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        navigate("/requests");
+                      }}
+                    >
+                      <NotificationsOutlinedIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Requests
+                      {hasPendingActionRequests ? ` (${actionableRequestCount})` : ""}
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        navigate("/profile");
+                      }}
+                    >
+                      <PersonOutlineIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Profile
+                    </MenuItem>
+                  </Menu>
                   <Button
                     color="inherit"
                     startIcon={<LogoutIcon />}
@@ -429,22 +533,28 @@ export const Header: React.FC = () => {
                 onClick={() => setDrawerOpen(!drawerOpen)}
                 sx={{ p: 0.25, ml: 1 }}
               >
-                <Avatar
-                  src={linkedPersonPhoto || undefined}
-                  sx={{
-                    width: 34,
-                    height: 34,
-                    border: "2px solid rgba(255,255,255,0.55)",
-                    bgcolor: "rgba(255,255,255,0.18)",
-                    color: "white",
-                    fontSize: 14,
-                    fontWeight: 700,
-                  }}
+                <Badge
+                  color="error"
+                  overlap="circular"
+                  variant={hasPendingActionRequests ? "dot" : undefined}
                 >
-                  {(userProfile?.displayName || currentUser?.email || "U")
-                    .charAt(0)
-                    .toUpperCase()}
-                </Avatar>
+                  <Avatar
+                    src={linkedPersonPhoto || undefined}
+                    sx={{
+                      width: 34,
+                      height: 34,
+                      border: "2px solid rgba(255,255,255,0.55)",
+                      bgcolor: "rgba(255,255,255,0.18)",
+                      color: "white",
+                      fontSize: 14,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {(userProfile?.displayName || currentUser?.email || "U")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Avatar>
+                </Badge>
               </IconButton>
             </>
           )}

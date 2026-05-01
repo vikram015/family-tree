@@ -91,6 +91,19 @@ function normalizeOnboardingResponse(
   };
 }
 
+function getResponseTimestamp(response: UserOnboardingResponse | null | undefined) {
+  const value = response?.modifiedAt || response?.createdAt || "";
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shouldApplyResponse(
+  current: UserOnboardingResponse | null,
+  incoming: UserOnboardingResponse,
+) {
+  return getResponseTimestamp(incoming) >= getResponseTimestamp(current);
+}
+
 export const fetchUserOnboarding = createAsyncThunk(
   "userOnboarding/fetch",
   async (_, { rejectWithValue }) => {
@@ -154,8 +167,10 @@ const userOnboardingSlice = createSlice({
       .addCase(fetchUserOnboarding.fulfilled, (state, action) => {
         state.loading = false;
         state.loaded = true;
-        state.row = action.payload;
-        state.effectiveOnboardingData = action.payload.effectiveOnboardingData;
+        if (shouldApplyResponse(state.row, action.payload)) {
+          state.row = action.payload;
+          state.effectiveOnboardingData = action.payload.effectiveOnboardingData;
+        }
       })
       .addCase(fetchUserOnboarding.rejected, (state, action) => {
         state.loading = false;

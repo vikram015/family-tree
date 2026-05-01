@@ -124,6 +124,7 @@ export const HomePage: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [continueTreeLoading, setContinueTreeLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const suppressMobileSearchOpenRef = useRef(false);
 
@@ -209,6 +210,45 @@ export const HomePage: React.FC = () => {
       navigate("/business");
     }
   };
+
+  const handleContinueToYourTree = useCallback(async () => {
+    if (!currentUser) {
+      navigate("/families");
+      return;
+    }
+
+    setContinueTreeLoading(true);
+
+    try {
+      if (userProfile?.peopleId) {
+        const person = await ApiService.getPersonById(userProfile.peopleId);
+        if (person?.treeId) {
+          const params = new URLSearchParams();
+          params.set("tree", person.treeId);
+          params.set("personId", userProfile.peopleId);
+          navigate(`/families?${params.toString()}`);
+          return;
+        }
+      }
+
+      const target = await ApiService.getDefaultUserTree();
+      if (target?.treeId) {
+        const params = new URLSearchParams();
+        params.set("tree", target.treeId);
+        if (target.personId) {
+          params.set("personId", target.personId);
+        }
+        navigate(`/families?${params.toString()}`);
+        return;
+      }
+    } catch (error) {
+      console.warn("Failed to resolve default user tree:", error);
+    } finally {
+      setContinueTreeLoading(false);
+    }
+
+    navigate("/families");
+  }, [currentUser, navigate, userProfile?.peopleId]);
 
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
@@ -457,8 +497,8 @@ export const HomePage: React.FC = () => {
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                 <Button
                   variant="contained"
-                  component={Link}
-                  to="/families"
+                  onClick={() => void handleContinueToYourTree()}
+                  disabled={continueTreeLoading}
                   endIcon={<ArrowForwardIcon />}
                   sx={{
                     fontWeight: 700,
@@ -466,7 +506,7 @@ export const HomePage: React.FC = () => {
                     "&:hover": { bgcolor: "#92400e" },
                   }}
                 >
-                  Continue Your Tree
+                  {continueTreeLoading ? "Opening..." : currentUser ? "Continue Your Tree" : "Explore Family Trees"}
                 </Button>
                 <Button
                   variant="outlined"
@@ -474,7 +514,7 @@ export const HomePage: React.FC = () => {
                   to="/business"
                   sx={{ fontWeight: 700, borderColor: "#0f766e", color: "#0f766e" }}
                 >
-                  Explore Family Network
+                  Explore Family Business
                 </Button>
               </Stack>
             </Paper>

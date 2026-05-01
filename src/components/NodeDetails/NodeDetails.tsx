@@ -26,6 +26,9 @@ import {
   Switch,
   Paper,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import dayjs, { Dayjs } from "dayjs";
@@ -38,6 +41,7 @@ import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import BloodtypeOutlinedIcon from "@mui/icons-material/BloodtypeOutlined";
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
@@ -53,6 +57,7 @@ const DatePicker = React.lazy(() =>
     default: m.DatePicker,
   })),
 );
+
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
 
 interface NodeDetailsProps {
@@ -805,16 +810,18 @@ export const NodeDetails = memo(function NodeDetails({
                     )}
                   </Stack>
                 </Paper>
-
-                {/* Ancestry */}
-                {node.hierarchy && node.hierarchy.length > 0 && (
-                  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ mb: 1, color: "primary.main" }}
-                    >
+                
+                <Accordion defaultExpanded={true} sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls="ancestry-content"
+                    id="ancestry-header"
+                  >
+                    <Typography>
                       Ancestry
                     </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
                     <Box sx={{ pl: 1.5, borderLeft: 2, borderColor: "divider" }}>
                       {node.hierarchy.map((ancestor, i) => (
                         <Typography
@@ -827,8 +834,8 @@ export const NodeDetails = memo(function NodeDetails({
                         </Typography>
                       ))}
                     </Box>
-                  </Paper>
-                )}
+                  </AccordionDetails>
+                </Accordion>
 
                 <Typography variant="subtitle2" color="text.secondary" sx={{ px: 0.5 }}>
                   Family connections

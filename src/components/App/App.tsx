@@ -30,6 +30,7 @@ import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
+import { PendingRequestsPage } from "../PendingRequestsPage";
 import { UserOnboardingPage } from "../UserOnboardingPage";
 import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
 
@@ -159,6 +160,7 @@ function AppContent() {
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             </Routes>
           </ErrorBoundary>

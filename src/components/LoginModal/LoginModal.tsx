@@ -319,6 +319,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 onChange={(e) => setOtp(e.target.value)}
                 placeholder="Enter verification code"
                 sx={{ mb: 2 }}
+                type="password"
                 disabled={loading}
               />
             )}

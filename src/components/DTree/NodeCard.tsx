@@ -127,6 +127,35 @@ function hasDevanagari(text: string): boolean {
   return DEVANAGARI_REGEX.test(text);
 }
 
+function encodeSvgTextContent(text: string): string {
+  let encoded = "";
+  for (const char of text) {
+    switch (char) {
+      case "&":
+        encoded += "&amp;";
+        break;
+      case "<":
+        encoded += "&lt;";
+        break;
+      case ">":
+        encoded += "&gt;";
+        break;
+      case '"':
+        encoded += "&quot;";
+        break;
+      case "'":
+        encoded += "&apos;";
+        break;
+      default: {
+        const codePoint = char.codePointAt(0);
+        if (codePoint == null) continue;
+        encoded += codePoint > 127 ? `&#x${codePoint.toString(16)};` : char;
+      }
+    }
+  }
+  return encoded;
+}
+
 function formatDisplayDate(value?: string): string {
   if (!value) return "";
   const raw = String(value).trim();
@@ -371,11 +400,15 @@ export function renderNodeCardSvg(
   const resolvedName =
     extra?.preferredName || name || extra?.nameEnglish || extra?.nameHindi || "";
   const normalizedName = normalizeDisplayText(resolvedName);
+  const isDevanagariName = hasDevanagari(normalizedName);
   const displayName = truncateText(normalizedName, textMaxWidth);
-  const escapedName = escapeXml(displayName);
-  const nameFontFamily = hasDevanagari(normalizedName)
+  const escapedName = encodeSvgTextContent(displayName);
+  const nameFontFamily = isDevanagariName
     ? DEVANAGARI_FONT_STACK
     : DEFAULT_FONT_STACK;
+  const nameLanguageAttrs = isDevanagariName
+    ? `lang="hi" xml:lang="hi" style="font-kerning: normal; font-feature-settings: 'abvm' 1, 'blwm' 1, 'akhn' 1, 'liga' 1, 'clig' 1, 'calt' 1; text-rendering: optimizeLegibility;"`
+    : "";
 
   let svg = "";
 
@@ -459,7 +492,7 @@ export function renderNodeCardSvg(
   svg += `<text x="${dim.text_x}" y="${dim.text_y}" `;
   svg += `font-family="${nameFontFamily}" `;
   svg += `font-size="14" font-weight="700" fill="${colors.text}" `;
-  svg += `dominant-baseline="auto" cursor="pointer">`;
+  svg += `dominant-baseline="auto" cursor="pointer" ${nameLanguageAttrs}>`;
   svg += escapedName;
   svg += `</text>`;
 

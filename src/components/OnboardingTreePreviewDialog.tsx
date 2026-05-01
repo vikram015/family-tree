@@ -10,10 +10,6 @@ import {
   Box,
   CircularProgress,
   Stack,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
   Alert,
   Paper,
   Tooltip,
@@ -21,7 +17,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { TransitionProps } from "@mui/material/transitions";
 import { DTreeComponent } from "./DTree/DTreeComponent";
-import { ApiService, LinkRequest } from "../services/apiService";
+import { ApiService, LinkRequest, TreeWriteScope } from "../services/apiService";
 import { FNode } from "./model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 
@@ -41,11 +37,24 @@ interface OnboardingTreePreviewDialogProps {
   treeName: string | null;
   personId: string | null;
   myLinkRequests?: LinkRequest[];
+  onRequestCompleted?: (input: {
+    requestType: "user_to_tree_node" | "branch_access_request";
+    treeId: string;
+    personId: string;
+  }) => Promise<void> | void;
 }
 
 export const OnboardingTreePreviewDialog: React.FC<
   OnboardingTreePreviewDialogProps
-> = ({ open, onClose, treeId, treeName, personId, myLinkRequests = [] }) => {
+> = ({
+  open,
+  onClose,
+  treeId,
+  treeName,
+  personId,
+  myLinkRequests = [],
+  onRequestCompleted,
+}) => {
   const [nodes, setNodes] = useState<FNode[]>([]);
   const [rootId, setRootId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -55,6 +64,7 @@ export const OnboardingTreePreviewDialog: React.FC<
   const [actionLoading, setActionLoading] = useState(false);
   const [actionSuccess, setActionSuccess] = useState("");
   const [actionError, setActionError] = useState("");
+  const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(null);
 
   useEffect(() => {
     if (!open || !treeId) {
@@ -67,6 +77,7 @@ export const OnboardingTreePreviewDialog: React.FC<
         }, 500); // Wait for transition
         return () => clearTimeout(timer);
       }
+      setTreeWriteScope(null);
       return;
     }
 
@@ -166,6 +177,29 @@ export const OnboardingTreePreviewDialog: React.FC<
     };
   }, [open, treeId]);
 
+  useEffect(() => {
+    if (!open || !treeId) {
+      return;
+    }
+
+    let active = true;
+
+    ApiService.getTreeWriteScope(treeId)
+      .then((scope) => {
+        if (!active) return;
+        setTreeWriteScope(scope);
+      })
+      .catch((err: any) => {
+        if (!active) return;
+        console.warn("Failed to load tree write scope:", err);
+        setTreeWriteScope({ treeId, canWriteAll: false, rootPersonIds: [] });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [open, treeId]);
+
   const handleNodeClick = (id: string) => {
     const node = nodes.find(n => n.id === id);
     if (!node) return;
@@ -181,6 +215,11 @@ export const OnboardingTreePreviewDialog: React.FC<
     try {
       await ApiService.createUserNodeLinkRequest({
         targetPersonId: selectedNode.id,
+      });
+      await onRequestCompleted?.({
+        requestType: "user_to_tree_node",
+        treeId,
+        personId: selectedNode.id,
       });
       setActionSuccess(`Successfully sent link request to ${selectedNode.name}.`);
     } catch (err: any) {
@@ -198,6 +237,11 @@ export const OnboardingTreePreviewDialog: React.FC<
       await ApiService.createBranchAccessRequest({
         targetTreeId: treeId,
         targetPersonId: selectedNode.id,
+      });
+      await onRequestCompleted?.({
+        requestType: "branch_access_request",
+        treeId,
+        personId: selectedNode.id,
       });
       setActionSuccess(
         `Successfully sent branch edit access request for ${selectedNode.name}'s branch.`,
@@ -231,6 +275,56 @@ export const OnboardingTreePreviewDialog: React.FC<
         req.status === "pending"
     );
   }, [selectedNode, myLinkRequests]);
+
+  const editableNodeIds = React.useMemo(() => {
+    if (!treeWriteScope || treeWriteScope.canWriteAll) {
+      return new Set(nodes.map((node) => node.id));
+    }
+
+    const editable = new Set<string>();
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const queue = [...treeWriteScope.rootPersonIds];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (!currentId || editable.has(currentId)) continue;
+
+      editable.add(currentId);
+      const current = nodeMap.get(currentId);
+
+      (current?.spouses || []).forEach((spouse) => {
+        if (spouse?.id) {
+          editable.add(spouse.id);
+        }
+      });
+
+      (current?.children || []).forEach((child) => {
+        if (child?.id && !editable.has(child.id)) {
+          queue.push(child.id);
+        }
+      });
+    }
+
+    return editable;
+  }, [nodes, treeWriteScope]);
+
+  const hasSelectedBranchAccess = React.useMemo(() => {
+    if (!selectedNode || !treeWriteScope) return false;
+    if (treeWriteScope.canWriteAll) return true;
+    return editableNodeIds.has(selectedNode.id);
+  }, [editableNodeIds, selectedNode, treeWriteScope]);
+
+  const branchAccessStatusMessage = React.useMemo(() => {
+    if (!selectedNode || !hasSelectedBranchAccess) {
+      return "";
+    }
+
+    if (treeWriteScope?.canWriteAll) {
+      return "You already have edit access to this entire tree.";
+    }
+
+    return `You already have edit access to ${selectedNode.name}'s branch.`;
+  }, [hasSelectedBranchAccess, selectedNode, treeWriteScope?.canWriteAll]);
 
   return (
     <>
@@ -349,6 +443,12 @@ export const OnboardingTreePreviewDialog: React.FC<
                   </Alert>
                 )}
 
+                {branchAccessStatusMessage && (
+                  <Alert severity="success" sx={{ mb: 2 }}>
+                    {branchAccessStatusMessage}
+                  </Alert>
+                )}
+
                 {!actionSuccess && (
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                     <Tooltip title={isLinkRequested ? "You already have a pending link request" : ""} placement="top" arrow>
@@ -364,16 +464,36 @@ export const OnboardingTreePreviewDialog: React.FC<
                       </span>
                     </Tooltip>
                     
-                    <Tooltip title={isBranchAccessRequested ? "You have already requested edit access for this branch" : ""} placement="top" arrow>
+                    <Tooltip
+                      title={
+                        hasSelectedBranchAccess
+                          ? branchAccessStatusMessage
+                          : isBranchAccessRequested
+                            ? "You have already requested edit access for this branch"
+                            : ""
+                      }
+                      placement="top"
+                      arrow
+                    >
                       <span style={{ display: 'block', width: '100%' }}>
                         <Button
                           variant="contained"
                           color="primary"
                           fullWidth
                           onClick={handleCreateBranchAccessRequest}
-                          disabled={actionLoading || isBranchAccessRequested}
+                          disabled={
+                            actionLoading ||
+                            isBranchAccessRequested ||
+                            hasSelectedBranchAccess
+                          }
                         >
-                          {actionLoading ? "Sending..." : isBranchAccessRequested ? "Access Requested" : "Request branch access"}
+                          {actionLoading
+                            ? "Sending..."
+                            : hasSelectedBranchAccess
+                              ? "Already have access"
+                              : isBranchAccessRequested
+                                ? "Access Requested"
+                                : "Request branch access"}
                         </Button>
                       </span>
                     </Tooltip>

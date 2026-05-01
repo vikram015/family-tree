@@ -49,7 +49,7 @@ export const Relations = memo(function Relations({
   };
 
   return (
-    <Accordion>
+    <Accordion sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
       <AccordionSummary
         expandIcon={<ExpandMoreIcon />}
         aria-controls={`rel-list-${title}`}

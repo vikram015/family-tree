@@ -68,6 +68,8 @@ const STEP_INDEX: Record<string, number> = {
   complete: 2,
 };
 
+type OnboardingHistoryStep = "profile" | "location" | "match";
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -170,6 +172,9 @@ export const UserOnboardingPage: React.FC = () => {
   const previewPersonId = searchParams.get("previewPersonId");
   const [stepOverride, setStepOverride] = useState<null | "profile" | "location" | "match">(null);
   const hydratedSnapshotRef = useRef("");
+  const historyInitializedRef = useRef(false);
+  const historyStepRef = useRef<OnboardingHistoryStep | null>(null);
+  const previewOpenedFromOnboardingRef = useRef(false);
   const lastSearchKeyRef = useRef("");
   const locationRequestIdRef = useRef(0);
   const previousSelectedCasteRef = useRef("");
@@ -201,6 +206,10 @@ export const UserOnboardingPage: React.FC = () => {
       ),
     [subCastes, selectedCasteId],
   );
+  const trimmedLocationQuery = locationInputValue.trim();
+  const shouldShowLocationSuggestions =
+    trimmedLocationQuery.length >= 2 &&
+    selectedLocationOption?.label !== locationInputValue;
 
   const selectedCaste = useMemo(
     () => castes.find((caste: any) => caste.id === selectedCasteId) || null,
@@ -222,6 +231,62 @@ export const UserOnboardingPage: React.FC = () => {
       ) || null,
     [myLinkRequests],
   );
+
+  const normalizeHistoryStep = (
+    step?: string | null,
+  ): OnboardingHistoryStep => {
+    if (step === "location" || step === "match") {
+      return step;
+    }
+
+    return "profile";
+  };
+
+  const updateHistoryStep = (
+    step: OnboardingHistoryStep,
+    mode: "push" | "replace",
+  ) => {
+    const nextState = {
+      ...(window.history.state || {}),
+      onboardingFlow: "user-onboarding",
+      onboardingStep: step,
+    };
+
+    if (mode === "replace") {
+      window.history.replaceState(nextState, "", window.location.href);
+    } else {
+      window.history.pushState(nextState, "", window.location.href);
+    }
+
+    historyStepRef.current = step;
+  };
+
+  const openPreview = (treeId: string, treeName?: string | null, personId?: string | null) => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("previewTreeId", treeId);
+    newParams.set("previewTreeName", treeName || "");
+    if (personId) {
+      newParams.set("previewPersonId", personId);
+    } else {
+      newParams.delete("previewPersonId");
+    }
+    previewOpenedFromOnboardingRef.current = true;
+    setSearchParams(newParams);
+  };
+
+  const closePreview = () => {
+    if (previewOpenedFromOnboardingRef.current) {
+      previewOpenedFromOnboardingRef.current = false;
+      navigate(-1);
+      return;
+    }
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete("previewTreeId");
+    newParams.delete("previewTreeName");
+    newParams.delete("previewPersonId");
+    setSearchParams(newParams, { replace: true });
+  };
 
   useEffect(() => {
     if (!currentUser || loading || userProfile?.role !== "admin") {
@@ -287,6 +352,68 @@ export const UserOnboardingPage: React.FC = () => {
       active = false;
     };
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!onboardingLoaded || historyInitializedRef.current) {
+      return;
+    }
+
+    const initialStep = normalizeHistoryStep(onboarding.currentStep);
+    updateHistoryStep("profile", "replace");
+
+    if (initialStep === "location" || initialStep === "match") {
+      updateHistoryStep("location", "push");
+    }
+
+    if (initialStep === "match") {
+      updateHistoryStep("match", "push");
+    }
+
+    historyInitializedRef.current = true;
+  }, [onboarding.currentStep, onboardingLoaded]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (!historyInitializedRef.current) {
+        return;
+      }
+
+      const targetStep = event.state?.onboardingStep as OnboardingHistoryStep | undefined;
+      const targetFlow = event.state?.onboardingFlow;
+
+      if (targetFlow !== "user-onboarding" || !targetStep) {
+        return;
+      }
+
+      historyStepRef.current = targetStep;
+      setLocalError("");
+      setStepOverride(targetStep);
+
+      if (targetStep === "location") {
+        lastSearchKeyRef.current = "";
+      }
+
+      void dispatch(
+        updateUserOnboarding({
+          currentStep: targetStep,
+        }),
+      )
+        .unwrap()
+        .catch((error: any) => {
+          setStepOverride(null);
+          setLocalError(error?.message || "Failed to update onboarding step.");
+        });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!previewTreeId) {
+      previewOpenedFromOnboardingRef.current = false;
+    }
+  }, [previewTreeId]);
 
   useEffect(() => {
     const snapshot = JSON.stringify(onboarding);
@@ -521,6 +648,7 @@ export const UserOnboardingPage: React.FC = () => {
           },
         }),
       ).unwrap();
+      updateHistoryStep("location", "push");
       setMatchSearchName(trimmedName);
       dispatch(clearUserOnboardingMatches());
     } catch (error: any) {
@@ -564,6 +692,7 @@ export const UserOnboardingPage: React.FC = () => {
           },
         }),
       ).unwrap();
+      updateHistoryStep("match", "push");
       lastSearchKeyRef.current = JSON.stringify({
         villageId: selectedVillageId,
         casteId: selectedCasteId || null,
@@ -593,6 +722,7 @@ export const UserOnboardingPage: React.FC = () => {
           currentStep: "location",
         }),
       ).unwrap();
+      updateHistoryStep("location", "push");
     } catch (error: any) {
       setStepOverride(null);
       setLocalError(error?.message || "Failed to return to location.");
@@ -640,25 +770,56 @@ export const UserOnboardingPage: React.FC = () => {
     }
   };
 
-  const handleCreateLinkRequest = async (personId: string) => {
+  const handleCreateLinkRequest = async (personId: string, treeId: string) => {
     setLocalError("");
     setLinkRequestSuccess("");
     setLinkRequestSubmittingPersonId(personId);
 
     try {
-      const created = await ApiService.createUserNodeLinkRequest({
+      await ApiService.createUserNodeLinkRequest({
         targetPersonId: personId,
       });
-      const rows = await ApiService.getMyLinkRequests("user_to_tree_node");
-      setMyLinkRequests(rows || []);
-      setLinkRequestSuccess(
-        `Link request sent for ${created.targetPersonName || "the selected profile"}. A tree reviewer can approve or reject it.`,
-      );
+      await handleOnboardingRequestCompleted({
+        requestType: "user_to_tree_node",
+        treeId,
+        personId,
+      });
     } catch (error: any) {
       setLocalError(error?.message || "Failed to create link request.");
     } finally {
       setLinkRequestSubmittingPersonId(null);
     }
+  };
+
+  const handleOnboardingRequestCompleted = async (input: {
+    requestType: "user_to_tree_node" | "branch_access_request";
+    treeId: string;
+    personId: string;
+  }) => {
+    const targetUrl = input.treeId
+      ? `/families?tree=${encodeURIComponent(input.treeId)}&personId=${encodeURIComponent(
+          input.personId,
+        )}`
+      : "/families";
+
+    await dispatch(
+      updateUserOnboarding({
+        status: "completed",
+        currentStep: "complete",
+        match: {
+          ...onboarding.match,
+          selectedTreeId: input.treeId,
+          selectedPersonId: input.personId,
+          action: "link",
+        },
+        completion: {
+          completedAt: nowIso(),
+          result: "linked",
+        },
+      }),
+    ).unwrap();
+    await dispatch(fetchUserOnboarding()).unwrap();
+    navigate(targetUrl, { replace: true });
   };
 
   const handleOpenCreateTree = async () => {
@@ -730,11 +891,7 @@ export const UserOnboardingPage: React.FC = () => {
               }}
               onClick={(e) => {
                 e.stopPropagation();
-                const newParams = new URLSearchParams(searchParams);
-                newParams.set("previewTreeId", tree.treeId);
-                newParams.set("previewTreeName", tree.treeName || "");
-                newParams.delete("previewPersonId");
-                setSearchParams(newParams, { replace: true });
+                openPreview(tree.treeId, tree.treeName);
               }}
             >
               {tree.treeName}
@@ -816,11 +973,7 @@ export const UserOnboardingPage: React.FC = () => {
                         "&:hover": { textDecoration: "underline" },
                       }}
                       onClick={() => {
-                        const newParams = new URLSearchParams(searchParams);
-                        newParams.set("previewTreeId", tree.treeId);
-                        newParams.set("previewTreeName", tree.treeName || "");
-                        newParams.set("previewPersonId", person.personId);
-                        setSearchParams(newParams, { replace: true });
+                        openPreview(tree.treeId, tree.treeName, person.personId);
                       }}
                     >
                       {renderHighlightedText(person.name, searchDisplayName)}
@@ -923,7 +1076,9 @@ export const UserOnboardingPage: React.FC = () => {
                         isPendingForThisPerson ||
                         isBlockedByAnotherPendingRequest
                       }
-                      onClick={() => void handleCreateLinkRequest(person.personId)}
+                      onClick={() =>
+                        void handleCreateLinkRequest(person.personId, tree.treeId)
+                      }
                     >
                       {linkRequestSubmittingPersonId === person.personId
                         ? "Sending..."
@@ -1069,11 +1224,18 @@ export const UserOnboardingPage: React.FC = () => {
                       <Autocomplete
                         options={locationOptions}
                         value={selectedLocationOption}
+                        open={shouldShowLocationSuggestions}
                         loading={locationLoading}
+                        forcePopupIcon={false}
                         filterOptions={(options) => options}
                         getOptionLabel={(option) => option.label}
                         isOptionEqualToValue={(option, value) =>
                           option.villageId === value.villageId
+                        }
+                        noOptionsText={
+                          trimmedLocationQuery.length < 2
+                            ? "Start typing to search locations"
+                            : "No matching locations"
                         }
                         inputValue={locationInputValue}
                         onInputChange={(_event, value, reason) => {
@@ -1453,13 +1615,8 @@ export const UserOnboardingPage: React.FC = () => {
         treeName={previewTreeName}
         personId={previewPersonId}
         myLinkRequests={myLinkRequests}
-        onClose={() => {
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete("previewTreeId");
-          newParams.delete("previewTreeName");
-          newParams.delete("previewPersonId");
-          setSearchParams(newParams, { replace: true });
-        }}
+        onRequestCompleted={handleOnboardingRequestCompleted}
+        onClose={closePreview}
       />
     </>
   );

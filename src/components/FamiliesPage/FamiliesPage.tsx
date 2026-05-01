@@ -114,6 +114,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteAccepting, setInviteAccepting] = useState(false);
   const [pendingLinkRequests, setPendingLinkRequests] = useState<LinkRequest[]>([]);
+  const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
   const [linkRequestsLoading, setLinkRequestsLoading] = useState(false);
   const [reviewingLinkRequestId, setReviewingLinkRequestId] = useState<string | null>(
     null,
@@ -195,7 +196,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setLinkRequestsLoading(true);
       setLinkRequestReviewError("");
       const rows = await ApiService.getPendingTreeLinkRequests(treeId);
-      setPendingLinkRequests(rows || []);
+      setPendingLinkRequests(
+        (rows || []).filter((request) => request.requesterUserId !== currentUser?.uid),
+      );
     } catch (error: any) {
       console.error("Failed to load pending link requests:", error);
       setPendingLinkRequests([]);
@@ -243,6 +246,34 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   useEffect(() => {
     void loadPendingLinkRequests();
   }, [loadPendingLinkRequests]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!currentUser) {
+      setMyPendingRequests([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    ApiService.getMyLinkRequests()
+      .then((rows) => {
+        if (!active) return;
+        setMyPendingRequests(
+          (rows || []).filter((request) => request.status === "pending"),
+        );
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.warn("Failed to load my pending link requests:", error);
+        setMyPendingRequests([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     if (!inviteToken || loading) {
@@ -956,6 +987,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           `Profile link request ${action === "approved" ? "approved" : "rejected"} successfully.`,
         );
         await loadPendingLinkRequests();
+        window.dispatchEvent(new Event("link-requests-updated"));
       } catch (error: any) {
         console.error("Failed to review link request:", error);
         setLinkRequestReviewError(
@@ -1112,6 +1144,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const statusAlerts = useMemo<StatusAlert[]>(
     () =>
       [
+        ...myPendingRequests.map((request) => ({
+          key: `my-pending-request-${request.id}`,
+          severity: "info" as const,
+          text:
+            request.requestType === "branch_access_request"
+              ? `Your branch access request for ${request.targetPersonName || "the selected branch"} in ${request.targetTreeName || "this tree"} is pending review.`
+              : `Your profile link request for ${request.targetPersonName || "the selected profile"} in ${request.targetTreeName || "this tree"} is pending review.`,
+        })),
         isAdmin() && !isApproved
           ? {
               key: "pending-approval",
@@ -1127,7 +1167,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             }
           : null,
       ].filter(Boolean) as StatusAlert[],
-    [isAdmin, isApproved, inviteAccepting],
+    [isAdmin, isApproved, inviteAccepting, myPendingRequests],
   );
 
   const statCards = useMemo(

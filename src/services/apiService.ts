@@ -138,6 +138,7 @@ export interface LinkRequest {
   targetTreeId: string | null;
   targetTreeName: string | null;
   requestMessage: string | null;
+  requesterPhone: string | null;
   reviewNote: string | null;
   reviewedBy: string | null;
   reviewedByName: string | null;
@@ -281,6 +282,11 @@ export interface TreeWriteScope {
   treeId: string;
   canWriteAll: boolean;
   rootPersonIds: string[];
+}
+
+export interface DefaultUserTreeTarget {
+  treeId: string;
+  personId: string | null;
 }
 
 export interface TreeInvite {
@@ -621,6 +627,10 @@ export const ApiService = {
     return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
   },
 
+  async getDefaultUserTree(): Promise<DefaultUserTreeTarget> {
+    return backendApi.get<DefaultUserTreeTarget>("/api/tree/my/default");
+  },
+
   async getTreeInvites(treeId: string): Promise<TreeInvite[]> {
     return backendApi.get<TreeInvite[]>(`/api/tree/${treeId}/invites`);
   },
@@ -953,6 +963,10 @@ export const ApiService = {
 
   async getPendingTreeLinkRequests(treeId: string): Promise<LinkRequest[]> {
     return backendApi.get<LinkRequest[]>(`/api/link-requests/tree/${treeId}/pending`);
+  },
+
+  async getActionableLinkRequests(): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>("/api/link-requests/actionable");
   },
 
   async reviewLinkRequest(
