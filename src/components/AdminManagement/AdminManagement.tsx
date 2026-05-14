@@ -124,6 +124,9 @@ export const AdminManagement: React.FC = () => {
   const [selectedVillages, setSelectedVillages] = useState<string[]>([]);
   const [error, setError] = useState<string>("");
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [openingLinkedUserId, setOpeningLinkedUserId] = useState<string | null>(
+    null,
+  );
 
   // Add dialog states
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -224,6 +227,36 @@ export const AdminManagement: React.FC = () => {
     setSelectedParentId("");
     setAddDialogOpen(true);
   };
+
+  const handleOpenLinkedTree = React.useCallback(
+    async (user: AppUser) => {
+      if (!user.peopleId) return;
+
+      try {
+        setOpeningLinkedUserId(user.id);
+        setError("");
+
+        const person = await ApiService.getPersonById(user.peopleId);
+        const treeId = person?.treeId;
+
+        if (!treeId) {
+          setError("Linked person record was found, but no tree could be opened.");
+          return;
+        }
+
+        const params = new URLSearchParams();
+        params.set("tree", treeId);
+        params.set("personId", user.peopleId);
+        navigate(`/families?${params.toString()}`);
+      } catch (err) {
+        console.error("Error opening linked tree:", err);
+        setError("Failed to open the linked family tree.");
+      } finally {
+        setOpeningLinkedUserId((current) => (current === user.id ? null : current));
+      }
+    },
+    [navigate],
+  );
 
   const handleAddConfirm = async () => {
     if (!newName.trim()) {
@@ -454,11 +487,6 @@ export const AdminManagement: React.FC = () => {
             id="admin-tab-0"
             aria-controls="admin-tabpanel-0"
           />
-          <Tab
-            label="Village Requests"
-            id="admin-tab-1"
-            aria-controls="admin-tabpanel-1"
-          />
           {isSuperAdmin() && (
             <Tab
               label="States"
@@ -515,10 +543,9 @@ export const AdminManagement: React.FC = () => {
                   <TableCell>Name</TableCell>
                   <TableCell>Phone</TableCell>
                   <TableCell>Role</TableCell>
-                  <TableCell>Villages</TableCell>
                   <TableCell>Linked Node</TableCell>
                   <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
+                  <TableCell sx={{ textAlign: "right"}}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -539,33 +566,15 @@ export const AdminManagement: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell>
-                      {user.role === "superadmin" ? (
-                        <Chip label="All Villages" size="small" />
-                      ) : user.villages && user.villages.length > 0 ? (
-                        <Box
-                          sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}
-                        >
-                          {user.villages.map((v) => {
-                            const villageName =
-                              villagesList.find((vl) => vl.id === v)?.name || v;
-                            return (
-                              <Chip key={v} label={villageName} size="small" />
-                            );
-                          })}
-                        </Box>
-                      ) : (
-                        <Typography variant="caption" color="text.secondary">
-                          No villages assigned
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       {(user as any).peopleId ? (
                         <Chip
                           label="Linked"
                           color="info"
                           size="small"
                           variant="outlined"
+                          clickable
+                          disabled={openingLinkedUserId === user.id}
+                          onClick={() => handleOpenLinkedTree(user)}
                         />
                       ) : (
                         <Typography variant="caption" color="text.secondary">
@@ -591,6 +600,7 @@ export const AdminManagement: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell>
+                      <Box sx={{textAlign: "right" }}>
                       {isSuperAdmin() && !user.isVerified && (
                         <Tooltip title="Approve User">
                           <IconButton
@@ -599,28 +609,6 @@ export const AdminManagement: React.FC = () => {
                             onClick={() => handleVerifyUser(user.id)}
                           >
                             <CheckCircle />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {isSuperAdmin() && (
-                        <Tooltip title="Edit Villages">
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleEditVillagesClick(user)}
-                            disabled={user.role !== "admin"}
-                          >
-                            <LocationOn />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      {isSuperAdmin() && (
-                        <Tooltip title="Edit">
-                          <IconButton
-                            size="small"
-                            onClick={() => handleEditClick(user)}
-                          >
-                            <Edit />
                           </IconButton>
                         </Tooltip>
                       )}
@@ -636,6 +624,7 @@ export const AdminManagement: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                       )}
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -643,69 +632,6 @@ export const AdminManagement: React.FC = () => {
             </Table>
           </TableContainer>
         </TabPanel>
-
-        {/* Village Requests Tab */}
-        <TabPanel value={tabValue} index={1}>
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="h6">
-              Pending Village Access Requests
-            </Typography>
-          </Box>
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 760 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Requester</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Village</TableCell>
-                  <TableCell>Message</TableCell>
-                  <TableCell>Requested At</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {pendingRequests.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <Typography color="text.secondary">
-                        No pending requests
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-                {pendingRequests.map((req) => (
-                  <TableRow key={req.id}>
-                    <TableCell>{req.requesterName || "-"}</TableCell>
-                    <TableCell>{req.requesterEmail || "-"}</TableCell>
-                    <TableCell>{req.villageName || req.villageId}</TableCell>
-                    <TableCell>{req.requestMessage || "-"}</TableCell>
-                    <TableCell>{formatDate(req.createdAt)}</TableCell>
-                    <TableCell>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="success"
-                        onClick={() => handleReviewRequest(req.id, "approved")}
-                        sx={{ mr: 1 }}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        onClick={() => handleReviewRequest(req.id, "rejected")}
-                      >
-                        Reject
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </TabPanel>
-
         {/* States Tab */}
         <TabPanel value={tabValue} index={2}>
           {!isSuperAdmin() ? (
@@ -1089,4 +1015,3 @@ export const AdminManagement: React.FC = () => {
     </Container>
   );
 };
-

@@ -824,22 +824,12 @@ export const UserOnboardingPage: React.FC = () => {
 
   const handleOpenCreateTree = async () => {
     setLocalError("");
-    await dispatch(
-      updateUserOnboarding({
-        match: {
-          action: "create_tree",
-          searchName:
-            onboarding.match.searchName || profileName || userProfile?.name || "",
-          searchedAt: onboarding.match.searchedAt || nowIso(),
-        },
-      }),
-    ).unwrap();
     setCreateTreeOpen(true);
   };
 
   const handleTreeCreated = async (treeId: string) => {
     setCreateTreeOpen(false);
-    await dispatch(
+    const resp = await dispatch(
       updateUserOnboarding({
         status: "completed",
         currentStep: "complete",
@@ -854,6 +844,10 @@ export const UserOnboardingPage: React.FC = () => {
         },
       }),
     ).unwrap();
+    console.log("Updated onboarding after tree creation:", resp);
+    if (selectedVillageId) {
+      setSelectedVillage(selectedVillageId);
+    }
     navigate(`/families?tree=${encodeURIComponent(treeId)}&createRoot=1`, {
       replace: true,
     });
