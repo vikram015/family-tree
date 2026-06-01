@@ -17,10 +17,16 @@ import {
   useMediaQuery,
   useTheme,
   createFilterOptions,
+  InputAdornment,
   type FilterOptionsState,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
+import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
@@ -64,6 +70,28 @@ const filter = createFilterOptions<AutocompleteOption>();
 function isCreateOption(option: AutocompleteOption): option is CreateOption {
   return "isCreateOption" in option;
 }
+
+const inputIconSx = { color: "text.secondary" } as const;
+const inputWithIconSx = {
+  "& .MuiInputAdornment-root": inputIconSx,
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 2,
+  },
+} as const;
+
+const adornment = (icon: React.ReactNode) => (
+  <InputAdornment position="start">{icon}</InputAdornment>
+);
+
+const autocompleteStartAdornment = (
+  icon: React.ReactNode,
+  params: { InputProps: { startAdornment?: React.ReactNode } },
+) => (
+  <>
+    {adornment(icon)}
+    {params.InputProps.startAdornment}
+  </>
+);
 
 function renderLookupOption(
   props: React.HTMLAttributes<HTMLLIElement> & { key: React.Key },
@@ -507,6 +535,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
                 label="Village"
                 placeholder="Search village..."
                 variant="outlined"
+                sx={inputWithIconSx}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: autocompleteStartAdornment(
+                    <LocationOnOutlinedIcon fontSize="small" />,
+                    params,
+                  ),
+                }}
               />
             )}
             sx={{ mt: 1, mb: 2 }}
@@ -522,7 +558,12 @@ export const AddTree: React.FC<AddTreeProps> = ({
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
-            sx={{ mt: 1, mb: 2 }}
+            sx={[{ mt: 1, mb: 2 }, inputWithIconSx]}
+            InputProps={{
+              startAdornment: adornment(
+                <AccountTreeOutlinedIcon fontSize="small" />,
+              ),
+            }}
           />
 
           <Autocomplete
@@ -567,6 +608,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
                 placeholder="Search or create caste..."
                 variant="outlined"
                 required
+                sx={inputWithIconSx}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: autocompleteStartAdornment(
+                    <GroupsOutlinedIcon fontSize="small" />,
+                    params,
+                  ),
+                }}
               />
             )}
             sx={{ mb: 2 }}
@@ -618,6 +667,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
                 }
                 variant="outlined"
                 required
+                sx={inputWithIconSx}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: autocompleteStartAdornment(
+                    <BadgeOutlinedIcon fontSize="small" />,
+                    params,
+                  ),
+                }}
               />
             )}
             sx={{ mb: 2 }}
@@ -634,7 +691,12 @@ export const AddTree: React.FC<AddTreeProps> = ({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             disabled={loading}
-            sx={{ mb: 2 }}
+            sx={[{ mb: 2 }, inputWithIconSx]}
+            InputProps={{
+              startAdornment: adornment(
+                <DescriptionOutlinedIcon fontSize="small" />,
+              ),
+            }}
           />
 
           {error && (
