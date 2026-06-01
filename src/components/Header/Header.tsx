@@ -301,12 +301,20 @@ export const Header: React.FC = () => {
       >
         <Toolbar>
           <Box
+            component={Link}
+            to="/"
             sx={{
               flexGrow: 0,
               mr: 2,
               display: "flex",
               alignItems: "center",
               gap: 1.25,
+              textDecoration: "none",
+              color: "inherit",
+              borderRadius: 1,
+              "&:hover": {
+                opacity: 0.85,
+              },
             }}
           >
             <Box
