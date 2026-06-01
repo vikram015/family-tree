@@ -17,15 +17,18 @@ import {
   useTheme,
   useMediaQuery,
   Dialog,
+  InputAdornment,
   ListItemButton,
   ListItemText,
   TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
 import LogoutIcon from "@mui/icons-material/Logout";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
@@ -285,7 +288,17 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <AppBar position="static" color="primary">
+      <AppBar
+        position="static"
+        color="default"
+        elevation={0}
+        sx={{
+          bgcolor: "#ffffff",
+          color: "#0f172a",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
         <Toolbar>
           <Box
             sx={{
@@ -306,7 +319,7 @@ export const Header: React.FC = () => {
                 p: "5px",
                 borderRadius: 2.5,
                 overflow: "hidden",
-                boxShadow: "0 10px 24px rgba(7, 28, 68, 0.22)",
+                boxShadow: "none",
                 backgroundColor: "#ffffff",
               }}
             >
@@ -345,8 +358,12 @@ export const Header: React.FC = () => {
                   sx={{
                     fontWeight: isActive(link.path) ? "bold" : "normal",
                     borderBottom: isActive(link.path)
-                      ? "2px solid white"
+                      ? "2px solid #0d6efd"
                       : "none",
+                    color: isActive(link.path) ? "#0d6efd" : "#334155",
+                    "&:hover": {
+                      bgcolor: "rgba(13,110,253,0.06)",
+                    },
                   }}
                 >
                   {link.label}
@@ -370,25 +387,25 @@ export const Header: React.FC = () => {
                 minWidth: 240,
                 ml: 2,
                 "& .MuiOutlinedInput-root": {
-                  color: "white",
+                  color: "#0f172a",
                   "& fieldset": {
-                    borderColor: "rgba(255, 255, 255, 0.5)",
+                    borderColor: "rgba(15,23,42,0.2)",
                   },
                   "&:hover fieldset": {
-                    borderColor: "rgba(255, 255, 255, 0.8)",
+                    borderColor: "rgba(13,110,253,0.65)",
                   },
                   "&.Mui-focused fieldset": {
-                    borderColor: "white",
+                    borderColor: "#0d6efd",
                   },
                 },
                 "& .MuiInputLabel-root": {
-                  color: "rgba(255,255,255,0.8)",
+                  color: "#475569",
                 },
                 "& .MuiSvgIcon-root": {
-                  color: "white",
+                  color: "#475569",
                 },
                 "& .MuiAutocomplete-input::placeholder": {
-                  color: "rgba(255,255,255,0.8)",
+                  color: "#64748b",
                   opacity: 1,
                 },
               }}
@@ -397,6 +414,17 @@ export const Header: React.FC = () => {
                   {...params}
                   size="small"
                   placeholder={villages.length === 0 ? "Loading..." : "Search village"}
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <InputAdornment position="start">
+                          <LocationOnIcon fontSize="small" />
+                        </InputAdornment>
+                        {params.InputProps.startAdornment}
+                      </>
+                    ),
+                  }}
                 />
               )}
             />
@@ -430,23 +458,17 @@ export const Header: React.FC = () => {
                         {userProfile?.displayName?.charAt(0) || "U"}
                       </Avatar>
                     </Badge>
-                    <Box sx={{ textAlign: "left" }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {userProfile?.displayName || "User"}
-                      </Typography>
-                      {userProfile?.role && (
-                        <Typography
-                          variant="caption"
-                          color="rgba(255, 255, 255, 0.7)"
-                          display="block"
-                          sx={{ fontWeight: 600, mt: 0.25 }}
-                        >
-                          {userProfile.role === "superadmin"
-                            ? "Super Admin"
-                            : "Admin"}
-                        </Typography>
-                      )}
-                    </Box>
+                    <Typography variant="body2" fontWeight={600} sx={{ textAlign: "left" }}>
+                      {userProfile?.displayName || "User"}
+                    </Typography>
+                    <ArrowDropDownIcon
+                      sx={{
+                        fontSize: 22,
+                        color: "text.secondary",
+                        transition: "transform 0.2s",
+                        transform: isAvatarMenuOpen ? "rotate(180deg)" : "none",
+                      }}
+                    />
                   </Button>
                   <Menu
                     anchorEl={avatarMenuAnchorEl}
@@ -474,16 +496,16 @@ export const Header: React.FC = () => {
                       <PersonOutlineIcon fontSize="small" sx={{ mr: 1.25 }} />
                       Profile
                     </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        handleLogout();
+                      }}
+                    >
+                      <LogoutIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Logout
+                    </MenuItem>
                   </Menu>
-                  <Button
-                    color="inherit"
-                    startIcon={<LogoutIcon />}
-                    onClick={handleLogout}
-                    variant="outlined"
-                    size="small"
-                  >
-                    Logout
-                  </Button>
                 </Box>
               ) : (
                 <Button
@@ -506,11 +528,12 @@ export const Header: React.FC = () => {
                 <Button
                   color="inherit"
                   variant="outlined"
+                  startIcon={<LocationOnIcon fontSize="small" />}
                   onClick={() => setVillagePickerOpen(true)}
                   sx={{
                     textTransform: "none",
-                    borderColor: "rgba(255,255,255,0.55)",
-                    color: "white",
+                    borderColor: "rgba(15,23,42,0.2)",
+                    color: "#0f172a",
                     minWidth: 150,
                     maxWidth: 220,
                     justifyContent: "flex-start",
@@ -518,13 +541,15 @@ export const Header: React.FC = () => {
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                     "&:hover": {
-                      borderColor: "white",
-                      backgroundColor: "rgba(255,255,255,0.08)",
+                      borderColor: "#0d6efd",
+                      backgroundColor: "rgba(13,110,253,0.06)",
                     },
                   }}
                 >
-                  {villages.find((v) => v.id === selectedVillage)?.name ||
-                    (villages.length === 0 ? "Loading..." : "Select Village")}
+                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {villages.find((v) => v.id === selectedVillage)?.name ||
+                      (villages.length === 0 ? "Loading..." : "Select Village")}
+                  </Box>
                 </Button>
               </Box>
               <IconButton
@@ -543,9 +568,9 @@ export const Header: React.FC = () => {
                     sx={{
                       width: 34,
                       height: 34,
-                      border: "2px solid rgba(255,255,255,0.55)",
-                      bgcolor: "rgba(255,255,255,0.18)",
-                      color: "white",
+                      border: "1px solid rgba(15,23,42,0.12)",
+                      bgcolor: "#f8fafc",
+                      color: "#0f172a",
                       fontSize: 14,
                       fontWeight: 700,
                     }}

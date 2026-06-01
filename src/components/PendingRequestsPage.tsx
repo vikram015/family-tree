@@ -13,14 +13,15 @@ import { useNavigate } from "react-router-dom";
 import { ApiService, LinkRequest } from "../services/apiService";
 
 function formatRequestType(requestType: LinkRequest["requestType"]) {
-  return requestType === "branch_access_request"
-    ? "Branch access request"
-    : "Profile link request";
+  if (requestType === "branch_access_request") return "Branch access request";
+  if (requestType === "spouse_link_request") return "Spouse link request";
+  return "Profile link request";
 }
 
 export const PendingRequestsPage: React.FC = () => {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<LinkRequest[]>([]);
+  const [myRequests, setMyRequests] = useState<LinkRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -30,11 +31,16 @@ export const PendingRequestsPage: React.FC = () => {
     try {
       setLoading(true);
       setError("");
-      const rows = await ApiService.getActionableLinkRequests();
+      const [rows, mine] = await Promise.all([
+        ApiService.getActionableLinkRequests(),
+        ApiService.getMyLinkRequests(),
+      ]);
       setRequests(rows || []);
+      setMyRequests(mine || []);
     } catch (err: any) {
       setError(err?.message || "Failed to load pending requests.");
       setRequests([]);
+      setMyRequests([]);
     } finally {
       setLoading(false);
     }
@@ -50,7 +56,15 @@ export const PendingRequestsPage: React.FC = () => {
         setReviewingRequestId(requestId);
         setError("");
         setSuccess("");
-        await ApiService.reviewLinkRequest(requestId, { action });
+        const reviewNote =
+          action === "rejected"
+            ? window.prompt("Reason for rejecting this request")?.trim()
+            : null;
+        if (action === "rejected" && !reviewNote) {
+          setReviewingRequestId(null);
+          return;
+        }
+        await ApiService.reviewLinkRequest(requestId, { action, reviewNote });
         setSuccess(
           `${action === "approved" ? "Approved" : "Rejected"} request successfully.`,
         );
@@ -67,17 +81,17 @@ export const PendingRequestsPage: React.FC = () => {
 
   const emptyState = useMemo(
     () =>
-      !loading && requests.length === 0 ? (
+      !loading && requests.length === 0 && myRequests.length === 0 ? (
         <Paper sx={{ p: 4, borderRadius: 4 }}>
           <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
             No pending requests
           </Typography>
           <Typography color="text.secondary">
-            You do not have any profile link or branch access requests waiting for your review.
+            You do not have any requests waiting for your review or submitted by you.
           </Typography>
         </Paper>
       ) : null,
-    [loading, requests.length],
+    [loading, myRequests.length, requests.length],
   );
 
   return (
@@ -123,6 +137,13 @@ export const PendingRequestsPage: React.FC = () => {
                   <Typography variant="body2">
                     <strong>Person:</strong> {request.targetPersonName || "Unknown person"}
                   </Typography>
+                  {request.requestType === "spouse_link_request" && (
+                    <Typography variant="body2">
+                      <strong>Source:</strong>{" "}
+                      {request.payload?.sourcePersonName || "Selected spouse"} in{" "}
+                      {request.payload?.sourceTreeName || "source tree"}
+                    </Typography>
+                  )}
                     <Typography variant="body2">
                     <strong>Phone:</strong> {request.requesterPhone || "Unknown phone"}
                   </Typography>
@@ -169,8 +190,38 @@ export const PendingRequestsPage: React.FC = () => {
               </Stack>
             </Paper>
           ))}
+
+        {!loading && myRequests.length > 0 && (
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 800, mt: 2, mb: 1.5 }}>
+              My Requests
+            </Typography>
+            <Stack spacing={1.5}>
+              {myRequests.map((request) => (
+                <Paper key={request.id} sx={{ p: 2.5, borderRadius: 4 }}>
+                  <Stack spacing={0.75}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                      {formatRequestType(request.requestType)}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {request.targetPersonName || request.payload?.targetPersonName || "Selected person"} in{" "}
+                      {request.targetTreeName || request.payload?.targetTreeName || "selected tree"}
+                    </Typography>
+                    <Typography variant="body2">
+                      <strong>Status:</strong> {request.status}
+                    </Typography>
+                    {request.status === "rejected" && request.reviewNote && (
+                      <Alert severity="error">
+                        <strong>Rejection reason:</strong> {request.reviewNote}
+                      </Alert>
+                    )}
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+          </Box>
+        )}
       </Stack>
     </Container>
   );
 };
-

@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, TextField, Button, Paper, Typography, Stack, Avatar } from "@mui/material";
+import {
+  Box,
+  TextField,
+  Button,
+  Paper,
+  Typography,
+  Stack,
+  Avatar,
+  InputAdornment,
+} from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { ApiService } from "../../services/apiService";
 
@@ -72,6 +81,7 @@ interface PersonSearchFieldProps {
   minSearchLength?: number;
   hideSearchButton?: boolean;
   noResultsText?: string;
+  startIcon?: React.ReactNode;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -88,6 +98,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   minSearchLength = 1,
   hideSearchButton = false,
   noResultsText = "No results found",
+  startIcon,
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -191,6 +202,17 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           size="medium"
           autoComplete="off"
           disabled={disabled}
+          InputProps={
+            startIcon
+              ? {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      {startIcon}
+                    </InputAdornment>
+                  ),
+                }
+              : undefined
+          }
         />
         {!hideSearchButton && (
           <Button

@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Autocomplete, CircularProgress, TextField, Typography } from "@mui/material";
+import {
+  Autocomplete,
+  CircularProgress,
+  InputAdornment,
+  TextField,
+  Typography,
+} from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 
 interface HindiNameInputProps {
@@ -8,6 +14,7 @@ interface HindiNameInputProps {
   onChange: (value: string) => void;
   label?: string;
   disabled?: boolean;
+  startIcon?: React.ReactNode;
 }
 
 function parseHindiSuggestions(payload: unknown): string[] {
@@ -32,6 +39,7 @@ export function HindiNameInput({
   onChange,
   label = "Hindi Name",
   disabled = false,
+  startIcon,
 }: HindiNameInputProps) {
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -135,6 +143,11 @@ export function HindiNameInput({
           helperText="Select a Hindi transliteration or type your own"
           InputProps={{
             ...params.InputProps,
+            startAdornment: startIcon ? (
+              <InputAdornment position="start">{startIcon}</InputAdornment>
+            ) : (
+              params.InputProps.startAdornment
+            ),
             endAdornment: (
               <>
                 {loading ? <CircularProgress color="inherit" size={18} /> : null}

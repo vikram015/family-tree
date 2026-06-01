@@ -755,14 +755,27 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (node.id && relation === "spouse" && targetId) {
         try {
           setIsLoading(true);
-          await ApiService.addSpouse(
-            targetId,
-            node.id,
-            node.relationSubtype,
-            node.relationStartDate,
-            node.relationEndDate,
-          );
-          await loadTreeData(true);
+          if (isSuperAdminUser) {
+            await ApiService.addSpouse(
+              targetId,
+              node.id,
+              node.relationSubtype,
+              node.relationStartDate,
+              node.relationEndDate,
+            );
+            await loadTreeData(true);
+          } else {
+            await ApiService.createSpouseLinkRequest({
+              personId1: targetId,
+              personId2: node.id,
+              relationSubtype: node.relationSubtype || null,
+              relationStartDate: node.relationStartDate || null,
+              relationEndDate: node.relationEndDate || null,
+              requestMessage: `Request to link ${node.name || "selected profile"} as spouse.`,
+            });
+            window.dispatchEvent(new Event("link-requests-updated"));
+            alert("Spouse link request raised. The other tree owner or a superadmin can approve it.");
+          }
           return node.id; // Return the linked person ID
         } catch (err) {
           console.error("Failed to link spouse:", err);
@@ -773,6 +786,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           );
           setIsLoading(false);
           return undefined;
+        } finally {
+          setIsLoading(false);
         }
       }
 
@@ -868,7 +883,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
       return undefined;
     },
-    [canEditNode, canCreateRootNode, treeId, loadTreeData, nodes, mergeAffectedNodes],
+    [
+      canEditNode,
+      canCreateRootNode,
+      treeId,
+      loadTreeData,
+      nodes,
+      mergeAffectedNodes,
+      isSuperAdminUser,
+    ],
   );
 
   const handleShareTree = useCallback(async () => {
@@ -982,9 +1005,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setReviewingLinkRequestId(requestId);
 
       try {
-        await ApiService.reviewLinkRequest(requestId, { action });
+        const reviewNote =
+          action === "rejected"
+            ? window.prompt("Reason for rejecting this request")?.trim()
+            : null;
+        if (action === "rejected" && !reviewNote) {
+          setReviewingLinkRequestId(null);
+          return;
+        }
+        await ApiService.reviewLinkRequest(requestId, { action, reviewNote });
         setLinkRequestReviewSuccess(
-          `Profile link request ${action === "approved" ? "approved" : "rejected"} successfully.`,
+          `Link request ${action === "approved" ? "approved" : "rejected"} successfully.`,
         );
         await loadPendingLinkRequests();
         window.dispatchEvent(new Event("link-requests-updated"));
@@ -1150,6 +1181,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           text:
             request.requestType === "branch_access_request"
               ? `Your branch access request for ${request.targetPersonName || "the selected branch"} in ${request.targetTreeName || "this tree"} is pending review.`
+              : request.requestType === "spouse_link_request"
+                ? `Your spouse link request for ${request.targetPersonName || "the selected profile"} in ${request.targetTreeName || "the other tree"} is pending review.`
               : `Your profile link request for ${request.targetPersonName || "the selected profile"} in ${request.targetTreeName || "this tree"} is pending review.`,
         })),
         isAdmin() && !isApproved
@@ -1299,10 +1332,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 <Stack spacing={1.5}>
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                      Pending profile link requests
+                      Pending link requests
                     </Typography>
                     <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                      Review requests from users who want to link themselves to people in this tree.
+                      Review profile, branch access, and spouse link requests for this tree.
                     </Typography>
                   </Box>
                   {pendingLinkRequests.map((request) => (
@@ -1325,7 +1358,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                             {request.requesterName || request.requesterEmail || "Unknown requester"}
                           </Typography>
                           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                            Wants to link to {request.targetPersonName || "selected profile"}
+                            {request.requestType === "spouse_link_request"
+                              ? `Wants to link spouse ${request.payload?.sourcePersonName || "from another branch"} to ${request.targetPersonName || "selected profile"}`
+                              : request.requestType === "branch_access_request"
+                                ? `Wants branch access for ${request.targetPersonName || "selected profile"}`
+                                : `Wants to link to ${request.targetPersonName || "selected profile"}`}
                           </Typography>
                           <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5 }}>
                             Requested {new Date(request.createdAt).toLocaleString()}

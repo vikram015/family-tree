@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -35,7 +35,6 @@ import { useVillage } from "../hooks/useVillage";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import LinkIcon from "@mui/icons-material/Link";
-import PersonIcon from "@mui/icons-material/Person";
 import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
@@ -51,6 +50,8 @@ import {
   fetchMyVillageAccessRequests,
   submitVillageAccessRequest,
 } from "../../store/thunks/apiThunks";
+
+const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -71,8 +72,6 @@ export const ProfilePage: React.FC = () => {
   const [professions, setProfessions] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [allProfessions, setAllProfessions] = useState<any[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-
   // Dialog State
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [openBusinessDialog, setOpenBusinessDialog] = useState(false);
@@ -85,7 +84,10 @@ export const ProfilePage: React.FC = () => {
   const [editProfileData, setEditProfileData] = useState({
     name: "",
     phone: "",
+    email: "",
   });
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>();
+  const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
   const [newBusinessData, setNewBusinessData] = useState({
     name: "",
     category: "",
@@ -114,6 +116,7 @@ export const ProfilePage: React.FC = () => {
       setEditProfileData({
         name: userProfile.displayName || userProfile.name || "",
         phone: userProfile.phone || "",
+        email: userProfile.email || "",
       });
     }
   }, [userProfile]);
@@ -121,7 +124,6 @@ export const ProfilePage: React.FC = () => {
   useEffect(() => {
     const fetchDetails = async () => {
       if (userProfile?.peopleId) {
-        setLoadingDetails(true);
         try {
           const person = await ApiService.getPersonById(
             userProfile.peopleId,
@@ -133,6 +135,7 @@ export const ProfilePage: React.FC = () => {
             );
           }
           setLinkedPersonDetails({ ...person, tree: treeDetails });
+          setProfilePhotoUrl((person as any)?.photoUrl || undefined);
 
           const [profs, biz, allProfs] = await Promise.all([
             ApiService.getProfessionsByPerson(userProfile.peopleId),
@@ -144,8 +147,6 @@ export const ProfilePage: React.FC = () => {
           setAllProfessions(allProfs || []);
         } catch (err) {
           console.error("Error fetching details:", err);
-        } finally {
-          setLoadingDetails(false);
         }
       }
     };
@@ -178,11 +179,58 @@ export const ProfilePage: React.FC = () => {
   const handleUpdateProfile = async () => {
     try {
       if (updateUserProfile) {
-        await updateUserProfile(editProfileData.name, editProfileData.phone);
+        await updateUserProfile(
+          editProfileData.name,
+          userProfile?.phone || "",
+          editProfileData.email,
+        );
         setOpenEditProfileDialog(false);
       }
     } catch (err) {
       console.error("Error updating profile:", err);
+    }
+  };
+
+  const handleProfilePhotoUpload = async (blob: Blob) => {
+    if (!userProfile?.peopleId) {
+      setError("Link your profile to a family tree person before adding a photo.");
+      return;
+    }
+
+    setProfilePhotoUploading(true);
+    setError("");
+    try {
+      const url = await ApiService.uploadPersonPhoto(userProfile.peopleId, blob);
+      setProfilePhotoUrl(url);
+      setLinkedPersonDetails((prev: any) =>
+        prev ? { ...prev, photoUrl: url } : prev,
+      );
+      setSuccess("Profile image updated successfully.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to update profile image.");
+    } finally {
+      setProfilePhotoUploading(false);
+    }
+  };
+
+  const handleProfilePhotoRemove = async () => {
+    if (!userProfile?.peopleId) {
+      return;
+    }
+
+    setProfilePhotoUploading(true);
+    setError("");
+    try {
+      await ApiService.removePersonPhoto(userProfile.peopleId);
+      setProfilePhotoUrl(undefined);
+      setLinkedPersonDetails((prev: any) =>
+        prev ? { ...prev, photoUrl: null } : prev,
+      );
+      setSuccess("Profile image removed successfully.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to remove profile image.");
+    } finally {
+      setProfilePhotoUploading(false);
     }
   };
 
@@ -378,7 +426,7 @@ export const ProfilePage: React.FC = () => {
             </Tooltip>
 
             <Avatar
-              src={linkedPersonDetails?.photoUrl || undefined}
+              src={profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined}
               sx={{
                 width: 100,
                 height: 100,
@@ -405,7 +453,9 @@ export const ProfilePage: React.FC = () => {
               }}
             >
               <EmailIcon fontSize="small" />
-              <Typography variant="body2">{currentUser.email}</Typography>
+              <Typography variant="body2">
+                {userProfile?.email || currentUser.email}
+              </Typography>
             </Box>
             {userProfile?.phone && (
               <Box
@@ -1077,15 +1127,47 @@ export const ProfilePage: React.FC = () => {
             />
             <TextField
               fullWidth
-              label="Phone Number"
-              value={editProfileData.phone}
+              label="Email"
+              type="email"
+              value={editProfileData.email}
               onChange={(e) =>
                 setEditProfileData({
                   ...editProfileData,
-                  phone: e.target.value,
+                  email: e.target.value,
                 })
               }
             />
+            <TextField
+              fullWidth
+              label="Mobile Number"
+              value={editProfileData.phone}
+              disabled
+              helperText="Mobile number is verified and cannot be edited here."
+            />
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Profile Image
+              </Typography>
+              {userProfile?.peopleId ? (
+                <Suspense fallback={<Box sx={{ height: 112 }} />}>
+                  <ImageCropper
+                    currentPhoto={
+                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
+                    }
+                    previewVariant="rounded"
+                    onCropped={handleProfilePhotoUpload}
+                    onRemove={handleProfilePhotoRemove}
+                    uploading={profilePhotoUploading}
+                    previewSize={112}
+                  />
+                </Suspense>
+              ) : (
+                <Alert severity="info">
+                  Link your account to a family tree profile before adding a
+                  profile image.
+                </Alert>
+              )}
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -1093,16 +1175,7 @@ export const ProfilePage: React.FC = () => {
             Cancel
           </Button>
           <Button
-            onClick={() => {
-              if (updateUserProfile) {
-                updateUserProfile(
-                  editProfileData.name,
-                  editProfileData.phone,
-                ).then(() => {
-                  setOpenEditProfileDialog(false);
-                });
-              }
-            }}
+            onClick={handleUpdateProfile}
             variant="contained"
           >
             Save

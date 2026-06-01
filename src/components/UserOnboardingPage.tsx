@@ -13,20 +13,31 @@ import {
   Chip,
   CircularProgress,
   Container,
-  Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Paper,
   Stack,
-  Step,
-  StepLabel,
-  Stepper,
   TextField,
   Typography,
   useMediaQuery,
   useTheme,
+  createFilterOptions,
+  type FilterOptionsState,
+  InputAdornment,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
+import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AddTree from "./AddTree/AddTree";
 import { useAuth } from "./hooks/useAuth";
@@ -67,8 +78,45 @@ const STEP_INDEX: Record<string, number> = {
   match: 2,
   complete: 2,
 };
+const ONBOARDING_STEPS = [
+  { key: "profile", label: "Your Info" },
+  { key: "location", label: "Community" },
+  { key: "match", label: "Find Family Tree" },
+] as const;
+const onboardingBlue = "#0d6efd";
+const onboardingGreen = "#16a34a";
+const profileFormMaxWidth = 560;
+const locationFormMaxWidth = 640;
 
 type OnboardingHistoryStep = "profile" | "location" | "match";
+type LookupOption = {
+  id: string;
+  name: string;
+  casteId?: string;
+};
+
+type CreateLookupOption = {
+  id: string;
+  name: string;
+  inputValue: string;
+  isCreateOption: true;
+};
+
+type LookupAutocompleteOption = LookupOption | CreateLookupOption;
+
+type CreatableLocationOption = LocationCombinationOption & {
+  isCreateOption?: boolean;
+  inputValue?: string;
+};
+
+const CREATE_LOCATION_OPTION_ID = "__create_location__";
+const lookupFilter = createFilterOptions<LookupAutocompleteOption>();
+
+function isCreateLookupOption(
+  option: LookupAutocompleteOption,
+): option is CreateLookupOption {
+  return "isCreateOption" in option;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -152,6 +200,9 @@ export const UserOnboardingPage: React.FC = () => {
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const [selectedCasteId, setSelectedCasteId] = useState("");
   const [selectedSubCasteId, setSelectedSubCasteId] = useState("");
+  const [casteInputValue, setCasteInputValue] = useState("");
+  const [subCasteInputValue, setSubCasteInputValue] = useState("");
+  const [lookupSaving, setLookupSaving] = useState(false);
   const [matchSearchName, setMatchSearchName] = useState("");
   const [locationInputValue, setLocationInputValue] = useState("");
   const [locationOptions, setLocationOptions] = useState<LocationCombinationOption[]>(
@@ -160,6 +211,17 @@ export const UserOnboardingPage: React.FC = () => {
   const [selectedLocationOption, setSelectedLocationOption] =
     useState<LocationCombinationOption | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [createVillageOpen, setCreateVillageOpen] = useState(false);
+  const [createVillageName, setCreateVillageName] = useState("");
+  const [createVillageStateId, setCreateVillageStateId] = useState("");
+  const [createVillageDistrictId, setCreateVillageDistrictId] = useState("");
+  const [createVillageStates, setCreateVillageStates] = useState<any[]>([]);
+  const [createVillageDistricts, setCreateVillageDistricts] = useState<any[]>([]);
+  const [createVillageLoadingStates, setCreateVillageLoadingStates] = useState(false);
+  const [createVillageLoadingDistricts, setCreateVillageLoadingDistricts] =
+    useState(false);
+  const [createVillageSaving, setCreateVillageSaving] = useState(false);
+  const [createVillageError, setCreateVillageError] = useState("");
   const [localError, setLocalError] = useState("");
   const [linkRequestSuccess, setLinkRequestSuccess] = useState("");
   const [myLinkRequests, setMyLinkRequests] = useState<LinkRequest[]>([]);
@@ -210,6 +272,48 @@ export const UserOnboardingPage: React.FC = () => {
   const shouldShowLocationSuggestions =
     trimmedLocationQuery.length >= 2 &&
     selectedLocationOption?.label !== locationInputValue;
+  const locationOptionsWithCreate = useMemo<CreatableLocationOption[]>(() => {
+    const options = locationOptions as CreatableLocationOption[];
+    if (
+      trimmedLocationQuery.length < 2 ||
+      locationLoading ||
+      selectedLocationOption?.label === locationInputValue
+    ) {
+      return options;
+    }
+
+    const query = trimmedLocationQuery.toLowerCase();
+    const exactMatch = options.some(
+      (option) =>
+        option.villageName.toLowerCase() === query ||
+        option.label.toLowerCase() === query,
+    );
+
+    if (exactMatch) {
+      return options;
+    }
+
+    return [
+      ...options,
+      {
+        stateId: "",
+        stateName: "",
+        districtId: "",
+        districtName: "",
+        villageId: CREATE_LOCATION_OPTION_ID,
+        villageName: `Add "${trimmedLocationQuery}"`,
+        label: `Add "${trimmedLocationQuery}"`,
+        isCreateOption: true,
+        inputValue: trimmedLocationQuery,
+      },
+    ];
+  }, [
+    locationInputValue,
+    locationLoading,
+    locationOptions,
+    selectedLocationOption?.label,
+    trimmedLocationQuery,
+  ]);
 
   const selectedCaste = useMemo(
     () => castes.find((caste: any) => caste.id === selectedCasteId) || null,
@@ -222,6 +326,48 @@ export const UserOnboardingPage: React.FC = () => {
       ) || null,
     [filteredSubCastes, selectedSubCasteId],
   );
+  const selectedCreateVillageState = useMemo(
+    () =>
+      createVillageStates.find(
+        (state: any) => state.id === createVillageStateId,
+      ) || null,
+    [createVillageStateId, createVillageStates],
+  );
+  const selectedCreateVillageDistrict = useMemo(
+    () =>
+      createVillageDistricts.find(
+        (district: any) => district.id === createVillageDistrictId,
+      ) || null,
+    [createVillageDistrictId, createVillageDistricts],
+  );
+  const buildCreatableLookupOptions = (
+    options: LookupOption[],
+    params: FilterOptionsState<LookupAutocompleteOption>,
+    label: string,
+  ): LookupAutocompleteOption[] => {
+    const trimmedValue = params.inputValue.trim();
+    const filtered = lookupFilter(options, params);
+
+    if (!trimmedValue) {
+      return filtered;
+    }
+
+    const hasExactMatch = options.some(
+      (option) =>
+        option.name.trim().toLowerCase() === trimmedValue.toLowerCase(),
+    );
+
+    if (!hasExactMatch) {
+      filtered.push({
+        id: `create-${label}-${trimmedValue}`,
+        name: `Add "${trimmedValue}" as new ${label}`,
+        inputValue: trimmedValue,
+        isCreateOption: true,
+      });
+    }
+
+    return filtered;
+  };
   const pendingUserNodeLinkRequest = useMemo(
     () =>
       myLinkRequests.find(
@@ -230,6 +376,153 @@ export const UserOnboardingPage: React.FC = () => {
           request.status === "pending",
       ) || null,
     [myLinkRequests],
+  );
+  const activeStepIndex = STEP_INDEX[displayStep] ?? 0;
+  const profilePhone = userProfile?.phone || currentUser?.phoneNumber || "";
+  const actionMaxWidth =
+    displayStep === "profile"
+      ? profileFormMaxWidth
+      : displayStep === "location"
+        ? locationFormMaxWidth
+        : "none";
+  const inputCardSx = {
+    "& .MuiInputLabel-root": {
+      left: 52,
+      top: 8,
+      transform: "none",
+      color: "#475569",
+      fontSize: 12,
+      fontWeight: 600,
+      lineHeight: 1.2,
+      pointerEvents: "none",
+      zIndex: 1,
+      "&.Mui-focused": {
+        color: "#475569",
+      },
+      "&.Mui-disabled": {
+        color: "#64748b",
+      },
+      "&.MuiInputLabel-shrink": {
+        transform: "none",
+      },
+    },
+    "& .MuiOutlinedInput-root": {
+      minHeight: 64,
+      borderRadius: 2,
+      bgcolor: "#ffffff",
+      boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+      alignItems: "flex-end",
+      "& fieldset": {
+        borderColor: "rgba(15,23,42,0.14)",
+        top: 0,
+      },
+      "& legend": {
+        display: "none",
+      },
+      "&:hover fieldset": {
+        borderColor: "rgba(13,110,253,0.45)",
+      },
+      "&.Mui-focused fieldset": {
+        borderColor: onboardingBlue,
+      },
+    },
+    "& .MuiOutlinedInput-input": {
+      pt: 3,
+      pb: 1.25,
+      fontWeight: 600,
+      color: "#0f172a",
+    },
+    "& .MuiInputAdornment-root": {
+      mt: "0 !important",
+      alignSelf: "center",
+      color: "#0f172a",
+    },
+  };
+  const primaryOnboardingButtonSx = {
+    minHeight: 48,
+    px: 4,
+    borderRadius: 2,
+    bgcolor: onboardingBlue,
+    boxShadow: "0 10px 20px rgba(13,110,253,0.22)",
+    fontWeight: 800,
+    textTransform: "none",
+    "&:hover": {
+      bgcolor: "#0b5ed7",
+      boxShadow: "0 12px 22px rgba(13,110,253,0.26)",
+    },
+  };
+  const secondaryOnboardingButtonSx = {
+    minHeight: 48,
+    px: 3,
+    borderRadius: 2,
+    borderColor: "rgba(13,110,253,0.45)",
+    color: onboardingBlue,
+    bgcolor: "#ffffff",
+    fontWeight: 800,
+    textTransform: "none",
+    "&:hover": {
+      borderColor: onboardingBlue,
+      bgcolor: "rgba(13,110,253,0.06)",
+    },
+  };
+  const renderOnboardingStepRail = () => (
+    <Stack
+      direction="row"
+      alignItems="flex-start"
+      justifyContent="center"
+      spacing={{ xs: 1, sm: 2 }}
+      sx={{ width: "100%", maxWidth: 620, mx: "auto" }}
+    >
+      {ONBOARDING_STEPS.map((step, index) => {
+        const completed = index < activeStepIndex;
+        const active = index === activeStepIndex;
+        const color = completed ? onboardingGreen : active ? onboardingBlue : "#cbd5e1";
+        return (
+          <React.Fragment key={step.key}>
+            <Stack alignItems="center" spacing={0.75} sx={{ minWidth: { xs: 76, sm: 120 } }}>
+              <Box
+                sx={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  bgcolor: color,
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 800,
+                  fontSize: 14,
+                  boxShadow: active ? "0 8px 18px rgba(13,110,253,0.26)" : "none",
+                }}
+              >
+                {completed ? <CheckCircleIcon sx={{ fontSize: 18 }} /> : index + 1}
+              </Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: active || completed ? "#0f172a" : "#64748b",
+                  fontWeight: active ? 800 : 600,
+                  textAlign: "center",
+                }}
+              >
+                {step.label}
+              </Typography>
+            </Stack>
+            {index < ONBOARDING_STEPS.length - 1 && (
+              <Box
+                sx={{
+                  flex: 1,
+                  height: 2,
+                  mt: 2,
+                  maxWidth: 160,
+                  bgcolor: index < activeStepIndex ? onboardingGreen : "#e2e8f0",
+                }}
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </Stack>
   );
 
   const normalizeHistoryStep = (
@@ -478,15 +771,25 @@ export const UserOnboardingPage: React.FC = () => {
   }, [selectedCasteId]);
 
   useEffect(() => {
+    if (selectedCaste) {
+      setCasteInputValue(selectedCaste.name);
+    }
+  }, [selectedCaste]);
+
+  useEffect(() => {
+    if (selectedSubCaste) {
+      setSubCasteInputValue(selectedSubCaste.name);
+    }
+  }, [selectedSubCaste]);
+
+  useEffect(() => {
     if (!onboardingLoaded) {
       return;
     }
 
     if (!selectedVillageId) {
       setSelectedLocationOption(null);
-      if (!locationInputValue) {
-        setLocationOptions([]);
-      }
+      setLocationOptions([]);
       return;
     }
 
@@ -569,6 +872,66 @@ export const UserOnboardingPage: React.FC = () => {
 
     return () => window.clearTimeout(timer);
   }, [locationInputValue, selectedLocationOption]);
+
+  useEffect(() => {
+    if (!createVillageOpen || createVillageStates.length > 0) {
+      return;
+    }
+
+    let active = true;
+    setCreateVillageLoadingStates(true);
+    ApiService.getStates()
+      .then((rows) => {
+        if (active) {
+          setCreateVillageStates(rows || []);
+        }
+      })
+      .catch((error: any) => {
+        if (active) {
+          setCreateVillageError(error?.message || "Failed to load states.");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCreateVillageLoadingStates(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [createVillageOpen, createVillageStates.length]);
+
+  useEffect(() => {
+    if (!createVillageOpen || !createVillageStateId) {
+      setCreateVillageDistricts([]);
+      setCreateVillageDistrictId("");
+      return;
+    }
+
+    let active = true;
+    setCreateVillageLoadingDistricts(true);
+    ApiService.getDistricts(createVillageStateId)
+      .then((rows) => {
+        if (active) {
+          setCreateVillageDistricts(rows || []);
+        }
+      })
+      .catch((error: any) => {
+        if (active) {
+          setCreateVillageError(error?.message || "Failed to load districts.");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setCreateVillageLoadingDistricts(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [createVillageOpen, createVillageStateId]);
 
   useEffect(() => {
     if (displayStep !== "match") {
@@ -654,6 +1017,136 @@ export const UserOnboardingPage: React.FC = () => {
     } catch (error: any) {
       setStepOverride(null);
       setLocalError(error?.message || "Failed to save profile.");
+    }
+  };
+
+  const handleOpenCreateVillage = (villageName?: string) => {
+    setCreateVillageName(villageName || trimmedLocationQuery);
+    setCreateVillageStateId(selectedStateId || "");
+    setCreateVillageDistrictId(selectedDistrictId || "");
+    setCreateVillageError("");
+    setCreateVillageOpen(true);
+  };
+
+  const handleCloseCreateVillage = () => {
+    if (createVillageSaving) {
+      return;
+    }
+    setCreateVillageOpen(false);
+    setCreateVillageError("");
+  };
+
+  const handleCreateVillage = async () => {
+    const villageName = createVillageName.trim();
+    if (!createVillageStateId || !createVillageDistrictId || !villageName) {
+      setCreateVillageError("State, district, and village name are required.");
+      return;
+    }
+
+    setCreateVillageSaving(true);
+    setCreateVillageError("");
+    setLocalError("");
+
+    try {
+      const state = selectedCreateVillageState;
+      const district = selectedCreateVillageDistrict;
+      if (!state || !district) {
+        setCreateVillageError("State and district are required.");
+        return;
+      }
+
+      const village = await ApiService.createVillage({
+        name: villageName,
+        districtId: createVillageDistrictId,
+      });
+      const option = {
+        stateId: state.id,
+        stateName: state.name,
+        districtId: district.id,
+        districtName: district.name,
+        villageId: village.id,
+        villageName: village.name,
+        label: [village.name, district.name, state.name].join(", "),
+      };
+
+      setSelectedLocationOption(option);
+      setSelectedStateId(option.stateId);
+      setSelectedDistrictId(option.districtId);
+      setSelectedVillageId(option.villageId);
+      setLocationInputValue(option.label);
+      setLocationOptions((prev) => {
+        const remaining = prev.filter(
+          (item) => item.villageId !== option.villageId,
+        );
+        return [option, ...remaining];
+      });
+      setCreateVillageOpen(false);
+      setSelectedVillage(option.villageId);
+      await dispatch(
+        updateUserOnboarding({
+          location: {
+            stateId: option.stateId,
+            districtId: option.districtId,
+            villageId: option.villageId,
+          },
+        }),
+      ).unwrap();
+    } catch (error: any) {
+      setCreateVillageError(error?.message || "Failed to create village.");
+    } finally {
+      setCreateVillageSaving(false);
+    }
+  };
+
+  const handleCreateCaste = async (nameToCreate: string) => {
+    const trimmedName = nameToCreate.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    setLookupSaving(true);
+    setLocalError("");
+
+    try {
+      const created = await ApiService.createCaste({ name: trimmedName });
+      await dispatch(fetchCastes()).unwrap();
+      setSelectedCasteId(created.id);
+      setSelectedSubCasteId("");
+      setCasteInputValue(created.name);
+      setSubCasteInputValue("");
+      previousSelectedCasteRef.current = created.id;
+    } catch (error: any) {
+      setLocalError(error?.message || "Failed to create caste.");
+    } finally {
+      setLookupSaving(false);
+    }
+  };
+
+  const handleCreateSubCaste = async (nameToCreate: string) => {
+    const trimmedName = nameToCreate.trim();
+    if (!trimmedName) {
+      return;
+    }
+    if (!selectedCasteId) {
+      setLocalError("Select caste before adding a sub-caste.");
+      return;
+    }
+
+    setLookupSaving(true);
+    setLocalError("");
+
+    try {
+      const created = await ApiService.createSubCaste({
+        name: trimmedName,
+        casteId: selectedCasteId,
+      });
+      await dispatch(fetchAllSubCastes()).unwrap();
+      setSelectedSubCasteId(created.id);
+      setSubCasteInputValue(created.name);
+    } catch (error: any) {
+      setLocalError(error?.message || "Failed to create sub-caste.");
+    } finally {
+      setLookupSaving(false);
     }
   };
 
@@ -860,13 +1353,15 @@ export const UserOnboardingPage: React.FC = () => {
       elevation={0}
       sx={{
         border: "1px solid",
-        borderColor: "divider",
-        borderRadius: "12px !important",
+        borderColor: "rgba(15,23,42,0.12)",
+        borderRadius: "16px !important",
         overflow: "hidden",
+        bgcolor: "#ffffff",
+        boxShadow: "0 10px 28px rgba(15,23,42,0.06)",
         "&:before": { display: "none" },
       }}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: { xs: 1.5, sm: 2 } }}>
         <Stack
           direction={{ xs: "column", sm: "row" }}
           spacing={1.5}
@@ -874,13 +1369,26 @@ export const UserOnboardingPage: React.FC = () => {
           alignItems={{ xs: "flex-start", sm: "center" }}
           sx={{ width: "100%", pr: 1 }}
         >
-          <Box>
+          <Stack direction="row" spacing={1.25} alignItems="center">
+            <Avatar
+              sx={{
+                width: 42,
+                height: 42,
+                bgcolor: tree.matchedPeople.length > 0 ? "#dcfce7" : "#f1f5f9",
+                color: tree.matchedPeople.length > 0 ? "#15803d" : "#64748b",
+                fontWeight: 900,
+              }}
+            >
+              {tree.matchedPeople.length || "•"}
+            </Avatar>
+            <Box>
             <Typography 
               variant="h6"
-              color="primary"
+              color="text.primary"
               sx={{
                 cursor: "pointer",
                 display: "inline-block",
+                fontWeight: 900,
                 "&:hover": { textDecoration: "underline" }
               }}
               onClick={(e) => {
@@ -901,12 +1409,14 @@ export const UserOnboardingPage: React.FC = () => {
                 size="small"
                 icon={<LocationOnOutlinedIcon />}
                 label={tree.villageName}
+                sx={{ bgcolor: "#f8fafc" }}
               />
-              <Chip size="small" label={tree.casteName || "No caste"} />
-              <Chip size="small" label={tree.subCasteName || "No sub-caste"} />
+              <Chip size="small" label={tree.casteName || "No caste"} sx={{ bgcolor: "#f8fafc" }} />
+              <Chip size="small" label={tree.subCasteName || "No sub-caste"} sx={{ bgcolor: "#f8fafc" }} />
             </Stack>
           </Box>
-          <Stack spacing={0.5}>
+          </Stack>
+          <Stack spacing={0.5} sx={{ minWidth: { sm: 170 } }}>
             <Typography variant="body2" color="text.secondary">
               Owner: {tree.ownerName}
             </Typography>
@@ -921,7 +1431,7 @@ export const UserOnboardingPage: React.FC = () => {
           </Stack>
         </Stack>
       </AccordionSummary>
-      <AccordionDetails sx={{ bgcolor: "background.default" }}>
+      <AccordionDetails sx={{ bgcolor: "#f8fafc", px: { xs: 1.5, sm: 2 } }}>
 
         {tree.matchedPeople.length > 0 ? (
           <Stack spacing={2}>
@@ -1073,6 +1583,10 @@ export const UserOnboardingPage: React.FC = () => {
                       onClick={() =>
                         void handleCreateLinkRequest(person.personId, tree.treeId)
                       }
+                      sx={{
+                        minWidth: 150,
+                        bgcolor: isPendingForThisPerson ? undefined : onboardingBlue,
+                      }}
                     >
                       {linkRequestSubmittingPersonId === person.personId
                         ? "Sending..."
@@ -1105,71 +1619,35 @@ export const UserOnboardingPage: React.FC = () => {
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          background:
-            "linear-gradient(180deg, rgba(25,118,210,0.08) 0%, rgba(255,255,255,1) 35%)",
+          background: "#ffffff",
         }}
       >
         <Container
           maxWidth="lg"
           sx={{
-            py: { xs: 2, sm: 4, md: 6 },
-            px: { xs: 0.75, sm: 2, md: 3 },
+            py: { xs: 2, sm: 3, md: 4 },
+            px: { xs: 1.5, sm: 2.5, md: 3 },
           }}
         >
           <Paper
             elevation={0}
             sx={{
-              borderRadius: { xs: 3, sm: 4 },
-              border: "1px solid",
-              borderColor: "divider",
+              borderRadius: 0,
+              border: 0,
               overflow: "hidden",
+              bgcolor: "transparent",
             }}
           >
             <Box
               sx={{
-                px: { xs: 1.5, sm: 4 },
-                py: { xs: 2.5, sm: 4 },
-                borderBottom: "1px solid",
-                borderColor: "divider",
-                background:
-                  "linear-gradient(135deg, rgba(25,118,210,0.12), rgba(0,204,153,0.08))",
+                px: { xs: 0, sm: 2 },
+                pt: { xs: 1, sm: 2 },
+                pb: { xs: 2, sm: 3 },
               }}
             >
-              <Typography
-                variant={isMobile ? "h5" : "h4"}
-                sx={{ fontWeight: 800, mb: 1 }}
-              >
-                Welcome to Kinvia
-              </Typography>
-              <Typography
-                variant="body1"
-                sx={{ color: "text.secondary", maxWidth: 760 }}
-              >
-                We’ll help you find your family tree or start a new one. This
-                setup works best if you complete the steps in order.
-              </Typography>
+              {renderOnboardingStepRail()}
             </Box>
-
-            <Box sx={{ px: { xs: 1.5, sm: 4 }, py: { xs: 1.5, sm: 3 } }}>
-              <Stepper
-                activeStep={STEP_INDEX[displayStep] ?? 0}
-                orientation={isMobile ? "vertical" : "horizontal"}
-              >
-                <Step>
-                  <StepLabel>Basic Info</StepLabel>
-                </Step>
-                <Step>
-                  <StepLabel>Location</StepLabel>
-                </Step>
-                <Step>
-                  <StepLabel>Find Tree</StepLabel>
-                </Step>
-              </Stepper>
-            </Box>
-
-            <Divider />
-
-            <Box sx={{ px: { xs: 1.5, sm: 4 }, py: { xs: 1.5, sm: 4 } }}>
+            <Box sx={{ px: { xs: 0, sm: 2 }, py: { xs: 1, sm: 2 } }}>
               {(onboardingLoading || !onboardingLoaded) && (
                 <Box
                   sx={{
@@ -1186,37 +1664,88 @@ export const UserOnboardingPage: React.FC = () => {
               {onboardingLoaded && (
                 <Stack spacing={3}>
                   {displayStep === "profile" && (
-                    <Stack spacing={2}>
-                      <Typography variant="h6">Step 1: Basic information</Typography>
-                      <Typography variant="body1" color="text.secondary">
-                        Start with your name and email so we can search for your
-                        record inside the tree.
-                      </Typography>
+                    <Stack spacing={2.25} alignItems="center">
+                      <Box sx={{ textAlign: "center", maxWidth: 620 }}>
+                        <Typography
+                          variant={isMobile ? "h5" : "h4"}
+                          sx={{ fontWeight: 900, letterSpacing: 0, mb: 1 }}
+                        >
+                          Let's start with your basic information
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary">
+                          This helps us find the right family tree for you.
+                        </Typography>
+                      </Box>
+                      <Stack
+                        spacing={1.5}
+                        sx={{ width: "100%", maxWidth: profileFormMaxWidth }}
+                      >
                       <TextField
-                        label="Name"
+                        label="Full Name"
                         value={profileName}
                         onChange={(event) => setProfileName(event.target.value)}
                         fullWidth
+                        sx={inputCardSx}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <PersonOutlineOutlinedIcon />
+                            </InputAdornment>
+                          ),
+                        }}
                       />
                       <TextField
-                        label="Email"
+                        label="Email Address"
                         type="email"
                         value={profileEmail}
                         onChange={(event) => setProfileEmail(event.target.value)}
                         fullWidth
+                        sx={inputCardSx}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <EmailOutlinedIcon />
+                            </InputAdornment>
+                          ),
+                        }}
                       />
+                      <TextField
+                        label="Phone Number"
+                        value={profilePhone || "Not provided"}
+                        fullWidth
+                        disabled
+                        sx={inputCardSx}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <PhoneOutlinedIcon />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      </Stack>
                     </Stack>
                   )}
 
                   {displayStep === "location" && (
-                    <Stack spacing={2}>
-                      <Typography variant="h6">Step 2: Location</Typography>
-                      <Typography variant="body1" color="text.secondary">
-                        Tell us where your family tree belongs. We’ll use this
-                        to narrow the search before showing possible matches.
-                      </Typography>
-                      <Autocomplete
-                        options={locationOptions}
+                    <Stack spacing={2.25} alignItems="center">
+                      <Box sx={{ textAlign: "center", maxWidth: 620 }}>
+                        <Typography
+                          variant={isMobile ? "h5" : "h4"}
+                          sx={{ fontWeight: 900, letterSpacing: 0, mb: 1 }}
+                        >
+                          Where is your family from?
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary">
+                          Your community details help us find matching family trees.
+                        </Typography>
+                      </Box>
+                      <Stack
+                        spacing={1.5}
+                        sx={{ width: "100%", maxWidth: locationFormMaxWidth }}
+                      >
+                      <Autocomplete<CreatableLocationOption, false, false, false>
+                        options={locationOptionsWithCreate}
                         value={selectedLocationOption}
                         open={shouldShowLocationSuggestions}
                         loading={locationLoading}
@@ -1253,7 +1782,11 @@ export const UserOnboardingPage: React.FC = () => {
                             }
                           }
                         }}
-                        onChange={(_event, value) => {
+                        onChange={(_event, value: CreatableLocationOption | null) => {
+                          if (value?.isCreateOption) {
+                            handleOpenCreateVillage(value.inputValue);
+                            return;
+                          }
                           setSelectedLocationOption(value);
                           setSelectedStateId(value?.stateId || "");
                           setSelectedDistrictId(value?.districtId || "");
@@ -1263,69 +1796,236 @@ export const UserOnboardingPage: React.FC = () => {
                         renderInput={(params) => (
                           <TextField
                             {...params}
-                            label="State, district, village"
+                            label="Location (Village / City)"
                             placeholder="Type village, district, or state"
+                            sx={inputCardSx}
+                            InputProps={{
+                              ...params.InputProps,
+                              startAdornment: (
+                                <>
+                                  <InputAdornment position="start">
+                                    <LocationOnOutlinedIcon />
+                                  </InputAdornment>
+                                  {params.InputProps.startAdornment}
+                                </>
+                              ),
+                            }}
                           />
                         )}
                         renderOption={(props, option) => (
                           <Box component="li" {...props}>
-                            <Box>
+                            {option.isCreateOption ? (
+                              <Stack direction="row" spacing={1.25} alignItems="center">
+                                <AddIcon color="primary" fontSize="small" />
+                                <Box>
+                                  <Typography
+                                    variant="body1"
+                                    color="primary"
+                                    sx={{ fontWeight: 700 }}
+                                  >
+                                    Add village
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {option.inputValue}
+                                  </Typography>
+                                </Box>
+                              </Stack>
+                            ) : (
+                              <Box>
                               <Typography variant="body1" sx={{ fontWeight: 600 }}>
                                 {option.villageName}
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
                                 {option.districtName}, {option.stateName}
                               </Typography>
-                            </Box>
+                              </Box>
+                            )}
                           </Box>
                         )}
                       />
-                      <Autocomplete
+                      <Autocomplete<LookupAutocompleteOption, false, false, false>
                         options={castes}
                         value={selectedCaste}
-                        loading={castesLoading}
-                        getOptionLabel={(option: any) => option.name}
-                        onChange={(_event, value: any | null) => {
-                          setSelectedCasteId(value?.id || "");
+                        inputValue={casteInputValue}
+                        loading={castesLoading || lookupSaving}
+                        selectOnFocus
+                        clearOnBlur
+                        handleHomeEndKeys
+                        getOptionLabel={(option) => option.name}
+                        isOptionEqualToValue={(option, value) =>
+                          option.id === value.id
+                        }
+                        filterOptions={(options, params) =>
+                          buildCreatableLookupOptions(options, params, "caste")
+                        }
+                        onInputChange={(_event, value) => {
+                          setCasteInputValue(value);
+                        }}
+                        onChange={async (_event, value) => {
+                          if (!value) {
+                            setSelectedCasteId("");
+                            setSelectedSubCasteId("");
+                            setCasteInputValue("");
+                            setSubCasteInputValue("");
+                            return;
+                          }
+
+                          if (isCreateLookupOption(value)) {
+                            await handleCreateCaste(value.inputValue);
+                            return;
+                          }
+
+                          setSelectedCasteId(value.id);
+                          setSelectedSubCasteId("");
+                          setCasteInputValue(value.name);
+                          setSubCasteInputValue("");
                         }}
                         renderInput={(params) => (
-                          <TextField {...params} label="Caste" />
+                          <TextField
+                            {...params}
+                            label="Caste"
+                            placeholder="Search or add caste"
+                            sx={inputCardSx}
+                            InputProps={{
+                              ...params.InputProps,
+                              startAdornment: (
+                                <>
+                                  <InputAdornment position="start">
+                                    <GroupsOutlinedIcon />
+                                  </InputAdornment>
+                                  {params.InputProps.startAdornment}
+                                </>
+                              ),
+                            }}
+                          />
+                        )}
+                        renderOption={(props, option) => (
+                          <Box component="li" {...props}>
+                            {isCreateLookupOption(option) ? (
+                              <Stack direction="row" spacing={1.25} alignItems="center">
+                                <AddCircleOutlineIcon color="success" fontSize="small" />
+                                <Typography
+                                  variant="body1"
+                                  color="success.dark"
+                                  sx={{ fontWeight: 700 }}
+                                >
+                                  {option.name}
+                                </Typography>
+                              </Stack>
+                            ) : (
+                              option.name
+                            )}
+                          </Box>
                         )}
                       />
-                      <Autocomplete
+                      <Autocomplete<LookupAutocompleteOption, false, false, false>
                         options={filteredSubCastes}
                         value={selectedSubCaste}
-                        loading={subCastesLoading}
-                        getOptionLabel={(option: any) => option.name}
-                        onChange={(_event, value: any | null) => {
-                          setSelectedSubCasteId(value?.id || "");
+                        inputValue={subCasteInputValue}
+                        loading={subCastesLoading || lookupSaving}
+                        disabled={!selectedCasteId || lookupSaving}
+                        selectOnFocus
+                        clearOnBlur
+                        handleHomeEndKeys
+                        getOptionLabel={(option) => option.name}
+                        isOptionEqualToValue={(option, value) =>
+                          option.id === value.id
+                        }
+                        filterOptions={(options, params) =>
+                          buildCreatableLookupOptions(
+                            options,
+                            params,
+                            "sub-caste",
+                          )
+                        }
+                        onInputChange={(_event, value) => {
+                          setSubCasteInputValue(value);
+                        }}
+                        onChange={async (_event, value) => {
+                          if (!value) {
+                            setSelectedSubCasteId("");
+                            setSubCasteInputValue("");
+                            return;
+                          }
+
+                          if (isCreateLookupOption(value)) {
+                            await handleCreateSubCaste(value.inputValue);
+                            return;
+                          }
+
+                          setSelectedSubCasteId(value.id);
+                          setSubCasteInputValue(value.name);
                         }}
                         renderInput={(params) => (
-                          <TextField {...params} label="Sub-caste" />
+                          <TextField
+                            {...params}
+                            label="Sub-caste"
+                            placeholder={
+                              selectedCasteId
+                                ? "Search or add sub-caste"
+                                : "Select caste first"
+                            }
+                            sx={inputCardSx}
+                            InputProps={{
+                              ...params.InputProps,
+                              startAdornment: (
+                                <>
+                                  <InputAdornment position="start">
+                                    <BadgeOutlinedIcon />
+                                  </InputAdornment>
+                                  {params.InputProps.startAdornment}
+                                </>
+                              ),
+                            }}
+                          />
+                        )}
+                        renderOption={(props, option) => (
+                          <Box component="li" {...props}>
+                            {isCreateLookupOption(option) ? (
+                              <Stack direction="row" spacing={1.25} alignItems="center">
+                                <AddCircleOutlineIcon color="success" fontSize="small" />
+                                <Typography
+                                  variant="body1"
+                                  color="success.dark"
+                                  sx={{ fontWeight: 700 }}
+                                >
+                                  {option.name}
+                                </Typography>
+                              </Stack>
+                            ) : (
+                              option.name
+                            )}
+                          </Box>
                         )}
                       />
+                      </Stack>
                     </Stack>
                   )}
 
                   {displayStep === "match" && (
-                    <Stack spacing={2}>
-                      <Box>
-                        <Typography variant="h6" sx={{ mb: 0.5 }}>
-                          Step 3: Choose your tree
+                    <Stack spacing={2.25}>
+                      <Box sx={{ textAlign: "center", mx: "auto" }}>
+                        <Typography
+                          variant={isMobile ? "h5" : "h4"}
+                          sx={{ fontWeight: 900, letterSpacing: 0, mb: 1 }}
+                        >
+                          {matchResults.length > 0
+                            ? `We found ${matchResults.length} possible family trees`
+                            : "Find your family tree"}
                         </Typography>
                         <Typography variant="body1" color="text.secondary">
-                          Trees matching your name are shown first. Other trees
-                          from the same village, caste, and sub-caste are
-                          listed below.
+                          Trees are ranked by name match and community details.
                         </Typography>
                       </Box>
 
                       <Paper
-                        variant="outlined"
                         sx={{
-                          p: { xs: 1.25, sm: 2 },
+                          p: { xs: 1.5, sm: 2.25 },
                           borderRadius: 3,
-                          bgcolor: "background.default",
+                          bgcolor: "#eff6ff",
+                          color: "#0f172a",
+                          border: "1px solid rgba(13,110,253,0.22)",
+                          boxShadow: "0 10px 24px rgba(13,110,253,0.06)",
                         }}
                       >
                         <Stack spacing={1.5}>
@@ -1336,11 +2036,11 @@ export const UserOnboardingPage: React.FC = () => {
                             alignItems={{ xs: "flex-start", sm: "center" }}
                           >
                             <Box>
-                              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                              <Typography
+                                variant="subtitle1"
+                                sx={{ color: "#0f172a", fontWeight: 800 }}
+                              >
                                 Search criteria
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Review or change the information used to find matching trees.
                               </Typography>
                             </Box>
                             <Stack
@@ -1350,8 +2050,12 @@ export const UserOnboardingPage: React.FC = () => {
                             >
                               <Button
                                 variant="outlined"
-                                size="small"
                                 onClick={handleBackToLocation}
+                                sx={{
+                                  ...secondaryOnboardingButtonSx,
+                                  minHeight: 40,
+                                  px: 2.75,
+                                }}
                               >
                                 Edit location
                               </Button>
@@ -1360,24 +2064,24 @@ export const UserOnboardingPage: React.FC = () => {
 
                           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                             <Chip
-                              size="small"
-                              color="primary"
-                              label={`Name: ${searchDisplayName || "Not set"}`}
+                              icon={<PersonOutlineOutlinedIcon />}
+                              label={searchDisplayName || "Not set"}
+                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                             <Chip
-                              size="small"
                               icon={<LocationOnOutlinedIcon />}
-                              label={`Location: ${
-                                selectedLocationOption?.label || locationInputValue || "Not set"
-                              }`}
+                              label={selectedLocationOption?.villageName || locationInputValue || "Not set"}
+                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                             <Chip
-                              size="small"
-                              label={`Caste: ${selectedCaste?.name || "Not set"}`}
+                              icon={<GroupsOutlinedIcon />}
+                              label={selectedCaste?.name || "Not set"}
+                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                             <Chip
-                              size="small"
-                              label={`Sub-caste: ${selectedSubCaste?.name || "Not set"}`}
+                              icon={<BadgeOutlinedIcon />}
+                              label={selectedSubCaste?.name || "Not set"}
+                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                           </Stack>
 
@@ -1398,7 +2102,14 @@ export const UserOnboardingPage: React.FC = () => {
                                   void handleRunMatchSearch();
                                 }
                               }}
-                              sx={{ flex: 1 }}
+                              sx={{ ...inputCardSx, flex: 1 }}
+                              InputProps={{
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <SearchOutlinedIcon />
+                                  </InputAdornment>
+                                ),
+                              }}
                             />
                             <Button
                               variant="contained"
@@ -1406,8 +2117,10 @@ export const UserOnboardingPage: React.FC = () => {
                               disabled={matchesLoading || onboardingSaving}
                               fullWidth={isMobile}
                               sx={{
+                                ...primaryOnboardingButtonSx,
                                 whiteSpace: "nowrap",
                                 minWidth: { sm: 140 },
+                                height: '100%',
                                 alignSelf: { xs: "stretch", sm: "flex-end" },
                               }}
                             >
@@ -1518,6 +2231,7 @@ export const UserOnboardingPage: React.FC = () => {
                                   variant="outlined"
                                   startIcon={<AddIcon />}
                                   onClick={handleOpenCreateTree}
+                                  sx={secondaryOnboardingButtonSx}
                                 >
                                   Create new tree
                                 </Button>
@@ -1538,12 +2252,13 @@ export const UserOnboardingPage: React.FC = () => {
               )}
             </Box>
 
-            <Divider />
-
             <Box
               sx={{
-                px: { xs: 1.5, sm: 4 },
-                py: 2,
+                px: { xs: 0, sm: 0 },
+                py: { xs: 2, sm: 2.5 },
+                width: "100%",
+                maxWidth: actionMaxWidth,
+                mx: "auto",
                 display: "flex",
                 justifyContent: displayStep === "match"
                   ? "space-between"
@@ -1551,11 +2266,15 @@ export const UserOnboardingPage: React.FC = () => {
                 alignItems: "center",
                 gap: 2,
                 flexWrap: "wrap",
-                backgroundColor: "background.paper",
+                backgroundColor: "transparent",
               }}
             >
               {displayStep === "match" && (
-                <Button color="inherit" onClick={handleBackToLocation}>
+                <Button
+                  variant="outlined"
+                  onClick={handleBackToLocation}
+                  sx={secondaryOnboardingButtonSx}
+                >
                   Back to location
                 </Button>
               )}
@@ -1565,11 +2284,18 @@ export const UserOnboardingPage: React.FC = () => {
                   variant="contained"
                   onClick={handleSaveProfile}
                   disabled={onboardingSaving}
+                  endIcon={
+                    !onboardingSaving ? <Box component="span">→</Box> : undefined
+                  }
                   startIcon={
                     onboardingSaving ? <CircularProgress size={16} /> : undefined
                   }
+                  sx={{
+                    ...primaryOnboardingButtonSx,
+                    width: "100%",
+                  }}
                 >
-                  {onboardingSaving ? "Saving..." : "Next: Location"}
+                  {onboardingSaving ? "Saving..." : "Continue"}
                 </Button>
               )}
 
@@ -1578,17 +2304,124 @@ export const UserOnboardingPage: React.FC = () => {
                   variant="contained"
                   onClick={handleSaveLocation}
                   disabled={onboardingSaving}
+                  endIcon={
+                    !onboardingSaving ? <Box component="span">→</Box> : undefined
+                  }
                   startIcon={
                     onboardingSaving ? <CircularProgress size={16} /> : undefined
                   }
+                  sx={{
+                    ...primaryOnboardingButtonSx,
+                    width: { xs: "100%", sm: 260 },
+                  }}
                 >
-                  {onboardingSaving ? "Saving..." : "Next: Search Trees"}
+                  {onboardingSaving ? "Saving..." : "Continue to Search"}
                 </Button>
               )}
             </Box>
           </Paper>
         </Container>
       </Box>
+
+      <Dialog
+        open={createVillageOpen}
+        onClose={handleCloseCreateVillage}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Add village</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            {createVillageError && (
+              <Alert severity="error">{createVillageError}</Alert>
+            )}
+            <Autocomplete
+              options={createVillageStates}
+              value={selectedCreateVillageState}
+              loading={createVillageLoadingStates}
+              getOptionLabel={(option: any) => option?.name || ""}
+              isOptionEqualToValue={(option: any, value: any) =>
+                option.id === value.id
+              }
+              onChange={(_event, value: any | null) => {
+                setCreateVillageStateId(value?.id || "");
+                setCreateVillageDistrictId("");
+                setCreateVillageError("");
+              }}
+              disabled={createVillageSaving}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="State"
+                  placeholder="Search state"
+                  helperText={
+                    createVillageLoadingStates ? "Loading states..." : undefined
+                  }
+                />
+              )}
+            />
+            <Autocomplete
+              options={createVillageDistricts}
+              value={selectedCreateVillageDistrict}
+              loading={createVillageLoadingDistricts}
+              getOptionLabel={(option: any) => option?.name || ""}
+              isOptionEqualToValue={(option: any, value: any) =>
+                option.id === value.id
+              }
+              onChange={(_event, value: any | null) => {
+                setCreateVillageDistrictId(value?.id || "");
+                setCreateVillageError("");
+              }}
+              disabled={createVillageSaving || !createVillageStateId}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="District"
+                  placeholder="Search district"
+                  helperText={
+                    createVillageLoadingDistricts
+                      ? "Loading districts..."
+                      : !createVillageStateId
+                        ? "Select a state first"
+                        : undefined
+                  }
+                />
+              )}
+            />
+            <TextField
+              label="Village"
+              value={createVillageName}
+              onChange={(event) => {
+                setCreateVillageName(event.target.value);
+                setCreateVillageError("");
+              }}
+              disabled={createVillageSaving}
+              autoFocus
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCreateVillage} disabled={createVillageSaving}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateVillage}
+            disabled={
+              createVillageSaving ||
+              !createVillageStateId ||
+              !createVillageDistrictId ||
+              !createVillageName.trim()
+            }
+            startIcon={
+              createVillageSaving ? <CircularProgress size={16} /> : undefined
+            }
+          >
+            {createVillageSaving ? "Saving..." : "Add village"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <AddTree
         hideTrigger

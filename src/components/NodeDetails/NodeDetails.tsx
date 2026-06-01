@@ -11,10 +11,6 @@ import {
   Button,
   CircularProgress,
   FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Stack,
   useTheme,
   useMediaQuery,
@@ -29,6 +25,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  InputAdornment,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import dayjs, { Dayjs } from "dayjs";
@@ -42,6 +39,11 @@ import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import BloodtypeOutlinedIcon from "@mui/icons-material/BloodtypeOutlined";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
+import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
+import TranslateOutlinedIcon from "@mui/icons-material/TranslateOutlined";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
@@ -59,6 +61,31 @@ const DatePicker = React.lazy(() =>
 );
 
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
+
+const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const GENDER_OPTIONS = [
+  { value: Gender.male, label: "Male", icon: <MaleOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: Gender.female, label: "Female", icon: <FemaleOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: "other" as Gender, label: "Other", icon: <PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} /> },
+] as const;
+
+const inputWithIconSx = {
+  "& .MuiInputAdornment-root": {
+    color: "text.secondary",
+  },
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 2,
+  },
+} as const;
+
+const adornment = (icon: React.ReactNode) => (
+  <InputAdornment position="start">{icon}</InputAdornment>
+);
+
+function titleCaseRelationType(value: string) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
 
 interface NodeDetailsProps {
   node: Readonly<FNode> | null;
@@ -142,6 +169,7 @@ export const NodeDetails = memo(function NodeDetails({
   const [linkExternalEndDate, setLinkExternalEndDate] = useState<Dayjs | null>(
     null,
   );
+  const [linkExternalSubmitting, setLinkExternalSubmitting] = useState(false);
   const [editSpouseDatesOpen, setEditSpouseDatesOpen] = useState(false);
   const [editSpouseId, setEditSpouseId] = useState("");
   const [editSpouseRelationSubtype, setEditSpouseRelationSubtype] =
@@ -186,7 +214,7 @@ export const NodeDetails = memo(function NodeDetails({
     saving: boolean;
   } | null>(null);
 
-  const { currentUser } = useAuth() as any;
+  const { currentUser, userProfile, isSuperAdmin } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
 
   useEffect(() => {
@@ -396,24 +424,53 @@ export const NodeDetails = memo(function NodeDetails({
     }
 
     try {
-      // addSpouse(targetId, spouseId, placeholderId)
-      // targetId = spouse.id (The person staying in the tree)
-      // spouseId = selectedExternalPerson.id (The new person coming in)
-      // placeholderId = node.id (The person leaving)
-      await ApiService.addSpouse(
-        spouse.id,
-        selectedExternalPerson.id,
-        linkExternalRelationSubtype,
-        formatPickerDate(linkExternalStartDate),
-        formatPickerDate(linkExternalEndDate),
-        node.id,
-      );
+      setLinkExternalSubmitting(true);
+      const relationStartDate = formatPickerDate(linkExternalStartDate);
+      const relationEndDate = formatPickerDate(linkExternalEndDate);
+      const canLinkDirectly =
+        typeof isSuperAdmin === "function"
+          ? isSuperAdmin()
+          : userProfile?.role === "superadmin";
 
-      alert("Successfully linked. The page will reload to reflect changes.");
-      window.location.reload();
+      if (canLinkDirectly) {
+        // addSpouse(targetId, spouseId, placeholderId)
+        // targetId = spouse.id (The person staying in the tree)
+        // spouseId = selectedExternalPerson.id (The new person coming in)
+        // placeholderId = node.id (The person leaving)
+        await ApiService.addSpouse(
+          spouse.id,
+          selectedExternalPerson.id,
+          linkExternalRelationSubtype,
+          relationStartDate,
+          relationEndDate,
+          node.id,
+        );
+
+        alert("Successfully linked. The page will reload to reflect changes.");
+        window.location.reload();
+        return;
+      }
+
+      await ApiService.createSpouseLinkRequest({
+        personId1: spouse.id,
+        personId2: selectedExternalPerson.id,
+        relationSubtype: linkExternalRelationSubtype,
+        relationStartDate,
+        relationEndDate,
+        replacePersonId: node.id,
+        requestMessage: `Request to replace ${node.name} with ${selectedExternalPerson.name} as spouse of ${
+          nodes.find((candidate) => candidate.id === spouse.id)?.name || "the selected person"
+        }.`,
+      });
+
+      window.dispatchEvent(new Event("link-requests-updated"));
+      alert("Spouse link request raised. The other tree owner or a superadmin can approve it.");
+      setView("details");
     } catch (error: any) {
       console.error("Link external error:", error);
       alert("Failed to link: " + (error.message || error));
+    } finally {
+      setLinkExternalSubmitting(false);
     }
   };
 
@@ -490,6 +547,7 @@ export const NodeDetails = memo(function NodeDetails({
     editSpouseRelationSubtype,
     editSpouseStartDate,
     editSpouseEndDate,
+    formatPickerDate,
     isSavingSpouseDates,
   ]);
 
@@ -945,52 +1003,61 @@ export const NodeDetails = memo(function NodeDetails({
                       </Stack>
                     </Box>
 
-                    <TextField
-                      label="Name"
-                      value={editedName}
-                      onChange={(e) => setEditedName(e.target.value)}
-                      fullWidth
-                      required
-                    />
-                    <HindiNameInput
-                      sourceText={editedName}
-                      value={editedNameHindi}
-                      onChange={setEditedNameHindi}
-                    />
+	                    <TextField
+	                      label="Name"
+	                      value={editedName}
+	                      onChange={(e) => setEditedName(e.target.value)}
+	                      fullWidth
+	                      required
+	                      sx={inputWithIconSx}
+	                      InputProps={{
+	                        startAdornment: adornment(
+	                          <PersonOutlineOutlinedIcon fontSize="small" />,
+	                        ),
+	                      }}
+	                    />
+	                    <HindiNameInput
+	                      sourceText={editedName}
+	                      value={editedNameHindi}
+	                      onChange={setEditedNameHindi}
+	                      startIcon={<TranslateOutlinedIcon fontSize="small" />}
+	                    />
                     <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
                       <DatePicker
-                        label="Date of Birth"
-                        value={editedDob}
-                        onChange={(value) => setEditedDob(value)}
-                        slotProps={{ textField: { fullWidth: true } }}
-                        format="DD/MM/YYYY"
-                      />
+	                        label="Date of Birth"
+	                        value={editedDob}
+	                        onChange={(value) => setEditedDob(value)}
+	                        slotProps={{
+	                          textField: {
+	                            fullWidth: true,
+	                            sx: inputWithIconSx,
+	                            InputProps: {
+	                              startAdornment: adornment(<CakeOutlinedIcon fontSize="small" />),
+	                            },
+	                          },
+	                        }}
+	                        format="DD/MM/YYYY"
+	                      />
                     </Suspense>
-                    <FormControl sx={{ m: 0 }}>
-                      <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
-                      <RadioGroup
-                        row
-                        sx={{ gap: 1.5 }}
-                        value={editedGender}
-                        onChange={(e) => setEditedGender(e.target.value as Gender)}
-                      >
-                        <FormControlLabel
-                          value={Gender.male}
-                          control={<Radio />}
-                          label="Male"
-                        />
-                        <FormControlLabel
-                          value={Gender.female}
-                          control={<Radio />}
-                          label="Female"
-                        />
-                        <FormControlLabel
-                          value={"other" as Gender}
-                          control={<Radio />}
-                          label="Other"
-                        />
-                      </RadioGroup>
-                    </FormControl>
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                        Gender
+                      </Typography>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {GENDER_OPTIONS.map((option) => (
+                          <Chip
+                            key={String(option.value)}
+                            icon={option.icon}
+                            label={option.label}
+                            clickable
+                            color={editedGender === option.value ? "primary" : "default"}
+                            variant={editedGender === option.value ? "filled" : "outlined"}
+                            onClick={() => setEditedGender(option.value)}
+                            sx={{ height: 36, px: 0.75 }}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
                   </Stack>
                 </Paper>
 
@@ -999,62 +1066,90 @@ export const NodeDetails = memo(function NodeDetails({
                     Life details
                   </Typography>
                   <Stack spacing={2}>
-                <FormControl fullWidth>
-                  <InputLabel>Blood Group</InputLabel>
-                  <Select
-                    value={editedBloodGroup}
-                    onChange={(e) => setEditedBloodGroup(e.target.value)}
-                    label="Blood Group"
-                  >
-                    <MenuItem value="">Unknown</MenuItem>
-                    <MenuItem value="A+">A+</MenuItem>
-                    <MenuItem value="A-">A−</MenuItem>
-                    <MenuItem value="B+">B+</MenuItem>
-                    <MenuItem value="B-">B−</MenuItem>
-                    <MenuItem value="AB+">AB+</MenuItem>
-                    <MenuItem value="AB-">AB−</MenuItem>
-                    <MenuItem value="O+">O+</MenuItem>
-                    <MenuItem value="O-">O−</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControlLabel
-                  sx={{ m: 0 }}
-                  control={
-                    <Switch
-                      checked={editedIsAlive}
-                      onChange={(e) => {
-                        setEditedIsAlive(e.target.checked);
-                        if (e.target.checked) setEditedDeceasedDate(null);
-                      }}
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    Blood Group
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip
+                      label="Unknown"
+                      clickable
+                      color={!editedBloodGroup ? "primary" : "default"}
+                      variant={!editedBloodGroup ? "filled" : "outlined"}
+                      onClick={() => setEditedBloodGroup("")}
                     />
-                  }
-                  label="Is Alive"
-                />
+                    {BLOOD_GROUP_OPTIONS.map((option) => (
+                      <Chip
+                        key={option}
+                        label={option}
+                        clickable
+                        color={editedBloodGroup === option ? "primary" : "default"}
+                        variant={editedBloodGroup === option ? "filled" : "outlined"}
+                        onClick={() => setEditedBloodGroup(option)}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Typography
+                    variant="body2"
+                    color={editedIsAlive ? "text.secondary" : "text.primary"}
+                    sx={{ fontWeight: editedIsAlive ? 500 : 800 }}
+                  >
+                    Dead
+                  </Typography>
+                  <Switch
+                    checked={editedIsAlive}
+                    onChange={(e) => {
+                      setEditedIsAlive(e.target.checked);
+                      if (e.target.checked) setEditedDeceasedDate(null);
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    color={editedIsAlive ? "text.primary" : "text.secondary"}
+                    sx={{ fontWeight: editedIsAlive ? 800 : 500 }}
+                  >
+                    Alive
+                  </Typography>
+                </Stack>
                 {!editedIsAlive && (
                   <Suspense
                     fallback={<TextField fullWidth label="Deceased Date" />}
                   >
                     <DatePicker
-                      label="Deceased Date"
-                      value={editedDeceasedDate}
-                      onChange={(value) => setEditedDeceasedDate(value)}
-                      slotProps={{ textField: { fullWidth: true } }}
-                      format="DD/MM/YYYY"
-                    />
+	                      label="Deceased Date"
+	                      value={editedDeceasedDate}
+	                      onChange={(value) => setEditedDeceasedDate(value)}
+	                      slotProps={{
+	                        textField: {
+	                          fullWidth: true,
+	                          sx: inputWithIconSx,
+	                          InputProps: {
+	                            startAdornment: adornment(<CakeOutlinedIcon fontSize="small" />),
+	                          },
+	                        },
+	                      }}
+	                      format="DD/MM/YYYY"
+	                    />
                   </Suspense>
                 )}
                   </Stack>
                 </Paper>
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
-                    Additional details
-                  </Typography>
-                  <AdditionalDetails
-                    value={editedCustomFields}
-                    onChange={setEditedCustomFields}
-                    showUpfrontFields={false}
-                  />
-                </Paper>
+                <Accordion variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      Additional details
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <AdditionalDetails
+                      value={editedCustomFields}
+                      onChange={setEditedCustomFields}
+                      showUpfrontFields={false}
+                    />
+                  </AccordionDetails>
+                </Accordion>
               </Stack>
             </DialogContent>
             <DialogActions>
@@ -1134,12 +1229,13 @@ export const NodeDetails = memo(function NodeDetails({
                 child reassignment automatically.
               </Typography>
 
-              <FormControl fullWidth margin="normal">
+              <FormControl fullWidth margin="normal" sx={inputWithIconSx}>
                 <InputLabel>Village</InputLabel>
                 <Select
                   value={linkExternalVillageId}
                   onChange={(e) => setLinkExternalVillageId(e.target.value)}
                   label="Village"
+                  startAdornment={adornment(<LocationOnOutlinedIcon fontSize="small" />)}
                 >
                   {villages.map((v) => (
                     <MenuItem key={v.id} value={v.id}>
@@ -1158,9 +1254,10 @@ export const NodeDetails = memo(function NodeDetails({
                 disabled={!linkExternalVillageId}
                 placeholder="Search for waiting spouse..."
                 label="Select Real Person"
+                startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
               />
 
-              <FormControl fullWidth sx={{ mt: 2 }}>
+              <FormControl fullWidth sx={{ ...inputWithIconSx, mt: 2 }}>
                 <InputLabel>Relation Type</InputLabel>
                 <Select
                   value={linkExternalRelationSubtype}
@@ -1172,31 +1269,56 @@ export const NodeDetails = memo(function NodeDetails({
                     }
                   }}
                   label="Relation Type"
+                  startAdornment={adornment(<FavoriteBorderOutlinedIcon fontSize="small" />)}
                 >
-                  <MenuItem value={RelType.married}>married</MenuItem>
-                  <MenuItem value={RelType.divorced}>divorced</MenuItem>
+                  <MenuItem value={RelType.married}>
+                    {titleCaseRelationType(RelType.married)}
+                  </MenuItem>
+                  <MenuItem value={RelType.divorced}>
+                    {titleCaseRelationType(RelType.divorced)}
+                  </MenuItem>
                 </Select>
               </FormControl>
 
               <Suspense fallback={<TextField fullWidth label="Marriage Start Date" sx={{ mt: 2 }} />}>
                 <DatePicker
-                  label="Marriage Start Date (optional)"
-                  value={linkExternalStartDate}
-                  onChange={(value) => setLinkExternalStartDate(value)}
-                  slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
-                  format="DD/MM/YYYY"
-                />
+	                  label="Marriage Start Date (optional)"
+	                  value={linkExternalStartDate}
+	                  onChange={(value) => setLinkExternalStartDate(value)}
+	                  slotProps={{
+	                    textField: {
+	                      fullWidth: true,
+	                      sx: { ...inputWithIconSx, mt: 2 },
+	                      InputProps: {
+	                        startAdornment: adornment(
+	                          <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                        ),
+	                      },
+	                    },
+	                  }}
+	                  format="DD/MM/YYYY"
+	                />
               </Suspense>
 
               {linkExternalRelationSubtype === RelType.divorced && (
                 <Suspense fallback={<TextField fullWidth label="Marriage End Date" sx={{ mt: 2 }} />}>
                   <DatePicker
-                    label="Marriage End Date (optional)"
-                    value={linkExternalEndDate}
-                    onChange={(value) => setLinkExternalEndDate(value)}
-                    slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
-                    format="DD/MM/YYYY"
-                  />
+	                    label="Marriage End Date (optional)"
+	                    value={linkExternalEndDate}
+	                    onChange={(value) => setLinkExternalEndDate(value)}
+	                    slotProps={{
+	                      textField: {
+	                        fullWidth: true,
+	                        sx: { ...inputWithIconSx, mt: 2 },
+	                        InputProps: {
+	                          startAdornment: adornment(
+	                            <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                          ),
+	                        },
+	                      },
+	                    }}
+	                    format="DD/MM/YYYY"
+	                  />
                 </Suspense>
               )}
             </DialogContent>
@@ -1204,11 +1326,11 @@ export const NodeDetails = memo(function NodeDetails({
               <Button onClick={() => setView("details")}>Cancel</Button>
               <Button
                 onClick={handleConfirmLinkExternal}
-                disabled={!selectedExternalPerson}
+                disabled={!selectedExternalPerson || linkExternalSubmitting}
                 variant="contained"
                 color="primary"
               >
-                Link & Replace
+                {linkExternalSubmitting ? "Submitting..." : "Link & Replace"}
               </Button>
             </DialogActions>
           </>
@@ -1230,12 +1352,13 @@ export const NodeDetails = memo(function NodeDetails({
           </IconButton>
         </DialogTitle>
         <DialogContent dividers>
-          <FormControl fullWidth sx={{ mb: 2 }}>
+          <FormControl fullWidth sx={{ ...inputWithIconSx, mb: 2 }}>
             <InputLabel>Spouse</InputLabel>
             <Select
               value={editSpouseId}
               onChange={(e) => handleChangeEditSpouse(e.target.value)}
               label="Spouse"
+              startAdornment={adornment(<PersonOutlineOutlinedIcon fontSize="small" />)}
             >
               {(node?.spouses || []).map((rel: any) => {
                 const spouseNode = nodes.find((n) => n.id === rel.id);
@@ -1248,7 +1371,7 @@ export const NodeDetails = memo(function NodeDetails({
             </Select>
           </FormControl>
 
-          <FormControl fullWidth sx={{ mb: 2 }}>
+          <FormControl fullWidth sx={{ ...inputWithIconSx, mb: 2 }}>
             <InputLabel>Relation Type</InputLabel>
             <Select
               value={editSpouseRelationSubtype}
@@ -1260,31 +1383,56 @@ export const NodeDetails = memo(function NodeDetails({
                 }
               }}
               label="Relation Type"
+              startAdornment={adornment(<FavoriteBorderOutlinedIcon fontSize="small" />)}
             >
-              <MenuItem value={RelType.married}>married</MenuItem>
-              <MenuItem value={RelType.divorced}>divorced</MenuItem>
+              <MenuItem value={RelType.married}>
+                {titleCaseRelationType(RelType.married)}
+              </MenuItem>
+              <MenuItem value={RelType.divorced}>
+                {titleCaseRelationType(RelType.divorced)}
+              </MenuItem>
             </Select>
           </FormControl>
 
           <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
             <DatePicker
-              label="Marriage Start Date (optional)"
-              value={editSpouseStartDate}
-              onChange={(value) => setEditSpouseStartDate(value)}
-              slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
-              format="DD/MM/YYYY"
-            />
+	              label="Marriage Start Date (optional)"
+	              value={editSpouseStartDate}
+	              onChange={(value) => setEditSpouseStartDate(value)}
+	              slotProps={{
+	                textField: {
+	                  fullWidth: true,
+	                  sx: { ...inputWithIconSx, mb: 2 },
+	                  InputProps: {
+	                    startAdornment: adornment(
+	                      <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                    ),
+	                  },
+	                },
+	              }}
+	              format="DD/MM/YYYY"
+	            />
           </Suspense>
 
           {editSpouseRelationSubtype === RelType.divorced && (
             <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
               <DatePicker
-                label="Marriage End Date (optional)"
-                value={editSpouseEndDate}
-                onChange={(value) => setEditSpouseEndDate(value)}
-                slotProps={{ textField: { fullWidth: true } }}
-                format="DD/MM/YYYY"
-              />
+	                label="Marriage End Date (optional)"
+	                value={editSpouseEndDate}
+	                onChange={(value) => setEditSpouseEndDate(value)}
+	                slotProps={{
+	                  textField: {
+	                    fullWidth: true,
+	                    sx: inputWithIconSx,
+	                    InputProps: {
+	                      startAdornment: adornment(
+	                        <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                      ),
+	                    },
+	                  },
+	                }}
+	                format="DD/MM/YYYY"
+	              />
             </Suspense>
           )}
         </DialogContent>
