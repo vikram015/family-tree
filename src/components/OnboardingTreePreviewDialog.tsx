@@ -387,6 +387,7 @@ export const OnboardingTreePreviewDialog: React.FC<
                 canEditTree={false}
                 currentTreeId={treeId || ""}
                 onNodeClick={handleNodeClick}
+                allowNameDetailsClick={false}
               />
             </Box>
           )}

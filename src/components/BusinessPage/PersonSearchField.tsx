@@ -67,11 +67,16 @@ function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber"
   );
 }
 
+export type PersonSearchValueChangeSource = "input" | "select";
+
 interface PersonSearchFieldProps {
   label?: string;
   placeholder?: string;
   searchValue: string;
-  onSearchValueChange: (value: string) => void;
+  onSearchValueChange: (
+    value: string,
+    meta?: { source: PersonSearchValueChangeSource },
+  ) => void;
   onPersonSelect: (person: PersonSearchResult) => void;
   selectedPerson?: PersonSearchResult | any | null;
   villageId?: string;
@@ -155,11 +160,11 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   }, [minSearchLength, searchValue, treeId, villageId]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
-    onPersonSelect(person);
     setSearchResults([]);
     setShowResults(false);
     skipNextAutoSearchRef.current = true;
-    onSearchValueChange(person.name);
+    onSearchValueChange(person.name, { source: "select" });
+    onPersonSelect(person);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -195,7 +200,9 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         <TextField
           label={label}
           value={searchValue}
-          onChange={(e) => onSearchValueChange(e.target.value)}
+          onChange={(e) =>
+            onSearchValueChange(e.target.value, { source: "input" })
+          }
           onKeyPress={handleKeyPress}
           fullWidth
           placeholder={placeholder}

@@ -290,6 +290,7 @@ export interface TreeWriteScope {
 export interface DefaultUserTreeTarget {
   treeId: string;
   personId: string | null;
+  villageId?: string | null;
 }
 
 export interface TreeInvite {

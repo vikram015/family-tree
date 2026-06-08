@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   Autocomplete,
@@ -33,6 +33,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
 import { ApiService } from "../../services/apiService";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
@@ -142,6 +143,18 @@ export const Header: React.FC = () => {
     return location.pathname.startsWith(path);
   };
 
+  const handleNavLinkClick = useCallback(
+    async (path: string) => {
+      if (path === "/families" && currentUser) {
+        navigate(await resolveDefaultFamilyTreePath());
+        return;
+      }
+
+      navigate(path);
+    },
+    [currentUser, navigate],
+  );
+
   const selectedVillageOption =
     villages.find((village) => village.id === selectedVillage) || null;
   const filteredVillages = useMemo(() => {
@@ -177,11 +190,12 @@ export const Header: React.FC = () => {
         {allNavLinks.map((link) => (
           <ListItem key={link.path}>
             <Button
-              component={Link}
-              to={link.path}
               fullWidth
               variant={isActive(link.path) ? "contained" : "outlined"}
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => {
+                setDrawerOpen(false);
+                void handleNavLinkClick(link.path);
+              }}
             >
               {link.label}
             </Button>
@@ -360,9 +374,10 @@ export const Header: React.FC = () => {
               {allNavLinks.map((link) => (
                 <Button
                   key={link.path}
-                  component={Link}
-                  to={link.path}
                   color="inherit"
+                  onClick={() => {
+                    void handleNavLinkClick(link.path);
+                  }}
                   sx={{
                     fontWeight: isActive(link.path) ? "bold" : "normal",
                     borderBottom: isActive(link.path)

@@ -78,6 +78,7 @@ export type TreeViewerFeatureFlags = {
   allowEditAction?: boolean;
   allowDeleteAction?: boolean;
   allowViewDetailsAction?: boolean;
+  allowNameDetailsClick?: boolean;
 };
 
 export interface TreeViewerProps {

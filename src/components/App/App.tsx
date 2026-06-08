@@ -11,6 +11,8 @@ import {
   Routes,
   Route,
   useSearchParams,
+  useLocation,
+  useNavigate,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -33,6 +35,8 @@ import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
 import { UserOnboardingPage } from "../UserOnboardingPage";
 import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
+import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 // Lazy load FamiliesPage
 const FamiliesPage = React.lazy(() =>
@@ -55,6 +59,9 @@ const theme = createTheme({
 function AppContent() {
   console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const treeId = searchParams.get("tree") || "";
 
   const setTreeId = useCallback(
@@ -95,6 +102,23 @@ function AppContent() {
     }, 1000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (location.pathname !== "/families" || treeId || !currentUser) {
+      return;
+    }
+
+    let active = true;
+    resolveDefaultFamilyTreePath().then((targetPath) => {
+      if (active && targetPath !== "/families") {
+        navigate(targetPath, { replace: true });
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser, location.pathname, navigate, treeId]);
 
   const onChange = useCallback(
     (value: string) => {
@@ -160,6 +184,7 @@ function AppContent() {
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/person/:personId" element={<ProfilePage />} />
               <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             </Routes>

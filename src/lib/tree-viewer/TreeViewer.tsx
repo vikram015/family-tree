@@ -151,6 +151,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       allowEditAction: features?.allowEditAction ?? true,
       allowDeleteAction: features?.allowDeleteAction ?? true,
       allowViewDetailsAction: features?.allowViewDetailsAction ?? true,
+      allowNameDetailsClick: features?.allowNameDetailsClick ?? true,
     }),
     [features],
   );
@@ -577,6 +578,23 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       const target = e.target as HTMLElement;
       setHoverInfo(null);
 
+      // --- Node name clicked: open the same details panel as double-click ---
+      const nodeName = target.closest(".node-name-click-target");
+      if (
+        nodeName &&
+        effectiveFeatures.allowNameDetailsClick &&
+        effectiveFeatures.allowViewDetailsAction &&
+        onViewDetails
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        const nodeId = nodeName.getAttribute("data-node-id");
+        if (nodeId) {
+          onViewDetails(nodeId);
+        }
+        return;
+      }
+
       // --- External tree link ---
       const linkButton = target.closest(".external-tree-icon");
       if (linkButton) {
@@ -754,6 +772,21 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       ) as Element | null;
       if (!target) return;
 
+      const nodeName = target.closest(".node-name-click-target");
+      if (
+        nodeName &&
+        effectiveFeatures.allowNameDetailsClick &&
+        effectiveFeatures.allowViewDetailsAction &&
+        onViewDetails
+      ) {
+        const nodeId = nodeName.getAttribute("data-node-id");
+        if (nodeId) {
+          lastTouchTapRef.current = Date.now();
+          onViewDetails(nodeId);
+        }
+        return;
+      }
+
       // Check if tap landed on a node card (find closest g.node with __data__)
       const nodeG = target.closest("g.node") as any;
       if (nodeG && nodeG.__data__) {
@@ -801,9 +834,12 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     effectiveFeatures.allowEditAction,
     effectiveFeatures.allowExternalTreeNavigation,
     effectiveFeatures.allowHoverPreview,
+    effectiveFeatures.allowNameDetailsClick,
     effectiveFeatures.allowPlaceholderActions,
+    effectiveFeatures.allowViewDetailsAction,
     onExternalTreeClick,
     onEditNode,
+    onViewDetails,
     onAddRelative,
     isNodeEditable,
     nodes,
@@ -1357,6 +1393,9 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
               if (
                 target.closest(".node-edit-icon") ||
                 target.closest(".node-add-icon") ||
+                (effectiveFeatures.allowNameDetailsClick &&
+                  effectiveFeatures.allowViewDetailsAction &&
+                  target.closest(".node-name-click-target")) ||
                 target.closest(".placeholder-click-target") ||
                 target.closest(".external-tree-icon")
               ) {
@@ -1521,8 +1560,11 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     treeLanguage,
     highlightedPersonId,
     effectiveFeatures.allowExternalTreeNavigation,
+    effectiveFeatures.allowNameDetailsClick,
     effectiveFeatures.allowPlaceholderActions,
+    effectiveFeatures.allowViewDetailsAction,
     effectiveRenderers,
+    onViewDetails,
   ]);
 
   if (error) {

@@ -489,7 +489,7 @@ export function renderNodeCardSvg(
 
   svg += renderStatusAvatarBadge(dim.img_x + dim.img_w - 2, dim.img_y + 3, isDeceased);
 
-  svg += `<text x="${dim.text_x}" y="${dim.text_y}" `;
+  svg += `<text class="node-name-click-target" data-node-id="${extra?.id || ""}" x="${dim.text_x}" y="${dim.text_y}" `;
   svg += `font-family="${nameFontFamily}" `;
   svg += `font-size="14" font-weight="700" fill="${colors.text}" `;
   svg += `dominant-baseline="auto" cursor="pointer" ${nameLanguageAttrs}>`;

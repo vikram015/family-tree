@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
@@ -214,9 +214,13 @@ const OwnerLink: React.FC<{
     <Tooltip title={tooltipContent}>
       <Box
         component="span"
-        onClick={() =>
-          onNavigate(buildFamilyPagePath(business.treeId, business.ownerId))
-        }
+        onClick={() => {
+          if (business.ownerId) {
+            onNavigate(`/profile/person/${business.ownerId}`);
+            return;
+          }
+          onNavigate(buildFamilyPagePath(business.treeId, business.ownerId));
+        }}
         sx={{
           color: businessBlue,
           cursor: "pointer",
@@ -234,8 +238,8 @@ const OwnerLink: React.FC<{
 export const BusinessPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { selectedVillage, villages } = useVillage();
-  const { isAdmin } = useAuth();
+  const { selectedVillage, setSelectedVillage, villages } = useVillage();
+  const { currentUser, isAdmin } = useAuth();
 
   // Redux state
   const businesses = useAppSelector(selectBusinesses);
@@ -265,6 +269,7 @@ export const BusinessPage: React.FC = () => {
     contact: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const defaultVillageAppliedForUserRef = useRef<string | null>(null);
 
   // Initialize default categories (static - no need to fetch from DB)
   const initializeCategories = () => {
@@ -339,6 +344,43 @@ export const BusinessPage: React.FC = () => {
     // Initialize categories on component mount
     initializeCategories();
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) {
+      defaultVillageAppliedForUserRef.current = null;
+      return;
+    }
+
+    const userKey = currentUser.uid || "current-user";
+    if (defaultVillageAppliedForUserRef.current === userKey) {
+      return;
+    }
+
+    let active = true;
+    defaultVillageAppliedForUserRef.current = userKey;
+
+    ApiService.getDefaultUserTree()
+      .then((target) => {
+        if (!active || !target?.villageId) {
+          return;
+        }
+
+        const villageExists =
+          villages.length === 0 || villages.some((village) => village.id === target.villageId);
+        if (villageExists && selectedVillage !== target.villageId) {
+          setSelectedVillage(target.villageId);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          console.warn("Failed to resolve default business village:", error);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser, selectedVillage, setSelectedVillage, villages]);
 
   // Fetch businesses when village changes - dispatches Redux action
   useEffect(() => {

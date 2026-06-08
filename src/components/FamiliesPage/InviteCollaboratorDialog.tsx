@@ -18,6 +18,10 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
+import PersonSearchOutlinedIcon from "@mui/icons-material/PersonSearchOutlined";
+import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 
 type BranchPersonOption = {
@@ -71,11 +75,33 @@ export function InviteCollaboratorDialog({
 }: InviteCollaboratorDialogProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const iconAdornment = (icon: React.ReactNode) => (
+    <InputAdornment position="start" sx={{ color: "action.active", mr: 0.25 }}>
+      {icon}
+    </InputAdornment>
+  );
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      fullScreen={isMobile}
+      PaperProps={{
+        sx: isMobile
+          ? {
+              m: 0,
+              width: "100%",
+              height: "100%",
+              maxHeight: "100%",
+              borderRadius: 0,
+            }
+          : undefined,
+      }}
+    >
       <DialogTitle>Invite Collaborator</DialogTitle>
-      <DialogContent>
+      <DialogContent sx={isMobile ? { flex: 1, overflowY: "auto" } : undefined}>
         <Stack spacing={2.5} sx={{ pt: 0.5 }}>
           <DialogContentText sx={{ m: 0 }}>
             Create an invite link and share it via SMS, WhatsApp, or any app from your phone.
@@ -89,7 +115,12 @@ export function InviteCollaboratorDialog({
             onChange={(e) => onInvitePhoneChange(e.target.value)}
             inputProps={{ maxLength: 10, inputMode: "numeric" }}
             InputProps={{
-              startAdornment: <InputAdornment position="start">+91</InputAdornment>,
+              startAdornment: (
+                <InputAdornment position="start" sx={{ gap: 0.75 }}>
+                  <PhoneOutlinedIcon fontSize="small" color="action" />
+                  +91
+                </InputAdornment>
+              ),
             }}
             helperText="Enter 10 digits only. +91 is added automatically."
           />
@@ -100,6 +131,7 @@ export function InviteCollaboratorDialog({
               label="Access Scope"
               value={inviteScope}
               onChange={(e) => onInviteScopeChange(e.target.value as "full" | "branch")}
+              startAdornment={iconAdornment(<AccountTreeOutlinedIcon fontSize="small" />)}
             >
               <MenuItem value="full">Full tree</MenuItem>
               <MenuItem value="branch">Selected person branch</MenuItem>
@@ -112,9 +144,13 @@ export function InviteCollaboratorDialog({
                 label="Branch Person"
                 placeholder="Search people in this tree"
                 searchValue={invitePersonSearch}
-                onSearchValueChange={(value) => {
+                startIcon={<PersonSearchOutlinedIcon fontSize="small" color="action" />}
+                onSearchValueChange={(value, meta) => {
                   onInvitePersonSearchChange(value);
-                  if (!value.trim() || value !== (selectedBranchPersonName || "")) {
+                  if (meta?.source === "select") {
+                    return;
+                  }
+                  if (value.trim() && value !== (selectedBranchPersonName || "")) {
                     onInvitePersonIdChange("");
                   }
                 }}
@@ -148,7 +184,12 @@ export function InviteCollaboratorDialog({
 
           <FormControl fullWidth sx={{ mt: inviteScope === "branch" ? 1 : 0 }}>
             <InputLabel>Role</InputLabel>
-            <Select label="Role" value={inviteRole} onChange={(e) => onInviteRoleChange(e.target.value)}>
+            <Select
+              label="Role"
+              value={inviteRole}
+              onChange={(e) => onInviteRoleChange(e.target.value)}
+              startAdornment={iconAdornment(<AdminPanelSettingsOutlinedIcon fontSize="small" />)}
+            >
               <MenuItem value="write">Write</MenuItem>
               <MenuItem value="editor">Editor</MenuItem>
               <MenuItem value="read">Read</MenuItem>
@@ -157,7 +198,7 @@ export function InviteCollaboratorDialog({
           </FormControl>
         </Stack>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={isMobile ? { px: 3, py: 2 } : undefined}>
         <Button onClick={onClose} disabled={busy}>
           Cancel
         </Button>

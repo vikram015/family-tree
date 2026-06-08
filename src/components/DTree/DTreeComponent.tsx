@@ -41,6 +41,8 @@ export interface DTreeComponentProps {
   onMobileSheetChange?: (open: boolean) => void;
   initialMainId?: string | null;
   initialShowFullTree?: boolean;
+  allowNameDetailsClick?: boolean;
+  allowHoverPreview?: boolean;
 }
 
 function normalizePreferenceLanguage(
@@ -108,6 +110,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   onMobileSheetChange,
   initialMainId = null,
   initialShowFullTree = true,
+  allowNameDetailsClick = true,
+  allowHoverPreview = false,  
 }) => {
   const dispatch = useAppDispatch();
   const { currentUser } = useAuth();
@@ -216,6 +220,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     [],
   );
 
+  const features: TreeViewerProps["features"] = useMemo(
+    () => ({ allowNameDetailsClick,allowHoverPreview }),
+    [allowNameDetailsClick, allowHoverPreview],
+  );
+
   return (
     <TreeViewer
       nodes={viewerNodes}
@@ -238,6 +247,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       initialShowSpouses={viewerPreferences.showSpouses}
       initialLanguage={viewerPreferences.language}
       onPreferencesChange={setViewerPreferences}
+      features={features}
       renderers={renderers}
     />
   );

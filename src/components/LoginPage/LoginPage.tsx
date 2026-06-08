@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LoginModal } from "../LoginModal/LoginModal";
 import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -16,11 +17,25 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
+    let active = true;
+
     if (currentUser) {
-      navigate(from, { replace: true });
+      if (from === "/families") {
+        resolveDefaultFamilyTreePath().then((targetPath) => {
+          if (active) {
+            navigate(targetPath, { replace: true });
+          }
+        });
+      } else {
+        navigate(from, { replace: true });
+      }
     }
 
     setPendingPostLogin(false);
+
+    return () => {
+      active = false;
+    };
   }, [
     pendingPostLogin,
     loading,

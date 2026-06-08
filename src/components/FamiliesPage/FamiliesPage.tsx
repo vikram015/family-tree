@@ -567,6 +567,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     loadTreeData();
   }, [loadTreeData]);
 
+  useEffect(() => {
+    // Prevent stale tree content/icons while switching between trees.
+    console.log("Invite Person ID changed:", invitePersonId);
+  }, [invitePersonId]);
+
   /**
    * Merges affected nodes from add_person_to_tree into the current state.
    * - New nodes (not in current state) are added.
@@ -1771,6 +1776,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }}
         onInvitePersonSearchChange={setInvitePersonSearch}
         onInvitePersonSelect={(person) => {
+          console.log("Selected person:", person);
           setInvitePersonId(person?.id || "");
           setInviteSelectedPersonName(person?.name || "");
           setInvitePersonSearch(person?.name || "");

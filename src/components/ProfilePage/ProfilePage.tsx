@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -28,8 +28,10 @@ import {
   Stack,
   Tooltip,
   Link,
+  Card,
+  CardContent,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useVillage } from "../hooks/useVillage";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -44,6 +46,10 @@ import WorkIcon from "@mui/icons-material/Work";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
+import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import { ApiService } from "../../services/apiService";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 import {
@@ -53,8 +59,24 @@ import {
 
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
 
+const BUSINESS_CATEGORY_LABELS: Record<string, string> = {
+  retail: "Retail & Shops",
+  agriculture: "Agriculture & Farming",
+  it: "IT & Technology",
+  education: "Education",
+  healthcare: "Healthcare",
+  engineering: "Engineering & Construction",
+  properties: "Properties & Real Estate",
+};
+
+const formatBusinessCategory = (category?: string) => {
+  if (!category) return null;
+  return BUSINESS_CATEGORY_LABELS[category] || category;
+};
+
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const { personId: routePersonId } = useParams<{ personId?: string }>();
   const dispatch = useAppDispatch();
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
     useAuth();
@@ -75,7 +97,11 @@ export const ProfilePage: React.FC = () => {
   // Dialog State
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [openBusinessDialog, setOpenBusinessDialog] = useState(false);
+  const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
   const [openEditProfileDialog, setOpenEditProfileDialog] = useState(false);
+  const [personLoading, setPersonLoading] = useState(false);
+  const [personNotFound, setPersonNotFound] = useState(false);
+  const [businessSaving, setBusinessSaving] = useState(false);
 
   // Form State
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>("");
@@ -111,6 +137,44 @@ export const ProfilePage: React.FC = () => {
     subCasteMap.get(linkedPersonDetails?.tree?.subCaste) ||
     linkedPersonDetails?.tree?.subCaste;
 
+  const isPublicPersonView = Boolean(routePersonId);
+  const effectivePersonId = routePersonId || userProfile?.peopleId || null;
+  const canManagePerson = Boolean(
+    currentUser &&
+      effectivePersonId &&
+      userProfile?.peopleId === effectivePersonId,
+  );
+  const isOwnAccountView = !isPublicPersonView;
+  const displayPersonName =
+    linkedPersonDetails?.name ||
+    userProfile?.displayName ||
+    userProfile?.name ||
+    "Profile";
+
+  const refreshPersonDetails = useCallback(async (personId: string) => {
+    const person = await ApiService.getPersonById(personId);
+    if (!person) {
+      return null;
+    }
+
+    let treeDetails = null;
+    if ((person as any).treeId) {
+      treeDetails = await ApiService.getTreeWithDetails((person as any).treeId);
+    }
+
+    return { ...person, tree: treeDetails };
+  }, []);
+
+  const refreshBusinesses = useCallback(async (personId: string) => {
+    const updatedBiz = await ApiService.getBusinessesByPerson(personId);
+    setBusinesses(updatedBiz || []);
+  }, []);
+
+  const refreshProfessions = useCallback(async (personId: string) => {
+    const updatedProfs = await ApiService.getProfessionsByPerson(personId);
+    setProfessions(updatedProfs || []);
+  }, []);
+
   useEffect(() => {
     if (userProfile) {
       setEditProfileData({
@@ -123,35 +187,52 @@ export const ProfilePage: React.FC = () => {
 
   useEffect(() => {
     const fetchDetails = async () => {
-      if (userProfile?.peopleId) {
-        try {
-          const person = await ApiService.getPersonById(
-            userProfile.peopleId,
-          );
-          let treeDetails = null;
-          if (person && (person as any).treeId) {
-            treeDetails = await ApiService.getTreeWithDetails(
-              (person as any).treeId,
-            );
-          }
-          setLinkedPersonDetails({ ...person, tree: treeDetails });
-          setProfilePhotoUrl((person as any)?.photoUrl || undefined);
+      if (!effectivePersonId) {
+        setLinkedPersonDetails(null);
+        setProfessions([]);
+        setBusinesses([]);
+        setPersonNotFound(false);
+        setProfilePhotoUrl(undefined);
+        return;
+      }
 
-          const [profs, biz, allProfs] = await Promise.all([
-            ApiService.getProfessionsByPerson(userProfile.peopleId),
-            ApiService.getBusinessesByPerson(userProfile.peopleId),
-            ApiService.getAllProfessions(),
-          ]);
-          setProfessions(profs || []);
-          setBusinesses(biz || []);
-          setAllProfessions(allProfs || []);
-        } catch (err) {
-          console.error("Error fetching details:", err);
+      setPersonLoading(true);
+      setPersonNotFound(false);
+      setError("");
+
+      try {
+        const personWithTree = await refreshPersonDetails(effectivePersonId);
+        if (!personWithTree) {
+          setLinkedPersonDetails(null);
+          setProfessions([]);
+          setBusinesses([]);
+          setPersonNotFound(true);
+          return;
         }
+
+        setLinkedPersonDetails(personWithTree);
+        setProfilePhotoUrl((personWithTree as any)?.photoUrl || undefined);
+
+        const [profs, biz, allProfs] = await Promise.all([
+          ApiService.getProfessionsByPerson(effectivePersonId),
+          ApiService.getBusinessesByPerson(effectivePersonId),
+          canManagePerson ? ApiService.getAllProfessions() : Promise.resolve([]),
+        ]);
+        setProfessions(profs || []);
+        setBusinesses(biz || []);
+        if (canManagePerson) {
+          setAllProfessions(allProfs || []);
+        }
+      } catch (err) {
+        console.error("Error fetching details:", err);
+        setError("Failed to load profile details.");
+      } finally {
+        setPersonLoading(false);
       }
     };
-    fetchDetails();
-  }, [userProfile?.peopleId]);
+
+    void fetchDetails();
+  }, [effectivePersonId, canManagePerson, refreshPersonDetails]);
 
   const loadMyVillageRequests = useCallback(async () => {
     try {
@@ -235,7 +316,7 @@ export const ProfilePage: React.FC = () => {
   };
 
   const handleAddProfession = async () => {
-    if (!userProfile?.peopleId) return;
+    if (!effectivePersonId || !canManagePerson) return;
 
     try {
       let profId = selectedProfessionId;
@@ -256,15 +337,8 @@ export const ProfilePage: React.FC = () => {
       }
 
       if (profId) {
-        await ApiService.addProfessionToPerson(
-          userProfile.peopleId,
-          profId,
-        );
-        // Refresh user professions
-        const updatedProfs = await ApiService.getProfessionsByPerson(
-          userProfile.peopleId,
-        );
-        setProfessions(updatedProfs);
+        await ApiService.addProfessionToPerson(effectivePersonId, profId);
+        await refreshProfessions(effectivePersonId);
         setOpenProfessionDialog(false);
         setSelectedProfessionId("");
         setNewProfessionName("");
@@ -276,55 +350,85 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleAddBusiness = async () => {
-    if (!userProfile?.peopleId) return;
-
-    try {
-      await ApiService.createBusiness({
-        ...newBusinessData,
-        peopleId: userProfile.peopleId,
+  const handleOpenBusinessDialog = (business?: any) => {
+    if (business) {
+      setEditingBusiness(business);
+      setNewBusinessData({
+        name: business.name || "",
+        category: business.category || "",
+        description: business.description || "",
+        contact: business.contact || "",
       });
-
-      // Refresh businesses
-      const updatedBiz = await ApiService.getBusinessesByPerson(
-        userProfile.peopleId,
-      );
-      setBusinesses(updatedBiz);
-      setOpenBusinessDialog(false);
+    } else {
+      setEditingBusiness(null);
       setNewBusinessData({
         name: "",
         category: "",
         description: "",
         contact: "",
       });
-    } catch (err) {
-      console.error("Error adding business:", err);
+    }
+    setOpenBusinessDialog(true);
+  };
+
+  const handleCloseBusinessDialog = () => {
+    setOpenBusinessDialog(false);
+    setEditingBusiness(null);
+  };
+
+  const handleSaveBusiness = async () => {
+    if (!effectivePersonId || !canManagePerson) return;
+
+    setBusinessSaving(true);
+    setError("");
+    try {
+      const payload = {
+        name: newBusinessData.name,
+        category: newBusinessData.category || null,
+        description: newBusinessData.description || null,
+        contact: newBusinessData.contact || null,
+        peopleId: effectivePersonId,
+      };
+
+      if (editingBusiness?.id) {
+        await ApiService.updateBusiness(editingBusiness.id, payload);
+        setSuccess("Business updated successfully.");
+      } else {
+        await ApiService.createBusiness(payload);
+        setSuccess("Business added successfully.");
+      }
+
+      await refreshBusinesses(effectivePersonId);
+      handleCloseBusinessDialog();
+    } catch (err: any) {
+      console.error("Error saving business:", err);
+      setError(err?.message || "Failed to save business.");
+    } finally {
+      setBusinessSaving(false);
     }
   };
 
   const handleDeleteBusiness = async (id: string) => {
+    if (!effectivePersonId || !canManagePerson) return;
+    if (!window.confirm("Are you sure you want to delete this business?")) {
+      return;
+    }
+
     try {
       await ApiService.deleteBusiness(id);
-      const updatedBiz = await ApiService.getBusinessesByPerson(
-        userProfile!.peopleId!,
-      );
-      setBusinesses(updatedBiz);
-    } catch (err) {
+      await refreshBusinesses(effectivePersonId);
+      setSuccess("Business deleted successfully.");
+    } catch (err: any) {
       console.error("Error deleting business:", err);
+      setError(err?.message || "Failed to delete business.");
     }
   };
 
   const handleRemoveProfession = async (profId: string) => {
-    if (!userProfile?.peopleId) return;
+    if (!effectivePersonId || !canManagePerson) return;
     try {
-      await ApiService.removeProfessionFromPerson(
-        userProfile.peopleId,
-        profId,
-      );
-      const updatedProfs = await ApiService.getProfessionsByPerson(
-        userProfile.peopleId,
-      );
-      setProfessions(updatedProfs);
+      await ApiService.removeProfessionFromPerson(effectivePersonId, profId);
+      await refreshProfessions(effectivePersonId);
     } catch (err) {
       console.error("Error removing profession:", err);
     }
@@ -349,7 +453,7 @@ export const ProfilePage: React.FC = () => {
   };
 
   const handleOpenLinkedProfileInTree = useCallback(() => {
-    const personId = userProfile?.peopleId;
+    const personId = effectivePersonId;
     const treeId =
       linkedPersonDetails?.treeId || linkedPersonDetails?.tree?.id || "";
     if (!personId || !treeId) return;
@@ -357,7 +461,7 @@ export const ProfilePage: React.FC = () => {
     params.set("tree", treeId);
     params.set("personId", personId);
     navigate(`/families?${params.toString()}`);
-  }, [navigate, userProfile?.peopleId, linkedPersonDetails]);
+  }, [navigate, effectivePersonId, linkedPersonDetails]);
 
   const handleSubmitVillageRequest = async () => {
     if (!requestVillageId) return;
@@ -389,23 +493,73 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  if (!currentUser) {
+  const pageTitle = useMemo(() => {
+    if (isPublicPersonView) {
+      return displayPersonName;
+    }
+    return "My Profile";
+  }, [displayPersonName, isPublicPersonView]);
+
+  if (isOwnAccountView && !currentUser) {
     return (
       <Container maxWidth="md" sx={{ mt: 4 }}>
-        <Alert severity="warning">Please log in to view your profile.</Alert>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Please log in to view and manage your account profile.
+        </Alert>
+        <Button variant="contained" onClick={() => navigate("/login")}>
+          Log in
+        </Button>
+      </Container>
+    );
+  }
+
+  if (personNotFound) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="error">Profile not found.</Alert>
+        <Button sx={{ mt: 2 }} onClick={() => navigate(-1)}>
+          Go back
+        </Button>
       </Container>
     );
   }
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: "bold" }}>
-        My Profile
-      </Typography>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 3 }}
+      >
+        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
+          {pageTitle}
+        </Typography>
+        {isPublicPersonView && (
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>
+            Back
+          </Button>
+        )}
+      </Stack>
 
+      {(error || success) && (
+        <Stack spacing={1} sx={{ mb: 2 }}>
+          {error && <Alert severity="error">{error}</Alert>}
+          {success && <Alert severity="success">{success}</Alert>}
+        </Stack>
+      )}
+
+      {personLoading && (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
+      {!personLoading && (
       <Grid container spacing={3}>
-        {/* User Info Card */}
-        <Grid size={{ xs: 12, md: 4 }}>
+        {/* Account info — logged-in user only */}
+        {isOwnAccountView && currentUser && (
+        <Grid size={{ xs: 12, md: isPublicPersonView ? 12 : 4 }}>
           <Paper
             elevation={2}
             sx={{
@@ -436,8 +590,9 @@ export const ProfilePage: React.FC = () => {
                 mb: 2,
               }}
             >
-              {userProfile?.displayName?.charAt(0) ||
-                currentUser.email?.charAt(0)}
+              {(linkedPersonDetails?.name || userProfile?.displayName || currentUser.email || "U")
+                .charAt(0)
+                .toUpperCase()}
             </Avatar>
             <Typography variant="h6" gutterBottom>
               {userProfile?.displayName || "User"}
@@ -508,6 +663,76 @@ export const ProfilePage: React.FC = () => {
             </Box>
           </Paper>
         </Grid>
+        )}
+
+        {/* Family tree person summary */}
+        {effectivePersonId && linkedPersonDetails && (
+          <Grid size={{ xs: 12, md: isOwnAccountView && currentUser ? 8 : 12 }}>
+            <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
+              <Stack direction="row" spacing={2} alignItems="flex-start">
+                {!(isOwnAccountView && currentUser) && (
+                  <Avatar
+                    src={
+                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
+                    }
+                    sx={{
+                      width: 88,
+                      height: 88,
+                      bgcolor: "primary.main",
+                      fontSize: 32,
+                    }}
+                  >
+                    {(linkedPersonDetails?.name || "?").charAt(0).toUpperCase()}
+                  </Avatar>
+                )}
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    <Link
+                      component="button"
+                      type="button"
+                      underline="hover"
+                      onClick={handleOpenLinkedProfileInTree}
+                      sx={{ fontWeight: 700 }}
+                    >
+                      {linkedPersonDetails.name}
+                    </Link>
+                  </Typography>
+                  {linkedPersonDetails.nameHindi && (
+                    <Typography variant="body2" color="text.secondary">
+                      {linkedPersonDetails.nameHindi}
+                    </Typography>
+                  )}
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                    {linkedPersonDetails.gender && (
+                      <Chip size="small" label={linkedPersonDetails.gender} />
+                    )}
+                    {linkedPersonDetails.dob && (
+                      <Chip size="small" label={`DOB: ${linkedPersonDetails.dob}`} />
+                    )}
+                  </Stack>
+                  {linkedPersonDetails.tree && (
+                    <Stack spacing={0.5} sx={{ mt: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Tree:</strong>{" "}
+                        {linkedPersonDetails.tree.name || "Family tree"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Caste:</strong> {linkedTreeCaste || "N/A"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Sub-caste:</strong> {linkedTreeSubCaste || "N/A"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Village:</strong>{" "}
+                        {linkedPersonDetails.tree.village?.name || "N/A"}
+                      </Typography>
+                    </Stack>
+                  )}
+                </Box>
+              </Stack>
+            </Paper>
+          </Grid>
+        )}
 
         {/* Tree Linking Section */}
         {false && (
@@ -703,7 +928,7 @@ export const ProfilePage: React.FC = () => {
         )}
 
         {/* Business & Professional Details Section */}
-        {userProfile?.peopleId && (
+        {effectivePersonId && (
           <Grid size={{ xs: 12 }}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -728,13 +953,15 @@ export const ProfilePage: React.FC = () => {
                         Professions
                       </Typography>
                     </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => setOpenProfessionDialog(true)}
-                      color="primary"
-                    >
-                      <AddIcon />
-                    </IconButton>
+                    {canManagePerson && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setOpenProfessionDialog(true)}
+                        color="primary"
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    )}
                   </Box>
 
                   {professions.length === 0 ? (
@@ -746,32 +973,48 @@ export const ProfilePage: React.FC = () => {
                       No professions added yet.
                     </Typography>
                   ) : (
-                    <List dense>
+                    <Stack spacing={1}>
                       {professions.map((prof: any) => (
-                        <ListItem
+                        <Paper
                           key={prof.id}
-                          sx={{
-                            border: "1px solid #eee",
-                            borderRadius: 1,
-                            mb: 1,
-                          }}
+                          variant="outlined"
+                          sx={{ p: 1.5, borderRadius: 2 }}
                         >
-                          <ListItemText
-                            primary={prof.name}
-                            secondary={prof.category}
-                          />
-                          <ListItemSecondaryAction>
-                            <IconButton
-                              edge="end"
-                              size="small"
-                              onClick={() => handleRemoveProfession(prof.id)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </ListItemSecondaryAction>
-                        </ListItem>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                              gap: 1,
+                            }}
+                          >
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight={700}>
+                                {prof.name}
+                              </Typography>
+                              {prof.category && (
+                                <Typography variant="body2" color="text.secondary">
+                                  {prof.category}
+                                </Typography>
+                              )}
+                              {prof.description && (
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  {prof.description}
+                                </Typography>
+                              )}
+                            </Box>
+                            {canManagePerson && (
+                              <IconButton
+                                size="small"
+                                onClick={() => handleRemoveProfession(prof.id)}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Box>
+                        </Paper>
                       ))}
-                    </List>
+                    </Stack>
                   )}
                 </Grid>
 
@@ -791,13 +1034,15 @@ export const ProfilePage: React.FC = () => {
                         Businesses
                       </Typography>
                     </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => setOpenBusinessDialog(true)}
-                      color="primary"
-                    >
-                      <AddIcon />
-                    </IconButton>
+                    {canManagePerson && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenBusinessDialog()}
+                        color="primary"
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    )}
                   </Box>
 
                   {businesses.length === 0 ? (
@@ -809,44 +1054,90 @@ export const ProfilePage: React.FC = () => {
                       No businesses added yet.
                     </Typography>
                   ) : (
-                    <List dense>
+                    <Stack spacing={1.5}>
                       {businesses.map((biz: any) => (
-                        <ListItem
-                          key={biz.id}
-                          sx={{
-                            border: "1px solid #eee",
-                            borderRadius: 1,
-                            mb: 1,
-                          }}
-                        >
-                          <ListItemText
-                            primary={biz.name}
-                            secondary={
-                              <React.Fragment>
-                                <Typography
-                                  component="span"
-                                  variant="body2"
-                                  color="text.primary"
-                                >
-                                  {biz.category}
-                                </Typography>
-                                {biz.description && ` — ${biz.description}`}
-                                {biz.contact && ` — ${biz.contact}`}
-                              </React.Fragment>
-                            }
-                          />
-                          <ListItemSecondaryAction>
-                            <IconButton
-                              edge="end"
-                              size="small"
-                              onClick={() => handleDeleteBusiness(biz.id)}
+                        <Card key={biz.id} variant="outlined" sx={{ borderRadius: 2 }}>
+                          <CardContent sx={{ pb: "16px !important" }}>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                gap: 1,
+                                mb: 1,
+                              }}
                             >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </ListItemSecondaryAction>
-                        </ListItem>
+                              <Typography variant="subtitle1" fontWeight={800}>
+                                {biz.name}
+                              </Typography>
+                              {canManagePerson && (
+                                <Stack direction="row" spacing={0.5}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleOpenBusinessDialog(biz)}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleDeleteBusiness(biz.id)}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Stack>
+                              )}
+                            </Box>
+
+                            {formatBusinessCategory(biz.category) && (
+                              <Chip
+                                size="small"
+                                icon={<CategoryOutlinedIcon />}
+                                label={formatBusinessCategory(biz.category) || ""}
+                                sx={{ mb: 1 }}
+                              />
+                            )}
+
+                            <Stack spacing={1}>
+                              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                                <NotesOutlinedIcon
+                                  fontSize="small"
+                                  color="action"
+                                  sx={{ mt: 0.25 }}
+                                />
+                                <Typography variant="body2" color="text.secondary">
+                                  {biz.description || "No description provided."}
+                                </Typography>
+                              </Box>
+                              {biz.contact && (
+                                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                  <PhoneIcon fontSize="small" color="action" />
+                                  <Typography
+                                    variant="body2"
+                                    component="a"
+                                    href={`tel:${biz.contact}`}
+                                    sx={{ color: "primary.main", textDecoration: "none" }}
+                                  >
+                                    {biz.contact}
+                                  </Typography>
+                                </Box>
+                              )}
+                              {linkedPersonDetails?.name && (
+                                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                  <PersonOutlineOutlinedIcon
+                                    fontSize="small"
+                                    color="action"
+                                  />
+                                  <Typography variant="body2">
+                                    Owner: {linkedPersonDetails.name}
+                                  </Typography>
+                                </Box>
+                              )}
+                            </Stack>
+                          </CardContent>
+                        </Card>
                       ))}
-                    </List>
+                    </Stack>
                   )}
                 </Grid>
               </Grid>
@@ -969,6 +1260,7 @@ export const ProfilePage: React.FC = () => {
           </Grid>
         )}
       </Grid>
+      )}
 
       {/* Dialogs */}
       <Dialog
@@ -1031,9 +1323,11 @@ export const ProfilePage: React.FC = () => {
 
       <Dialog
         open={openBusinessDialog}
-        onClose={() => setOpenBusinessDialog(false)}
+        onClose={handleCloseBusinessDialog}
       >
-        <DialogTitle>Add Business</DialogTitle>
+        <DialogTitle>
+          {editingBusiness ? "Edit Business" : "Add Business"}
+        </DialogTitle>
         <DialogContent>
           <Box
             sx={{
@@ -1091,13 +1385,22 @@ export const ProfilePage: React.FC = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenBusinessDialog(false)}>Cancel</Button>
+          <Button onClick={handleCloseBusinessDialog} disabled={businessSaving}>
+            Cancel
+          </Button>
           <Button
-            onClick={handleAddBusiness}
+            onClick={handleSaveBusiness}
             variant="contained"
-            disabled={!newBusinessData.name}
+            disabled={!newBusinessData.name || businessSaving}
+            startIcon={
+              businessSaving ? <CircularProgress size={18} color="inherit" /> : undefined
+            }
           >
-            Add
+            {businessSaving
+              ? "Saving..."
+              : editingBusiness
+                ? "Save changes"
+                : "Add"}
           </Button>
         </DialogActions>
       </Dialog>

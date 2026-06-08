@@ -51,6 +51,7 @@ import {
 } from "../../store/slices/statisticsSlice";
 import { ApiService } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 interface SearchResult {
   id: string;
@@ -199,12 +200,11 @@ export const HomePage: React.FC = () => {
     setShowResults(false);
     setSearchDialogOpen(false);
     setSearchQuery("");
-    if (result.treeId) {
+    if (result.type === "person" && result.id) {
+      navigate(`/profile/person/${result.id}`);
+    } else if (result.treeId) {
       const params = new URLSearchParams();
       params.set("tree", result.treeId);
-      if (result.type === "person" && result.id) {
-        params.set("personId", result.id);
-      }
       navigate(`/families?${params.toString()}`);
     } else if (result.type === "business" || result.type === "profession") {
       navigate("/business");
@@ -218,37 +218,12 @@ export const HomePage: React.FC = () => {
     }
 
     setContinueTreeLoading(true);
-
     try {
-      if (userProfile?.peopleId) {
-        const person = await ApiService.getPersonById(userProfile.peopleId);
-        if (person?.treeId) {
-          const params = new URLSearchParams();
-          params.set("tree", person.treeId);
-          params.set("personId", userProfile.peopleId);
-          navigate(`/families?${params.toString()}`);
-          return;
-        }
-      }
-
-      const target = await ApiService.getDefaultUserTree();
-      if (target?.treeId) {
-        const params = new URLSearchParams();
-        params.set("tree", target.treeId);
-        if (target.personId) {
-          params.set("personId", target.personId);
-        }
-        navigate(`/families?${params.toString()}`);
-        return;
-      }
-    } catch (error) {
-      console.warn("Failed to resolve default user tree:", error);
+      navigate(await resolveDefaultFamilyTreePath());
     } finally {
       setContinueTreeLoading(false);
     }
-
-    navigate("/families");
-  }, [currentUser, navigate, userProfile?.peopleId]);
+  }, [currentUser, navigate]);
 
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
