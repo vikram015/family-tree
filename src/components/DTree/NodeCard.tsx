@@ -8,7 +8,7 @@
  * - Name text on the right
  * - Similar to family-chart card_dim layout
  */
-
+import "./NodeCard.css";
 // Card dimensions (similar to family-chart)
 export const CARD_DIM = {
   w: 220,
@@ -103,6 +103,7 @@ const COLORS = {
     pillText: "#667180",
   },
 };
+
 
 function escapeXml(str: string): string {
   return str
@@ -363,6 +364,7 @@ export function renderNodeCardSvg(
   isHighlighted?: boolean,
   isMobile?: boolean,
   canEditNode: boolean = true,
+  isNameClickable: boolean = true,
 ): string {
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
@@ -406,6 +408,15 @@ export function renderNodeCardSvg(
   const nameFontFamily = isDevanagariName
     ? DEVANAGARI_FONT_STACK
     : DEFAULT_FONT_STACK;
+  const nameColor = colors.text;
+  
+  const nameCursor = isNameClickable
+    ? "pointer"
+    : "default";
+  
+  const escapedDisplayName = encodeSvgTextContent(
+    displayName
+  );
   const nameLanguageAttrs = isDevanagariName
     ? `lang="hi" xml:lang="hi" style="font-kerning: normal; font-feature-settings: 'abvm' 1, 'blwm' 1, 'akhn' 1, 'liga' 1, 'clig' 1, 'calt' 1; text-rendering: optimizeLegibility;"`
     : "";
@@ -488,14 +499,29 @@ export function renderNodeCardSvg(
   }
 
   svg += renderStatusAvatarBadge(dim.img_x + dim.img_w - 2, dim.img_y + 3, isDeceased);
-
-  svg += `<text class="node-name-click-target" data-node-id="${extra?.id || ""}" x="${dim.text_x}" y="${dim.text_y}" `;
-  svg += `font-family="${nameFontFamily}" `;
-  svg += `font-size="14" font-weight="700" fill="${colors.text}" `;
-  svg += `dominant-baseline="auto" cursor="pointer" ${nameLanguageAttrs}>`;
-  svg += escapedName;
+  svg += `<g class="node-name-group">`;
+  svg += `<text
+    class="${isNameClickable ? "node-name-click-target" : ""}"
+    data-node-id="${extra?.id || ""}"
+    x="${dim.text_x}"
+    y="${dim.text_y}"
+    font-family="${nameFontFamily}"
+    font-size="14"
+    font-weight="700"
+    fill="${nameColor}"
+    cursor="${isNameClickable ? "pointer" : "default"}"
+    ${nameLanguageAttrs}
+  >`;
+  svg += escapedDisplayName;
+  if (isNameClickable) {
+    svg += `<tspan
+      class="node-name-hover-icon"
+      dx="3"
+      opacity="0"
+    >↗</tspan>`;
+  }
   svg += `</text>`;
-
+  svg += `</g>`;
   const dobValue = extra?.dob ? formatDisplayDate(extra.dob) : "DOB unavailable";
   const deceasedDateValue =
     isDeceased && extra?.deceasedDate

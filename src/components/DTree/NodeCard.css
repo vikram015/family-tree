@@ -1,0 +1,35 @@
+.node-name-hover-icon {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.node-name-group:hover .node-name-hover-icon {
+  opacity: 1;
+}
+
+.node-name-group:hover .node-name-click-target {
+  fill: #1976d2;
+  text-decoration: underline;
+}
+
+/* iOS Safari and Chrome fixes for Devanagari text rendering */
+svg text[lang="hi"],
+svg tspan[lang="hi"] {
+  /* Force text rendering on iOS by enabling subpixel antialiasing */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent text clipping on iOS */
+  paint-order: stroke fill;
+  /* Ensure proper Unicode handling on mobile browsers */
+  text-rendering: geometricPrecision;
+}
+
+/* Additional fallback for complex scripts on iOS */
+@supports (-webkit-touch-callout: none) {
+  svg text[lang="hi"],
+  svg tspan[lang="hi"] {
+    /* iOS-specific: boost font rendering */
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-variant-ligatures: common-ligatures;
+  }
+}
