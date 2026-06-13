@@ -104,7 +104,6 @@ const COLORS = {
   },
 };
 
-
 function escapeXml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -116,7 +115,7 @@ function escapeXml(str: string): string {
 
 const DEVANAGARI_REGEX = /[\u0900-\u097F]/;
 const DEVANAGARI_FONT_STACK =
-  "'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Noto Sans Devanagari', 'Nirmala UI', 'Mangal', sans-serif";
+  "'Noto Sans Devanagari', 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI', 'Mangal', sans-serif";
 const DEFAULT_FONT_STACK =
   "'Manrope', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
@@ -394,29 +393,33 @@ export function renderNodeCardSvg(
 
   const actionIconsReservedWidth = hasActionIcons ? 50 : 0;
   const externalLinkReservedWidth = showExternalLink ? 24 : 0;
-  
+
   // Name and Subtitle are on upper rows, so they only need to avoid the external link icon (top right)
   const textUpperRightPadding = 12 + externalLinkReservedWidth;
   const textMaxWidth = dim.w - dim.text_x - textUpperRightPadding;
-  
+
   const resolvedName =
-    extra?.preferredName || name || extra?.nameEnglish || extra?.nameHindi || "";
+    extra?.preferredName ||
+    name ||
+    extra?.nameEnglish ||
+    extra?.nameHindi ||
+    "";
   const normalizedName = normalizeDisplayText(resolvedName);
   const isDevanagariName = hasDevanagari(normalizedName);
   const displayName = truncateText(normalizedName, textMaxWidth);
-  const escapedName = encodeSvgTextContent(displayName);
   const nameFontFamily = isDevanagariName
     ? DEVANAGARI_FONT_STACK
     : DEFAULT_FONT_STACK;
   const nameColor = colors.text;
-  
-  const nameCursor = isNameClickable
-    ? "pointer"
-    : "default";
-  
-  const escapedDisplayName = encodeSvgTextContent(
-    displayName
-  );
+
+  const nameCursor = isNameClickable ? "pointer" : "default";
+
+  // For Devanagari text, use simple XML escaping to preserve raw Unicode characters.
+  // iOS Safari's text shaping engine needs raw Unicode to form proper conjuncts,
+  // ligatures, and matra positioning. Numeric character references (&#x...;) break this.
+  const escapedDisplayName = isDevanagariName
+    ? escapeXml(displayName)
+    : encodeSvgTextContent(displayName);
   const nameLanguageAttrs = isDevanagariName
     ? `lang="hi" xml:lang="hi" style="font-kerning: normal; font-feature-settings: 'abvm' 1, 'blwm' 1, 'akhn' 1, 'liga' 1, 'clig' 1, 'calt' 1; text-rendering: optimizeLegibility;"`
     : "";
@@ -498,31 +501,65 @@ export function renderNodeCardSvg(
     }
   }
 
-  svg += renderStatusAvatarBadge(dim.img_x + dim.img_w - 2, dim.img_y + 3, isDeceased);
+  svg += renderStatusAvatarBadge(
+    dim.img_x + dim.img_w - 2,
+    dim.img_y + 3,
+    isDeceased,
+  );
   svg += `<g class="node-name-group">`;
-  svg += `<text
-    class="${isNameClickable ? "node-name-click-target" : ""}"
-    data-node-id="${extra?.id || ""}"
-    x="${dim.text_x}"
-    y="${dim.text_y}"
-    font-family="${nameFontFamily}"
-    font-size="14"
-    font-weight="700"
-    fill="${nameColor}"
-    cursor="${isNameClickable ? "pointer" : "default"}"
-    ${nameLanguageAttrs}
-  >`;
-  svg += escapedDisplayName;
-  if (isNameClickable) {
-    svg += `<tspan
-      class="node-name-hover-icon"
-      dx="3"
-      opacity="0"
-    >↗</tspan>`;
+  if (isDevanagariName) {
+    // Use foreignObject for Devanagari text — iOS Safari's SVG <text> engine
+    // does not perform proper complex text layout (CTL) for Indic scripts,
+    // resulting in dotted circles (◌) instead of properly shaped matras/conjuncts.
+    // HTML text rendering handles Devanagari correctly on all platforms.
+    const foWidth = textMaxWidth;
+    const foHeight = 22;
+    const foX = dim.text_x;
+    const foY = dim.text_y - 14; // Adjust for baseline alignment with SVG text
+    svg += `<foreignObject x="${foX}" y="${foY}" width="${foWidth}" height="${foHeight}"
+      class="${isNameClickable ? "node-name-click-target" : ""}"
+      data-node-id="${extra?.id || ""}"
+      cursor="${isNameClickable ? "pointer" : "default"}"
+    >`;
+    svg += `<span xmlns="http://www.w3.org/1999/xhtml" lang="hi" style="
+      font-family: ${nameFontFamily};
+      font-size: 14px;
+      font-weight: 700;
+      color: ${nameColor};
+      line-height: ${foHeight}px;
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: ${isNameClickable ? "pointer" : "default"};
+    ">${escapeXml(displayName)}</span>`;
+    svg += `</foreignObject>`;
+  } else {
+    svg += `<text
+      class="${isNameClickable ? "node-name-click-target" : ""}"
+      data-node-id="${extra?.id || ""}"
+      x="${dim.text_x}"
+      y="${dim.text_y}"
+      font-family="${nameFontFamily}"
+      font-size="14"
+      font-weight="700"
+      fill="${nameColor}"
+      cursor="${isNameClickable ? "pointer" : "default"}"
+    >`;
+    svg += escapedDisplayName;
+    if (isNameClickable) {
+      svg += `<tspan
+        class="node-name-hover-icon"
+        dx="3"
+        opacity="0"
+      >↗</tspan>`;
+    }
+    svg += `</text>`;
   }
-  svg += `</text>`;
   svg += `</g>`;
-  const dobValue = extra?.dob ? formatDisplayDate(extra.dob) : "DOB unavailable";
+  const dobValue = extra?.dob
+    ? formatDisplayDate(extra.dob)
+    : "DOB unavailable";
   const deceasedDateValue =
     isDeceased && extra?.deceasedDate
       ? formatDisplayDate(extra.deceasedDate)
@@ -547,7 +584,13 @@ export function renderNodeCardSvg(
     const childrenLabel = `${childrenCount} ${childrenCount === 1 ? "child" : "children"}`;
     const childrenWidth = estimatePillWidth(childrenLabel);
     if (pillX + childrenWidth <= pillRowRightLimit) {
-      svg += renderPill(pillX, pillY, childrenLabel, colors.pillBg, colors.pillText);
+      svg += renderPill(
+        pillX,
+        pillY,
+        childrenLabel,
+        colors.pillBg,
+        colors.pillText,
+      );
       pillX += childrenWidth + 6;
     }
   }

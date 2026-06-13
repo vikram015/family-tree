@@ -15,21 +15,44 @@
 /* iOS Safari and Chrome fixes for Devanagari text rendering */
 svg text[lang="hi"],
 svg tspan[lang="hi"] {
-  /* Force text rendering on iOS by enabling subpixel antialiasing */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Prevent text clipping on iOS */
-  paint-order: stroke fill;
-  /* Ensure proper Unicode handling on mobile browsers */
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "liga" 1,
+    "clig" 1,
+    "calt" 1,
+    "akhn" 1,
+    "blwf" 1,
+    "half" 1,
+    "pstf" 1,
+    "vatu" 1,
+    "cjct" 1;
 }
 
-/* Additional fallback for complex scripts on iOS */
+/* foreignObject Hindi text styling */
+svg foreignObject span[lang="hi"] {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "liga" 1,
+    "clig" 1,
+    "calt" 1,
+    "akhn" 1,
+    "blwf" 1,
+    "half" 1,
+    "pstf" 1,
+    "vatu" 1,
+    "cjct" 1;
+}
+
+/* iOS Safari specific: ensure complex script shaping works */
 @supports (-webkit-touch-callout: none) {
   svg text[lang="hi"],
-  svg tspan[lang="hi"] {
-    /* iOS-specific: boost font rendering */
+  svg tspan[lang="hi"],
+  svg foreignObject span[lang="hi"] {
     -webkit-text-size-adjust: 100%;
-    -webkit-font-variant-ligatures: common-ligatures;
+    font-variant-ligatures: common-ligatures;
+    -webkit-locale: "hi";
   }
 }
