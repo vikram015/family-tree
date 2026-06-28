@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   Container,
@@ -21,17 +21,11 @@ import {
   Avatar,
   ClickAwayListener,
   LinearProgress,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import SearchIcon from "@mui/icons-material/Search";
-import CloseIcon from "@mui/icons-material/Close";
-import PersonIcon from "@mui/icons-material/Person";
 import StoreIcon from "@mui/icons-material/Store";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
@@ -52,6 +46,7 @@ import {
 import { ApiService } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
+import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
 
 interface SearchResult {
   id: string;
@@ -124,10 +119,8 @@ export const HomePage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [continueTreeLoading, setContinueTreeLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const suppressMobileSearchOpenRef = useRef(false);
 
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
@@ -198,7 +191,6 @@ export const HomePage: React.FC = () => {
 
   const handleResultClick = (result: SearchResult) => {
     setShowResults(false);
-    setSearchDialogOpen(false);
     setSearchQuery("");
     if (result.type === "person" && result.id) {
       navigate(`/profile/person/${result.id}`);
@@ -229,17 +221,7 @@ export const HomePage: React.FC = () => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
 
-  const closeSearchDialog = useCallback(() => {
-    suppressMobileSearchOpenRef.current = true;
-    setSearchDialogOpen(false);
-    setShowResults(false);
-
-    window.setTimeout(() => {
-      suppressMobileSearchOpenRef.current = false;
-    }, 250);
-  }, []);
-
-  const renderSearchResults = () => {
+  const renderSearchResults = (onPick?: () => void) => {
     if (!showResults) return null;
 
     return (
@@ -263,7 +245,10 @@ export const HomePage: React.FC = () => {
               <ListItem
                 key={`${result.type}-${result.id}`}
                 component="div"
-                onClick={() => handleResultClick(result)}
+                onClick={() => {
+                  onPick?.();
+                  handleResultClick(result);
+                }}
                 sx={{
                   cursor: "pointer",
                   "&:hover": { bgcolor: "action.hover" },
@@ -418,56 +403,92 @@ export const HomePage: React.FC = () => {
                 Every update you make today becomes heritage tomorrow.
               </Typography>
 
-              <ClickAwayListener onClickAway={() => !isMobile && setShowResults(false)}>
-                <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
-                  <TextField
-                    fullWidth
-                    placeholder="Search family members, businesses..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    onClick={() => {
-                      if (isMobile && !suppressMobileSearchOpenRef.current) {
-                        setSearchDialogOpen(true);
-                      }
-                    }}
-                    onFocus={() => {
-                      if (isMobile) {
-                        if (suppressMobileSearchOpenRef.current) {
-                          return;
+              <FullScreenMobilePicker
+                title="Search"
+                closeLabel="Close search"
+                dialogContent={({ closeDialog }) => (
+                  <>
+                    <TextField
+                      fullWidth
+                      autoFocus
+                      placeholder="Search family members, businesses..."
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      onFocus={() => {
+                        if (searchResults.length > 0) setShowResults(true);
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && searchQuery.trim()) {
+                          performSearch(searchQuery);
                         }
-                        setSearchDialogOpen(true);
-                        return;
-                      }
-                      if (searchResults.length > 0) setShowResults(true);
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && searchQuery.trim()) {
-                        performSearch(searchQuery);
-                      }
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
-                        </InputAdornment>
-                      ),
-                      endAdornment: isSearching ? (
-                        <InputAdornment position="end">
-                          <CircularProgress size={18} />
-                        </InputAdornment>
-                      ) : null,
-                    }}
-                    sx={{
-                      bgcolor: "white",
-                      borderRadius: 2,
-                    }}
-                    inputProps={{
-                      readOnly: isMobile,
-                    }}
-                  />
-                  {!isMobile && renderSearchResults()}
-                </Box>
-              </ClickAwayListener>
+                      }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: isSearching ? (
+                          <InputAdornment position="end">
+                            <CircularProgress size={18} />
+                          </InputAdornment>
+                        ) : null,
+                      }}
+                      sx={{
+                        bgcolor: "white",
+                        borderRadius: 2,
+                      }}
+                    />
+                    {renderSearchResults(closeDialog)}
+                  </>
+                )}
+              >
+                {({ isMobile: mobilePicker, openDialog }) => (
+                  <ClickAwayListener onClickAway={() => !mobilePicker && setShowResults(false)}>
+                    <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
+                      <TextField
+                        fullWidth
+                        placeholder="Search family members, businesses..."
+                        value={searchQuery}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                        onClick={openDialog}
+                        onFocus={() => {
+                          if (mobilePicker) {
+                            openDialog();
+                            return;
+                          }
+                          if (searchResults.length > 0) setShowResults(true);
+                        }}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter" && searchQuery.trim()) {
+                            performSearch(searchQuery);
+                          }
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                            </InputAdornment>
+                          ),
+                          endAdornment: isSearching ? (
+                            <InputAdornment position="end">
+                              <CircularProgress size={18} />
+                            </InputAdornment>
+                          ) : null,
+                        }}
+                        sx={{
+                          bgcolor: "white",
+                          borderRadius: 2,
+                        }}
+                        inputProps={{
+                          readOnly: mobilePicker,
+                        }}
+                      />
+                      {!mobilePicker && renderSearchResults()}
+                    </Box>
+                  </ClickAwayListener>
+                )}
+              </FullScreenMobilePicker>
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                 <Button
@@ -526,71 +547,6 @@ export const HomePage: React.FC = () => {
           </Box>
         </Container>
       </Box>
-
-      <Dialog
-        open={searchDialogOpen}
-        onClose={closeSearchDialog}
-        fullScreen={isMobile}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            pl: 2,
-            pr: 1.5,
-            py: 1.5,
-          }}
-        >
-          Search
-          <IconButton
-            aria-label="Close search"
-            edge="end"
-            onClick={(event) => {
-              event.stopPropagation();
-              closeSearchDialog();
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 1.5 }}>
-          <TextField
-            fullWidth
-            autoFocus
-            placeholder="Search family members, businesses..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            onFocus={() => {
-              if (searchResults.length > 0) setShowResults(true);
-            }}
-            onKeyPress={(e) => {
-              if (e.key === "Enter" && searchQuery.trim()) {
-                performSearch(searchQuery);
-              }
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
-                </InputAdornment>
-              ),
-              endAdornment: isSearching ? (
-                <InputAdornment position="end">
-                  <CircularProgress size={18} />
-                </InputAdornment>
-              ) : null,
-            }}
-            sx={{
-              bgcolor: "white",
-              borderRadius: 2,
-            }}
-          />
-          {renderSearchResults()}
-        </DialogContent>
-      </Dialog>
 
       <Container maxWidth="lg" sx={{ py: 6 }}>
         <Box

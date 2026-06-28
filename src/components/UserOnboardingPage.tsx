@@ -71,6 +71,7 @@ import {
   LocationCombinationOption,
 } from "../services/apiService";
 import { OnboardingTreePreviewDialog } from "./OnboardingTreePreviewDialog";
+import { FullScreenMobileAutocomplete } from "./FullScreenMobilePicker";
 
 const STEP_INDEX: Record<string, number> = {
   profile: 0,
@@ -1744,7 +1745,9 @@ export const UserOnboardingPage: React.FC = () => {
                         spacing={1.5}
                         sx={{ width: "100%", maxWidth: locationFormMaxWidth }}
                       >
-                      <Autocomplete<CreatableLocationOption, false, false, false>
+                      <FullScreenMobileAutocomplete<CreatableLocationOption, false, false, false>
+                        pickerTitle="Select Location"
+                        closeLabel="Close location picker"
                         options={locationOptionsWithCreate}
                         value={selectedLocationOption}
                         open={shouldShowLocationSuggestions}
@@ -1843,7 +1846,9 @@ export const UserOnboardingPage: React.FC = () => {
                           </Box>
                         )}
                       />
-                      <Autocomplete<LookupAutocompleteOption, false, false, false>
+                      <FullScreenMobileAutocomplete<LookupAutocompleteOption, false, false, false>
+                        pickerTitle="Select Caste"
+                        closeLabel="Close caste picker"
                         options={castes}
                         value={selectedCaste}
                         inputValue={casteInputValue}
@@ -1918,7 +1923,9 @@ export const UserOnboardingPage: React.FC = () => {
                           </Box>
                         )}
                       />
-                      <Autocomplete<LookupAutocompleteOption, false, false, false>
+                      <FullScreenMobileAutocomplete<LookupAutocompleteOption, false, false, false>
+                        pickerTitle="Select Sub-caste"
+                        closeLabel="Close sub-caste picker"
                         options={filteredSubCastes}
                         value={selectedSubCaste}
                         inputValue={subCasteInputValue}
