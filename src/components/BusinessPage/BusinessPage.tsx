@@ -40,6 +40,7 @@ import NotesIcon from "@mui/icons-material/Notes";
 import EditIcon from "@mui/icons-material/Edit";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
+import SearchIcon from "@mui/icons-material/Search";
 import { useVillage } from "../hooks/useVillage";
 import { useAuth } from "../hooks/useAuth";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -47,6 +48,7 @@ import {
   fetchBusinessesByVillage,
   selectBusinesses,
   selectBusinessLoading,
+  selectBusinessLoadedVillageId,
   clearBusinesses,
 } from "../../store/slices/businessSlice";
 import {
@@ -79,6 +81,7 @@ interface Business {
   hierarchy?: any[]; // Parent hierarchy
   casteName?: string; // Caste name
   subCasteName?: string; // Sub-caste name
+  canEdit?: boolean; // Whether the current viewer may edit/delete this business
 }
 
 interface BusinessCategory {
@@ -245,6 +248,7 @@ export const BusinessPage: React.FC = () => {
   // Redux state
   const businesses = useAppSelector(selectBusinesses);
   const loading = useAppSelector(selectBusinessLoading);
+  const loadedVillageId = useAppSelector(selectBusinessLoadedVillageId);
   const professions = useAppSelector(selectProfessions);
   const peopleWithProfessions = useAppSelector(selectPeopleWithProfessions);
   const professionsWithCount = useAppSelector(selectProfessionsWithCount);
@@ -270,6 +274,8 @@ export const BusinessPage: React.FC = () => {
     contact: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const defaultVillageAppliedForUserRef = useRef<string | null>(null);
 
   // Initialize default categories (static - no need to fetch from DB)
@@ -569,7 +575,10 @@ export const BusinessPage: React.FC = () => {
     );
   }
 
-  if (loading) {
+  // Show the loader until the businesses for the CURRENTLY selected village have
+  // been loaded. Without the loadedVillageId check there's a flash where the page
+  // renders with stale/empty data before the fetch effect flips `loading` on.
+  if (loading || loadedVillageId !== selectedVillage) {
     return (
       <Container maxWidth="lg" sx={{ py: 8, textAlign: "center" }}>
         <CircularProgress />
@@ -584,6 +593,27 @@ export const BusinessPage: React.FC = () => {
     count: getCategoryCount(cat.id),
     category: cat.id,
   }));
+
+  const filteredBusinesses = businesses.filter((business) => {
+    const matchesCategory =
+      activeCategory === "all" ||
+      normalizeCategory(business.category) === activeCategory;
+    const term = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      [
+        business.name,
+        business.description,
+        business.owner,
+        getCategoryLabel(business.category),
+        business.contact,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    return matchesCategory && matchesSearch;
+  });
 
   const benefits = [
     {
@@ -699,48 +729,67 @@ export const BusinessPage: React.FC = () => {
           </Box>
         ) : (
           <>
-            {/* Introduction */}
-            <Box sx={{ mb: 5, textAlign: "center" }}>
-              <Stack
-                direction={{ xs: "column", sm: "row" }}
-                justifyContent="center"
-                alignItems="center"
-                spacing={2}
-                sx={{ mb: 2 }}
-              >
-                <Typography
-                  variant="h4"
-                  sx={{ fontWeight: 900, color: slateText, letterSpacing: 0 }}
-                >
-                  Supporting {villageName} Businesses
-                </Typography>
-                {isAdmin() && (
-                  <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={() => handleOpenDialog()}
-                    sx={primaryButtonSx}
-                  >
-                    Add Business
-                  </Button>
-                )}
-              </Stack>
+            {/* Businesses Directory */}
+            <Box sx={{ mb: 8 }}>
               <Typography
-                variant="body1"
-                paragraph
-                sx={{ maxWidth: 760, mx: "auto", mb: 3, color: mutedText }}
+                variant="h4"
+                sx={{ fontWeight: 900, color: slateText, mb: 0.5, letterSpacing: 0 }}
               >
-                Our village has a rich tradition of entrepreneurship and
-                professional excellence. This directory helps connect family
-                members in business, fostering collaboration, mutual support,
-                and shared success.
+                Registered Businesses
               </Typography>
-              {businesses.length === 0 && (
+              <Typography variant="body1" sx={{ color: mutedText, mb: 3 }}>
+                Discover and connect with family-run businesses in {villageName}.
+              </Typography>
+
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                spacing={2}
+                alignItems={{ xs: "stretch", md: "center" }}
+                sx={{ mb: 3 }}
+              >
+                <TextField
+                  size="small"
+                  placeholder="Search by name, owner, category, or phone"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  sx={{ bgcolor: "#fff", width: { xs: "100%", md: 380 } }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <FormControl size="small" sx={{ bgcolor: "#fff", minWidth: 200 }}>
+                  <InputLabel>Category</InputLabel>
+                  <Select
+                    value={activeCategory}
+                    label="Category"
+                    onChange={(e) => setActiveCategory(e.target.value)}
+                  >
+                    <MenuItem value="all">All categories</MenuItem>
+                    {categories.map((cat) => (
+                      <MenuItem key={cat.id} value={cat.id}>
+                        {cat.displayName}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Box sx={{ flexGrow: 1 }} />
+                <Typography
+                  variant="body2"
+                  sx={{ color: mutedText, whiteSpace: "nowrap" }}
+                >
+                  {filteredBusinesses.length}{" "}
+                  {filteredBusinesses.length === 1 ? "business" : "businesses"}
+                </Typography>
+              </Stack>
+
+              {businesses.length === 0 ? (
                 <Alert
                   severity="info"
                   sx={{
-                    maxWidth: 800,
-                    mx: "auto",
                     borderRadius: 2,
                     border: "1px solid rgba(13,110,253,0.16)",
                   }}
@@ -748,25 +797,12 @@ export const BusinessPage: React.FC = () => {
                   No businesses registered yet for {villageName}.{" "}
                   {isAdmin() && "Click 'Add Business' to get started!"}
                 </Alert>
-              )}
-            </Box>
-
-            {/* Registered Businesses Section */}
-            {businesses.length > 0 && (
-              <Box sx={{ mb: 8 }}>
-                <Typography
-                  variant="h4"
-                  gutterBottom
-                  sx={{
-                    textAlign: "center",
-                    fontWeight: 900,
-                    color: slateText,
-                    mb: 4,
-                    letterSpacing: 0,
-                  }}
-                >
-                  Registered Businesses in {villageName}
-                </Typography>
+              ) : filteredBusinesses.length === 0 ? (
+                <Alert severity="info" sx={{ borderRadius: 2 }}>
+                  No businesses match your search. Try a different term or
+                  category.
+                </Alert>
+              ) : (
                 <Box
                   sx={{
                     display: "grid",
@@ -778,7 +814,7 @@ export const BusinessPage: React.FC = () => {
                     gap: 3,
                   }}
                 >
-                  {businesses.map((business) => {
+                  {filteredBusinesses.map((business) => {
                     const categoryLabel = getCategoryLabel(business.category);
                     const categoryColor = getCategoryColor(business.category);
 
@@ -832,7 +868,7 @@ export const BusinessPage: React.FC = () => {
                               />
                             )}
                           </Box>
-                          {isAdmin() && (
+                          {business.canEdit && (
                             <Box>
                               <IconButton
                                 size="small"
@@ -923,8 +959,8 @@ export const BusinessPage: React.FC = () => {
                     );
                   })}
                 </Box>
-              </Box>
-            )}
+              )}
+            </Box>
 
             <Divider sx={{ my: 5, borderColor: "rgba(15,23,42,0.08)" }} />
 

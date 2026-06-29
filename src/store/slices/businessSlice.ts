@@ -19,17 +19,20 @@ interface Business {
   subCasteName: string;
   createdAt: string;
   updatedAt: string;
+  canEdit: boolean;
 }
 
 interface BusinessState {
   businesses: Business[];
   loading: boolean;
   error: string | null;
+  loadedVillageId: string | null;
 }
 
 const initialState: BusinessState = {
   businesses: [],
   loading: false,
+  loadedVillageId: null,
   error: null,
 };
 
@@ -60,6 +63,7 @@ export const fetchBusinessesByVillage = createAsyncThunk(
         subCasteName: business.subCasteName || '',
         createdAt: business.businessCreatedAt,
         updatedAt: business.businessCreatedAt,
+        canEdit: business.canEdit === true,
       }));
 
       return businessList;
@@ -76,6 +80,7 @@ const businessSlice = createSlice({
   reducers: {
     clearBusinesses: (state) => {
       state.businesses = [];
+      state.loadedVillageId = null;
     },
     clearError: (state) => {
       state.error = null;
@@ -90,10 +95,12 @@ const businessSlice = createSlice({
         state.businesses = action.payload;
         state.loading = false;
         state.error = null;
+        state.loadedVillageId = action.meta.arg;
       })
       .addCase(fetchBusinessesByVillage.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+        state.loadedVillageId = action.meta.arg;
       });
   },
 });
@@ -103,6 +110,8 @@ export const { clearBusinesses, clearError } = businessSlice.actions;
 // Selectors
 export const selectBusinesses = (state: any) => state.business.businesses;
 export const selectBusinessLoading = (state: any) => state.business.loading;
+export const selectBusinessLoadedVillageId = (state: any) =>
+  state.business.loadedVillageId;
 export const selectBusinessError = (state: any) => state.business.error;
 
 export default businessSlice.reducer;
