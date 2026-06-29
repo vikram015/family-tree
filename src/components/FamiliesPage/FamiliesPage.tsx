@@ -111,8 +111,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [invitePersonId, setInvitePersonId] = useState("");
   const [invitePersonSearch, setInvitePersonSearch] = useState("");
   const [inviteSelectedPersonName, setInviteSelectedPersonName] = useState("");
+  // When opened from a node, the branch person is fixed (shown as selected, not searchable).
+  const [inviteBranchPersonLocked, setInviteBranchPersonLocked] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteAccepting, setInviteAccepting] = useState(false);
+  // Bumped to force a tree-data reload (e.g. after accepting an invite grants access).
+  const [treeReloadKey, setTreeReloadKey] = useState(0);
   const [pendingLinkRequests, setPendingLinkRequests] = useState<LinkRequest[]>([]);
   const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
   const [linkRequestsLoading, setLinkRequestsLoading] = useState(false);
@@ -294,16 +298,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setInviteAccepting(true);
     ApiService.acceptTreeInvite(inviteToken)
       .then((result) => {
-        if (result?.treeId && result.treeId !== treeId) {
-          setTreeId(result.treeId);
-        }
+        const acceptedTreeId = result?.treeId || treeId;
+        // Always move the user to the tree they were invited to, and drop the
+        // one-time invite token from the URL.
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
+          if (acceptedTreeId) {
+            next.set("tree", acceptedTreeId);
+          }
           next.delete("inviteToken");
           return next;
         });
+        // Re-fetch the tree now that access has been granted (the treeId may be
+        // unchanged from the link, so a plain treeId change wouldn't reload it).
+        setTreeReloadKey((key) => key + 1);
         alert("Invite accepted. You now have access to this tree.");
-        return ApiService.getTreeWriteScope(result.treeId || treeId);
+        return ApiService.getTreeWriteScope(acceptedTreeId);
       })
       .then((scope) => {
         if (scope) {
@@ -556,7 +566,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setIsLoading(false);
       }
     },
-    [treeId],
+    [treeId, treeReloadKey],
   );
 
   useEffect(() => {
@@ -745,6 +755,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       targetId?: string,
       type?: RelType,
       otherParentId?: string,
+      childOptions?: {
+        otherParentMode?: "existing" | "new" | "unknown";
+        newSpouse?: {
+          name?: string;
+          nameHindi?: string;
+          gender?: string;
+          dob?: string;
+        };
+      },
     ): Promise<string | undefined> => {
       if (targetId && !canEditNode(targetId)) {
         alert("You don't have permission to add relatives in this branch.");
@@ -810,10 +829,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
         if (relation === "child" && targetId) {
           // Adding a child to target: new_person → parent → target
-          // Use the second parent from AddNode component if provided
+          // The other parent is now an explicit choice made in AddNode:
+          //   - "existing": link to the selected spouse (otherParentId)
+          //   - "new": backend creates the spouse from childOptions.newSpouse
+          //   - "unknown": no other parent is linked
           relationType = "parent";
           relatedPersonId = targetId;
-          relatedPersonId2 = otherParentId; // From AddNode selection
+          relatedPersonId2 =
+            childOptions?.otherParentMode === "existing" ? otherParentId : undefined;
           isReverseRelation = false;
         } else if (relation === "spouse" && targetId) {
           // Adding a spouse: only pass one target
@@ -862,6 +885,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           undefined,
           coreNode.relationStartDate,
           coreNode.relationEndDate,
+          relation === "child" ? childOptions?.otherParentMode : undefined,
+          relation === "child" ? childOptions?.newSpouse : undefined,
         );
 
         // Efficiently merge affected nodes into existing state instead of full reload
@@ -932,6 +957,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   }, [treeId]);
 
   const handleOpenInviteDialog = useCallback(() => {
+    // Start from a clean form each time so a previously entered number/role/scope
+    // is not retained from the last invite.
+    setInvitePhone("");
+    setInviteRole("write");
+    setInviteScope("full");
+    setInviteBranchPersonLocked(false);
     if (!currentUser) {
       openLoginModal(() => setInviteDialogOpen(true));
       return;
@@ -947,6 +978,33 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setInvitePersonSearch(defaultPerson?.name || "");
     setInviteDialogOpen(true);
   }, [currentUser, openLoginModal, canManageInvites, selectId, rootId, nodes]);
+
+  // Open the invite dialog scoped to a specific person's branch (from node details).
+  const handleInviteForNode = useCallback(
+    (personId: string) => {
+      const openForNode = () => {
+        if (!canEditNode(personId)) {
+          alert("You don't have access to invite collaborators for this branch.");
+          return;
+        }
+        setInvitePhone("");
+        setInviteRole("write");
+        setInviteScope("branch");
+        setInvitePersonId(personId);
+        const person = nodes.find((n) => n.id === personId);
+        setInviteSelectedPersonName(person?.name || "");
+        setInvitePersonSearch(person?.name || "");
+        setInviteBranchPersonLocked(true);
+        setInviteDialogOpen(true);
+      };
+      if (!currentUser) {
+        openLoginModal(openForNode);
+        return;
+      }
+      openForNode();
+    },
+    [currentUser, openLoginModal, canEditNode, nodes],
+  );
 
   const handleCreateInvite = useCallback(async () => {
     if (!treeId) return;
@@ -972,6 +1030,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         personId,
         invitedPhone: normalizedInvitePhone,
       });
+
+      // If the invitee already had an account, the backend grants access immediately
+      // (no link to share).
+      if (invite.granted) {
+        const grantedName = invite.user?.name || "The user";
+        alert(`${grantedName} already has an account and now has access to this tree.`);
+        setInviteDialogOpen(false);
+        setInvitePhone("");
+        setInviteRole("write");
+        setInviteScope("full");
+        setInvitePersonId("");
+        setInvitePersonSearch("");
+        setInviteSelectedPersonName("");
+        return;
+      }
+
       const shareLink = invite.inviteLink || `${window.location.origin}/families?tree=${treeId}&inviteToken=${invite.inviteToken || ""}`;
       const targetScope = personId ? `branch from ${nodes.find((n) => n.id === personId)?.name || "selected person"}` : "full tree";
       const targetPhone = normalizedInvitePhone ? `Phone: ${normalizedInvitePhone}\n` : "";
@@ -1752,6 +1826,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         invitePersonSearch={invitePersonSearch}
         treeId={treeId}
         selectedBranchPersonName={inviteSelectedPersonName || nodes.find((n) => n.id === invitePersonId)?.name || undefined}
+        lockBranchPerson={inviteBranchPersonLocked}
         onClose={() => setInviteDialogOpen(false)}
         onInvitePhoneChange={(value) => {
           const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -1798,6 +1873,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           onDelete={onDelete}
           canEditNode={canEditNode}
           treeId={treeId}
+          onInviteCollaborator={handleInviteForNode}
           initialView={nodeDetailsInitialView}
           initialAddInfo={nodeDetailsAddInfo}
         />

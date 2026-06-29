@@ -51,6 +51,8 @@ import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import { ApiService } from "../../services/apiService";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { phoneFromCustomFields } from "../Business/businessContact";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 import {
   fetchMyVillageAccessRequests,
@@ -93,6 +95,9 @@ export const ProfilePage: React.FC = () => {
   // New state for Business and Profession
   const [professions, setProfessions] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
+  const [personCustomFields, setPersonCustomFields] = useState<
+    Record<string, string>
+  >({});
   const [allProfessions, setAllProfessions] = useState<any[]>([]);
   // Dialog State
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
@@ -101,7 +106,6 @@ export const ProfilePage: React.FC = () => {
   const [openEditProfileDialog, setOpenEditProfileDialog] = useState(false);
   const [personLoading, setPersonLoading] = useState(false);
   const [personNotFound, setPersonNotFound] = useState(false);
-  const [businessSaving, setBusinessSaving] = useState(false);
 
   // Form State
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>("");
@@ -114,12 +118,6 @@ export const ProfilePage: React.FC = () => {
   });
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>();
   const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
-  const [newBusinessData, setNewBusinessData] = useState({
-    name: "",
-    category: "",
-    description: "",
-    contact: "",
-  });
   const [linkedPersonDetails, setLinkedPersonDetails] = useState<any | null>(
     null,
   );
@@ -213,13 +211,15 @@ export const ProfilePage: React.FC = () => {
         setLinkedPersonDetails(personWithTree);
         setProfilePhotoUrl((personWithTree as any)?.photoUrl || undefined);
 
-        const [profs, biz, allProfs] = await Promise.all([
+        const [profs, biz, allProfs, customFields] = await Promise.all([
           ApiService.getProfessionsByPerson(effectivePersonId),
           ApiService.getBusinessesByPerson(effectivePersonId),
           canManagePerson ? ApiService.getAllProfessions() : Promise.resolve([]),
+          ApiService.getPersonCustomFields(effectivePersonId).catch(() => ({})),
         ]);
         setProfessions(profs || []);
         setBusinesses(biz || []);
+        setPersonCustomFields(customFields || {});
         if (canManagePerson) {
           setAllProfessions(allProfs || []);
         }
@@ -351,61 +351,13 @@ export const ProfilePage: React.FC = () => {
   };
 
   const handleOpenBusinessDialog = (business?: any) => {
-    if (business) {
-      setEditingBusiness(business);
-      setNewBusinessData({
-        name: business.name || "",
-        category: business.category || "",
-        description: business.description || "",
-        contact: business.contact || "",
-      });
-    } else {
-      setEditingBusiness(null);
-      setNewBusinessData({
-        name: "",
-        category: "",
-        description: "",
-        contact: "",
-      });
-    }
+    setEditingBusiness(business || null);
     setOpenBusinessDialog(true);
   };
 
   const handleCloseBusinessDialog = () => {
     setOpenBusinessDialog(false);
     setEditingBusiness(null);
-  };
-
-  const handleSaveBusiness = async () => {
-    if (!effectivePersonId || !canManagePerson) return;
-
-    setBusinessSaving(true);
-    setError("");
-    try {
-      const payload = {
-        name: newBusinessData.name,
-        category: newBusinessData.category || null,
-        description: newBusinessData.description || null,
-        contact: newBusinessData.contact || null,
-        peopleId: effectivePersonId,
-      };
-
-      if (editingBusiness?.id) {
-        await ApiService.updateBusiness(editingBusiness.id, payload);
-        setSuccess("Business updated successfully.");
-      } else {
-        await ApiService.createBusiness(payload);
-        setSuccess("Business added successfully.");
-      }
-
-      await refreshBusinesses(effectivePersonId);
-      handleCloseBusinessDialog();
-    } catch (err: any) {
-      console.error("Error saving business:", err);
-      setError(err?.message || "Failed to save business.");
-    } finally {
-      setBusinessSaving(false);
-    }
   };
 
   const handleDeleteBusiness = async (id: string) => {
@@ -1321,89 +1273,21 @@ export const ProfilePage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog
+      <BusinessFormDialog
         open={openBusinessDialog}
         onClose={handleCloseBusinessDialog}
-      >
-        <DialogTitle>
-          {editingBusiness ? "Edit Business" : "Add Business"}
-        </DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              pt: 1,
-              minWidth: 300,
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-            }}
-          >
-            <TextField
-              fullWidth
-              label="Business Name"
-              value={newBusinessData.name}
-              onChange={(e) =>
-                setNewBusinessData({ ...newBusinessData, name: e.target.value })
-              }
-            />
-            <TextField
-              fullWidth
-              label="Category"
-              value={newBusinessData.category}
-              onChange={(e) =>
-                setNewBusinessData({
-                  ...newBusinessData,
-                  category: e.target.value,
-                })
-              }
-            />
-            <TextField
-              fullWidth
-              label="Description"
-              multiline
-              rows={3}
-              value={newBusinessData.description}
-              onChange={(e) =>
-                setNewBusinessData({
-                  ...newBusinessData,
-                  description: e.target.value,
-                })
-              }
-            />
-            <TextField
-              fullWidth
-              label="Contact Number"
-              value={newBusinessData.contact}
-              onChange={(e) =>
-                setNewBusinessData({
-                  ...newBusinessData,
-                  contact: e.target.value,
-                })
-              }
-              placeholder="Enter phone number (optional)"
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseBusinessDialog} disabled={businessSaving}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSaveBusiness}
-            variant="contained"
-            disabled={!newBusinessData.name || businessSaving}
-            startIcon={
-              businessSaving ? <CircularProgress size={18} color="inherit" /> : undefined
-            }
-          >
-            {businessSaving
-              ? "Saving..."
-              : editingBusiness
-                ? "Save changes"
-                : "Add"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        business={editingBusiness}
+        personId={effectivePersonId}
+        defaultContact={phoneFromCustomFields(personCustomFields)}
+        onSaved={() => {
+          setSuccess(
+            editingBusiness ? "Business updated successfully." : "Business added successfully.",
+          );
+          if (effectivePersonId) {
+            void refreshBusinesses(effectivePersonId);
+          }
+        }}
+      />
 
       <Dialog
         open={openEditProfileDialog}

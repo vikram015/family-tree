@@ -42,11 +42,11 @@ import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlin
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import BusinessIcon from "@mui/icons-material/Business";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
-import TranslateOutlinedIcon from "@mui/icons-material/TranslateOutlined";
 import dayjs, { Dayjs } from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
@@ -55,6 +55,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { phoneFromCustomFields } from "../Business/businessContact";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
     default: m.DatePicker,
@@ -87,6 +89,16 @@ interface AddNodeProps {
     targetId?: string,
     type?: RelType,
     otherParentId?: string, // second parent for children or second spouse
+    childOptions?: {
+      // How to resolve the other parent when adding a child.
+      otherParentMode?: "existing" | "new" | "unknown";
+      newSpouse?: {
+        name?: string;
+        nameHindi?: string;
+        gender?: string;
+        dob?: string;
+      };
+    },
   ) => Promise<string | undefined> | Promise<void> | void;
   onCancel?: () => void;
   /** Called when the full add flow is complete (after Step 2 save or skip).
@@ -153,11 +165,10 @@ export default function AddNode({
     "business" | "job" | "other"
   >("business");
 
-  // Business Fields
-  const [businessName, setBusinessName] = useState("");
-  const [businessCategory, setBusinessCategory] = useState("");
-  const [businessAddress, setBusinessAddress] = useState("");
-  const [businessContact, setBusinessContact] = useState("");
+  // Business is captured via the shared BusinessFormDialog (same modal used on the
+  // Business page, Profile page, and node details).
+  const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
+  const [businessAdded, setBusinessAdded] = useState(false);
 
   // Profession Fields
   const [jobTitle, setJobTitle] = useState("");
@@ -260,11 +271,31 @@ export default function AddNode({
   const [selectedOtherParentId, setSelectedOtherParentId] = useState<string>(
     () => "",
   );
+  // How the user wants to set the child's other parent (spouse of the target).
+  const [otherParentMode, setOtherParentMode] = useState<
+    "existing" | "new" | "unknown"
+  >("unknown");
+  // Details for the "create new spouse" option.
+  const [newSpouseName, setNewSpouseName] = useState("");
+  const [newSpouseNameHindi, setNewSpouseNameHindi] = useState("");
+  const [newSpouseGender, setNewSpouseGender] = useState<
+    "male" | "female" | "other" | ""
+  >("");
+  const [newSpouseDob, setNewSpouseDob] = useState<Dayjs | null>(null);
+
   useEffect(() => {
-    // default to first spouse if available
-    if (spouseOptions.length > 0) {
+    // Choose a sensible default for the other parent:
+    // - exactly one existing spouse -> preselect it
+    // - multiple existing spouses -> default to "existing" but make the user pick which one
+    // - no existing spouse -> default to "unknown" (user can switch to "create new")
+    if (spouseOptions.length === 1) {
+      setOtherParentMode("existing");
       setSelectedOtherParentId(spouseOptions[0].id);
+    } else if (spouseOptions.length > 1) {
+      setOtherParentMode("existing");
+      setSelectedOtherParentId("");
     } else {
+      setOtherParentMode("unknown");
       setSelectedOtherParentId("");
     }
   }, [spouseOptions]);
@@ -320,6 +351,12 @@ export default function AddNode({
     setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
+    setOtherParentMode("unknown");
+    setSelectedOtherParentId("");
+    setNewSpouseName("");
+    setNewSpouseNameHindi("");
+    setNewSpouseGender("");
+    setNewSpouseDob(null);
     setSelectedPerson(null);
     setSearchVillageId("");
     setPersonSearchValue("");
@@ -332,10 +369,8 @@ export default function AddNode({
     // Reset Step 2
     setStep(1);
     setSavedNodeId(null);
-    setBusinessName("");
-    setBusinessCategory("");
-    setBusinessAddress("");
-    setBusinessContact("");
+    setBusinessAdded(false);
+    setBusinessDialogOpen(false);
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
@@ -354,6 +389,12 @@ export default function AddNode({
     setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
+    setOtherParentMode("unknown");
+    setSelectedOtherParentId("");
+    setNewSpouseName("");
+    setNewSpouseNameHindi("");
+    setNewSpouseGender("");
+    setNewSpouseDob(null);
     setSelectedPerson(null);
     setSearchVillageId("");
     setPersonSearchValue("");
@@ -367,10 +408,8 @@ export default function AddNode({
     setStep(1);
     setSavedNodeId(null);
     setFlowTargetId(targetId);
-    setBusinessName("");
-    setBusinessCategory("");
-    setBusinessAddress("");
-    setBusinessContact("");
+    setBusinessAdded(false);
+    setBusinessDialogOpen(false);
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
@@ -394,6 +433,12 @@ export default function AddNode({
     setSelectedRelType(RelType.blood);
     setCustomFields({});
     setMode("create");
+    setOtherParentMode("unknown");
+    setSelectedOtherParentId("");
+    setNewSpouseName("");
+    setNewSpouseNameHindi("");
+    setNewSpouseGender("");
+    setNewSpouseDob(null);
     setSelectedPerson(null);
     setSearchVillageId("");
     setPersonSearchValue("");
@@ -406,10 +451,8 @@ export default function AddNode({
     setStep(1);
     setSavedNodeId(null);
     setFlowTargetId(targetId);
-    setBusinessName("");
-    setBusinessCategory("");
-    setBusinessAddress("");
-    setBusinessContact("");
+    setBusinessAdded(false);
+    setBusinessDialogOpen(false);
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
@@ -425,18 +468,7 @@ export default function AddNode({
     }
 
     try {
-      if (occupationType === "business") {
-        if (businessName) {
-          await ApiService.createBusiness({
-            name: businessName,
-            category: businessCategory,
-            address: businessAddress,
-            description: businessAddress,
-            contact: businessContact || null,
-            peopleId: savedNodeId,
-          });
-        }
-      } else if (occupationType === "job") {
+      if (occupationType === "job") {
         if (jobTitle) {
           const existing = allProfessions.find(
             (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
@@ -471,10 +503,6 @@ export default function AddNode({
     handleFlowComplete();
   }, [
     allProfessions,
-    businessAddress,
-    businessCategory,
-    businessContact,
-    businessName,
     handleContinueWithSon,
     handleFlowComplete,
     isSavingDetails,
@@ -536,6 +564,34 @@ export default function AddNode({
       return;
     }
 
+    // Validate the other-parent choice when adding a child.
+    if (relation === "child" && !isFirstNode) {
+      if (otherParentMode === "existing" && !selectedOtherParentId) {
+        alert("Please select the other parent for this child.");
+        return;
+      }
+      if (otherParentMode === "new" && !newSpouseName.trim()) {
+        alert("Please enter a name for the new spouse, or choose another option.");
+        return;
+      }
+    }
+
+    const childOptions =
+      relation === "child"
+        ? {
+            otherParentMode,
+            newSpouse:
+              otherParentMode === "new"
+                ? {
+                    name: newSpouseName.trim(),
+                    nameHindi: newSpouseNameHindi.trim() || undefined,
+                    gender: newSpouseGender || undefined,
+                    dob: formatPickerDate(newSpouseDob),
+                  }
+                : undefined,
+          }
+        : undefined;
+
     const processAdd = async () => {
       setIsSaving(true);
       // prepare parents array: include targetId (if adding child) and optional other parent
@@ -578,6 +634,7 @@ export default function AddNode({
           effectiveTargetId,
           selectedRelType,
           selectedOtherParentId,
+          childOptions,
         );
 
         if (resultId && typeof resultId === "string") {
@@ -633,6 +690,12 @@ export default function AddNode({
     onAdd,
     handleCancel,
     selectedOtherParentId,
+    otherParentMode,
+    newSpouseName,
+    newSpouseNameHindi,
+    newSpouseGender,
+    newSpouseDob,
+    isFirstNode,
     selectedRelType,
     mode,
     selectedPerson,
@@ -650,7 +713,6 @@ export default function AddNode({
         onClick: handleSaveDetails,
         disabled:
           isSavingDetails ||
-          (occupationType === "business" && !businessName) ||
           (occupationType === "job" && !jobTitle),
         saving: isSavingDetails,
       });
@@ -665,7 +727,6 @@ export default function AddNode({
 
     return () => onMobileSaveActionChange(null);
   }, [
-    businessName,
     handleSave,
     handleSaveDetails,
     isSaving,
@@ -757,50 +818,31 @@ export default function AddNode({
 
           {occupationType === "business" && (
             <>
-	              <TextField
-	                label="Business Name"
-	                fullWidth
-	                value={businessName}
-	                onChange={(e) => setBusinessName(e.target.value)}
-	                placeholder="Shop or Company Name"
-	                sx={inputWithIconSx}
-	                InputProps={{
-	                  startAdornment: adornment(<BusinessIcon fontSize="small" />),
-	                }}
-	              />
-	              <TextField
-	                label="Category"
-	                fullWidth
-	                value={businessCategory}
-	                onChange={(e) => setBusinessCategory(e.target.value)}
-	                placeholder="e.g. Retail, Agriculture, Tech"
-	                sx={inputWithIconSx}
-	                InputProps={{
-	                  startAdornment: adornment(<CategoryOutlinedIcon fontSize="small" />),
-	                }}
-	              />
-	              <TextField
-	                label="Location / Village"
-	                fullWidth
-	                value={businessAddress}
-	                onChange={(e) => setBusinessAddress(e.target.value)}
-	                placeholder="Where is it located?"
-	                sx={inputWithIconSx}
-	                InputProps={{
-	                  startAdornment: adornment(<LocationOnOutlinedIcon fontSize="small" />),
-	                }}
-	              />
-	              <TextField
-	                label="Contact Number"
-	                fullWidth
-	                value={businessContact}
-	                onChange={(e) => setBusinessContact(e.target.value)}
-	                placeholder="Phone number (optional)"
-	                sx={inputWithIconSx}
-	                InputProps={{
-	                  startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />),
-	                }}
-	              />
+              {businessAdded ? (
+                <Paper
+                  variant="outlined"
+                  sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <CheckCircleOutlineIcon color="success" fontSize="small" />
+                  <Typography variant="body2">Business details saved.</Typography>
+                  <Button
+                    size="small"
+                    onClick={() => setBusinessDialogOpen(true)}
+                    sx={{ ml: "auto" }}
+                  >
+                    Add another
+                  </Button>
+                </Paper>
+              ) : (
+                <Button
+                  variant="outlined"
+                  startIcon={<BusinessIcon fontSize="small" />}
+                  onClick={() => setBusinessDialogOpen(true)}
+                  disabled={!savedNodeId}
+                >
+                  Add Business Details
+                </Button>
+              )}
             </>
           )}
 
@@ -865,7 +907,6 @@ export default function AddNode({
               }
               disabled={
                 isSavingDetails ||
-                (occupationType === "business" && !businessName) ||
                 (occupationType === "job" && !jobTitle)
               }
             >
@@ -1149,42 +1190,150 @@ export default function AddNode({
                 </Typography>
                 <Stack spacing={2}>
                   {!isFirstNode && relation === "child" && (
-                    <FormControl fullWidth sx={inputWithIconSx}>
-                      <InputLabel>Other parent</InputLabel>
-                      <Select
-                        value={selectedOtherParentId}
-                        onChange={(e) => setSelectedOtherParentId(e.target.value)}
-                        label="Other parent"
-                        startAdornment={adornment(<PersonOutlineOutlinedIcon fontSize="small" />)}
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                        Other parent
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block", mb: 1.25 }}
                       >
-                        <MenuItem value="">None</MenuItem>
-                        {spouseOptions.map((s) => (
-                          <MenuItem key={s.id} value={s.id}>
-                            <Stack direction="row" spacing={1.25} alignItems="center">
-                              <Avatar
-                                src={s.photo || undefined}
-                                sx={{ width: 28, height: 28, fontSize: 12 }}
-                              >
-                                {(s.name || "?").charAt(0).toUpperCase()}
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2">
-                                  {s.name ||
-                                    (targetNode?.name
-                                      ? `${targetNode.name}'s Spouse`
-                                      : s.id)}
-                                </Typography>
-                                {s.gender && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {s.gender}
-                                  </Typography>
-                                )}
-                              </Box>
+                        Who is the child's other parent (spouse of {targetNode?.name || "this person"})?
+                      </Typography>
+                      <ToggleButtonGroup
+                        color="primary"
+                        value={otherParentMode}
+                        exclusive
+                        onChange={(_event, value) => value && setOtherParentMode(value)}
+                        size="small"
+                        fullWidth
+                        sx={{ mb: 1.5 }}
+                      >
+                        <ToggleButton
+                          value="existing"
+                          disabled={spouseOptions.length === 0}
+                        >
+                          Existing
+                        </ToggleButton>
+                        <ToggleButton value="new">Create new</ToggleButton>
+                        <ToggleButton value="unknown">Unknown</ToggleButton>
+                      </ToggleButtonGroup>
+
+                      {otherParentMode === "existing" && (
+                        <FormControl fullWidth sx={inputWithIconSx}>
+                          <InputLabel>Select existing spouse</InputLabel>
+                          <Select
+                            value={selectedOtherParentId}
+                            onChange={(e) => setSelectedOtherParentId(e.target.value)}
+                            label="Select existing spouse"
+                            startAdornment={adornment(<PersonOutlineOutlinedIcon fontSize="small" />)}
+                          >
+                            {spouseOptions.map((s) => (
+                              <MenuItem key={s.id} value={s.id}>
+                                <Stack direction="row" spacing={1.25} alignItems="center">
+                                  <Avatar
+                                    src={s.photo || undefined}
+                                    sx={{ width: 28, height: 28, fontSize: 12 }}
+                                  >
+                                    {(s.name || "?").charAt(0).toUpperCase()}
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="body2">
+                                      {s.name ||
+                                        (targetNode?.name
+                                          ? `${targetNode.name}'s Spouse`
+                                          : s.id)}
+                                    </Typography>
+                                    {s.gender && (
+                                      <Typography variant="caption" color="text.secondary">
+                                        {s.gender}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                </Stack>
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+
+                      {otherParentMode === "new" && (
+                        <Stack spacing={2}>
+                          <TextField
+                            label="Spouse name"
+                            value={newSpouseName}
+                            onChange={(e) => setNewSpouseName(e.target.value)}
+                            fullWidth
+                            required
+                            sx={inputWithIconSx}
+                            InputProps={{
+                              startAdornment: adornment(
+                                <PersonOutlineOutlinedIcon fontSize="small" />,
+                              ),
+                            }}
+                          />
+                          <HindiNameInput
+                            sourceText={newSpouseName}
+                            value={newSpouseNameHindi}
+                            onChange={setNewSpouseNameHindi}
+                          />
+                          <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
+                            <DatePicker
+                              label="Spouse date of birth (optional)"
+                              value={newSpouseDob}
+                              onChange={(value) => setNewSpouseDob(value)}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  sx: inputWithIconSx,
+                                  InputProps: {
+                                    startAdornment: adornment(
+                                      <CakeOutlinedIcon fontSize="small" />,
+                                    ),
+                                  },
+                                },
+                              }}
+                              format="DD/MM/YYYY"
+                            />
+                          </Suspense>
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                              Spouse gender
+                            </Typography>
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                              {GENDER_OPTIONS.map((option) => (
+                                <Chip
+                                  key={option.value}
+                                  icon={option.icon}
+                                  label={option.label}
+                                  clickable
+                                  color={
+                                    newSpouseGender === option.value ? "primary" : "default"
+                                  }
+                                  variant={
+                                    newSpouseGender === option.value ? "filled" : "outlined"
+                                  }
+                                  onClick={() => setNewSpouseGender(option.value)}
+                                  sx={{ height: 36, px: 0.75 }}
+                                />
+                              ))}
                             </Stack>
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                          </Box>
+                        </Stack>
+                      )}
+
+                      {otherParentMode === "unknown" && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontStyle: "italic", display: "block" }}
+                        >
+                          The child will be added with only {targetNode?.name || "this person"} as a
+                          known parent. You can add the other parent later.
+                        </Typography>
+                      )}
+                    </Box>
                   )}
 
                   <Box
@@ -1241,7 +1390,6 @@ export default function AddNode({
 	                    value={nameHindi}
 	                    onChange={setNameHindi}
 	                    disabled={mode === "link"}
-	                    startIcon={<TranslateOutlinedIcon fontSize="small" />}
 	                  />
 
 	                  <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
@@ -1402,6 +1550,14 @@ export default function AddNode({
           </Box>
         </Stack>
       )}
+
+      <BusinessFormDialog
+        open={businessDialogOpen}
+        onClose={() => setBusinessDialogOpen(false)}
+        personId={savedNodeId}
+        defaultContact={phoneFromCustomFields(customFields)}
+        onSaved={() => setBusinessAdded(true)}
+      />
     </Box>
   );
 }

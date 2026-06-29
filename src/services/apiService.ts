@@ -305,6 +305,10 @@ export interface TreeInvite {
   createdAt: string;
   inviteToken?: string;
   inviteLink?: string;
+  /** True when the invitee already had an account and was granted access immediately. */
+  granted?: boolean;
+  /** Present when granted === true: the existing user who received access. */
+  user?: { id: string; name: string | null; phone: string | null };
 }
 
 export const ApiService = {
@@ -530,6 +534,13 @@ export const ApiService = {
     photoUrl?: string,
     relationStartDate?: string,
     relationEndDate?: string,
+    otherParentMode?: "existing" | "new" | "unknown",
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
   ): Promise<AddPersonResult> {
     const normalizedDob = this.normalizeDateValue(dob);
     const normalizedDeceasedDate = this.normalizeDateValue(deceasedDate);
@@ -554,6 +565,10 @@ export const ApiService = {
       photoUrl,
       relationStartDate: normalizedRelationStartDate,
       relationEndDate: normalizedRelationEndDate,
+      otherParentMode,
+      newSpouse: newSpouse
+        ? { ...newSpouse, dob: this.normalizeDateValue(newSpouse.dob) }
+        : undefined,
     });
   },
 
@@ -649,6 +664,18 @@ export const ApiService = {
     },
   ): Promise<TreeInvite> {
     return backendApi.post<TreeInvite>(`/api/tree/${treeId}/invites`, payload);
+  },
+
+  /** Checks whether a phone number already belongs to a user in the system. */
+  async lookupTreeInviteUser(
+    treeId: string,
+    phone: string,
+    personId?: string | null,
+  ): Promise<{ exists: boolean; name: string | null }> {
+    return backendApi.post<{ exists: boolean; name: string | null }>(
+      `/api/tree/${treeId}/invites/lookup`,
+      { phone, personId: personId || null },
+    );
   },
 
   async revokeTreeInvite(treeId: string, inviteId: string): Promise<{ success: boolean }> {

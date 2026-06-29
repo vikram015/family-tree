@@ -58,6 +58,7 @@ import {
 } from "../../store/slices/professionSlice";
 import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "./PersonSearchField";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { FNode } from "../model/FNode";
 
 interface Business {
@@ -527,28 +528,7 @@ export const BusinessPage: React.FC = () => {
   };
 
   const handleOpenDialog = (business?: Business) => {
-    if (business) {
-      setEditingBusiness(business);
-      setFormData({
-        name: business.name,
-        category: business.category || "",
-        description: business.description,
-        owner: business.owner,
-        ownerId: business.ownerId || "",
-        contact: business.contact || "",
-      });
-    } else {
-      setEditingBusiness(null);
-      setFormData({
-        name: "",
-        category: "",
-        description: "",
-        owner: "",
-        ownerId: "",
-        contact: "",
-      });
-    }
-    setPeople([]);
+    setEditingBusiness(business || null);
     setOpenDialog(true);
   };
 
@@ -557,48 +537,10 @@ export const BusinessPage: React.FC = () => {
     setEditingBusiness(null);
   };
 
-  const handleFormChange = (e: any) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async () => {
-    if (!formData.name || !formData.owner) {
-      alert("Please fill in all required fields");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const businessData = {
-        name: formData.name,
-        category: formData.category || null,
-        description: formData.description,
-        peopleId: formData.ownerId || null,
-        contact: formData.contact || null,
-      };
-
-      if (editingBusiness) {
-        // Update existing business
-        await ApiService.updateBusiness(editingBusiness.id, businessData);
-      } else {
-        // Add new business
-        await ApiService.createBusiness(businessData);
-      }
-      handleCloseDialog();
-
-      // Refresh businesses list by dispatching Redux action
-      if (selectedVillage) {
-        dispatch(fetchBusinessesByVillage(selectedVillage));
-      }
-    } catch (error) {
-      console.error("Error saving business:", error);
-      alert("Error saving business. Please try again.");
-    } finally {
-      setSubmitting(false);
+  const handleBusinessSaved = () => {
+    // Refresh businesses list by dispatching Redux action
+    if (selectedVillage) {
+      dispatch(fetchBusinessesByVillage(selectedVillage));
     }
   };
 
@@ -1466,140 +1408,14 @@ export const BusinessPage: React.FC = () => {
       </Box>
 
       {/* Add/Edit Business Dialog */}
-      <Dialog
+      <BusinessFormDialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="sm"
-        fullWidth
-      >
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
-            {editingBusiness ? "Edit Business" : "Add New Business"}
-          </Typography>
-
-          <Stack spacing={2} sx={{ mt: 3 }}>
-	            <TextField
-	              label="Business Name"
-	              name="name"
-	              value={formData.name}
-	              onChange={handleFormChange}
-	              fullWidth
-	              required
-	              placeholder="Enter business name"
-	              sx={dialogFieldSx}
-	              InputProps={{
-	                startAdornment: (
-	                  <InputAdornment position="start">
-	                    <BusinessIcon fontSize="small" />
-	                  </InputAdornment>
-	                ),
-	              }}
-	            />
-
-	            <FormControl fullWidth sx={dialogFieldSx}>
-	              <InputLabel shrink>Category (optional)</InputLabel>
-	              <Select
-	                name="category"
-	                value={formData.category}
-	                onChange={handleFormChange}
-	                label="Category (optional)"
-	                displayEmpty
-	                startAdornment={
-	                  <InputAdornment position="start">
-	                    <CategoryIcon fontSize="small" />
-	                  </InputAdornment>
-	                }
-	                renderValue={(value) =>
-	                  value ? getCategoryLabel(value as string) : "No category"
-	                }
-	              >
-                <MenuItem value="">
-                  No category
-                </MenuItem>
-                {categories.map((category) => (
-                  <MenuItem key={category.id} value={category.id}>
-                    {category.displayName}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <TextField
-              label="Business Description"
-              name="description"
-              value={formData.description}
-              onChange={handleFormChange}
-              fullWidth
-	              multiline
-	              rows={3}
-	              placeholder="Describe what your business does"
-	              sx={dialogFieldSx}
-	              InputProps={{
-	                startAdornment: (
-	                  <InputAdornment position="start">
-	                    <NotesIcon fontSize="small" />
-	                  </InputAdornment>
-	                ),
-	              }}
-	            />
-
-	            <PersonSearchField
-	              label="Owner Name"
-	              placeholder="Enter owner name and search"
-              searchValue={formData.owner}
-              onSearchValueChange={(value) =>
-                setFormData((prev) => ({ ...prev, owner: value }))
-              }
-              onPersonSelect={(person) => {
-                setFormData((prev) => ({
-                  ...prev,
-                  owner: person.name || "",
-                  ownerId: person.id,
-                }));
-	              }}
-	              selectedPerson={people.length > 0 ? people[0] : null}
-	              villageId={selectedVillage}
-	              startIcon={<PersonIcon fontSize="small" />}
-	            />
-
-	            <TextField
-	              label="Contact Number"
-	              name="contact"
-	              value={formData.contact}
-	              onChange={handleFormChange}
-	              fullWidth
-	              placeholder="Enter phone number (optional)"
-	              sx={dialogFieldSx}
-	              InputProps={{
-	                startAdornment: (
-	                  <InputAdornment position="start">
-	                    <PhoneIcon fontSize="small" />
-	                  </InputAdornment>
-	                ),
-	              }}
-	            />
-
-            <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
-              <Button variant="outlined" onClick={handleCloseDialog} fullWidth>
-                Cancel
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={submitting}
-                fullWidth
-                sx={primaryButtonSx}
-              >
-                {submitting
-                  ? "Saving..."
-                  : editingBusiness
-                    ? "Update Business"
-                    : "Add Business"}
-              </Button>
-            </Stack>
-          </Stack>
-        </Box>
-      </Dialog>
+        business={editingBusiness}
+        enableOwnerSelect
+        villageId={selectedVillage}
+        onSaved={handleBusinessSaved}
+      />
 
       {/* Professions Dialog */}
       <Dialog

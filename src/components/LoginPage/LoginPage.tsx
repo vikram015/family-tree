@@ -10,34 +10,30 @@ export const LoginPage: React.FC = () => {
   const { currentUser, loading } = useAuth();
   const from = (location.state as any)?.from?.pathname || "/families";
   const [open, setOpen] = useState(true);
-  const [pendingPostLogin, setPendingPostLogin] = useState(false);
 
   useEffect(() => {
-    if (!pendingPostLogin || loading) {
+    if (loading || !currentUser) {
       return;
     }
 
     let active = true;
 
-    if (currentUser) {
-      if (from === "/families") {
-        resolveDefaultFamilyTreePath().then((targetPath) => {
-          if (active) {
-            navigate(targetPath, { replace: true });
-          }
-        });
-      } else {
+    if (from === "/families") {
+      resolveDefaultFamilyTreePath().then((targetPath) => {
+        if (active) {
+          navigate(targetPath, { replace: true });
+        }
+      });
+    } else {
+      if (active) {
         navigate(from, { replace: true });
       }
     }
-
-    setPendingPostLogin(false);
 
     return () => {
       active = false;
     };
   }, [
-    pendingPostLogin,
     loading,
     currentUser,
     from,
@@ -51,7 +47,6 @@ export const LoginPage: React.FC = () => {
 
   const handleSuccess = useCallback(() => {
     setOpen(false);
-    setPendingPostLogin(true);
   }, []);
 
   return (

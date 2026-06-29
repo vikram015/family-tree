@@ -7,6 +7,7 @@ import {
   Box,
   Typography,
   IconButton,
+  Tooltip,
   TextField,
   Button,
   CircularProgress,
@@ -43,12 +44,18 @@ import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
 import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
-import TranslateOutlinedIcon from "@mui/icons-material/TranslateOutlined";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
+import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
+import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { businessCategoryLabel } from "../Business/businessCategories";
+import { phoneFromCustomFields } from "../Business/businessContact";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
@@ -98,11 +105,22 @@ interface NodeDetailsProps {
     targetId?: string,
     type?: RelType,
     otherParentId?: string,
+    childOptions?: {
+      otherParentMode?: "existing" | "new" | "unknown";
+      newSpouse?: {
+        name?: string;
+        nameHindi?: string;
+        gender?: string;
+        dob?: string;
+      };
+    },
   ) => Promise<string | undefined> | Promise<void> | void;
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
   onDelete?: (nodeId: string) => void;
   canEditNode?: (nodeId: string) => boolean;
   treeId?: string;
+  /** Open the invite-collaborator dialog scoped to this person's branch. */
+  onInviteCollaborator?: (personId: string) => void;
   /** Open directly in a specific view (e.g. "add" when clicking a placeholder) */
   initialView?: "details" | "edit" | "add";
   /** Pre-selected relation info when opening in "add" view from a placeholder */
@@ -127,6 +145,7 @@ export const NodeDetails = memo(function NodeDetails({
     onDelete,
     canEditNode,
     treeId,
+    onInviteCollaborator,
   } = props;
   const formatDisplayDate = (value?: string) => {
     if (!value) return "";
@@ -208,6 +227,11 @@ export const NodeDetails = memo(function NodeDetails({
   const [displayCustomFields, setDisplayCustomFields] = useState<
     Record<string, string>
   >({});
+  const [businesses, setBusinesses] = useState<any[]>([]);
+  const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
+  const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
+  const [requestingAccess, setRequestingAccess] = useState(false);
+  const [branchAccessRequested, setBranchAccessRequested] = useState(false);
   const [mobileAddSaveAction, setMobileAddSaveAction] = useState<{
     onClick: () => void;
     disabled: boolean;
@@ -244,8 +268,63 @@ export const NodeDetails = memo(function NodeDetails({
         setEditedCustomFields(fields);
         setDisplayCustomFields(fields);
       });
+
+      // Fetch this person's businesses for the Business section
+      ApiService.getBusinessesByPerson(node.id)
+        .then((biz) => setBusinesses(biz || []))
+        .catch(() => setBusinesses([]));
+
+      setBranchAccessRequested(false);
     }
   }, [node, initialView, parsePickerValue]);
+
+  const refreshBusinesses = useCallback(async () => {
+    if (!node) return;
+    try {
+      const biz = await ApiService.getBusinessesByPerson(node.id);
+      setBusinesses(biz || []);
+    } catch {
+      setBusinesses([]);
+    }
+  }, [node]);
+
+  const handleShareNode = useCallback(async () => {
+    if (!node) return;
+    const base = window.location.origin;
+    const linkTreeId = treeId || node.treeId || "";
+    const url = `${base}/families?tree=${encodeURIComponent(linkTreeId)}&personId=${encodeURIComponent(node.id)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: node.name || "Family member",
+          text: `View ${node.name || "this profile"} on the family tree:`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert("Profile link copied to clipboard.");
+      }
+    } catch {
+      // Share was cancelled or clipboard failed — nothing to do.
+    }
+  }, [node, treeId]);
+
+  const handleRequestBranchAccess = useCallback(async () => {
+    if (!node || !treeId) return;
+    setRequestingAccess(true);
+    try {
+      await ApiService.createBranchAccessRequest({
+        targetTreeId: treeId,
+        targetPersonId: node.id,
+      });
+      setBranchAccessRequested(true);
+      alert(`Branch access request sent for ${node.name || "this"} branch.`);
+    } catch (error: any) {
+      alert(error?.message || "Failed to request branch access.");
+    } finally {
+      setRequestingAccess(false);
+    }
+  }, [node, treeId]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -359,11 +438,20 @@ export const NodeDetails = memo(function NodeDetails({
       t?: string,
       type?: RelType,
       op?: string,
+      childOptions?: {
+        otherParentMode?: "existing" | "new" | "unknown";
+        newSpouse?: {
+          name?: string;
+          nameHindi?: string;
+          gender?: string;
+          dob?: string;
+        };
+      },
     ): Promise<string | undefined> => {
       if (!onAdd) {
         return undefined;
       }
-      const result = await onAdd(n, r, t, type, op);
+      const result = await onAdd(n, r, t, type, op, childOptions);
       return typeof result === "string" ? result : undefined;
     },
     [onAdd],
@@ -573,6 +661,11 @@ export const NodeDetails = memo(function NodeDetails({
   const siblings = node.siblings?.map(relNodeMapper).filter(Boolean) || [];
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
   const canEditCurrentNode = canEditNode ? canEditNode(node.id) : true;
+  const isSuperAdminUser = typeof isSuperAdmin === "function" ? isSuperAdmin() : Boolean(isSuperAdmin);
+  // Superadmins already have full access, so they never need to request branch access.
+  const canRequestBranchAccess = Boolean(
+    currentUser && !isSuperAdminUser && !canEditCurrentNode && treeId,
+  );
   const summaryItems = [
     {
       key: "gender",
@@ -690,9 +783,49 @@ export const NodeDetails = memo(function NodeDetails({
                       {node.name}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                      Family profile
+                      {node.nameHindi || "Family profile"}
                     </Typography>
                   </Box>
+
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    useFlexGap
+                    justifyContent="center"
+                  >
+                    {canEditCurrentNode && onInviteCollaborator && (
+                      <Tooltip title="Invite collaborator">
+                        <IconButton
+                          size="large"
+                          color="primary"
+                          onClick={() => onInviteCollaborator(node.id)}
+                          sx={{
+                            border: 1,
+                            borderColor: "divider",
+                            width: 48,
+                            height: 48,
+                          }}
+                        >
+                          <PersonAddAlt1OutlinedIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Share">
+                      <IconButton
+                        size="large"
+                        color="primary"
+                        onClick={handleShareNode}
+                        sx={{
+                          border: 1,
+                          borderColor: "divider",
+                          width: 48,
+                          height: 48,
+                        }}
+                      >
+                        <ShareOutlinedIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
                   <Stack
                     direction="row"
                     spacing={1}
@@ -710,23 +843,6 @@ export const NodeDetails = memo(function NodeDetails({
                       />
                     ))}
                   </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {node.gender === Gender.male
-                      ? "Male"
-                      : node.gender === Gender.female
-                        ? "Female"
-                        : "Other"}
-                    {node.dob && ` • Born ${formatDisplayDate(node.dob)}`}
-                    {node.isAlive === false && ` • Deceased`}
-                    {node.isAlive === false &&
-                      node.deceasedDate &&
-                      ` (${formatDisplayDate(node.deceasedDate)})`}
-                  </Typography>
-                  {node.bloodGroup && (
-                    <Typography variant="body2" color="text.secondary">
-                      🩸 Blood Group: <strong>{node.bloodGroup}</strong>
-                    </Typography>
-                  )}
                   </Stack>
                 </Paper>
 
@@ -796,6 +912,21 @@ export const NodeDetails = memo(function NodeDetails({
                           disabled={!canEditCurrentNode}
                         >
                           Edit Marriage Dates
+                        </Button>
+                      )}
+                      {canRequestBranchAccess && (
+                        <Button
+                          variant="outlined"
+                          color="secondary"
+                          startIcon={<LockOpenOutlinedIcon />}
+                          onClick={handleRequestBranchAccess}
+                          disabled={requestingAccess || branchAccessRequested}
+                        >
+                          {branchAccessRequested
+                            ? "Access Requested"
+                            : requestingAccess
+                              ? "Requesting…"
+                              : "Request Branch Access"}
                         </Button>
                       )}
                     </Box>
@@ -868,7 +999,81 @@ export const NodeDetails = memo(function NodeDetails({
                     )}
                   </Stack>
                 </Paper>
-                
+
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    sx={{ mb: businesses.length > 0 ? 1.5 : 0 }}
+                  >
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <BusinessOutlinedIcon fontSize="small" color="action" />
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        Businesses
+                      </Typography>
+                    </Stack>
+                    {canEditCurrentNode && (
+                      <Button
+                        size="small"
+                        startIcon={<AddIcon fontSize="small" />}
+                        onClick={() => {
+                          setEditingBusiness(null);
+                          setBusinessDialogOpen(true);
+                        }}
+                      >
+                        Add
+                      </Button>
+                    )}
+                  </Stack>
+
+                  {businesses.length > 0 ? (
+                    <Stack spacing={1}>
+                      {businesses.map((biz) => (
+                        <Box
+                          key={biz.id}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 1,
+                            p: 1,
+                            borderRadius: 2,
+                            bgcolor: "action.hover",
+                          }}
+                        >
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                              {biz.name}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {[businessCategoryLabel(biz.category), biz.contact]
+                                .filter(Boolean)
+                                .join(" • ")}
+                            </Typography>
+                          </Box>
+                          {canEditCurrentNode && (
+                            <IconButton
+                              size="small"
+                              aria-label="Edit business"
+                              onClick={() => {
+                                setEditingBusiness(biz);
+                                setBusinessDialogOpen(true);
+                              }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Box>
+                      ))}
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No businesses added yet.
+                    </Typography>
+                  )}
+                </Paper>
+
                 <Accordion defaultExpanded={true} sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
                   <AccordionSummary
                     expandIcon={<ExpandMoreIcon />}
@@ -1020,7 +1225,6 @@ export const NodeDetails = memo(function NodeDetails({
 	                      sourceText={editedName}
 	                      value={editedNameHindi}
 	                      onChange={setEditedNameHindi}
-	                      startIcon={<TranslateOutlinedIcon fontSize="small" />}
 	                    />
                     <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
                       <DatePicker
@@ -1510,6 +1714,17 @@ export const NodeDetails = memo(function NodeDetails({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {node && (
+        <BusinessFormDialog
+          open={businessDialogOpen}
+          onClose={() => setBusinessDialogOpen(false)}
+          business={editingBusiness}
+          personId={node.id}
+          defaultContact={phoneFromCustomFields(displayCustomFields)}
+          onSaved={() => void refreshBusinesses()}
+        />
+      )}
     </>
   );
 });

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Button,
   Dialog,
@@ -22,7 +22,9 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import PersonSearchOutlinedIcon from "@mui/icons-material/PersonSearchOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import { ApiService } from "../../services/apiService";
 
 type BranchPersonOption = {
   id: string;
@@ -44,6 +46,9 @@ interface InviteCollaboratorDialogProps {
   invitePersonSearch: string;
   treeId: string;
   selectedBranchPersonName?: string;
+  /** When true the branch person is fixed (e.g. opened from a node) and shown as
+   *  already selected instead of a searchable field. */
+  lockBranchPerson?: boolean;
   onClose: () => void;
   onInvitePhoneChange: (value: string) => void;
   onInviteRoleChange: (value: string) => void;
@@ -64,6 +69,7 @@ export function InviteCollaboratorDialog({
   invitePersonSearch,
   treeId,
   selectedBranchPersonName,
+  lockBranchPerson = false,
   onClose,
   onInvitePhoneChange,
   onInviteRoleChange,
@@ -80,6 +86,51 @@ export function InviteCollaboratorDialog({
       {icon}
     </InputAdornment>
   );
+
+  // Look up whether the entered phone already belongs to a user, so we can show
+  // their name (and signal that they'll get instant access) below the field.
+  const [lookupStatus, setLookupStatus] = useState<
+    "idle" | "checking" | "found" | "not-found"
+  >("idle");
+  const [matchedName, setMatchedName] = useState<string | null>(null);
+  const phoneDigits = invitePhone.replace(/\D/g, "");
+
+  useEffect(() => {
+    if (!open || phoneDigits.length !== 10 || !treeId) {
+      setLookupStatus("idle");
+      setMatchedName(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setLookupStatus("checking");
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const result = await ApiService.lookupTreeInviteUser(
+          treeId,
+          `+91${phoneDigits}`,
+          inviteScope === "branch" ? invitePersonId : undefined,
+        );
+        if (controller.signal.aborted) return;
+        if (result.exists) {
+          setMatchedName(result.name);
+          setLookupStatus("found");
+        } else {
+          setMatchedName(null);
+          setLookupStatus("not-found");
+        }
+      } catch {
+        if (controller.signal.aborted) return;
+        setLookupStatus("idle");
+        setMatchedName(null);
+      }
+    }, 400);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [open, phoneDigits, treeId, inviteScope, invitePersonId]);
 
   return (
     <Dialog
@@ -104,7 +155,8 @@ export function InviteCollaboratorDialog({
       <DialogContent sx={isMobile ? { flex: 1, overflowY: "auto" } : undefined}>
         <Stack spacing={2.5} sx={{ pt: 0.5 }}>
           <DialogContentText sx={{ m: 0 }}>
-            Create an invite link and share it via SMS, WhatsApp, or any app from your phone.
+            Enter a phone number to invite someone. If they already have an account, access is
+            granted instantly. Otherwise, you'll get a link to share via SMS, WhatsApp, or any app.
           </DialogContentText>
 
           <TextField
@@ -125,6 +177,32 @@ export function InviteCollaboratorDialog({
             helperText="Enter 10 digits only. +91 is added automatically."
           />
 
+          {phoneDigits.length === 10 && lookupStatus !== "idle" && (
+            <Typography
+              variant="body2"
+              sx={{
+                mt: -1.5,
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                color:
+                  lookupStatus === "found" ? "success.main" : "text.secondary",
+              }}
+            >
+              {lookupStatus === "checking" && "Checking…"}
+              {lookupStatus === "found" && (
+                <>
+                  <CheckCircleOutlineIcon fontSize="small" />
+                  {matchedName
+                    ? `${matchedName} is already on the system — they'll get instant access.`
+                    : "This number already has an account — they'll get instant access."}
+                </>
+              )}
+              {lookupStatus === "not-found" &&
+                "No account yet — you'll get an invite link to share."}
+            </Typography>
+          )}
+
           <FormControl fullWidth>
             <InputLabel>Access Scope</InputLabel>
             <Select
@@ -140,35 +218,37 @@ export function InviteCollaboratorDialog({
 
           {inviteScope === "branch" && (
             <Stack spacing={1.5} sx={{ mb: 1 }}>
-              <PersonSearchField
-                label="Branch Person"
-                placeholder="Search people in this tree"
-                searchValue={invitePersonSearch}
-                startIcon={<PersonSearchOutlinedIcon fontSize="small" color="action" />}
-                onSearchValueChange={(value, meta) => {
-                  onInvitePersonSearchChange(value);
-                  if (meta?.source === "select") {
-                    return;
+              {!lockBranchPerson && (
+                <PersonSearchField
+                  label="Branch Person"
+                  placeholder="Search people in this tree"
+                  searchValue={invitePersonSearch}
+                  startIcon={<PersonSearchOutlinedIcon fontSize="small" color="action" />}
+                  onSearchValueChange={(value, meta) => {
+                    onInvitePersonSearchChange(value);
+                    if (meta?.source === "select") {
+                      return;
+                    }
+                    if (value.trim() && value !== (selectedBranchPersonName || "")) {
+                      onInvitePersonIdChange("");
+                    }
+                  }}
+                  onPersonSelect={(person) => {
+                    onInvitePersonSelect(person as BranchPersonOption);
+                  }}
+                  selectedPerson={invitePersonId ? { id: invitePersonId } : null}
+                  treeId={treeId}
+                  disabled={!treeId}
+                  autoSearch
+                  minSearchLength={2}
+                  hideSearchButton
+                  noResultsText={
+                    invitePersonSearch.trim().length < 2
+                      ? "Type at least 2 characters"
+                      : "No matching person in this tree"
                   }
-                  if (value.trim() && value !== (selectedBranchPersonName || "")) {
-                    onInvitePersonIdChange("");
-                  }
-                }}
-                onPersonSelect={(person) => {
-                  onInvitePersonSelect(person as BranchPersonOption);
-                }}
-                selectedPerson={invitePersonId ? { id: invitePersonId } : null}
-                treeId={treeId}
-                disabled={!treeId}
-                autoSearch
-                minSearchLength={2}
-                hideSearchButton
-                noResultsText={
-                  invitePersonSearch.trim().length < 2
-                    ? "Type at least 2 characters"
-                    : "No matching person in this tree"
-                }
-              />
+                />
+              )}
               {invitePersonId && (
                 <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -207,7 +287,7 @@ export function InviteCollaboratorDialog({
           variant="contained"
           disabled={busy || (inviteScope === "branch" && !invitePersonId)}
         >
-          {busy ? "Creating..." : "Create & Share"}
+          {busy ? "Inviting..." : "Invite"}
         </Button>
       </DialogActions>
     </Dialog>

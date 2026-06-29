@@ -7,6 +7,8 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableSortLabel,
+  InputAdornment,
   TableContainer,
   TableHead,
   TableRow,
@@ -34,6 +36,7 @@ import {
   CheckCircle,
   LocationOn,
   Close,
+  Search,
 } from "@mui/icons-material";
 import { ApiService } from "../../services/apiService";
 import { AppUser, UserRole } from "../model/User";
@@ -116,6 +119,11 @@ export const AdminManagement: React.FC = () => {
 
   // Local component state
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [userOrderBy, setUserOrderBy] = useState<
+    "email" | "name" | "phone" | "createdAt"
+  >("createdAt");
+  const [userOrder, setUserOrder] = useState<"asc" | "desc">("desc");
+  const [userSearch, setUserSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [editUser, setEditUser] = useState<AppUser | null>(null);
   const [editMode, setEditMode] = useState<"full" | "villages">("full");
@@ -167,6 +175,55 @@ export const AdminManagement: React.FC = () => {
       console.error("Error loading hierarchy data:", err);
     }
   }, [dispatch]);
+
+  const handleUserSort = (field: "email" | "name" | "phone" | "createdAt") => {
+    if (userOrderBy === field) {
+      setUserOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setUserOrderBy(field);
+      setUserOrder("asc");
+    }
+  };
+
+  const sortedUsers = React.useMemo(() => {
+    const term = userSearch.trim().toLowerCase();
+    const filtered = !term
+      ? users
+      : users.filter((u: any) => {
+          const haystack = [
+            u.email,
+            u.name,
+            u.displayName,
+            u.phone,
+            formatDate(u.createdAt),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(term);
+        });
+
+    const getValue = (u: any): string | number => {
+      switch (userOrderBy) {
+        case "name":
+          return (u.name || u.displayName || "").toLowerCase();
+        case "phone":
+          return u.phone || "";
+        case "createdAt":
+          return u.createdAt ? new Date(u.createdAt).getTime() : 0;
+        case "email":
+        default:
+          return (u.email || "").toLowerCase();
+      }
+    };
+    return [...filtered].sort((a, b) => {
+      const av = getValue(a);
+      const bv = getValue(b);
+      if (av < bv) return userOrder === "asc" ? -1 : 1;
+      if (av > bv) return userOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [users, userOrderBy, userOrder, userSearch]);
 
   const loadData = React.useCallback(async () => {
     try {
@@ -526,8 +583,31 @@ export const AdminManagement: React.FC = () => {
 
         {/* Users Tab */}
         <TabPanel value={tabValue} index={0}>
-          <Box sx={{ mb: 2 }}>
+          <Box
+            sx={{
+              mb: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              flexWrap: "wrap",
+            }}
+          >
             <Typography variant="h6">User Management</Typography>
+            <TextField
+              size="small"
+              placeholder="Search by email, name, phone, or created date"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              sx={{ width: { xs: "100%", sm: 360 } }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
           </Box>
           {!isSuperAdmin() && (
             <Alert severity="info" sx={{ mb: 2 }}>
@@ -539,17 +619,50 @@ export const AdminManagement: React.FC = () => {
             <Table size="small" sx={{ minWidth: 820 }}>
               <TableHead>
                 <TableRow>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Phone</TableCell>
+                  <TableCell sortDirection={userOrderBy === "email" ? userOrder : false}>
+                    <TableSortLabel
+                      active={userOrderBy === "email"}
+                      direction={userOrderBy === "email" ? userOrder : "asc"}
+                      onClick={() => handleUserSort("email")}
+                    >
+                      Email
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sortDirection={userOrderBy === "name" ? userOrder : false}>
+                    <TableSortLabel
+                      active={userOrderBy === "name"}
+                      direction={userOrderBy === "name" ? userOrder : "asc"}
+                      onClick={() => handleUserSort("name")}
+                    >
+                      Name
+                    </TableSortLabel>
+                  </TableCell>
+                  <TableCell sortDirection={userOrderBy === "phone" ? userOrder : false}>
+                    <TableSortLabel
+                      active={userOrderBy === "phone"}
+                      direction={userOrderBy === "phone" ? userOrder : "asc"}
+                      onClick={() => handleUserSort("phone")}
+                    >
+                      Phone
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Linked Node</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell sortDirection={userOrderBy === "createdAt" ? userOrder : false}>
+                    <TableSortLabel
+                      active={userOrderBy === "createdAt"}
+                      direction={userOrderBy === "createdAt" ? userOrder : "asc"}
+                      onClick={() => handleUserSort("createdAt")}
+                    >
+                      Created At
+                    </TableSortLabel>
+                  </TableCell>
                   <TableCell sx={{ textAlign: "right"}}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {users.map((user) => (
+                {sortedUsers.map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
@@ -599,6 +712,7 @@ export const AdminManagement: React.FC = () => {
                         />
                       )}
                     </TableCell>
+                    <TableCell>{formatDate((user as any).createdAt)}</TableCell>
                     <TableCell>
                       <Box sx={{textAlign: "right" }}>
                       {isSuperAdmin() && !user.isVerified && (
@@ -633,7 +747,7 @@ export const AdminManagement: React.FC = () => {
           </TableContainer>
         </TabPanel>
         {/* States Tab */}
-        <TabPanel value={tabValue} index={2}>
+        <TabPanel value={tabValue} index={1}>
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage states.</Alert>
           ) : (
@@ -674,7 +788,7 @@ export const AdminManagement: React.FC = () => {
         </TabPanel>
 
         {/* Districts Tab */}
-        <TabPanel value={tabValue} index={3}>
+        <TabPanel value={tabValue} index={2}>
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage districts.</Alert>
           ) : (
@@ -716,7 +830,7 @@ export const AdminManagement: React.FC = () => {
         </TabPanel>
 
         {/* Villages Tab */}
-        <TabPanel value={tabValue} index={4}>
+        <TabPanel value={tabValue} index={3}>
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage villages.</Alert>
           ) : (
@@ -767,7 +881,7 @@ export const AdminManagement: React.FC = () => {
         </TabPanel>
 
         {/* Castes Tab */}
-        <TabPanel value={tabValue} index={5}>
+        <TabPanel value={tabValue} index={4}>
           {!isSuperAdmin() ? (
             <Alert severity="info">Only superadmin can manage castes.</Alert>
           ) : (
@@ -804,7 +918,7 @@ export const AdminManagement: React.FC = () => {
         </TabPanel>
 
         {/* Sub-Castes Tab */}
-        <TabPanel value={tabValue} index={6}>
+        <TabPanel value={tabValue} index={5}>
           {!isSuperAdmin() ? (
             <Alert severity="info">
               Only superadmin can manage sub-castes.
