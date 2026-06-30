@@ -53,6 +53,7 @@ import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined
 import { ApiService } from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
+import { formatDisplayDate } from "../../utils/dateFormatter";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 import {
   fetchMyVillageAccessRequests,
@@ -103,6 +104,8 @@ export const ProfilePage: React.FC = () => {
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [openBusinessDialog, setOpenBusinessDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
+  const [businessToDelete, setBusinessToDelete] = useState<any | null>(null);
+  const [deletingBusiness, setDeletingBusiness] = useState(false);
   const [openEditProfileDialog, setOpenEditProfileDialog] = useState(false);
   const [personLoading, setPersonLoading] = useState(false);
   const [personNotFound, setPersonNotFound] = useState(false);
@@ -360,19 +363,25 @@ export const ProfilePage: React.FC = () => {
     setEditingBusiness(null);
   };
 
-  const handleDeleteBusiness = async (id: string) => {
+  const handleDeleteBusiness = (business: any) => {
     if (!effectivePersonId || !canManagePerson) return;
-    if (!window.confirm("Are you sure you want to delete this business?")) {
-      return;
-    }
+    setBusinessToDelete(business);
+  };
 
+  const handleConfirmDeleteBusiness = async () => {
+    if (!effectivePersonId || !canManagePerson || !businessToDelete) return;
+
+    setDeletingBusiness(true);
     try {
-      await ApiService.deleteBusiness(id);
+      await ApiService.deleteBusiness(businessToDelete.id);
       await refreshBusinesses(effectivePersonId);
       setSuccess("Business deleted successfully.");
+      setBusinessToDelete(null);
     } catch (err: any) {
       console.error("Error deleting business:", err);
       setError(err?.message || "Failed to delete business.");
+    } finally {
+      setDeletingBusiness(false);
     }
   };
 
@@ -659,7 +668,10 @@ export const ProfilePage: React.FC = () => {
                       <Chip size="small" label={linkedPersonDetails.gender} />
                     )}
                     {linkedPersonDetails.dob && (
-                      <Chip size="small" label={`DOB: ${linkedPersonDetails.dob}`} />
+                      <Chip
+                        size="small"
+                        label={`DOB: ${formatDisplayDate(linkedPersonDetails.dob)}`}
+                      />
                     )}
                   </Stack>
                   {linkedPersonDetails.tree && (
@@ -1033,7 +1045,7 @@ export const ProfilePage: React.FC = () => {
                                   <IconButton
                                     size="small"
                                     color="error"
-                                    onClick={() => handleDeleteBusiness(biz.id)}
+                                    onClick={() => handleDeleteBusiness(biz)}
                                   >
                                     <DeleteIcon fontSize="small" />
                                   </IconButton>
@@ -1288,6 +1300,38 @@ export const ProfilePage: React.FC = () => {
           }
         }}
       />
+
+      <Dialog
+        open={Boolean(businessToDelete)}
+        onClose={() => {
+          if (!deletingBusiness) setBusinessToDelete(null);
+        }}
+      >
+        <DialogTitle>Delete business</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete
+            {businessToDelete?.name ? ` "${businessToDelete.name}"` : " this business"}? This
+            action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setBusinessToDelete(null)}
+            disabled={deletingBusiness}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDeleteBusiness}
+            color="error"
+            variant="contained"
+            disabled={deletingBusiness}
+          >
+            {deletingBusiness ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={openEditProfileDialog}

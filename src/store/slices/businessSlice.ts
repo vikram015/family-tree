@@ -19,7 +19,6 @@ interface Business {
   subCasteName: string;
   createdAt: string;
   updatedAt: string;
-  canEdit: boolean;
 }
 
 interface BusinessState {
@@ -63,7 +62,6 @@ export const fetchBusinessesByVillage = createAsyncThunk(
         subCasteName: business.subCasteName || '',
         createdAt: business.businessCreatedAt,
         updatedAt: business.businessCreatedAt,
-        canEdit: business.canEdit === true,
       }));
 
       return businessList;

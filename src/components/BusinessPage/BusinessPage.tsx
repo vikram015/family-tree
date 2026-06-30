@@ -35,9 +35,7 @@ import HandshakeIcon from "@mui/icons-material/Handshake";
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import AddIcon from "@mui/icons-material/Add";
 import CategoryIcon from "@mui/icons-material/Category";
-import DeleteIcon from "@mui/icons-material/Delete";
 import NotesIcon from "@mui/icons-material/Notes";
-import EditIcon from "@mui/icons-material/Edit";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
 import SearchIcon from "@mui/icons-material/Search";
@@ -81,7 +79,6 @@ interface Business {
   hierarchy?: any[]; // Parent hierarchy
   casteName?: string; // Caste name
   subCasteName?: string; // Sub-caste name
-  canEdit?: boolean; // Whether the current viewer may edit/delete this business
 }
 
 interface BusinessCategory {
@@ -550,21 +547,6 @@ export const BusinessPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (businessId: string) => {
-    if (window.confirm("Are you sure you want to delete this business?")) {
-      try {
-        await ApiService.deleteBusiness(businessId);
-        // Refresh businesses list by dispatching Redux action
-        if (selectedVillage) {
-          dispatch(fetchBusinessesByVillage(selectedVillage));
-        }
-      } catch (error) {
-        console.error("Error deleting business:", error);
-        alert("Error deleting business. Please try again.");
-      }
-    }
-  };
-
   if (!selectedVillage) {
     return (
       <Container maxWidth="lg" sx={{ py: 8 }}>
@@ -868,24 +850,6 @@ export const BusinessPage: React.FC = () => {
                               />
                             )}
                           </Box>
-                          {business.canEdit && (
-                            <Box>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleOpenDialog(business)}
-                                color="primary"
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                              <IconButton
-                                size="small"
-                                onClick={() => handleDelete(business.id)}
-                                color="error"
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Box>
-                          )}
                         </Box>
 
                         <Typography

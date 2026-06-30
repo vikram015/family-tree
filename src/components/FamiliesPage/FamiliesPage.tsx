@@ -709,6 +709,46 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     [canEditNode, loadTreeData],
   );
 
+  const onChangeOtherParent = useCallback(
+    async (
+      personId: string,
+      anchorParentId: string,
+      otherParentMode: "existing" | "new" | "unknown",
+      otherParentId?: string,
+      newSpouse?: {
+        name?: string;
+        nameHindi?: string;
+        gender?: string;
+        dob?: string;
+      },
+    ) => {
+      if (!canEditNode(personId)) {
+        alert("You don't have permission to edit this person.");
+        return;
+      }
+
+      const result = await ApiService.changeOtherParent(
+        personId,
+        anchorParentId,
+        otherParentMode,
+        otherParentId,
+        newSpouse,
+      );
+
+      if (result && (result as any).success === false) {
+        throw new Error(
+          (result as any).error || "Failed to change the other parent",
+        );
+      }
+
+      const affectedNodes = result?.affectedNodes || [];
+      if (affectedNodes.length > 0) {
+        mergeAffectedNodes(affectedNodes);
+      }
+    },
+    [canEditNode, mergeAffectedNodes],
+  );
+
   const onDelete = useCallback(
     async (nodeId: string, force: boolean = false) => {
       if (!canEditNode(nodeId)) {
@@ -1870,6 +1910,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }}
           onAdd={onAdd}
           onUpdate={onUpdate}
+          onChangeOtherParent={onChangeOtherParent}
           onDelete={onDelete}
           canEditNode={canEditNode}
           treeId={treeId}

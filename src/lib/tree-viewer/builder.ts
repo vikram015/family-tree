@@ -5,6 +5,17 @@ import { line } from 'd3-shape';
 import 'd3-transition';
 import { filter, forEach, get, map } from 'lodash-es';
 
+// Heart drawn as an SVG path (centered at the origin, ~11px) so the marriage
+// marker renders identically across macOS / Windows / Linux instead of relying on
+// a platform-native emoji glyph.
+const MARRIAGE_HEART_PATH =
+  'M0,5.05 l-0.78,-0.71 C-3.56,1.81 -5.4,0.15 -5.4,-1.89 C-5.4,-3.55 -4.09,-4.86 -2.43,-4.86 ' +
+  'C-1.49,-4.86 -0.59,-4.42 0,-3.73 C0.59,-4.42 1.49,-4.86 2.43,-4.86 C4.09,-4.86 5.4,-3.55 5.4,-1.89 ' +
+  'C5.4,0.15 3.56,1.81 0.78,4.34 L0,5.05 z';
+// Zigzag "crack" overlaid on the heart for divorced couples (broken-heart look).
+const MARRIAGE_HEART_CRACK_PATH =
+  'M0,-3.7 L-1.2,-1.6 L1,-0.2 L-1,1.6 L0.4,3 L0,5.05';
+
 class TreeBuilder {
   static DEBUG_LEVEL = 0;
   static CONNECTOR_RADIUS = 16;
@@ -556,7 +567,6 @@ class TreeBuilder {
           id: marriageNode?.data?.id ?? `m-${s.source?.id}-${s.target?.id}`,
           x: marriageNode.x,
           y: marriageNode.y,
-          icon: isDivorced ? '\u{1F494}' : '\u2764',
           className: `marriage-marker ${stateClass}${deceasedClass}${anniversaryClass}`,
           tooltip: anniversaryClass
             ? 'Blinking heart: today is this couple\'s anniversary.'
@@ -587,18 +597,24 @@ class TreeBuilder {
       })
       .attr('r', 8);
 
+    const iconClass = (d: any) => {
+      const base = d.className.includes('divorced')
+        ? 'marriage-marker-icon divorced'
+        : 'marriage-marker-icon married';
+      const withState = d.className.includes('deceased') ? `${base} deceased` : base;
+      return d.className.includes('anniversary') ? `${withState} anniversary` : withState;
+    };
+
     markers
-      .append('text')
-      .attr('class', (d: any) => {
-        const base = d.className.includes('divorced')
-          ? 'marriage-marker-icon divorced'
-          : 'marriage-marker-icon married';
-        const withState = d.className.includes('deceased') ? `${base} deceased` : base;
-        return d.className.includes('anniversary') ? `${withState} anniversary` : withState;
-      })
-      .attr('text-anchor', 'middle')
-      .attr('dominant-baseline', 'central')
-      .text((d: any) => d.icon);
+      .append('path')
+      .attr('class', iconClass)
+      .attr('d', MARRIAGE_HEART_PATH);
+
+    markers
+      .filter((d: any) => d.className.includes('divorced'))
+      .append('path')
+      .attr('class', 'marriage-marker-crack')
+      .attr('d', MARRIAGE_HEART_CRACK_PATH);
 
     markers
       .filter((d: any) => Boolean(d.tooltip))

@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useState, useEffect, Suspense } from "react";
+import React, { memo, useCallback, useState, useEffect, useMemo, Suspense } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -116,6 +116,18 @@ interface NodeDetailsProps {
     },
   ) => Promise<string | undefined> | Promise<void> | void;
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
+  onChangeOtherParent?: (
+    personId: string,
+    anchorParentId: string,
+    otherParentMode: "existing" | "new" | "unknown",
+    otherParentId?: string,
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
+  ) => Promise<void> | void;
   onDelete?: (nodeId: string) => void;
   canEditNode?: (nodeId: string) => boolean;
   treeId?: string;
@@ -142,6 +154,7 @@ export const NodeDetails = memo(function NodeDetails({
     onSelect,
     onAdd,
     onUpdate,
+    onChangeOtherParent,
     onDelete,
     canEditNode,
     treeId,
@@ -212,6 +225,81 @@ export const NodeDetails = memo(function NodeDetails({
   const [editedBloodGroup, setEditedBloodGroup] = useState("");
   const [editedIsAlive, setEditedIsAlive] = useState(true);
   const [editedDeceasedDate, setEditedDeceasedDate] = useState<Dayjs | null>(null);
+
+  // Other-parent edit state
+  const [editOtherParentMode, setEditOtherParentMode] = useState<
+    "existing" | "new" | "unknown"
+  >("unknown");
+  const [editSelectedOtherParentId, setEditSelectedOtherParentId] = useState("");
+  const [editNewOtherParentName, setEditNewOtherParentName] = useState("");
+  const [editNewOtherParentNameHindi, setEditNewOtherParentNameHindi] = useState("");
+  const [editNewOtherParentGender, setEditNewOtherParentGender] = useState<
+    "male" | "female" | "other" | ""
+  >("");
+  const [editNewOtherParentDob, setEditNewOtherParentDob] = useState<Dayjs | null>(
+    null,
+  );
+
+  // The node's parents resolved to full nodes.
+  const nodeParentNodes = useMemo(() => {
+    if (!node?.parents) return [] as FNode[];
+    return node.parents
+      .map((p) => nodes.find((n) => n.id === p.id))
+      .filter(Boolean) as FNode[];
+  }, [node, nodes]);
+
+  // The "anchor" parent stays fixed; we offer its spouses as the other-parent choices.
+  // Per product decision, the male parent is the anchor (falling back to the first parent).
+  const anchorParent = useMemo(() => {
+    if (nodeParentNodes.length === 0) return null;
+    return (
+      nodeParentNodes.find((p) => p.gender === Gender.male) || nodeParentNodes[0]
+    );
+  }, [nodeParentNodes]);
+
+  // The parent that is currently recorded as the "other parent" (not the anchor).
+  const currentOtherParent = useMemo(() => {
+    if (!anchorParent) return null;
+    return nodeParentNodes.find((p) => p.id !== anchorParent.id) || null;
+  }, [nodeParentNodes, anchorParent]);
+
+  // Candidate other parents = the anchor's spouses (plus the current other parent,
+  // defensively, in case the spouse link is missing).
+  const otherParentOptions = useMemo(() => {
+    if (!anchorParent) return [] as FNode[];
+    const byId = new Map<string, FNode>();
+    (anchorParent.spouses || []).forEach((s) => {
+      const spouseNode = nodes.find((n) => n.id === s.id);
+      if (spouseNode) byId.set(spouseNode.id, spouseNode);
+    });
+    if (currentOtherParent) byId.set(currentOtherParent.id, currentOtherParent);
+    return Array.from(byId.values());
+  }, [anchorParent, currentOtherParent, nodes]);
+
+  // Seed the other-parent selection:
+  // - a current other parent -> preselect it
+  // - exactly one candidate -> preselect it
+  // - multiple candidates -> require the user to pick
+  // - none -> default to "no other parent"
+  useEffect(() => {
+    if (currentOtherParent) {
+      setEditOtherParentMode("existing");
+      setEditSelectedOtherParentId(currentOtherParent.id);
+    } else if (otherParentOptions.length === 1) {
+      setEditOtherParentMode("existing");
+      setEditSelectedOtherParentId(otherParentOptions[0].id);
+    } else if (otherParentOptions.length > 1) {
+      setEditOtherParentMode("existing");
+      setEditSelectedOtherParentId("");
+    } else {
+      setEditOtherParentMode("unknown");
+      setEditSelectedOtherParentId("");
+    }
+    setEditNewOtherParentName("");
+    setEditNewOtherParentNameHindi("");
+    setEditNewOtherParentGender("");
+    setEditNewOtherParentDob(null);
+  }, [node?.id, currentOtherParent, otherParentOptions]);
 
   // Photo edit state
   const [editedPhotoPreview, setEditedPhotoPreview] = useState<
@@ -401,6 +489,37 @@ export const NodeDetails = memo(function NodeDetails({
               : undefined,
           customFields: editedCustomFields,
         };
+
+        // Persist a change to the "other parent" (co-parent of the anchor), if any.
+        if (anchorParent && onChangeOtherParent) {
+          const originalOtherParentId = currentOtherParent?.id || "";
+          const otherParentChanged =
+            (editOtherParentMode === "existing" &&
+              !!editSelectedOtherParentId &&
+              editSelectedOtherParentId !== originalOtherParentId) ||
+            editOtherParentMode === "new" ||
+            (editOtherParentMode === "unknown" && !!originalOtherParentId);
+
+          if (otherParentChanged) {
+            await onChangeOtherParent(
+              node.id,
+              anchorParent.id,
+              editOtherParentMode,
+              editOtherParentMode === "existing"
+                ? editSelectedOtherParentId
+                : undefined,
+              editOtherParentMode === "new"
+                ? {
+                    name: editNewOtherParentName.trim(),
+                    nameHindi: editNewOtherParentNameHindi.trim() || undefined,
+                    gender: editNewOtherParentGender || undefined,
+                    dob: formatPickerDate(editNewOtherParentDob),
+                  }
+                : undefined,
+            );
+          }
+        }
+
         await onUpdate(node.id, updates);
         setView("details");
       } catch (err) {
@@ -420,6 +539,15 @@ export const NodeDetails = memo(function NodeDetails({
     editedBloodGroup,
     editedIsAlive,
     editedDeceasedDate,
+    anchorParent,
+    currentOtherParent,
+    onChangeOtherParent,
+    editOtherParentMode,
+    editSelectedOtherParentId,
+    editNewOtherParentName,
+    editNewOtherParentNameHindi,
+    editNewOtherParentGender,
+    editNewOtherParentDob,
     formatPickerDate,
     onUpdate,
   ]);
@@ -1340,6 +1468,156 @@ export const NodeDetails = memo(function NodeDetails({
                 )}
                   </Stack>
                 </Paper>
+                {anchorParent && (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                    <Stack spacing={1.5}>
+                      <Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Other parent
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Co-parent with {anchorParent.name || "this parent"}.
+                        </Typography>
+                      </Box>
+
+                      {otherParentOptions.length > 0 && (
+                        <FormControl fullWidth size="small">
+                          <InputLabel id="other-parent-select-label">
+                            Other parent
+                          </InputLabel>
+                          <Select
+                            labelId="other-parent-select-label"
+                            label="Other parent"
+                            value={
+                              editOtherParentMode === "existing"
+                                ? editSelectedOtherParentId
+                                : ""
+                            }
+                            onChange={(e) => {
+                              setEditOtherParentMode("existing");
+                              setEditSelectedOtherParentId(
+                                e.target.value as string,
+                              );
+                            }}
+                          >
+                            {otherParentOptions.map((opt) => (
+                              <MenuItem key={opt.id} value={opt.id}>
+                                {opt.name || "Unnamed"}
+                                {opt.gender ? ` (${opt.gender})` : ""}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip
+                          label="Add new other parent"
+                          clickable
+                          color={
+                            editOtherParentMode === "new" ? "primary" : "default"
+                          }
+                          variant={
+                            editOtherParentMode === "new" ? "filled" : "outlined"
+                          }
+                          onClick={() => setEditOtherParentMode("new")}
+                        />
+                        <Chip
+                          label="No other parent"
+                          clickable
+                          color={
+                            editOtherParentMode === "unknown"
+                              ? "primary"
+                              : "default"
+                          }
+                          variant={
+                            editOtherParentMode === "unknown"
+                              ? "filled"
+                              : "outlined"
+                          }
+                          onClick={() => {
+                            setEditOtherParentMode("unknown");
+                            setEditSelectedOtherParentId("");
+                          }}
+                        />
+                      </Stack>
+
+                      {editOtherParentMode === "new" && (
+                        <Stack spacing={1.5}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Name"
+                            value={editNewOtherParentName}
+                            onChange={(e) =>
+                              setEditNewOtherParentName(e.target.value)
+                            }
+                          />
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Name (Hindi)"
+                            value={editNewOtherParentNameHindi}
+                            onChange={(e) =>
+                              setEditNewOtherParentNameHindi(e.target.value)
+                            }
+                          />
+                          <FormControl fullWidth size="small">
+                            <InputLabel id="new-other-parent-gender-label">
+                              Gender
+                            </InputLabel>
+                            <Select
+                              labelId="new-other-parent-gender-label"
+                              label="Gender"
+                              value={editNewOtherParentGender}
+                              onChange={(e) =>
+                                setEditNewOtherParentGender(
+                                  e.target.value as
+                                    | "male"
+                                    | "female"
+                                    | "other"
+                                    | "",
+                                )
+                              }
+                            >
+                              <MenuItem value="">
+                                Auto (
+                                {anchorParent.gender === Gender.male
+                                  ? "female"
+                                  : "male"}
+                                )
+                              </MenuItem>
+                              <MenuItem value="male">Male</MenuItem>
+                              <MenuItem value="female">Female</MenuItem>
+                              <MenuItem value="other">Other</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <Suspense
+                            fallback={
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Date of birth"
+                              />
+                            }
+                          >
+                            <DatePicker
+                              label="Date of birth"
+                              value={editNewOtherParentDob}
+                              onChange={(value) =>
+                                setEditNewOtherParentDob(value)
+                              }
+                              slotProps={{
+                                textField: { fullWidth: true, size: "small" },
+                              }}
+                              format="DD/MM/YYYY"
+                            />
+                          </Suspense>
+                        </Stack>
+                      )}
+                    </Stack>
+                  </Paper>
+                )}
                 <Accordion variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>

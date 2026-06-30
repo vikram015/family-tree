@@ -573,6 +573,34 @@ export const ApiService = {
   },
 
   /**
+   * Change a person's "other parent" while keeping the anchor parent fixed.
+   * The other parent can be an existing spouse of the anchor ("existing"), a newly
+   * created spouse ("new"), or removed entirely ("unknown").
+   * Returns affected_nodes for efficient UI merge.
+   */
+  async changeOtherParent(
+    personId: string,
+    anchorParentId: string,
+    otherParentMode: "existing" | "new" | "unknown",
+    otherParentId?: string,
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
+  ): Promise<AddPersonResult> {
+    return backendApi.patch<AddPersonResult>(`/api/people/${personId}/other-parent`, {
+      anchorParentId,
+      otherParentMode,
+      otherParentId,
+      newSpouse: newSpouse
+        ? { ...newSpouse, dob: this.normalizeDateValue(newSpouse.dob) }
+        : undefined,
+    });
+  },
+
+  /**
    * Get all predefined field names from people_field table
    * Used for field dropdown in additional details
    */
