@@ -81,6 +81,8 @@ interface PersonSearchFieldProps {
   selectedPerson?: PersonSearchResult | any | null;
   villageId?: string;
   treeId?: string;
+  /** When set, only candidates of this gender are shown in the results. */
+  filterGender?: string;
   disabled?: boolean;
   autoSearch?: boolean;
   minSearchLength?: number;
@@ -98,6 +100,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   selectedPerson,
   villageId,
   treeId,
+  filterGender,
   disabled = false,
   autoSearch = false,
   minSearchLength = 1,
@@ -133,8 +136,9 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         return;
       }
 
-      const peopleSearchResults: PersonSearchResult[] = results.map(
-        (person: any) => ({
+      const normalizedFilterGender = (filterGender || "").toLowerCase();
+      const peopleSearchResults: PersonSearchResult[] = results
+        .map((person: any) => ({
           id: person.personId,
           name: person.personName,
           gender: person.gender,
@@ -147,8 +151,15 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           villageName: person.villageName,
           casteName: person.casteName,
           subCasteName: person.subCasteName,
-        }),
-      );
+        }))
+        // When a gender filter is active, only show candidates of that gender
+        // (keep those with unknown gender so incomplete records aren't hidden).
+        .filter(
+          (person) =>
+            !normalizedFilterGender ||
+            !person.gender ||
+            person.gender.toLowerCase() === normalizedFilterGender,
+        );
 
       setSearchResults(peopleSearchResults);
     } catch (error) {
@@ -157,7 +168,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         setSearchResults([]);
       }
     }
-  }, [minSearchLength, searchValue, treeId, villageId]);
+  }, [minSearchLength, searchValue, treeId, villageId, filterGender]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
     setSearchResults([]);

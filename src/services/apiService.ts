@@ -391,6 +391,13 @@ export const ApiService = {
     return backendApi.get<Record<string, string>>(`/api/people/${personId}/custom-fields`);
   },
 
+  /** Fetch a single person's spouses (both relation directions). */
+  async getPersonSpouses(
+    personId: string,
+  ): Promise<Array<{ id: string; name?: string; nameHindi?: string; gender?: string; dob?: string }>> {
+    return backendApi.get(`/api/people/${personId}/spouses`);
+  },
+
   /**
    * Update a person with core properties and additional fields
    * Handles both regular updates and additional details in one procedure call
@@ -463,18 +470,31 @@ export const ApiService = {
     relationStartDate?: string,
     relationEndDate?: string,
     placeholderId?: string,
+    confirmExistingSpouse?: boolean,
+    mergeSpouseId?: string,
   ): Promise<void> {
     const normalizedStartDate = this.normalizeDateValue(relationStartDate);
     const normalizedEndDate = this.normalizeDateValue(relationEndDate);
 
-    await backendApi.post(`/api/people/spouse-link`, {
-      personId1: personId,
-      personId2: spouseId,
-      relationSubtype: relationSubtype || undefined,
-      relationStartDate: normalizedStartDate,
-      relationEndDate: normalizedEndDate,
-      replacePersonId: placeholderId || undefined,
-    });
+    const result = await backendApi.post<{ success?: boolean; error?: string } | void>(
+      `/api/people/spouse-link`,
+      {
+        personId1: personId,
+        personId2: spouseId,
+        relationSubtype: relationSubtype || undefined,
+        relationStartDate: normalizedStartDate,
+        relationEndDate: normalizedEndDate,
+        replacePersonId: placeholderId || undefined,
+        confirmExistingSpouse: confirmExistingSpouse || undefined,
+        mergeSpouseId: mergeSpouseId || undefined,
+      },
+    );
+
+    // The direct link path returns { success: false, error } with a 200 status,
+    // so surface backend validation failures (gender/existing-spouse) as errors.
+    if (result && (result as any).success === false) {
+      throw new Error((result as any).error || "Failed to link spouse");
+    }
   },
 
   async updateSpouseRelationDates(
@@ -1028,6 +1048,8 @@ export const ApiService = {
     relationEndDate?: string | null;
     replacePersonId?: string | null;
     requestMessage?: string | null;
+    confirmExistingSpouse?: boolean;
+    mergeSpouseId?: string | null;
   }): Promise<LinkRequest> {
     return backendApi.post<LinkRequest>("/api/people/spouse-link", {
       ...payload,

@@ -27,6 +27,12 @@ import {
   AccordionSummary,
   AccordionDetails,
   InputAdornment,
+  FormControlLabel,
+  Alert,
+  Snackbar,
+  Radio,
+  RadioGroup,
+  FormLabel,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import dayjs, { Dayjs } from "dayjs";
@@ -202,6 +208,28 @@ export const NodeDetails = memo(function NodeDetails({
     null,
   );
   const [linkExternalSubmitting, setLinkExternalSubmitting] = useState(false);
+  // Full profile of the selected external person, used to warn about an
+  // existing spouse and to render the before/after replacement preview.
+  const [externalPersonDetails, setExternalPersonDetails] = useState<any>(null);
+  const [loadingExternalDetails, setLoadingExternalDetails] = useState(false);
+  // When the selected person already has spouse(s): decide whether this is a
+  // separate/additional marriage ("new") or the same person as the tree-A
+  // spouse to be merged ("merge", picking which existing spouse via mergeSpouseId).
+  const [linkMode, setLinkMode] = useState<"" | "new" | "merge">("");
+  const [mergeSpouseId, setMergeSpouseId] = useState("");
+  const [linkExternalConfirmOpen, setLinkExternalConfirmOpen] = useState(false);
+  // Transient feedback (replaces native alert()).
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error" | "info" | "warning";
+  }>({ open: false, message: "", severity: "info" });
+  const showSnackbar = useCallback(
+    (message: string, severity: "success" | "error" | "info" | "warning" = "info") => {
+      setSnackbar({ open: true, message, severity });
+    },
+    [],
+  );
   const [editSpouseDatesOpen, setEditSpouseDatesOpen] = useState(false);
   const [editSpouseId, setEditSpouseId] = useState("");
   const [editSpouseRelationSubtype, setEditSpouseRelationSubtype] =
@@ -390,12 +418,12 @@ export const NodeDetails = memo(function NodeDetails({
         });
       } else {
         await navigator.clipboard.writeText(url);
-        alert("Profile link copied to clipboard.");
+        showSnackbar("Profile link copied to clipboard.", "success");
       }
     } catch {
       // Share was cancelled or clipboard failed — nothing to do.
     }
-  }, [node, treeId]);
+  }, [node, treeId, showSnackbar]);
 
   const handleRequestBranchAccess = useCallback(async () => {
     if (!node || !treeId) return;
@@ -406,13 +434,13 @@ export const NodeDetails = memo(function NodeDetails({
         targetPersonId: node.id,
       });
       setBranchAccessRequested(true);
-      alert(`Branch access request sent for ${node.name || "this"} branch.`);
+      showSnackbar(`Branch access request sent for ${node.name || "this"} branch.`, "success");
     } catch (error: any) {
-      alert(error?.message || "Failed to request branch access.");
+      showSnackbar(error?.message || "Failed to request branch access.", "error");
     } finally {
       setRequestingAccess(false);
     }
-  }, [node, treeId]);
+  }, [node, treeId, showSnackbar]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -589,30 +617,57 @@ export const NodeDetails = memo(function NodeDetails({
     onSelect(undefined);
   }, [onSelect]);
 
-  const handleLinkExternalClick = useCallback(() => {
-    if (!currentUser) {
-      openLoginModal(() => {
-        setLinkExternalRelationSubtype(RelType.married);
-        setLinkExternalStartDate(null);
-        setLinkExternalEndDate(null);
-        setView("link-external");
-      });
-      return;
-    }
+  const openLinkExternalDialog = useCallback(() => {
     setLinkExternalRelationSubtype(RelType.married);
     setLinkExternalStartDate(null);
     setLinkExternalEndDate(null);
+    setSelectedExternalPerson(null);
+    setExternalSearchValue("");
+    setExternalPersonDetails(null);
+    setLinkMode("");
+    setMergeSpouseId("");
+    setLinkExternalConfirmOpen(false);
     setView("link-external");
-  }, [currentUser, openLoginModal]);
+  }, []);
 
-  const handleConfirmLinkExternal = async () => {
+  const handleLinkExternalClick = useCallback(() => {
+    if (!currentUser) {
+      openLoginModal(() => {
+        openLinkExternalDialog();
+      });
+      return;
+    }
+    openLinkExternalDialog();
+  }, [currentUser, openLoginModal, openLinkExternalDialog]);
+
+  // Fetch the full profile of the chosen external person so we can detect an
+  // existing spouse and show the replacement preview before submitting.
+  const handleSelectExternalPerson = useCallback(async (person: any) => {
+    setSelectedExternalPerson(person);
+    setLinkMode("");
+    setMergeSpouseId("");
+    setExternalPersonDetails(null);
+    if (!person?.id) return;
+    try {
+      setLoadingExternalDetails(true);
+      const spouses = await ApiService.getPersonSpouses(person.id);
+      setExternalPersonDetails({ spouses: spouses || [] });
+    } catch (error) {
+      console.error("Failed to load external person details:", error);
+      setExternalPersonDetails(null);
+    } finally {
+      setLoadingExternalDetails(false);
+    }
+  }, []);
+
+  const handleConfirmLinkExternal = () => {
     if (!node || !selectedExternalPerson) return;
     if (
       linkExternalStartDate &&
       linkExternalEndDate &&
       linkExternalEndDate.isBefore(linkExternalStartDate, "day")
     ) {
-      alert("Marriage end date cannot be before marriage start date.");
+      showSnackbar("Marriage end date cannot be before marriage start date.", "warning");
       return;
     }
 
@@ -621,23 +676,32 @@ export const NodeDetails = memo(function NodeDetails({
       node.spouses && node.spouses.length > 0 ? node.spouses[0] : null;
 
     if (!spouse) {
-      alert(
+      showSnackbar(
         "This person must have a spouse in the current tree to use this replacement feature.",
+        "warning",
       );
       return;
     }
 
+    // Defer the destructive action to an explicit confirmation dialog.
+    setLinkExternalConfirmOpen(true);
+  };
+
+  const performLinkExternal = async () => {
+    if (!node || !selectedExternalPerson) return;
+
     // Logic: Node (Placeholder) <-> Spouse (Target)
     // We want: New Person <-> Spouse (Target)
     // And delete Node (Placeholder)
+    const spouse =
+      node.spouses && node.spouses.length > 0 ? node.spouses[0] : null;
+    if (!spouse) return;
 
-    if (
-      !window.confirm(
-        `Are you sure you want to replace "${node.name}" with "${selectedExternalPerson.name}" from the other tree? This will delete "${node.name}" and transfer children.`,
-      )
-    ) {
-      return;
-    }
+    // Existing-spouse decision: choosing a mode is itself the acknowledgement.
+    const hasExistingSpouses = Boolean(externalPersonDetails?.spouses?.length);
+    const effectiveMergeSpouseId =
+      hasExistingSpouses && linkMode === "merge" ? mergeSpouseId || undefined : undefined;
+    const effectiveConfirm = hasExistingSpouses || undefined;
 
     try {
       setLinkExternalSubmitting(true);
@@ -660,10 +724,16 @@ export const NodeDetails = memo(function NodeDetails({
           relationStartDate,
           relationEndDate,
           node.id,
+          effectiveConfirm,
+          effectiveMergeSpouseId,
         );
 
-        alert("Successfully linked. The page will reload to reflect changes.");
-        window.location.reload();
+        setLinkExternalConfirmOpen(false);
+        showSnackbar(
+          effectiveMergeSpouseId ? "Merged successfully. Refreshing…" : "Successfully linked. Refreshing…",
+          "success",
+        );
+        window.setTimeout(() => window.location.reload(), 900);
         return;
       }
 
@@ -674,17 +744,26 @@ export const NodeDetails = memo(function NodeDetails({
         relationStartDate,
         relationEndDate,
         replacePersonId: node.id,
+        confirmExistingSpouse: effectiveConfirm,
+        mergeSpouseId: effectiveMergeSpouseId,
         requestMessage: `Request to replace ${node.name} with ${selectedExternalPerson.name} as spouse of ${
           nodes.find((candidate) => candidate.id === spouse.id)?.name || "the selected person"
         }.`,
       });
 
       window.dispatchEvent(new Event("link-requests-updated"));
-      alert("Spouse link request raised. The other tree owner or a superadmin can approve it.");
+      showSnackbar(
+        "Spouse link request raised. The other tree owner or a superadmin can approve it.",
+        "success",
+      );
+      setLinkExternalConfirmOpen(false);
       setView("details");
     } catch (error: any) {
       console.error("Link external error:", error);
-      alert("Failed to link: " + (error.message || error));
+      // Return to the link dialog (where the "additional marriage" checkbox
+      // lives) so the user can adjust rather than being stuck on the confirm.
+      setLinkExternalConfirmOpen(false);
+      showSnackbar("Failed to link: " + (error?.message || error), "error");
     } finally {
       setLinkExternalSubmitting(false);
     }
@@ -737,7 +816,7 @@ export const NodeDetails = memo(function NodeDetails({
       editSpouseEndDate &&
       editSpouseEndDate.isBefore(editSpouseStartDate, "day")
     ) {
-      alert("Marriage end date cannot be before marriage start date.");
+      showSnackbar("Marriage end date cannot be before marriage start date.", "warning");
       return;
     }
 
@@ -753,7 +832,7 @@ export const NodeDetails = memo(function NodeDetails({
       setEditSpouseDatesOpen(false);
       window.location.reload();
     } catch (error: any) {
-      alert("Failed to update spouse dates: " + (error?.message || error));
+      showSnackbar("Failed to update spouse dates: " + (error?.message || error), "error");
     } finally {
       setIsSavingSpouseDates(false);
     }
@@ -765,6 +844,7 @@ export const NodeDetails = memo(function NodeDetails({
     editSpouseEndDate,
     formatPickerDate,
     isSavingSpouseDates,
+    showSnackbar,
   ]);
 
   const relNodeMapper = useCallback(
@@ -788,6 +868,12 @@ export const NodeDetails = memo(function NodeDetails({
   const children = node.children?.map(relNodeMapper).filter(Boolean) || [];
   const siblings = node.siblings?.map(relNodeMapper).filter(Boolean) || [];
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
+  // The tree-A person the placeholder is married to — the "surviving" spouse in
+  // a Link Real Profile / merge. Used for wording in the link-external dialog.
+  const anchorSpouseName =
+    (spouses[0] as any)?.name ||
+    nodes.find((n) => n.id === (node.spouses?.[0] as any)?.id)?.name ||
+    "the current spouse";
   const canEditCurrentNode = canEditNode ? canEditNode(node.id) : true;
   const isSuperAdminUser = typeof isSuperAdmin === "function" ? isSuperAdmin() : Boolean(isSuperAdmin);
   // Superadmins already have full access, so they never need to request branch access.
@@ -1030,7 +1116,7 @@ export const NodeDetails = memo(function NodeDetails({
                             onClick={handleLinkExternalClick}
                             disabled={!canEditCurrentNode}
                           >
-                            Link & Replace
+                            Link Real Profile
                           </Button>
                         )}
                       {node.spouses && node.spouses.length > 0 && (
@@ -1298,12 +1384,13 @@ export const NodeDetails = memo(function NodeDetails({
                                 setEditedPhotoPreview(url);
                               } catch (err) {
                                 console.error("Photo upload failed:", err);
-                                alert(
+                                showSnackbar(
                                   `Failed to upload photo: ${
                                     err instanceof Error
                                       ? err.message
                                       : String(err)
                                   }`,
+                                  "error",
                                 );
                               } finally {
                                 setPhotoUploading(false);
@@ -1698,7 +1785,7 @@ export const NodeDetails = memo(function NodeDetails({
           <>
             <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                Link {node.name} to External Tree
+                Link {node.name} to a Real Profile
               </Typography>
               <IconButton onClick={closeHandler} size="small">
                 <CloseIcon />
@@ -1730,14 +1817,27 @@ export const NodeDetails = memo(function NodeDetails({
               <PersonSearchField
                 searchValue={externalSearchValue}
                 onSearchValueChange={setExternalSearchValue}
-                onPersonSelect={(p) => setSelectedExternalPerson(p)}
+                onPersonSelect={handleSelectExternalPerson}
                 selectedPerson={selectedExternalPerson}
                 villageId={linkExternalVillageId}
+                filterGender={node.gender}
                 disabled={!linkExternalVillageId}
-                placeholder="Search for waiting spouse..."
+                placeholder={`Search for a ${
+                  node.gender === Gender.female
+                    ? "woman"
+                    : node.gender === Gender.male
+                      ? "man"
+                      : "person"
+                }...`}
                 label="Select Real Person"
                 startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
               />
+              {node.gender && (
+                <Typography variant="caption" sx={{ display: "block", mb: 1, color: "#64748b" }}>
+                  Only {node.gender === Gender.female ? "female" : node.gender === Gender.male ? "male" : node.gender}{" "}
+                  profiles are shown, matching the placeholder being replaced.
+                </Typography>
+              )}
 
               <FormControl fullWidth sx={{ ...inputWithIconSx, mt: 2 }}>
                 <InputLabel>Relation Type</InputLabel>
@@ -1803,20 +1903,196 @@ export const NodeDetails = memo(function NodeDetails({
 	                  />
                 </Suspense>
               )}
+
+              {selectedExternalPerson && (
+                <Box
+                  sx={{
+                    mt: 2.5,
+                    p: 1.75,
+                    borderRadius: 2,
+                    border: "1px solid #e2e8f0",
+                    bgcolor: "#f8fafc",
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ mb: 1, color: "#334155" }}>
+                    Review this change
+                  </Typography>
+                  {loadingExternalDetails ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <CircularProgress size={16} />
+                      <Typography variant="body2" color="textSecondary">
+                        Loading profile…
+                      </Typography>
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" sx={{ color: "#475569" }}>
+                      Replacing placeholder <strong>{node.name}</strong> with{" "}
+                      <strong>{selectedExternalPerson.name}</strong>
+                      {selectedExternalPerson?.villageName
+                        ? ` from ${selectedExternalPerson.villageName}`
+                        : ""}
+                      . This deletes <strong>{node.name}</strong>, connects{" "}
+                      {selectedExternalPerson.name} as spouse
+                      {node.children && node.children.length > 0
+                        ? `, and moves ${node.children.length} child${
+                            node.children.length === 1 ? "" : "ren"
+                          } to them`
+                        : ""}
+                      .
+                    </Typography>
+                  )}
+
+                  {!loadingExternalDetails &&
+                    externalPersonDetails?.spouses &&
+                    externalPersonDetails.spouses.length > 0 && (
+                      <Box sx={{ mt: 1.5 }}>
+                        <Alert severity="warning" sx={{ mb: 1 }}>
+                          {selectedExternalPerson.name} already has a spouse in the
+                          other tree:{" "}
+                          <strong>
+                            {externalPersonDetails.spouses
+                              .map((s: any) => s.name)
+                              .filter(Boolean)
+                              .join(", ")}
+                          </strong>
+                          . How should we handle this?
+                        </Alert>
+                        <FormControl>
+                          <RadioGroup
+                            value={linkMode}
+                            onChange={(e) => {
+                              setLinkMode(e.target.value as "new" | "merge");
+                              setMergeSpouseId("");
+                            }}
+                          >
+                            <FormControlLabel
+                              value="new"
+                              control={<Radio size="small" />}
+                              label={`Separate marriage — add ${selectedExternalPerson.name} as an additional spouse of ${anchorSpouseName}`}
+                            />
+                            <FormControlLabel
+                              value="merge"
+                              control={<Radio size="small" />}
+                              label={`Same person — one of these is actually ${anchorSpouseName}; merge them`}
+                            />
+                          </RadioGroup>
+                        </FormControl>
+
+                        {linkMode === "merge" && (
+                          <FormControl sx={{ mt: 1, ml: 3.5 }}>
+                            <FormLabel sx={{ fontSize: 13 }}>
+                              Which one is {anchorSpouseName}?
+                            </FormLabel>
+                            <RadioGroup
+                              value={mergeSpouseId}
+                              onChange={(e) => setMergeSpouseId(e.target.value)}
+                            >
+                              {externalPersonDetails.spouses.map((s: any) => (
+                                <FormControlLabel
+                                  key={s.id}
+                                  value={s.id}
+                                  control={<Radio size="small" />}
+                                  label={`${s.name || "Unnamed"}${
+                                    s.gender ? ` (${s.gender})` : ""
+                                  }`}
+                                />
+                              ))}
+                            </RadioGroup>
+                            <Typography variant="caption" sx={{ color: "#b45309", mt: 0.5 }}>
+                              Merging removes the selected person from the other
+                              tree and moves their children/parents onto{" "}
+                              {anchorSpouseName}.
+                            </Typography>
+                          </FormControl>
+                        )}
+                      </Box>
+                    )}
+                </Box>
+              )}
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setView("details")}>Cancel</Button>
               <Button
                 onClick={handleConfirmLinkExternal}
-                disabled={!selectedExternalPerson || linkExternalSubmitting}
+                disabled={
+                  !selectedExternalPerson ||
+                  linkExternalSubmitting ||
+                  loadingExternalDetails ||
+                  (externalPersonDetails?.spouses?.length > 0 &&
+                    (linkMode === "" ||
+                      (linkMode === "merge" && !mergeSpouseId)))
+                }
                 variant="contained"
                 color="primary"
               >
-                {linkExternalSubmitting ? "Submitting..." : "Link & Replace"}
+                {linkExternalSubmitting ? "Submitting..." : "Link Real Profile"}
               </Button>
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      <Dialog
+        open={linkExternalConfirmOpen}
+        onClose={() =>
+          !linkExternalSubmitting && setLinkExternalConfirmOpen(false)
+        }
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Confirm link</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">
+            This will delete the placeholder{" "}
+            <strong>{node?.name}</strong> and replace it with{" "}
+            <strong>{selectedExternalPerson?.name}</strong> from the other tree
+            {node?.children && node.children.length > 0
+              ? `, transferring ${node.children.length} child${
+                  node.children.length === 1 ? "" : "ren"
+                }`
+              : ""}
+            . This can’t be undone.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, color: "#64748b" }}>
+            {anchorSpouseName} and {selectedExternalPerson?.name}’s shared children
+            (and their father’s-line descendants) will be moved into{" "}
+            {anchorSpouseName}’s tree. Children from any other marriage stay where
+            they are.
+          </Typography>
+          {externalPersonDetails?.spouses?.length > 0 && linkMode === "merge" && (
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              <strong>
+                {externalPersonDetails.spouses.find((s: any) => s.id === mergeSpouseId)
+                  ?.name || "The selected spouse"}
+              </strong>{" "}
+              will be merged into <strong>{anchorSpouseName}</strong> and removed
+              from the other tree — their children and parents move to{" "}
+              {anchorSpouseName}, and any other marriages they have are removed.
+            </Alert>
+          )}
+          {externalPersonDetails?.spouses?.length > 0 && linkMode === "new" && (
+            <Alert severity="info" sx={{ mt: 1.5 }}>
+              {selectedExternalPerson?.name} will be recorded as an additional
+              spouse of {anchorSpouseName} (their existing marriage is kept).
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setLinkExternalConfirmOpen(false)}
+            disabled={linkExternalSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={performLinkExternal}
+            disabled={linkExternalSubmitting}
+            variant="contained"
+            color="error"
+          >
+            {linkExternalSubmitting ? "Replacing..." : "Replace"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog
@@ -2003,6 +2279,22 @@ export const NodeDetails = memo(function NodeDetails({
           onSaved={() => void refreshBusinesses()}
         />
       )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 });

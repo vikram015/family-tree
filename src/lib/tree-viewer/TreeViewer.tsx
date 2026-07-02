@@ -126,6 +126,17 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   const [mainId, setMainId] = useState<string | null>(initialMainId);
   // Ref to track mainId for the renderer callback (avoids stale closure)
   const mainIdRef = useRef<string | null>(initialMainId);
+  // Per-marriage collapse state for multi-spouse people. Keyed by
+  // `${personId}::${spouseId}`. A key being present means that marriage's
+  // children are collapsed (hidden) even when the branch is otherwise expanded.
+  const [collapsedMarriages, setCollapsedMarriages] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // Ref mirror so the click callback can read the latest value without a stale closure.
+  const collapsedMarriagesRef = useRef<Set<string>>(collapsedMarriages);
+  useEffect(() => {
+    collapsedMarriagesRef.current = collapsedMarriages;
+  }, [collapsedMarriages]);
   // Track which node has placeholder "add relative" nodes shown in the tree
   const [addMenuNodeId, setAddMenuNodeId] = useState<string | null>(null);
   const addMenuNodeIdRef = useRef<string | null>(null);
@@ -539,6 +550,25 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         return;
       }
 
+      // Per-spouse collapse: tapping a spouse of the currently focused person
+      // toggles just that marriage's children, leaving other marriages expanded
+      // (instead of switching focus to the spouse).
+      const handledByMobileSheet =
+        isSmallScreen && effectiveFeatures.allowMobileActions;
+      if (!handledByMobileSheet && mainId && nodeId !== mainId) {
+        const focusedNode = nodes.find((n) => n.id === mainId);
+        if (focusedNode?.spouses?.some((s) => s.id === nodeId)) {
+          const key = `${mainId}::${nodeId}`;
+          setCollapsedMarriages((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+          });
+          return;
+        }
+      }
+
       // If tapping the same node that's already focused, do nothing extra
       if (mainId === nodeId) {
         return;
@@ -550,7 +580,14 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       setMainId(nodeId);
       onNodeFocus?.(nodeId);
     },
-    [effectiveFeatures.allowMobileActions, mainId, onNodeClick, onNodeFocus, showFullTree],
+    [
+      effectiveFeatures.allowMobileActions,
+      mainId,
+      nodes,
+      onNodeClick,
+      onNodeFocus,
+      showFullTree,
+    ],
   );
 
   // Stable ref so touch/click handlers always call the latest handleNodeTap
@@ -963,10 +1000,38 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         if (!spouseNode) return;
         const canEditSpouseNode = isNodeEditable(spouseNode.id);
 
+        // A child belongs to this marriage when one parent is the person and the
+        // other is this specific spouse.
+        const belongsToThisMarriage = (childNode: TreeViewerNode | undefined) => {
+          if (!childNode) return false;
+          const hasPersonAsParent = childNode.parents?.some(
+            (p) => p.id === person.id,
+          );
+          const hasSpouseAsParent = childNode.parents?.some(
+            (p) => p.id === spouse.id,
+          );
+          return Boolean(hasPersonAsParent && hasSpouseAsParent);
+        };
+
+        // Count of children for THIS marriage only (independent of expand state),
+        // so each spouse link shows its own count instead of the person's total.
+        const marriageChildCount = (person.children || []).reduce(
+          (acc, child) =>
+            belongsToThisMarriage(nodes.find((n) => n.id === child.id))
+              ? acc + 1
+              : acc,
+          0,
+        );
+
+        // This marriage can be individually collapsed even when the branch is expanded.
+        const isMarriageCollapsed = collapsedMarriages.has(
+          `${person.id}::${spouse.id}`,
+        );
+
         // Find children that belong to this specific marriage
         const marriageChildren: DTreeNode[] = [];
 
-        if (shouldExpandChildren) {
+        if (shouldExpandChildren && !isMarriageCollapsed) {
           person.children?.forEach((child) => {
             if (visited.has(child.id)) return;
             if (addMissingParentForChild && child.id === addMenuChildId) {
@@ -976,16 +1041,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
             const childNode = nodes.find((n) => n.id === child.id);
             if (!childNode) return;
 
-            // Check if this child belongs to this marriage
-            // A child belongs to a marriage if one parent is the person and the other is the spouse
-            const hasPersonAsParent = childNode.parents?.some(
-              (p) => p.id === person.id,
-            );
-            const hasSpouseAsParent = childNode.parents?.some(
-              (p) => p.id === spouse.id,
-            );
-
-            if (hasPersonAsParent && hasSpouseAsParent) {
+            if (belongsToThisMarriage(childNode)) {
               const childTreeNode = convertToTreeFormat(
                 child.id,
                 visited,
@@ -996,7 +1052,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
               }
             }
           });
-        } // end shouldExpandChildren
+        } // end shouldExpandChildren && !isMarriageCollapsed
 
         // Inject child placeholders (son/daughter) into every marriage
         // when either the main person OR the spouse has their add-menu open
@@ -1072,7 +1128,9 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
               photo: spouseNode.photo,
               isAlive: spouseNode.isAlive,
               parentsCount: spouseNode.parents?.length || 0,
-              childrenCount: spouseNode.children?.length || 0,
+              // Per-marriage child count (children shared by this person + spouse),
+              // not the spouse's total children across all relationships.
+              childrenCount: marriageChildCount,
               spousesCount: spouseNode.spouses?.length || 0,
               canEditNode: canEditSpouseNode,
               isReadOnly: !canEditSpouseNode,
@@ -1551,6 +1609,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     nodes,
     rootId,
     mainId,
+    collapsedMarriages,
     addMenuNodeId,
     isMobile,
     isNodeEditable,

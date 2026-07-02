@@ -5,8 +5,14 @@ import {
   Button,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
   Paper,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
@@ -26,6 +32,12 @@ export const PendingRequestsPage: React.FC = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
+  // Confirmation modal shown before an approve/reject actually runs.
+  const [reviewTarget, setReviewTarget] = useState<{
+    request: LinkRequest;
+    action: "approved" | "rejected";
+  } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const loadRequests = useCallback(async () => {
     try {
@@ -50,34 +62,36 @@ export const PendingRequestsPage: React.FC = () => {
     void loadRequests();
   }, [loadRequests]);
 
-  const handleReview = useCallback(
-    async (requestId: string, action: "approved" | "rejected") => {
-      try {
-        setReviewingRequestId(requestId);
-        setError("");
-        setSuccess("");
-        const reviewNote =
-          action === "rejected"
-            ? window.prompt("Reason for rejecting this request")?.trim()
-            : null;
-        if (action === "rejected" && !reviewNote) {
-          setReviewingRequestId(null);
-          return;
-        }
-        await ApiService.reviewLinkRequest(requestId, { action, reviewNote });
-        setSuccess(
-          `${action === "approved" ? "Approved" : "Rejected"} request successfully.`,
-        );
-        await loadRequests();
-        window.dispatchEvent(new Event("link-requests-updated"));
-      } catch (err: any) {
-        setError(err?.message || "Failed to review request.");
-      } finally {
-        setReviewingRequestId(null);
-      }
+  const openReview = useCallback(
+    (request: LinkRequest, action: "approved" | "rejected") => {
+      setRejectReason("");
+      setReviewTarget({ request, action });
     },
-    [loadRequests],
+    [],
   );
+
+  const confirmReview = useCallback(async () => {
+    if (!reviewTarget) return;
+    const { request, action } = reviewTarget;
+    const reviewNote = action === "rejected" ? rejectReason.trim() : null;
+    if (action === "rejected" && !reviewNote) return; // required, enforced by disabled button
+    try {
+      setReviewingRequestId(request.id);
+      setError("");
+      setSuccess("");
+      await ApiService.reviewLinkRequest(request.id, { action, reviewNote });
+      setSuccess(
+        `${action === "approved" ? "Approved" : "Rejected"} request successfully.`,
+      );
+      setReviewTarget(null);
+      await loadRequests();
+      window.dispatchEvent(new Event("link-requests-updated"));
+    } catch (err: any) {
+      setError(err?.message || "Failed to review request.");
+    } finally {
+      setReviewingRequestId(null);
+    }
+  }, [reviewTarget, rejectReason, loadRequests]);
 
   const emptyState = useMemo(
     () =>
@@ -174,7 +188,7 @@ export const PendingRequestsPage: React.FC = () => {
                     variant="contained"
                     color="success"
                     disabled={reviewingRequestId === request.id}
-                    onClick={() => void handleReview(request.id, "approved")}
+                    onClick={() => openReview(request, "approved")}
                   >
                     {reviewingRequestId === request.id ? "Saving..." : "Approve"}
                   </Button>
@@ -182,7 +196,7 @@ export const PendingRequestsPage: React.FC = () => {
                     variant="outlined"
                     color="error"
                     disabled={reviewingRequestId === request.id}
-                    onClick={() => void handleReview(request.id, "rejected")}
+                    onClick={() => openReview(request, "rejected")}
                   >
                     {reviewingRequestId === request.id ? "Saving..." : "Reject"}
                   </Button>
@@ -222,6 +236,132 @@ export const PendingRequestsPage: React.FC = () => {
           </Box>
         )}
       </Stack>
+
+      <Dialog
+        open={!!reviewTarget}
+        onClose={() => !reviewingRequestId && setReviewTarget(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        {reviewTarget && (
+          <>
+            <DialogTitle>
+              {reviewTarget.action === "approved" ? "Approve request?" : "Reject request?"}
+            </DialogTitle>
+            <DialogContent dividers>
+              <Stack spacing={1.25}>
+                <Typography variant="body2">
+                  <strong>Requested by:</strong>{" "}
+                  {reviewTarget.request.requesterName ||
+                    reviewTarget.request.requesterEmail ||
+                    "Unknown user"}
+                  {reviewTarget.request.requesterPhone
+                    ? ` · ${reviewTarget.request.requesterPhone}`
+                    : ""}
+                  {` · ${new Date(reviewTarget.request.createdAt).toLocaleString()}`}
+                </Typography>
+                {reviewTarget.request.requestMessage && (
+                  <Typography variant="body2" color="text.secondary">
+                    “{reviewTarget.request.requestMessage}”
+                  </Typography>
+                )}
+
+                <Divider />
+
+                {reviewTarget.request.requestType === "spouse_link_request" ? (
+                  <>
+                    <Typography variant="body2">
+                      <strong>Will be linked:</strong>{" "}
+                      {reviewTarget.request.targetPersonName ||
+                        reviewTarget.request.payload?.targetPersonName ||
+                        "the selected person"}{" "}
+                      as spouse of{" "}
+                      {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}
+                      {reviewTarget.request.payload?.sourceTreeName
+                        ? ` (${reviewTarget.request.payload.sourceTreeName})`
+                        : ""}
+                      .
+                    </Typography>
+                    {reviewTarget.request.payload?.replacePersonName && (
+                      <Typography variant="body2">
+                        <strong>Will be removed:</strong> placeholder{" "}
+                        {reviewTarget.request.payload.replacePersonName} (its children move to{" "}
+                        {reviewTarget.request.targetPersonName ||
+                          reviewTarget.request.payload?.targetPersonName ||
+                          "the linked person"}
+                        ).
+                      </Typography>
+                    )}
+                    <Typography variant="body2" color="text.secondary">
+                      The couple’s shared children (and their father’s-line
+                      descendants) will be moved into{" "}
+                      {reviewTarget.request.payload?.sourceTreeName || "the requester’s tree"}.
+                      Children from any other marriage stay where they are.
+                    </Typography>
+                    {reviewTarget.request.payload?.mergeSpouseId && (
+                      <Alert severity="warning">
+                        <strong>
+                          {reviewTarget.request.payload?.mergeSpouseName || "The existing spouse"}
+                        </strong>
+                        {reviewTarget.request.payload?.mergeSpouseTreeName
+                          ? ` (in ${reviewTarget.request.payload.mergeSpouseTreeName})`
+                          : ""}{" "}
+                        will be <strong>merged</strong> into{" "}
+                        {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}{" "}
+                        and removed — their children and parents move over, and any other marriages
+                        they have are removed. This can’t be undone.
+                      </Alert>
+                    )}
+                  </>
+                ) : (
+                  <Typography variant="body2">
+                    {reviewTarget.action === "approved" ? "Approve" : "Reject"} this{" "}
+                    {formatRequestType(reviewTarget.request.requestType).toLowerCase()} for{" "}
+                    {reviewTarget.request.targetPersonName || "the selected person"} in{" "}
+                    {reviewTarget.request.targetTreeName || "the tree"}?
+                  </Typography>
+                )}
+
+                {reviewTarget.action === "rejected" && (
+                  <TextField
+                    label="Reason for rejection"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    required
+                    sx={{ mt: 1 }}
+                  />
+                )}
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button
+                onClick={() => setReviewTarget(null)}
+                disabled={!!reviewingRequestId}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                color={reviewTarget.action === "approved" ? "success" : "error"}
+                disabled={
+                  !!reviewingRequestId ||
+                  (reviewTarget.action === "rejected" && !rejectReason.trim())
+                }
+                onClick={() => void confirmReview()}
+              >
+                {reviewingRequestId
+                  ? "Saving..."
+                  : reviewTarget.action === "approved"
+                    ? "Approve"
+                    : "Reject"}
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Container>
   );
 };
