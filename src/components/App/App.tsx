@@ -19,6 +19,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { AuthInitializer } from "../AuthInitializer";
 import { LocationInitializer } from "../LocationInitializer";
+import { PwaUpdatePrompt } from "../PwaUpdatePrompt/PwaUpdatePrompt";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
@@ -216,6 +217,7 @@ export default React.memo(function App() {
                   <BrowserRouter>
                     <AppContent />
                   </BrowserRouter>
+                  <PwaUpdatePrompt />
                 </LoginModalProvider>
               </LocationInitializer>
             </AuthInitializer>
