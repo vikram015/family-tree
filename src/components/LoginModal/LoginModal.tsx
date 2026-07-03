@@ -22,6 +22,7 @@ import {
   signInWithPhoneNumber,
 } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
+import { ApiService } from "../../services/apiService";
 
 const OTP_RESEND_BASE_DELAY_SECONDS = 30;
 const OTP_RESEND_MAX_DELAY_SECONDS = 5 * 60;
@@ -235,6 +236,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setLoading(true);
 
       await confirmationResult.confirm(otp.trim());
+
+      // Record the login (best-effort — never block sign-in on this).
+      try {
+        await ApiService.recordLoginEvent();
+      } catch (loginEventErr) {
+        console.warn("Failed to record login event:", loginEventErr);
+      }
 
       setPhone("");
       resetOtpFlow();

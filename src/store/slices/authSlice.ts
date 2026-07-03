@@ -27,6 +27,8 @@ type BackendUserProfile = {
   name?: string | null;
   phone?: string | null;
   isVerified?: boolean | null;
+  isBlocked?: boolean | null;
+  blockedReason?: string | null;
   privacyPolicyAccepted?: boolean | null;
   createdAt?: string;
   modifiedAt?: string;
@@ -43,6 +45,8 @@ function mapBackendUserToAppUser(row: BackendUserProfile): AppUser {
     name: row.name || undefined,
     phone: row.phone || undefined,
     isVerified: row.isVerified ?? undefined,
+    isBlocked: row.isBlocked ?? undefined,
+    blockedReason: row.blockedReason ?? null,
     privacyPolicyAccepted: row.privacyPolicyAccepted ?? undefined,
     createdAt: row.createdAt || new Date().toISOString(),
     updatedAt: row.modifiedAt || new Date().toISOString(),

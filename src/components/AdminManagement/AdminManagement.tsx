@@ -37,17 +37,21 @@ import {
   LocationOn,
   Close,
   Search,
+  Block,
+  LockOpen,
 } from "@mui/icons-material";
 import { ApiService } from "../../services/apiService";
 import { AppUser, UserRole } from "../model/User";
 import { useAuth } from "../hooks/useAuth";
-import { formatDate } from "../../utils/dateFormatter";
+import { formatDate, formatDateTime } from "../../utils/dateFormatter";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
+  blockAdminUser,
   deleteAdminUser,
   fetchAdminUsers,
   fetchPendingVillageAccessRequests,
   reviewVillageAccessRequest,
+  unblockAdminUser,
   updateAdminUser,
   verifyAdminUser,
 } from "../../store/thunks/apiThunks";
@@ -130,6 +134,10 @@ export const AdminManagement: React.FC = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
   const [selectedVillages, setSelectedVillages] = useState<string[]>([]);
+  // Block/unblock confirmation dialog state.
+  const [blockTarget, setBlockTarget] = useState<AppUser | null>(null);
+  const [blockReason, setBlockReason] = useState("");
+  const [blockBusy, setBlockBusy] = useState(false);
   const [error, setError] = useState<string>("");
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [openingLinkedUserId, setOpeningLinkedUserId] = useState<string | null>(
@@ -452,6 +460,36 @@ export const AdminManagement: React.FC = () => {
     }
   };
 
+  const openBlockDialog = (user: AppUser) => {
+    if (!isSuperAdmin()) return;
+    setBlockReason("");
+    setBlockTarget(user);
+  };
+
+  const handleConfirmBlockToggle = async () => {
+    if (!isSuperAdmin() || !blockTarget) return;
+    const willBlock = !blockTarget.isBlocked;
+    try {
+      setBlockBusy(true);
+      if (willBlock) {
+        await dispatch(
+          blockAdminUser({ userId: blockTarget.id, reason: blockReason.trim() || null }),
+        ).unwrap();
+      } else {
+        await dispatch(unblockAdminUser(blockTarget.id)).unwrap();
+      }
+      setSuccessMessage(willBlock ? "User blocked." : "User unblocked.");
+      setBlockTarget(null);
+      await loadData();
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (err: any) {
+      console.error("Error updating block status:", err);
+      setError(err?.message || "Failed to update block status");
+    } finally {
+      setBlockBusy(false);
+    }
+  };
+
   const handleVillageToggle = (villageId: string) => {
     setSelectedVillages((prev) =>
       prev.includes(villageId)
@@ -658,6 +696,7 @@ export const AdminManagement: React.FC = () => {
                       Created At
                     </TableSortLabel>
                   </TableCell>
+                  <TableCell>Last Login</TableCell>
                   <TableCell sx={{ textAlign: "right"}}>Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -696,7 +735,14 @@ export const AdminManagement: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {user.isVerified ? (
+                      {user.isBlocked ? (
+                        <Chip
+                          icon={<Block />}
+                          label="Blocked"
+                          color="error"
+                          size="small"
+                        />
+                      ) : user.isVerified ? (
                         <Chip
                           icon={<CheckCircle />}
                           label="Approved"
@@ -714,6 +760,15 @@ export const AdminManagement: React.FC = () => {
                     </TableCell>
                     <TableCell>{formatDate((user as any).createdAt)}</TableCell>
                     <TableCell>
+                      {user.lastLoginAt ? (
+                        formatDateTime(user.lastLoginAt)
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Never
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Box sx={{textAlign: "right" }}>
                       {isSuperAdmin() && !user.isVerified && (
                         <Tooltip title="Approve User">
@@ -723,6 +778,17 @@ export const AdminManagement: React.FC = () => {
                             onClick={() => handleVerifyUser(user.id)}
                           >
                             <CheckCircle />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {isSuperAdmin() && user.id !== userProfile?.id && (
+                        <Tooltip title={user.isBlocked ? "Unblock user" : "Block user"}>
+                          <IconButton
+                            size="small"
+                            color={user.isBlocked ? "success" : "warning"}
+                            onClick={() => openBlockDialog(user)}
+                          >
+                            {user.isBlocked ? <LockOpen /> : <Block />}
                           </IconButton>
                         </Tooltip>
                       )}
@@ -1125,6 +1191,64 @@ export const AdminManagement: React.FC = () => {
             Save
           </Button>
         </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!blockTarget}
+        onClose={() => !blockBusy && setBlockTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        {blockTarget && (
+          <>
+            <DialogTitle>
+              {blockTarget.isBlocked ? "Unblock user?" : "Block user?"}
+            </DialogTitle>
+            <DialogContent dividers>
+              {blockTarget.isBlocked ? (
+                <Typography variant="body2">
+                  Unblock{" "}
+                  <strong>{blockTarget.name || blockTarget.email}</strong>? They
+                  will be able to sign in and use the application again.
+                </Typography>
+              ) : (
+                <>
+                  <Typography variant="body2" sx={{ mb: 2 }}>
+                    Block{" "}
+                    <strong>{blockTarget.name || blockTarget.email}</strong>? They
+                    will stay signed in but see a "blocked" message instead of the
+                    app, and their changes will be rejected.
+                  </Typography>
+                  <TextField
+                    label="Reason (optional — shown to the user)"
+                    value={blockReason}
+                    onChange={(e) => setBlockReason(e.target.value)}
+                    fullWidth
+                    multiline
+                    minRows={2}
+                  />
+                </>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setBlockTarget(null)} disabled={blockBusy}>
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                color={blockTarget.isBlocked ? "success" : "error"}
+                onClick={() => void handleConfirmBlockToggle()}
+                disabled={blockBusy}
+              >
+                {blockBusy
+                  ? "Saving..."
+                  : blockTarget.isBlocked
+                    ? "Unblock"
+                    : "Block"}
+              </Button>
+            </DialogActions>
+          </>
+        )}
       </Dialog>
     </Container>
   );

@@ -35,6 +35,7 @@ import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
 import { UserOnboardingPage } from "../UserOnboardingPage";
 import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
+import { BlockedScreen } from "../BlockedScreen/BlockedScreen";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
@@ -61,7 +62,7 @@ function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile, loading } = useAuth();
   const treeId = searchParams.get("tree") || "";
 
   const setTreeId = useCallback(
@@ -126,6 +127,12 @@ function AppContent() {
     },
     [setTreeId],
   );
+
+  // A blocked user stays authenticated (so we can read the flag from /api/auth/me)
+  // but must not see the app — replace everything with a blocked message.
+  if (!loading && currentUser && userProfile?.isBlocked) {
+    return <BlockedScreen reason={userProfile.blockedReason} />;
+  }
 
   console.log("AppContent: About to return JSX");
   return (

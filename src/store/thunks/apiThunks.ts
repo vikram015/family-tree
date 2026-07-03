@@ -66,6 +66,34 @@ export const verifyAdminUser = createAsyncThunk(
   },
 );
 
+export const blockAdminUser = createAsyncThunk(
+  "api/blockAdminUser",
+  async (
+    payload: { userId: string; reason?: string | null },
+    { rejectWithValue },
+  ) => {
+    try {
+      return await backendApi.post<any>(
+        `/api/admin/users/${payload.userId}/block`,
+        { reason: payload.reason || null },
+      );
+    } catch (error: any) {
+      return rejectWithValue(error?.message || "Failed to block user");
+    }
+  },
+);
+
+export const unblockAdminUser = createAsyncThunk(
+  "api/unblockAdminUser",
+  async (userId: string, { rejectWithValue }) => {
+    try {
+      return await backendApi.post<any>(`/api/admin/users/${userId}/unblock`, {});
+    } catch (error: any) {
+      return rejectWithValue(error?.message || "Failed to unblock user");
+    }
+  },
+);
+
 export const fetchPendingVillageAccessRequests = createAsyncThunk(
   "api/fetchPendingVillageAccessRequests",
   async (userId: string, { rejectWithValue }) => {

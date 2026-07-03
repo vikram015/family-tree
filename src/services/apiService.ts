@@ -317,6 +317,10 @@ export const ApiService = {
     const trimmed = String(value).trim();
     return trimmed ? trimmed : undefined;
   },
+  /** Record a login event for the current user (call once on successful sign-in). */
+  async recordLoginEvent(): Promise<void> {
+    await backendApi.post("/api/auth/login-event", {});
+  },
   /**
    * Fetch all people for a specific tree with their relationships
    */
