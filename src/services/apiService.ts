@@ -42,7 +42,7 @@ export interface UserOnboardingData {
   location: {
     stateId: string | null;
     districtId: string | null;
-    villageId: string | null;
+    locationId: string | null;
     casteId: string | null;
     subCasteId: string | null;
     completedAt: string | null;
@@ -97,8 +97,8 @@ export interface UserOnboardingMatchedPerson {
 export interface UserOnboardingTreeMatch {
   treeId: string;
   treeName: string;
-  villageId: string;
-  villageName: string;
+  locationId: string;
+  locationName: string;
   casteId: string | null;
   casteName: string | null;
   subCasteId: string | null;
@@ -114,8 +114,8 @@ export interface LocationCombinationOption {
   stateName: string;
   districtId: string;
   districtName: string;
-  villageId: string;
-  villageName: string;
+  locationId: string;
+  locationName: string;
   label: string;
 }
 
@@ -243,7 +243,7 @@ interface CompleteTreeResponse {
     caste?: string;
     subCaste?: string;
     createdAt: string;
-    village?: {
+    location?: {
       id: string;
       name: string;
       district?: {
@@ -290,7 +290,7 @@ export interface TreeWriteScope {
 export interface DefaultUserTreeTarget {
   treeId: string;
   personId: string | null;
-  villageId?: string | null;
+  locationId?: string | null;
 }
 
 export interface TreeInvite {
@@ -330,10 +330,10 @@ export const ApiService = {
   },
 
   /**
-   * Fetch all people for a specific village across all trees
+   * Fetch all people for a specific location across all trees
    */
-  async getPeopleByVillage(villageId: string): Promise<PersonWithRelations[]> {
-    const trees = await backendApi.get<any[]>("/api/tree", { villageId });
+  async getPeopleByLocation(locationId: string): Promise<PersonWithRelations[]> {
+    const trees = await backendApi.get<any[]>("/api/tree", { locationId });
     const treeIds = (trees || []).map((tree: any) => tree.id).filter(Boolean);
     if (treeIds.length === 0) return [];
 
@@ -683,12 +683,12 @@ export const ApiService = {
   /**
    * Get all trees
    */
-  async getTrees(villageId?: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/tree', { villageId });
+  async getTrees(locationId?: string): Promise<any[]> {
+    return backendApi.get<any[]>('/api/tree', { locationId });
   },
 
   /**
-   * Get tree with village details
+   * Get tree with location details
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
     return backendApi.get<any>(`/api/tree/${treeId}`);
@@ -748,17 +748,17 @@ export const ApiService = {
     return backendApi.post<any>('/api/tree', {
       name: tree.name,
       description: tree.description || null,
-      villageId: tree.villageId || null,
+      locationId: tree.locationId || null,
       caste: tree.caste || null,
       subCaste: tree.subCaste || null,
     });
   },
 
   /**
-   * Get all villages with hierarchy
+   * Get all locations with hierarchy
    */
-  async getVillages(): Promise<any[]> {
-    return backendApi.get<any[]>('/api/lookup/villages');
+  async getLocations(): Promise<any[]> {
+    return backendApi.get<any[]>('/api/lookup/locations');
   },
 
   /**
@@ -776,22 +776,22 @@ export const ApiService = {
   },
 
   /**
-   * Get all villages for a district
+   * Get all locations for a district
    */
-  async getVillagesForDistrict(districtId: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/lookup/villages', { districtId });
+  async getLocationsForDistrict(districtId: string): Promise<any[]> {
+    return backendApi.get<any[]>('/api/lookup/locations', { districtId });
   },
 
   async searchLocationCombinations(params: {
     query?: string;
-    villageId?: string;
+    locationId?: string;
     limit?: number;
   }): Promise<LocationCombinationOption[]> {
     return backendApi.get<LocationCombinationOption[]>(
       "/api/lookup/location-combinations",
       {
         query: params.query,
-        villageId: params.villageId,
+        locationId: params.locationId,
         limit: params.limit,
       },
     );
@@ -825,7 +825,7 @@ export const ApiService = {
 
   /**
    * Global search across people, businesses, and professions.
-   * Returns enriched context including tree/village and ancestor hierarchy.
+   * Returns enriched context including tree/location and ancestor hierarchy.
    */
   async globalSearch(searchTerm: string): Promise<any[]> {
     return backendApi.get<any[]>('/api/search/global', { term: searchTerm });
@@ -880,12 +880,12 @@ export const ApiService = {
   },
 
   /**
-   * Get businesses by village with person hierarchy
+   * Get businesses by location with person hierarchy
    */
-  async getBusinessesByVillageWithHierarchy(
-    villageId: string
+  async getBusinessesByLocationWithHierarchy(
+    locationId: string
   ): Promise<any[]> {
-    return backendApi.get<any[]>('/api/business', { villageId });
+    return backendApi.get<any[]>('/api/business', { locationId });
   },
 
   /**
@@ -919,12 +919,12 @@ export const ApiService = {
   },
 
   /**
-   * Create village
+   * Create location
    */
-  async createVillage(village: { name: string; districtId?: string }): Promise<any> {
-    return backendApi.post<any>('/api/lookup/villages', {
-      name: village.name,
-      districtId: village.districtId,
+  async createLocation(location: { name: string; districtId?: string }): Promise<any> {
+    return backendApi.post<any>('/api/lookup/locations', {
+      name: location.name,
+      districtId: location.districtId,
     });
   },
 
@@ -1013,7 +1013,7 @@ export const ApiService = {
 
   async searchUserOnboardingMatches(payload: {
     searchName?: string | null;
-    villageId: string;
+    locationId: string;
     casteId?: string | null;
     subCasteId?: string | null;
   }): Promise<UserOnboardingTreeMatch[]> {
@@ -1084,38 +1084,38 @@ export const ApiService = {
 
   /**
    * Search people by name with parent hierarchy.
-   * Supports village-scoped and tree-scoped search.
+   * Supports location-scoped and tree-scoped search.
    */
   async searchPeopleWithHierarchy(
     searchTerm: string,
     options: {
-      villageId?: string;
+      locationId?: string;
       treeId?: string;
     },
   ): Promise<any[]> {
-    return backendApi.get<any[]>("/api/people/search/by-village", {
+    return backendApi.get<any[]>("/api/people/search/by-location", {
       searchTerm,
-      villageId: options.villageId,
+      locationId: options.locationId,
       treeId: options.treeId,
     });
   },
 
   /**
-   * Search people by name in a village with parent hierarchy.
+   * Search people by name in a location with parent hierarchy.
    * Kept as a compatibility wrapper for existing callers.
    */
-  async searchPeopleByVillageWithHierarchy(
+  async searchPeopleByLocationWithHierarchy(
     searchTerm: string,
-    villageId: string
+    locationId: string
   ): Promise<any[]> {
-    return this.searchPeopleWithHierarchy(searchTerm, { villageId });
+    return this.searchPeopleWithHierarchy(searchTerm, { locationId });
   },
 
   /**
-   * Get all people with their professions for a village
+   * Get all people with their professions for a location
    */
-  async getPeopleWithProfessionsByVillage(villageId: string): Promise<any[]> {
-    const professions = await this.getProfessionsByVillage(villageId);
+  async getPeopleWithProfessionsByLocation(locationId: string): Promise<any[]> {
+    const professions = await this.getProfessionsByLocation(locationId);
     const peopleMap = new Map<string, any>();
 
     (professions || []).forEach((profession: any) => {
@@ -1139,10 +1139,10 @@ export const ApiService = {
   },
 
   /**
-   * Get professions by village with people and hierarchy
+   * Get professions by location with people and hierarchy
    */
-  async getProfessionsByVillage(villageId: string): Promise<any[]> {
-    const data = await backendApi.get<any[]>(`/api/profession/by-village/${villageId}`);
+  async getProfessionsByLocation(locationId: string): Promise<any[]> {
+    const data = await backendApi.get<any[]>(`/api/profession/by-location/${locationId}`);
 
     // Transform the data to group people by profession
     const professionsMap = new Map<string, any>();
@@ -1164,8 +1164,8 @@ export const ApiService = {
           personName: row.personName,
           gender: row.personGender,
           personDob: row.personDob,
-          villageId: row.villageId,
-          villageName: row.villageName,
+          locationId: row.locationId,
+          locationName: row.locationName,
           casteName: row.casteName,
           subCasteName: row.subCasteName,
           treeId: row.treeId,
@@ -1179,7 +1179,7 @@ export const ApiService = {
   },
 
   /**
-   * Get dashboard statistics (global, all villages)
+   * Get dashboard statistics (global, all locations)
    */
   async getDashboardStatistics(): Promise<any> {
     return backendApi.get<any>('/api/dashboard/statistics');

@@ -31,7 +31,7 @@ type BranchPersonOption = {
   name: string;
   treeId: string;
   hierarchy?: Array<{ id: string; name: string; generation?: number }>;
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
 };

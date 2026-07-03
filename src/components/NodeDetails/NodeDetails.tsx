@@ -65,7 +65,8 @@ import { phoneFromCustomFields } from "../Business/businessContact";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
@@ -194,8 +195,10 @@ export const NodeDetails = memo(function NodeDetails({
   >(initialView || "details");
 
   // Link External State
-  const [villages, setVillages] = useState<any[]>([]);
-  const [linkExternalVillageId, setLinkExternalVillageId] = useState("");
+  const [locations, setLocations] = useState<any[]>([]);
+  const [linkExternalLocationId, setLinkExternalLocationId] = useState("");
+  const [linkExternalLocationOption, setLinkExternalLocationOption] =
+    useState<LocationCombinationOption | null>(null);
   const [selectedExternalPerson, setSelectedExternalPerson] =
     useState<any>(null);
   const [externalSearchValue, setExternalSearchValue] = useState("");
@@ -358,10 +361,10 @@ export const NodeDetails = memo(function NodeDetails({
   const { openLoginModal } = useLoginModal();
 
   useEffect(() => {
-    if (view === "link-external" && villages.length === 0) {
-      ApiService.getVillages().then((data) => setVillages(data));
+    if (view === "link-external" && locations.length === 0) {
+      ApiService.getLocations().then((data) => setLocations(data));
     }
-  }, [view, villages.length]);
+  }, [view, locations.length]);
 
   // Reset view and values when node changes
   useEffect(() => {
@@ -624,6 +627,8 @@ export const NodeDetails = memo(function NodeDetails({
     setSelectedExternalPerson(null);
     setExternalSearchValue("");
     setExternalPersonDetails(null);
+    setLinkExternalLocationId("");
+    setLinkExternalLocationOption(null);
     setLinkMode("");
     setMergeSpouseId("");
     setLinkExternalConfirmOpen(false);
@@ -1798,30 +1803,25 @@ export const NodeDetails = memo(function NodeDetails({
                 child reassignment automatically.
               </Typography>
 
-              <FormControl fullWidth margin="normal" sx={inputWithIconSx}>
-                <InputLabel>Village</InputLabel>
-                <Select
-                  value={linkExternalVillageId}
-                  onChange={(e) => setLinkExternalVillageId(e.target.value)}
-                  label="Village"
-                  startAdornment={adornment(<LocationOnOutlinedIcon fontSize="small" />)}
-                >
-                  {villages.map((v) => (
-                    <MenuItem key={v.id} value={v.id}>
-                      {v.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Box sx={{ my: 2 }}>
+                <LocationPicker
+                  value={linkExternalLocationOption}
+                  onChange={(option) => {
+                    setLinkExternalLocationOption(option);
+                    setLinkExternalLocationId(option?.locationId || "");
+                  }}
+                  label="Location"
+                />
+              </Box>
 
               <PersonSearchField
                 searchValue={externalSearchValue}
                 onSearchValueChange={setExternalSearchValue}
                 onPersonSelect={handleSelectExternalPerson}
                 selectedPerson={selectedExternalPerson}
-                villageId={linkExternalVillageId}
+                locationId={linkExternalLocationId}
                 filterGender={node.gender}
-                disabled={!linkExternalVillageId}
+                disabled={!linkExternalLocationId}
                 placeholder={`Search for a ${
                   node.gender === Gender.female
                     ? "woman"
@@ -1928,8 +1928,8 @@ export const NodeDetails = memo(function NodeDetails({
                     <Typography variant="body2" sx={{ color: "#475569" }}>
                       Replacing placeholder <strong>{node.name}</strong> with{" "}
                       <strong>{selectedExternalPerson.name}</strong>
-                      {selectedExternalPerson?.villageName
-                        ? ` from ${selectedExternalPerson.villageName}`
+                      {selectedExternalPerson?.locationName
+                        ? ` from ${selectedExternalPerson.locationName}`
                         : ""}
                       . This deletes <strong>{node.name}</strong>, connects{" "}
                       {selectedExternalPerson.name} as spouse

@@ -1,14 +1,14 @@
-# Get Businesses by Village Function
+# Get Businesses by Location Function
 
 ## Overview
 
-The `get_businesses_by_village()` function retrieves all businesses in a specific village along with complete details about the business owners, including their family hierarchy and demographic information.
+The `get_businesses_by_location()` function retrieves all businesses in a specific location along with complete details about the business owners, including their family hierarchy and demographic information.
 
 ## Function Signature
 
 ```sql
-CREATE OR REPLACE FUNCTION get_businesses_by_village(
-  p_village_id UUID
+CREATE OR REPLACE FUNCTION get_businesses_by_location(
+  p_location_id UUID
 )
 RETURNS TABLE (
   business_id UUID,
@@ -21,8 +21,8 @@ RETURNS TABLE (
   person_name VARCHAR,
   person_gender VARCHAR,
   person_dob DATE,
-  village_id UUID,
-  village_name VARCHAR,
+  location_id UUID,
+  location_name VARCHAR,
   caste_name VARCHAR,
   sub_caste_name VARCHAR,
   tree_id UUID,
@@ -33,7 +33,7 @@ RETURNS TABLE (
 
 ## Parameters
 
-- **p_village_id** (UUID): The ID of the village for which to fetch businesses
+- **p_location_id** (UUID): The ID of the location for which to fetch businesses
 
 ## Return Columns
 
@@ -55,8 +55,8 @@ RETURNS TABLE (
 
 ### Location & Family Information
 
-- **village_id**: ID of the village where the business is located
-- **village_name**: Name of the village
+- **location_id**: ID of the location where the business is located
+- **location_name**: Name of the location
 - **caste_name**: Caste of the business owner
 - **sub_caste_name**: Sub-caste of the business owner
 - **tree_id**: ID of the family tree
@@ -72,9 +72,9 @@ RETURNS TABLE (
 
 ### Algorithm
 
-1. **Get all trees in the village**: Fetches all family trees (tree IDs) that belong to the specified village
+1. **Get all trees in the location**: Fetches all family trees (tree IDs) that belong to the specified location
 2. **Recursive CTE for hierarchy**: Uses a recursive Common Table Expression to traverse the family tree:
-   - Base case: Starts with all people in the village trees
+   - Base case: Starts with all people in the location trees
    - Recursive case: Follows parent relationships up to 5 generations
    - Filtering: Only includes male ancestors in the recursion
 3. **Build parent data**: Aggregates parent information into a JSONB array
@@ -85,21 +85,21 @@ RETURNS TABLE (
 - **Gender filtering**: Automatically filters to show only male ancestors in the hierarchy
 - **Depth limit**: Limits ancestor traversal to 5 generations
 - **JSON aggregation**: Returns parent hierarchy as structured JSON for easy client-side processing
-- **Complete demographics**: Includes village, caste, and sub-caste information
+- **Complete demographics**: Includes location, caste, and sub-caste information
 
 ## Usage Example
 
 ### In SQL
 
 ```sql
-SELECT * FROM get_businesses_by_village('550e8400-e29b-41d4-a716-446655440000');
+SELECT * FROM get_businesses_by_location('550e8400-e29b-41d4-a716-446655440000');
 ```
 
 ### In TypeScript (via Supabase RPC)
 
 ```typescript
-const { data, error } = await supabase.rpc("get_businesses_by_village", {
-  p_village_id: villageId,
+const { data, error } = await supabase.rpc("get_businesses_by_location", {
+  p_location_id: locationId,
 });
 ```
 
@@ -107,7 +107,7 @@ const { data, error } = await supabase.rpc("get_businesses_by_village", {
 
 ```typescript
 const businesses =
-  await SupabaseService.getBusinessesByVillageWithHierarchy(villageId);
+  await SupabaseService.getBusinessesByLocationWithHierarchy(locationId);
 
 // Result structure:
 // [{
@@ -116,7 +116,7 @@ const businesses =
 //   business_category: "it",
 //   person_id: "...",
 //   person_name: "John Doe",
-//   village_name: "Gangwa",
+//   location_name: "Gangwa",
 //   caste_name: "Brahmin",
 //   sub_caste_name: "Kanyakubj",
 //   parent_hierarchy: [
@@ -131,7 +131,7 @@ const businesses =
 
 The function is integrated in the BusinessPage component to:
 
-1. **Fetch businesses**: On component mount or village selection change
+1. **Fetch businesses**: On component mount or location selection change
 2. **Display owner information**: Show clickable owner names
 3. **Show hierarchy on hover**: Tooltip displays:
    - Owner name
@@ -142,21 +142,21 @@ The function is integrated in the BusinessPage component to:
 ## Performance Considerations
 
 - **Indexed lookups**: Uses indexes on:
-  - `tree.village_id` for fast village lookups
+  - `tree.location_id` for fast location lookups
   - `business.is_deleted` for filtering deleted records
   - `people_relations(person_id, relation_type)` for parent lookups
 
 - **Recursive limit**: Limited to 5 generations to prevent excessive recursion depth
-- **Early return**: Returns early if no trees are found in the village
+- **Early return**: Returns early if no trees are found in the location
 
 ## Data Flow
 
 ```
-User selects village
+User selects location
     ↓
-getBusinessesByVillageWithHierarchy() called
+getBusinessesByLocationWithHierarchy() called
     ↓
-Function finds all family trees in village
+Function finds all family trees in location
     ↓
 For each business owner, builds parent hierarchy using recursive CTE
     ↓
@@ -172,5 +172,5 @@ On click: Navigates to FamilyPage for that tree
 ## Related Components
 
 - **BusinessPage.tsx**: Main component using this function
-- **SupabaseService.ts**: `getBusinessesByVillageWithHierarchy()` wrapper method
+- **SupabaseService.ts**: `getBusinessesByLocationWithHierarchy()` wrapper method
 - People search hierarchy is now implemented in the Node backend service layer.

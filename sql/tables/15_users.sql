@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255),
   name VARCHAR(255),
   phone VARCHAR(50),
-  villages TEXT[],
+  locations TEXT[],
   people_id UUID REFERENCES people(id) ON DELETE SET NULL,
   role VARCHAR(50) DEFAULT 'user',
   is_verified BOOLEAN DEFAULT FALSE,

@@ -4,7 +4,7 @@ export interface AppUser {
   id: string;
   email: string;
   role: UserRole;
-  villages: string[]; // Village IDs that this admin can manage
+  locations: string[]; // Location IDs that this admin can manage
   peopleId?: string; // Linked person node ID
   isVerified?: boolean; // Superadmin approval flag
   isBlocked?: boolean; // Blocked by a superadmin — cannot use the app

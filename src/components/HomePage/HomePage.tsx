@@ -57,7 +57,7 @@ interface SearchResult {
   personPhotoUrl?: string;
   gotra?: string;
   extra?: string;
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
   parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
@@ -167,7 +167,7 @@ export const HomePage: React.FC = () => {
           treeName: row.treeName || undefined,
           personPhotoUrl: row.personPhotoUrl || undefined,
           gotra: row.gotra || undefined,
-          villageName: row.villageName || undefined,
+          locationName: row.locationName || undefined,
           casteName: row.casteName || undefined,
           subCasteName: row.subCasteName || undefined,
           parentHierarchy: row.parentHierarchy || [],
@@ -284,9 +284,9 @@ export const HomePage: React.FC = () => {
                         {result.name}
                       </Typography>
                       {result.type === "person" &&
-                        (result.villageName || result.gotra || result.casteName) && (
+                        (result.locationName || result.gotra || result.casteName) && (
                           <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
-                            {renderMetaPill("Village", result.villageName, "teal")}
+                            {renderMetaPill("Location", result.locationName, "teal")}
                             {renderMetaPill("Caste", result.casteName, "slate")}
                             {renderMetaPill("Sub caste", result.gotra, "slate")}
                           </Stack>
@@ -331,7 +331,7 @@ export const HomePage: React.FC = () => {
 
   const totalPeople = statistics?.totalPeople || 0;
   const totalTrees = statistics?.totalTrees || 0;
-  const totalVillages = statistics?.totalVillages || 0;
+  const totalLocations = statistics?.totalLocations || 0;
   const totalBusinesses = statistics?.totalBusinesses || 0;
   const topContributors = Array.isArray(statistics?.topContributors)
     ? (statistics.topContributors as DashboardContributor[])
@@ -341,7 +341,7 @@ export const HomePage: React.FC = () => {
     : 0;
 
   const pulseItems = [
-    `Families across ${totalVillages} villages are preserving lineage records.`,
+    `Families across ${totalLocations} locations are preserving lineage records.`,
     `${totalBusinesses} family businesses are now visible in the network.`,
     `${statistics?.totalProfessionsAssigned || 0} professional links are mapped.`,
   ];
@@ -526,7 +526,7 @@ export const HomePage: React.FC = () => {
               {[
                 { label: "Members", value: totalPeople, icon: <PeopleIcon /> },
                 { label: "Trees", value: totalTrees, icon: <AccountTreeIcon /> },
-                { label: "Villages", value: totalVillages, icon: <LocationCityIcon /> },
+                { label: "Locations", value: totalLocations, icon: <LocationCityIcon /> },
                 { label: "Businesses", value: totalBusinesses, icon: <BusinessIcon /> },
               ].map((item) => (
                 <Card key={item.label} sx={{ borderRadius: 2.5 }}>

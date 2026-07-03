@@ -1,10 +1,9 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './slices/authSlice';
-import villageReducer from './slices/villageSlice';
+import locationReducer from './slices/locationSlice';
 import businessReducer from './slices/businessSlice';
 import professionReducer from './slices/professionSlice';
 import statisticsReducer from './slices/statisticsSlice';
-import locationReducer from './slices/locationSlice';
 import casteReducer from './slices/casteSlice';
 import userPreferenceReducer from './slices/userPreferenceSlice';
 import userOnboardingReducer from './slices/userOnboardingSlice';
@@ -12,11 +11,10 @@ import userOnboardingReducer from './slices/userOnboardingSlice';
 export const store = configureStore({
   reducer: {
     auth: authReducer,
-    village: villageReducer,
+    location: locationReducer,
     business: businessReducer,
     profession: professionReducer,
     statistics: statisticsReducer,
-    location: locationReducer,
     caste: casteReducer,
     userPreference: userPreferenceReducer,
     userOnboarding: userOnboardingReducer,

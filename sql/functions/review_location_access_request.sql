@@ -1,8 +1,8 @@
 -- =====================================================
--- FUNCTION: review_village_access_request
--- Approve/reject request by superadmin or admin of that village.
+-- FUNCTION: review_location_access_request
+-- Approve/reject request by superadmin or admin of that location.
 -- =====================================================
-CREATE OR REPLACE FUNCTION review_village_access_request(
+CREATE OR REPLACE FUNCTION review_location_access_request(
   p_request_id UUID,
   p_action VARCHAR, -- 'approved' | 'rejected'
   p_review_note TEXT DEFAULT NULL
@@ -11,9 +11,9 @@ RETURNS JSON AS $$
 DECLARE
   v_user_id UUID;
   v_role VARCHAR;
-  v_villages TEXT[];
+  v_locations TEXT[];
   v_request RECORD;
-  v_requester_villages TEXT[];
+  v_requester_locations TEXT[];
 BEGIN
   v_user_id := auth.uid();
   IF v_user_id IS NULL THEN
@@ -24,8 +24,8 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Invalid action');
   END IF;
 
-  SELECT role, villages
-  INTO v_role, v_villages
+  SELECT role, locations
+  INTO v_role, v_locations
   FROM users
   WHERE id = v_user_id
     AND is_deleted = false;
@@ -36,7 +36,7 @@ BEGIN
 
   SELECT *
   INTO v_request
-  FROM village_access_requests
+  FROM location_access_requests
   WHERE id = p_request_id
     AND is_deleted = false;
 
@@ -49,12 +49,12 @@ BEGIN
   END IF;
 
   IF v_role <> 'superadmin' THEN
-    IF v_role <> 'admin' OR NOT (v_request.village_id::TEXT = ANY(COALESCE(v_villages, ARRAY[]::TEXT[]))) THEN
+    IF v_role <> 'admin' OR NOT (v_request.location_id::TEXT = ANY(COALESCE(v_locations, ARRAY[]::TEXT[]))) THEN
       RETURN json_build_object('success', false, 'error', 'Permission denied');
     END IF;
   END IF;
 
-  UPDATE village_access_requests
+  UPDATE location_access_requests
   SET
     status = p_action,
     review_note = p_review_note,
@@ -64,14 +64,14 @@ BEGIN
   WHERE id = p_request_id;
 
   IF p_action = 'approved' THEN
-    SELECT villages INTO v_requester_villages
+    SELECT locations INTO v_requester_locations
     FROM users
     WHERE id = v_request.requester_user_id;
 
     UPDATE users
-    SET villages = (
+    SET locations = (
       SELECT ARRAY(
-        SELECT DISTINCT unnest(COALESCE(v_requester_villages, ARRAY[]::TEXT[]) || ARRAY[v_request.village_id::TEXT])
+        SELECT DISTINCT unnest(COALESCE(v_requester_locations, ARRAY[]::TEXT[]) || ARRAY[v_request.location_id::TEXT])
       )
     ),
     modified_at = now(),

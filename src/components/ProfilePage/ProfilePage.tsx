@@ -33,7 +33,7 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import LinkIcon from "@mui/icons-material/Link";
@@ -56,8 +56,8 @@ import { phoneFromCustomFields } from "../Business/businessContact";
 import { formatDisplayDate } from "../../utils/dateFormatter";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 import {
-  fetchMyVillageAccessRequests,
-  submitVillageAccessRequest,
+  fetchMyLocationAccessRequests,
+  submitLocationAccessRequest,
 } from "../../store/thunks/apiThunks";
 
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
@@ -83,7 +83,7 @@ export const ProfilePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
     useAuth();
-  const { villages, selectedVillage, setSelectedVillage } = useVillage();
+  const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const [isLinking, setIsLinking] = useState(false);
@@ -124,11 +124,11 @@ export const ProfilePage: React.FC = () => {
   const [linkedPersonDetails, setLinkedPersonDetails] = useState<any | null>(
     null,
   );
-  const [requestVillageId, setRequestVillageId] = useState("");
+  const [requestLocationId, setRequestLocationId] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
-  const [myVillageRequests, setMyVillageRequests] = useState<any[]>([]);
+  const [myLocationRequests, setMyLocationRequests] = useState<any[]>([]);
   const [requestSubmitting, setRequestSubmitting] = useState(false);
-  const hasAssignedVillage = (userProfile?.villages || []).length > 0;
+  const hasAssignedLocation = (userProfile?.locations || []).length > 0;
   const casteMap = new Map(castes.map((c: any) => [c.id, c.name]));
   const subCasteMap = new Map(subCastes.map((s: any) => [s.id, s.name]));
   const linkedTreeCaste =
@@ -237,28 +237,28 @@ export const ProfilePage: React.FC = () => {
     void fetchDetails();
   }, [effectivePersonId, canManagePerson, refreshPersonDetails]);
 
-  const loadMyVillageRequests = useCallback(async () => {
+  const loadMyLocationRequests = useCallback(async () => {
     try {
       const userId = userProfile?.id;
       if (!userId) {
-        setMyVillageRequests([]);
+        setMyLocationRequests([]);
         return;
       }
       const data = await dispatch(
-        fetchMyVillageAccessRequests(userId),
+        fetchMyLocationAccessRequests(userId),
       ).unwrap();
-      setMyVillageRequests(data || []);
+      setMyLocationRequests(data || []);
     } catch (err) {
-      console.error("Error loading village requests:", err);
-      setMyVillageRequests([]);
+      console.error("Error loading location requests:", err);
+      setMyLocationRequests([]);
     }
   }, [dispatch, userProfile?.id]);
 
   useEffect(() => {
     if (currentUser && userProfile?.role === "admin") {
-      loadMyVillageRequests();
+      loadMyLocationRequests();
     }
-  }, [currentUser, userProfile?.role, loadMyVillageRequests]);
+  }, [currentUser, userProfile?.role, loadMyLocationRequests]);
 
   const handleUpdateProfile = async () => {
     try {
@@ -424,8 +424,8 @@ export const ProfilePage: React.FC = () => {
     navigate(`/families?${params.toString()}`);
   }, [navigate, effectivePersonId, linkedPersonDetails]);
 
-  const handleSubmitVillageRequest = async () => {
-    if (!requestVillageId) return;
+  const handleSubmitLocationRequest = async () => {
+    if (!requestLocationId) return;
     setRequestSubmitting(true);
     setError("");
     setSuccess("");
@@ -435,18 +435,18 @@ export const ProfilePage: React.FC = () => {
         throw new Error("User profile not loaded");
       }
       const data = await dispatch(
-        submitVillageAccessRequest({
+        submitLocationAccessRequest({
           userId,
-          villageId: requestVillageId,
+          locationId: requestLocationId,
           requestMessage: requestMessage || null,
         }),
       ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
-      setSuccess("Village access request submitted successfully.");
-      setRequestVillageId("");
+      setSuccess("Location access request submitted successfully.");
+      setRequestLocationId("");
       setRequestMessage("");
-      await loadMyVillageRequests();
+      await loadMyLocationRequests();
     } catch (err: any) {
       setError(err.message || "Failed to submit request");
     } finally {
@@ -687,8 +687,8 @@ export const ProfilePage: React.FC = () => {
                         <strong>Sub-caste:</strong> {linkedTreeSubCaste || "N/A"}
                       </Typography>
                       <Typography variant="body2">
-                        <strong>Village:</strong>{" "}
-                        {linkedPersonDetails.tree.village?.name || "N/A"}
+                        <strong>Location:</strong>{" "}
+                        {linkedPersonDetails.tree.location?.name || "N/A"}
                       </Typography>
                     </Stack>
                   )}
@@ -745,8 +745,8 @@ export const ProfilePage: React.FC = () => {
                           {linkedTreeSubCaste || "N/A"}
                         </Typography>
                         <Typography variant="body1">
-                          <strong>Village:</strong>{" "}
-                          {linkedPersonDetails.tree.village?.name || "N/A"}
+                          <strong>Location:</strong>{" "}
+                          {linkedPersonDetails.tree.location?.name || "N/A"}
                         </Typography>
                       </>
                     )}
@@ -800,18 +800,18 @@ export const ProfilePage: React.FC = () => {
                     </Typography>
 
                     <FormControl fullWidth sx={{ mb: 3 }}>
-                      <InputLabel id="village-select-label">
-                        Select Village
+                      <InputLabel id="location-select-label">
+                        Select Location
                       </InputLabel>
                       <Select
-                        labelId="village-select-label"
-                        value={selectedVillage || ""}
-                        label="Select Village"
-                        onChange={(e) => setSelectedVillage(e.target.value)}
+                        labelId="location-select-label"
+                        value={selectedLocation || ""}
+                        label="Select Location"
+                        onChange={(e) => setSelectedLocation(e.target.value)}
                       >
-                        {villages.map((village) => (
-                          <MenuItem key={village.id} value={village.id}>
-                            {village.name}
+                        {locations.map((location) => (
+                          <MenuItem key={location.id} value={location.id}>
+                            {location.name}
                           </MenuItem>
                         ))}
                       </Select>
@@ -830,15 +830,15 @@ export const ProfilePage: React.FC = () => {
                         setSearchValue(person.name);
                       }}
                       selectedPerson={selectedPerson}
-                      villageId={selectedVillage}
-                      disabled={!selectedVillage}
+                      locationId={selectedLocation}
+                      disabled={!selectedLocation}
                     />
 
                     {selectedPerson && (
                       <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
                         Selected: <strong>{selectedPerson.name}</strong>
-                        {selectedPerson.villageName &&
-                          ` from ${selectedPerson.villageName}`}
+                        {selectedPerson.locationName &&
+                          ` from ${selectedPerson.locationName}`}
                       </Alert>
                     )}
 
@@ -1113,24 +1113,24 @@ export const ProfilePage: React.FC = () => {
           <Grid size={{ xs: 12 }}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Village Assignment Requests
+                Location Assignment Requests
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
-              {hasAssignedVillage ? (
+              {hasAssignedLocation ? (
                 <Box sx={{ mb: 3 }}>
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    Your village assignment is already approved.
+                    Your location assignment is already approved.
                   </Alert>
                   <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                    Assigned Village
+                    Assigned Location
                   </Typography>
                   <Box
                     sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}
                   >
-                    {(userProfile?.villages || []).map((vId) => {
+                    {(userProfile?.locations || []).map((vId) => {
                       const vName =
-                        villages.find((v) => v.id === vId)?.name || vId;
+                        locations.find((v) => v.id === vId)?.name || vId;
                       return (
                         <Chip
                           key={vId}
@@ -1142,7 +1142,7 @@ export const ProfilePage: React.FC = () => {
                     })}
                   </Box>
                   <Typography variant="body2" color="text.secondary">
-                    To change village assignment, contact superadmin at{" "}
+                    To change location assignment, contact superadmin at{" "}
                     <Link href="mailto:support@kinvia.in" underline="hover">
                       support@kinvia.in
                     </Link>
@@ -1152,18 +1152,18 @@ export const ProfilePage: React.FC = () => {
               ) : (
                 <Stack spacing={2} sx={{ mb: 3 }}>
                   <FormControl fullWidth>
-                    <InputLabel id="request-village-label">
-                      Select Village
+                    <InputLabel id="request-location-label">
+                      Select Location
                     </InputLabel>
                     <Select
-                      labelId="request-village-label"
-                      value={requestVillageId}
-                      label="Select Village"
-                      onChange={(e) => setRequestVillageId(e.target.value)}
+                      labelId="request-location-label"
+                      value={requestLocationId}
+                      label="Select Location"
+                      onChange={(e) => setRequestLocationId(e.target.value)}
                     >
-                      {villages.map((village) => (
-                        <MenuItem key={village.id} value={village.id}>
-                          {village.name}
+                      {locations.map((location) => (
+                        <MenuItem key={location.id} value={location.id}>
+                          {location.name}
                         </MenuItem>
                       ))}
                     </Select>
@@ -1178,8 +1178,8 @@ export const ProfilePage: React.FC = () => {
                   <Box>
                     <Button
                       variant="contained"
-                      disabled={!requestVillageId || requestSubmitting}
-                      onClick={handleSubmitVillageRequest}
+                      disabled={!requestLocationId || requestSubmitting}
+                      onClick={handleSubmitLocationRequest}
                     >
                       {requestSubmitting ? "Submitting..." : "Raise Request"}
                     </Button>
@@ -1190,19 +1190,19 @@ export const ProfilePage: React.FC = () => {
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
                 My Requests
               </Typography>
-              {myVillageRequests.length === 0 ? (
+              {myLocationRequests.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   No requests submitted yet.
                 </Typography>
               ) : (
                 <List dense>
-                  {myVillageRequests.map((req) => (
+                  {myLocationRequests.map((req) => (
                     <ListItem
                       key={req.id}
                       sx={{ border: "1px solid #eee", borderRadius: 1, mb: 1 }}
                     >
                       <ListItemText
-                        primary={req.villageName || req.villageId}
+                        primary={req.locationName || req.locationId}
                         secondary={req.requestMessage || "No note"}
                       />
                       <Chip

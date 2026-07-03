@@ -38,7 +38,7 @@ import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../hooks/useAuth";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
@@ -63,7 +63,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, userProfile, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
     useAuth();
-  const { setSelectedVillage } = useVillage();
+  const { setSelectedLocation } = useLocations();
   const { openLoginModal } = useLoginModal();
   const highlightedPersonId = searchParams.get("personId");
   const inviteToken = searchParams.get("inviteToken");
@@ -71,7 +71,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
-  const [villageId, setVillageId] = useState<string | undefined>(undefined);
+  const [locationId, setLocationId] = useState<string | undefined>(undefined);
   const [selectId, setSelectId] = useState<string>();
   const [autoExpandNodeId, setAutoExpandNodeId] = useState<string | null>(null);
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
@@ -142,12 +142,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
   const isSuperAdminUser = isSuperAdmin();
-  const hasVillageAdminAccess = hasPermission("admin", villageId);
+  const hasLocationAdminAccess = hasPermission("admin", locationId);
   const hasBranchWriteScope = Boolean(
     treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length,
   );
   const canWriteCurrentTree = Boolean(
-    currentUser && (isSuperAdminUser || hasVillageAdminAccess || hasBranchWriteScope),
+    currentUser && (isSuperAdminUser || hasLocationAdminAccess || hasBranchWriteScope),
   );
   const canWriteAnyBranch =
     canWriteCurrentTree &&
@@ -400,7 +400,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         // Fetch complete tree from Supabase using the PostgreSQL function
         const treeData = await ApiService.getCompleteTreeById(treeId);
         if (requestId !== loadRequestIdRef.current) return;
-        setVillageId(treeData.tree?.village?.id);
+        setLocationId(treeData.tree?.location?.id);
 
         // Convert tree data to FNode format
         const items: Readonly<FNode>[] = (treeData.members || []).map(
@@ -1862,11 +1862,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               if (tid) {
                 try {
                   const tree = await ApiService.getTreeWithDetails(tid);
-                  if (tree?.villageId) {
-                    setSelectedVillage(tree.villageId);
+                  if (tree?.locationId) {
+                    setSelectedLocation(tree.locationId);
                   }
                 } catch (e) {
-                  console.warn("Could not fetch target tree village:", e);
+                  console.warn("Could not fetch target tree location:", e);
                 }
                 setTreeId(tid, { personId: pid || undefined });
               }

@@ -41,7 +41,7 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AddTree from "./AddTree/AddTree";
 import { useAuth } from "./hooks/useAuth";
-import { useVillage } from "./hooks/useVillage";
+import { useLocations } from "./hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import {
   fetchAllSubCastes,
@@ -172,7 +172,7 @@ export const UserOnboardingPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { currentUser, userProfile, loading, updateUserProfile } = useAuth();
-  const { setSelectedVillage } = useVillage();
+  const { setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const castesLoading = useAppSelector(selectCastesLoading);
@@ -196,7 +196,7 @@ export const UserOnboardingPage: React.FC = () => {
 
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
-  const [selectedVillageId, setSelectedVillageId] = useState("");
+  const [selectedLocationId, setSelectedLocationId] = useState("");
   const [selectedStateId, setSelectedStateId] = useState("");
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
   const [selectedCasteId, setSelectedCasteId] = useState("");
@@ -212,17 +212,17 @@ export const UserOnboardingPage: React.FC = () => {
   const [selectedLocationOption, setSelectedLocationOption] =
     useState<LocationCombinationOption | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
-  const [createVillageOpen, setCreateVillageOpen] = useState(false);
-  const [createVillageName, setCreateVillageName] = useState("");
-  const [createVillageStateId, setCreateVillageStateId] = useState("");
-  const [createVillageDistrictId, setCreateVillageDistrictId] = useState("");
-  const [createVillageStates, setCreateVillageStates] = useState<any[]>([]);
-  const [createVillageDistricts, setCreateVillageDistricts] = useState<any[]>([]);
-  const [createVillageLoadingStates, setCreateVillageLoadingStates] = useState(false);
-  const [createVillageLoadingDistricts, setCreateVillageLoadingDistricts] =
+  const [createLocationOpen, setCreateLocationOpen] = useState(false);
+  const [createLocationName, setCreateLocationName] = useState("");
+  const [createLocationStateId, setCreateLocationStateId] = useState("");
+  const [createLocationDistrictId, setCreateLocationDistrictId] = useState("");
+  const [createLocationStates, setCreateLocationStates] = useState<any[]>([]);
+  const [createLocationDistricts, setCreateLocationDistricts] = useState<any[]>([]);
+  const [createLocationLoadingStates, setCreateLocationLoadingStates] = useState(false);
+  const [createLocationLoadingDistricts, setCreateLocationLoadingDistricts] =
     useState(false);
-  const [createVillageSaving, setCreateVillageSaving] = useState(false);
-  const [createVillageError, setCreateVillageError] = useState("");
+  const [createLocationSaving, setCreateLocationSaving] = useState(false);
+  const [createLocationError, setCreateLocationError] = useState("");
   const [localError, setLocalError] = useState("");
   const [linkRequestSuccess, setLinkRequestSuccess] = useState("");
   const [myLinkRequests, setMyLinkRequests] = useState<LinkRequest[]>([]);
@@ -286,7 +286,7 @@ export const UserOnboardingPage: React.FC = () => {
     const query = trimmedLocationQuery.toLowerCase();
     const exactMatch = options.some(
       (option) =>
-        option.villageName.toLowerCase() === query ||
+        option.locationName.toLowerCase() === query ||
         option.label.toLowerCase() === query,
     );
 
@@ -301,8 +301,8 @@ export const UserOnboardingPage: React.FC = () => {
         stateName: "",
         districtId: "",
         districtName: "",
-        villageId: CREATE_LOCATION_OPTION_ID,
-        villageName: `Add "${trimmedLocationQuery}"`,
+        locationId: CREATE_LOCATION_OPTION_ID,
+        locationName: `Add "${trimmedLocationQuery}"`,
         label: `Add "${trimmedLocationQuery}"`,
         isCreateOption: true,
         inputValue: trimmedLocationQuery,
@@ -327,19 +327,19 @@ export const UserOnboardingPage: React.FC = () => {
       ) || null,
     [filteredSubCastes, selectedSubCasteId],
   );
-  const selectedCreateVillageState = useMemo(
+  const selectedCreateLocationState = useMemo(
     () =>
-      createVillageStates.find(
-        (state: any) => state.id === createVillageStateId,
+      createLocationStates.find(
+        (state: any) => state.id === createLocationStateId,
       ) || null,
-    [createVillageStateId, createVillageStates],
+    [createLocationStateId, createLocationStates],
   );
-  const selectedCreateVillageDistrict = useMemo(
+  const selectedCreateLocationDistrict = useMemo(
     () =>
-      createVillageDistricts.find(
-        (district: any) => district.id === createVillageDistrictId,
+      createLocationDistricts.find(
+        (district: any) => district.id === createLocationDistrictId,
       ) || null,
-    [createVillageDistrictId, createVillageDistricts],
+    [createLocationDistrictId, createLocationDistricts],
   );
   const buildCreatableLookupOptions = (
     options: LookupOption[],
@@ -725,18 +725,18 @@ export const UserOnboardingPage: React.FC = () => {
         "",
     );
     if (
-      onboarding.location.villageId ||
+      onboarding.location.locationId ||
       onboarding.location.stateId ||
       onboarding.location.districtId ||
       onboarding.location.casteId ||
       onboarding.location.subCasteId ||
-      (!selectedVillageId &&
+      (!selectedLocationId &&
         !selectedStateId &&
         !selectedDistrictId &&
         !selectedCasteId &&
         !selectedSubCasteId)
     ) {
-      setSelectedVillageId(onboarding.location.villageId || "");
+      setSelectedLocationId(onboarding.location.locationId || "");
       setSelectedStateId(onboarding.location.stateId || "");
       setSelectedDistrictId(onboarding.location.districtId || "");
       previousSelectedCasteRef.current = onboarding.location.casteId || "";
@@ -750,7 +750,7 @@ export const UserOnboardingPage: React.FC = () => {
     selectedDistrictId,
     selectedStateId,
     selectedSubCasteId,
-    selectedVillageId,
+    selectedLocationId,
     userProfile?.email,
     userProfile?.name,
   ]);
@@ -788,7 +788,7 @@ export const UserOnboardingPage: React.FC = () => {
       return;
     }
 
-    if (!selectedVillageId) {
+    if (!selectedLocationId) {
       setSelectedLocationOption(null);
       setLocationOptions([]);
       return;
@@ -798,7 +798,7 @@ export const UserOnboardingPage: React.FC = () => {
     setLocationLoading(true);
 
     ApiService.searchLocationCombinations({
-      villageId: selectedVillageId,
+      locationId: selectedLocationId,
       limit: 1,
     })
       .then((rows) => {
@@ -813,7 +813,7 @@ export const UserOnboardingPage: React.FC = () => {
         if (option) {
           setLocationOptions((prev) => {
             const remaining = prev.filter(
-              (item) => item.villageId !== option.villageId,
+              (item) => item.locationId !== option.locationId,
             );
             return [option, ...remaining];
           });
@@ -830,7 +830,7 @@ export const UserOnboardingPage: React.FC = () => {
           setLocationLoading(false);
         }
       });
-  }, [onboardingLoaded, selectedVillageId]);
+  }, [onboardingLoaded, selectedLocationId]);
 
   useEffect(() => {
     const query = locationInputValue.trim();
@@ -875,77 +875,77 @@ export const UserOnboardingPage: React.FC = () => {
   }, [locationInputValue, selectedLocationOption]);
 
   useEffect(() => {
-    if (!createVillageOpen || createVillageStates.length > 0) {
+    if (!createLocationOpen || createLocationStates.length > 0) {
       return;
     }
 
     let active = true;
-    setCreateVillageLoadingStates(true);
+    setCreateLocationLoadingStates(true);
     ApiService.getStates()
       .then((rows) => {
         if (active) {
-          setCreateVillageStates(rows || []);
+          setCreateLocationStates(rows || []);
         }
       })
       .catch((error: any) => {
         if (active) {
-          setCreateVillageError(error?.message || "Failed to load states.");
+          setCreateLocationError(error?.message || "Failed to load states.");
         }
       })
       .finally(() => {
         if (active) {
-          setCreateVillageLoadingStates(false);
+          setCreateLocationLoadingStates(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, [createVillageOpen, createVillageStates.length]);
+  }, [createLocationOpen, createLocationStates.length]);
 
   useEffect(() => {
-    if (!createVillageOpen || !createVillageStateId) {
-      setCreateVillageDistricts([]);
-      setCreateVillageDistrictId("");
+    if (!createLocationOpen || !createLocationStateId) {
+      setCreateLocationDistricts([]);
+      setCreateLocationDistrictId("");
       return;
     }
 
     let active = true;
-    setCreateVillageLoadingDistricts(true);
-    ApiService.getDistricts(createVillageStateId)
+    setCreateLocationLoadingDistricts(true);
+    ApiService.getDistricts(createLocationStateId)
       .then((rows) => {
         if (active) {
-          setCreateVillageDistricts(rows || []);
+          setCreateLocationDistricts(rows || []);
         }
       })
       .catch((error: any) => {
         if (active) {
-          setCreateVillageError(error?.message || "Failed to load districts.");
+          setCreateLocationError(error?.message || "Failed to load districts.");
         }
       })
       .finally(() => {
         if (active) {
-          setCreateVillageLoadingDistricts(false);
+          setCreateLocationLoadingDistricts(false);
         }
       });
 
     return () => {
       active = false;
     };
-  }, [createVillageOpen, createVillageStateId]);
+  }, [createLocationOpen, createLocationStateId]);
 
   useEffect(() => {
     if (displayStep !== "match") {
       return;
     }
 
-    const villageId = onboarding.location.villageId || selectedVillageId;
-    if (!villageId) {
+    const locationId = onboarding.location.locationId || selectedLocationId;
+    if (!locationId) {
       return;
     }
 
     const searchKey = JSON.stringify({
-      villageId,
+      locationId,
       casteId: onboarding.location.casteId || selectedCasteId || null,
       subCasteId: onboarding.location.subCasteId || selectedSubCasteId || null,
     });
@@ -958,7 +958,7 @@ export const UserOnboardingPage: React.FC = () => {
     dispatch(
       searchUserOnboardingMatches({
         searchName: searchDisplayName || null,
-        villageId,
+        locationId,
         casteId: onboarding.location.casteId || selectedCasteId || null,
         subCasteId:
           onboarding.location.subCasteId || selectedSubCasteId || null,
@@ -969,11 +969,11 @@ export const UserOnboardingPage: React.FC = () => {
     dispatch,
     onboarding.location.casteId,
     onboarding.location.subCasteId,
-    onboarding.location.villageId,
+    onboarding.location.locationId,
     searchDisplayName,
     selectedCasteId,
     selectedSubCasteId,
-    selectedVillageId,
+    selectedLocationId,
   ]);
 
   const handleSaveProfile = async () => {
@@ -1021,81 +1021,81 @@ export const UserOnboardingPage: React.FC = () => {
     }
   };
 
-  const handleOpenCreateVillage = (villageName?: string) => {
-    setCreateVillageName(villageName || trimmedLocationQuery);
-    setCreateVillageStateId(selectedStateId || "");
-    setCreateVillageDistrictId(selectedDistrictId || "");
-    setCreateVillageError("");
-    setCreateVillageOpen(true);
+  const handleOpenCreateLocation = (locationName?: string) => {
+    setCreateLocationName(locationName || trimmedLocationQuery);
+    setCreateLocationStateId(selectedStateId || "");
+    setCreateLocationDistrictId(selectedDistrictId || "");
+    setCreateLocationError("");
+    setCreateLocationOpen(true);
   };
 
-  const handleCloseCreateVillage = () => {
-    if (createVillageSaving) {
+  const handleCloseCreateLocation = () => {
+    if (createLocationSaving) {
       return;
     }
-    setCreateVillageOpen(false);
-    setCreateVillageError("");
+    setCreateLocationOpen(false);
+    setCreateLocationError("");
   };
 
-  const handleCreateVillage = async () => {
-    const villageName = createVillageName.trim();
-    if (!createVillageStateId || !createVillageDistrictId || !villageName) {
-      setCreateVillageError("State, district, and village name are required.");
+  const handleCreateLocation = async () => {
+    const locationName = createLocationName.trim();
+    if (!createLocationStateId || !createLocationDistrictId || !locationName) {
+      setCreateLocationError("State, district, and location name are required.");
       return;
     }
 
-    setCreateVillageSaving(true);
-    setCreateVillageError("");
+    setCreateLocationSaving(true);
+    setCreateLocationError("");
     setLocalError("");
 
     try {
-      const state = selectedCreateVillageState;
-      const district = selectedCreateVillageDistrict;
+      const state = selectedCreateLocationState;
+      const district = selectedCreateLocationDistrict;
       if (!state || !district) {
-        setCreateVillageError("State and district are required.");
+        setCreateLocationError("State and district are required.");
         return;
       }
 
-      const village = await ApiService.createVillage({
-        name: villageName,
-        districtId: createVillageDistrictId,
+      const location = await ApiService.createLocation({
+        name: locationName,
+        districtId: createLocationDistrictId,
       });
       const option = {
         stateId: state.id,
         stateName: state.name,
         districtId: district.id,
         districtName: district.name,
-        villageId: village.id,
-        villageName: village.name,
-        label: [village.name, district.name, state.name].join(", "),
+        locationId: location.id,
+        locationName: location.name,
+        label: [location.name, district.name, state.name].join(", "),
       };
 
       setSelectedLocationOption(option);
       setSelectedStateId(option.stateId);
       setSelectedDistrictId(option.districtId);
-      setSelectedVillageId(option.villageId);
+      setSelectedLocationId(option.locationId);
       setLocationInputValue(option.label);
       setLocationOptions((prev) => {
         const remaining = prev.filter(
-          (item) => item.villageId !== option.villageId,
+          (item) => item.locationId !== option.locationId,
         );
         return [option, ...remaining];
       });
-      setCreateVillageOpen(false);
-      setSelectedVillage(option.villageId);
+      setCreateLocationOpen(false);
+      setSelectedLocation(option.locationId);
       await dispatch(
         updateUserOnboarding({
           location: {
             stateId: option.stateId,
             districtId: option.districtId,
-            villageId: option.villageId,
+            locationId: option.locationId,
           },
         }),
       ).unwrap();
     } catch (error: any) {
-      setCreateVillageError(error?.message || "Failed to create village.");
+      setCreateLocationError(error?.message || "Failed to create location.");
     } finally {
-      setCreateVillageSaving(false);
+      setCreateLocationSaving(false);
     }
   };
 
@@ -1152,8 +1152,8 @@ export const UserOnboardingPage: React.FC = () => {
   };
 
   const handleSaveLocation = async () => {
-    if (!selectedStateId || !selectedDistrictId || !selectedVillageId) {
-      setLocalError("State, district, and village are required.");
+    if (!selectedStateId || !selectedDistrictId || !selectedLocationId) {
+      setLocalError("State, district, and location are required.");
       return;
     }
 
@@ -1163,7 +1163,7 @@ export const UserOnboardingPage: React.FC = () => {
     }
 
     setLocalError("");
-    setSelectedVillage(selectedVillageId);
+    setSelectedLocation(selectedLocationId);
     setStepOverride("match");
 
     try {
@@ -1173,7 +1173,7 @@ export const UserOnboardingPage: React.FC = () => {
           location: {
             stateId: selectedStateId,
             districtId: selectedDistrictId,
-            villageId: selectedVillageId,
+            locationId: selectedLocationId,
             casteId: selectedCasteId,
             subCasteId: selectedSubCasteId,
             completedAt: nowIso(),
@@ -1188,14 +1188,14 @@ export const UserOnboardingPage: React.FC = () => {
       ).unwrap();
       updateHistoryStep("match", "push");
       lastSearchKeyRef.current = JSON.stringify({
-        villageId: selectedVillageId,
+        locationId: selectedLocationId,
         casteId: selectedCasteId || null,
         subCasteId: selectedSubCasteId || null,
       });
       await dispatch(
         searchUserOnboardingMatches({
           searchName: searchDisplayName || null,
-          villageId: selectedVillageId,
+          locationId: selectedLocationId,
           casteId: selectedCasteId,
           subCasteId: selectedSubCasteId,
         }),
@@ -1231,7 +1231,7 @@ export const UserOnboardingPage: React.FC = () => {
       return;
     }
 
-    if (!selectedVillageId) {
+    if (!selectedLocationId) {
       setLocalError("Please select a location before searching.");
       return;
     }
@@ -1253,7 +1253,7 @@ export const UserOnboardingPage: React.FC = () => {
       await dispatch(
         searchUserOnboardingMatches({
           searchName: trimmedSearchName,
-          villageId: selectedVillageId,
+          locationId: selectedLocationId,
           casteId: selectedCasteId || null,
           subCasteId: selectedSubCasteId || null,
         }),
@@ -1339,8 +1339,8 @@ export const UserOnboardingPage: React.FC = () => {
       }),
     ).unwrap();
     console.log("Updated onboarding after tree creation:", resp);
-    if (selectedVillageId) {
-      setSelectedVillage(selectedVillageId);
+    if (selectedLocationId) {
+      setSelectedLocation(selectedLocationId);
     }
     navigate(`/families?tree=${encodeURIComponent(treeId)}&createRoot=1`, {
       replace: true,
@@ -1409,7 +1409,7 @@ export const UserOnboardingPage: React.FC = () => {
               <Chip
                 size="small"
                 icon={<LocationOnOutlinedIcon />}
-                label={tree.villageName}
+                label={tree.locationName}
                 sx={{ bgcolor: "#f8fafc" }}
               />
               <Chip size="small" label={tree.casteName || "No caste"} sx={{ bgcolor: "#f8fafc" }} />
@@ -1606,7 +1606,7 @@ export const UserOnboardingPage: React.FC = () => {
         ) : (
           <Typography variant="body2" color="text.secondary">
             No direct name match was found in this tree. This result is shown
-            because the tree matches your selected village, caste, and sub-caste.
+            because the tree matches your selected location, caste, and sub-caste.
           </Typography>
         )}
       </AccordionDetails>
@@ -1756,7 +1756,7 @@ export const UserOnboardingPage: React.FC = () => {
                         filterOptions={(options) => options}
                         getOptionLabel={(option) => option.label}
                         isOptionEqualToValue={(option, value) =>
-                          option.villageId === value.villageId
+                          option.locationId === value.locationId
                         }
                         noOptionsText={
                           trimmedLocationQuery.length < 2
@@ -1775,32 +1775,32 @@ export const UserOnboardingPage: React.FC = () => {
                               setSelectedLocationOption(null);
                               setSelectedStateId("");
                               setSelectedDistrictId("");
-                              setSelectedVillageId("");
+                              setSelectedLocationId("");
                             }
                             if (!value) {
                               setSelectedLocationOption(null);
                               setSelectedStateId("");
                               setSelectedDistrictId("");
-                              setSelectedVillageId("");
+                              setSelectedLocationId("");
                             }
                           }
                         }}
                         onChange={(_event, value: CreatableLocationOption | null) => {
                           if (value?.isCreateOption) {
-                            handleOpenCreateVillage(value.inputValue);
+                            handleOpenCreateLocation(value.inputValue);
                             return;
                           }
                           setSelectedLocationOption(value);
                           setSelectedStateId(value?.stateId || "");
                           setSelectedDistrictId(value?.districtId || "");
-                          setSelectedVillageId(value?.villageId || "");
+                          setSelectedLocationId(value?.locationId || "");
                           setLocationInputValue(value?.label || "");
                         }}
                         renderInput={(params) => (
                           <TextField
                             {...params}
-                            label="Location (Village / City)"
-                            placeholder="Type village, district, or state"
+                            label="Location (Location / City)"
+                            placeholder="Type location, district, or state"
                             sx={inputCardSx}
                             InputProps={{
                               ...params.InputProps,
@@ -1826,7 +1826,7 @@ export const UserOnboardingPage: React.FC = () => {
                                     color="primary"
                                     sx={{ fontWeight: 700 }}
                                   >
-                                    Add village
+                                    Add location
                                   </Typography>
                                   <Typography variant="body2" color="text.secondary">
                                     {option.inputValue}
@@ -1836,7 +1836,7 @@ export const UserOnboardingPage: React.FC = () => {
                             ) : (
                               <Box>
                               <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                {option.villageName}
+                                {option.locationName}
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
                                 {option.districtName}, {option.stateName}
@@ -2077,7 +2077,7 @@ export const UserOnboardingPage: React.FC = () => {
                             />
                             <Chip
                               icon={<LocationOnOutlinedIcon />}
-                              label={selectedLocationOption?.villageName || locationInputValue || "Not set"}
+                              label={selectedLocationOption?.locationName || locationInputValue || "Not set"}
                               sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                             <Chip
@@ -2201,7 +2201,7 @@ export const UserOnboardingPage: React.FC = () => {
                                   Other matching trees
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
-                                  These trees match your selected village, caste,
+                                  These trees match your selected location, caste,
                                   and sub-caste even though your name was not found
                                   inside them.
                                 </Typography>
@@ -2331,64 +2331,64 @@ export const UserOnboardingPage: React.FC = () => {
       </Box>
 
       <Dialog
-        open={createVillageOpen}
-        onClose={handleCloseCreateVillage}
+        open={createLocationOpen}
+        onClose={handleCloseCreateLocation}
         fullWidth
         maxWidth="sm"
       >
-        <DialogTitle>Add village</DialogTitle>
+        <DialogTitle>Add location</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            {createVillageError && (
-              <Alert severity="error">{createVillageError}</Alert>
+            {createLocationError && (
+              <Alert severity="error">{createLocationError}</Alert>
             )}
             <Autocomplete
-              options={createVillageStates}
-              value={selectedCreateVillageState}
-              loading={createVillageLoadingStates}
+              options={createLocationStates}
+              value={selectedCreateLocationState}
+              loading={createLocationLoadingStates}
               getOptionLabel={(option: any) => option?.name || ""}
               isOptionEqualToValue={(option: any, value: any) =>
                 option.id === value.id
               }
               onChange={(_event, value: any | null) => {
-                setCreateVillageStateId(value?.id || "");
-                setCreateVillageDistrictId("");
-                setCreateVillageError("");
+                setCreateLocationStateId(value?.id || "");
+                setCreateLocationDistrictId("");
+                setCreateLocationError("");
               }}
-              disabled={createVillageSaving}
+              disabled={createLocationSaving}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   label="State"
                   placeholder="Search state"
                   helperText={
-                    createVillageLoadingStates ? "Loading states..." : undefined
+                    createLocationLoadingStates ? "Loading states..." : undefined
                   }
                 />
               )}
             />
             <Autocomplete
-              options={createVillageDistricts}
-              value={selectedCreateVillageDistrict}
-              loading={createVillageLoadingDistricts}
+              options={createLocationDistricts}
+              value={selectedCreateLocationDistrict}
+              loading={createLocationLoadingDistricts}
               getOptionLabel={(option: any) => option?.name || ""}
               isOptionEqualToValue={(option: any, value: any) =>
                 option.id === value.id
               }
               onChange={(_event, value: any | null) => {
-                setCreateVillageDistrictId(value?.id || "");
-                setCreateVillageError("");
+                setCreateLocationDistrictId(value?.id || "");
+                setCreateLocationError("");
               }}
-              disabled={createVillageSaving || !createVillageStateId}
+              disabled={createLocationSaving || !createLocationStateId}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   label="District"
                   placeholder="Search district"
                   helperText={
-                    createVillageLoadingDistricts
+                    createLocationLoadingDistricts
                       ? "Loading districts..."
-                      : !createVillageStateId
+                      : !createLocationStateId
                         ? "Select a state first"
                         : undefined
                   }
@@ -2396,36 +2396,36 @@ export const UserOnboardingPage: React.FC = () => {
               )}
             />
             <TextField
-              label="Village"
-              value={createVillageName}
+              label="Location"
+              value={createLocationName}
               onChange={(event) => {
-                setCreateVillageName(event.target.value);
-                setCreateVillageError("");
+                setCreateLocationName(event.target.value);
+                setCreateLocationError("");
               }}
-              disabled={createVillageSaving}
+              disabled={createLocationSaving}
               autoFocus
               fullWidth
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseCreateVillage} disabled={createVillageSaving}>
+          <Button onClick={handleCloseCreateLocation} disabled={createLocationSaving}>
             Cancel
           </Button>
           <Button
             variant="contained"
-            onClick={handleCreateVillage}
+            onClick={handleCreateLocation}
             disabled={
-              createVillageSaving ||
-              !createVillageStateId ||
-              !createVillageDistrictId ||
-              !createVillageName.trim()
+              createLocationSaving ||
+              !createLocationStateId ||
+              !createLocationDistrictId ||
+              !createLocationName.trim()
             }
             startIcon={
-              createVillageSaving ? <CircularProgress size={16} /> : undefined
+              createLocationSaving ? <CircularProgress size={16} /> : undefined
             }
           >
-            {createVillageSaving ? "Saving..." : "Add village"}
+            {createLocationSaving ? "Saving..." : "Add location"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2434,7 +2434,7 @@ export const UserOnboardingPage: React.FC = () => {
         hideTrigger
         open={createTreeOpen}
         onClose={() => setCreateTreeOpen(false)}
-        initialVillageId={selectedVillageId || onboarding.location.villageId || undefined}
+        initialLocationId={selectedLocationId || onboarding.location.locationId || undefined}
         initialCasteId={selectedCasteId || onboarding.location.casteId || undefined}
         initialSubCasteId={
           selectedSubCasteId || onboarding.location.subCasteId || undefined

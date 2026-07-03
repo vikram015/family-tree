@@ -33,13 +33,13 @@ const initialState: ProfessionState = {
 // Async thunks
 export const fetchProfessionsData = createAsyncThunk(
   'profession/fetchData',
-  async (villageId: string, { rejectWithValue }) => {
+  async (locationId: string, { rejectWithValue }) => {
     try {
       // Fetch all professions for the select dropdown
       const allProfessions = await ApiService.getAllProfessions();
 
-      // Fetch professions with people and hierarchy for the village
-      const profsWithPeopleData = await ApiService.getProfessionsByVillage(villageId);
+      // Fetch professions with people and hierarchy for the location
+      const profsWithPeopleData = await ApiService.getProfessionsByLocation(locationId);
 
       // Extract all people from the professions data
       const uniquePeople = new Map<string, FNode>();

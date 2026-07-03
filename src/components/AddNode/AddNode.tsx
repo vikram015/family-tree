@@ -152,8 +152,8 @@ export default function AddNode({
 
   // Mode state: 'create' or 'link' (only relevant for spouse currently)
   const [mode, setMode] = useState<"create" | "link">("create");
-  const [villages, setVillages] = useState<any[]>([]);
-  const [searchVillageId, setSearchVillageId] = useState("");
+  const [locations, setLocations] = useState<any[]>([]);
+  const [searchLocationId, setSearchLocationId] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [personSearchValue, setPersonSearchValue] = useState("");
 
@@ -230,10 +230,10 @@ export default function AddNode({
     return value.format("YYYY-MM-DD");
   }, []);
 
-  // Load villages for the search dropdown
+  // Load locations for the search dropdown
   useEffect(() => {
-    ApiService.getVillages().then((data) => {
-      setVillages(data || []);
+    ApiService.getLocations().then((data) => {
+      setLocations(data || []);
     });
     ApiService.getAllProfessions().then((data) => {
       setAllProfessions(data || []);
@@ -263,9 +263,9 @@ export default function AddNode({
       .filter(Boolean) as FNode[];
   }, [effectiveTargetId, nodes]);
 
-  const selectedSearchVillage = useMemo(
-    () => villages.find((v) => v.id === searchVillageId) || null,
-    [searchVillageId, villages],
+  const selectedSearchLocation = useMemo(
+    () => locations.find((v) => v.id === searchLocationId) || null,
+    [searchLocationId, locations],
   );
 
   const [selectedOtherParentId, setSelectedOtherParentId] = useState<string>(
@@ -358,7 +358,7 @@ export default function AddNode({
     setNewSpouseGender("");
     setNewSpouseDob(null);
     setSelectedPerson(null);
-    setSearchVillageId("");
+    setSearchLocationId("");
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
@@ -396,7 +396,7 @@ export default function AddNode({
     setNewSpouseGender("");
     setNewSpouseDob(null);
     setSelectedPerson(null);
-    setSearchVillageId("");
+    setSearchLocationId("");
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
@@ -440,7 +440,7 @@ export default function AddNode({
     setNewSpouseGender("");
     setNewSpouseDob(null);
     setSelectedPerson(null);
-    setSearchVillageId("");
+    setSearchLocationId("");
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
@@ -1112,23 +1112,23 @@ export default function AddNode({
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
               <Stack spacing={2.25}>
               <Autocomplete
-                options={villages}
-                value={selectedSearchVillage}
+                options={locations}
+                value={selectedSearchLocation}
                 onChange={(_event, value) => {
-                    setSearchVillageId(value?.id || "");
+                    setSearchLocationId(value?.id || "");
                     setPersonSearchValue("");
                     setSelectedPerson(null);
                   }}
                 getOptionLabel={(option) => option?.name || ""}
                 isOptionEqualToValue={(option, value) => option.id === value.id}
                 noOptionsText={
-                  villages.length === 0 ? "Loading villages..." : "No villages found"
+                  locations.length === 0 ? "Loading locations..." : "No locations found"
                 }
                 renderInput={(params) => (
 	                  <TextField
 	                    {...params}
-	                    label="Select Village (Required)"
-	                    placeholder="Search village"
+	                    label="Select Location (Required)"
+	                    placeholder="Search location"
 	                    sx={inputWithIconSx}
 	                    InputProps={{
 	                      ...params.InputProps,
@@ -1143,9 +1143,9 @@ export default function AddNode({
                 )}
               />
 
-              {searchVillageId ? (
+              {searchLocationId ? (
                 <PersonSearchField
-                  villageId={searchVillageId}
+                  locationId={searchLocationId}
                   searchValue={personSearchValue}
                   onSearchValueChange={setPersonSearchValue}
                   onPersonSelect={setSelectedPerson}
@@ -1160,7 +1160,7 @@ export default function AddNode({
                   color="text.secondary"
                   sx={{ fontStyle: "italic", display: "block", mt: -0.5 }}
                 >
-                  Please select a village first to search for people.
+                  Please select a location first to search for people.
                 </Typography>
               )}
 
@@ -1174,7 +1174,7 @@ export default function AddNode({
                     {selectedPerson.name}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {[selectedPerson.villageName, selectedPerson.casteName]
+                    {[selectedPerson.locationName, selectedPerson.casteName]
                       .filter(Boolean)
                       .join(" • ")}
                   </Typography>

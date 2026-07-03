@@ -18,12 +18,12 @@ import PublicIcon from "@mui/icons-material/Public";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch } from "../../store/hooks";
-import { fetchVillageHeritage } from "../../store/thunks/apiThunks";
+import { fetchLocationHeritage } from "../../store/thunks/apiThunks";
 
 interface HeritageData {
-  villageOrigin: string;
+  locationOrigin: string;
   foundedYear: string;
   founders: string;
   genealogy: {
@@ -36,27 +36,27 @@ interface HeritageData {
 
 export const HeritagePage: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { selectedVillage, villages } = useVillage();
+  const { selectedLocation, locations } = useLocations();
   const [heritageData, setHeritageData] = useState<HeritageData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const villageName =
-    villages.find((v) => v.id === selectedVillage)?.name || "Select a village";
+  const locationName =
+    locations.find((v) => v.id === selectedLocation)?.name || "Select a location";
 
   useEffect(() => {
-    if (!selectedVillage) {
-      console.log("No village selected");
+    if (!selectedLocation) {
+      console.log("No location selected");
       setLoading(false);
       return;
     }
 
-    console.log("Loading heritage for village ID:", selectedVillage);
+    console.log("Loading heritage for location ID:", selectedLocation);
     setLoading(true);
 
     const loadHeritageData = async () => {
       try {
         const data = await dispatch(
-          fetchVillageHeritage(selectedVillage),
+          fetchLocationHeritage(selectedLocation),
         ).unwrap();
         if (data) {
           console.log("Heritage data found:", data);
@@ -73,13 +73,13 @@ export const HeritagePage: React.FC = () => {
     };
 
     loadHeritageData();
-  }, [selectedVillage]);
+  }, [selectedLocation]);
 
-  if (!selectedVillage) {
+  if (!selectedLocation) {
     return (
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Alert severity="info">
-          Please select a village from the dropdown above to view its heritage.
+          Please select a location from the dropdown above to view its heritage.
         </Alert>
       </Container>
     );
@@ -97,7 +97,7 @@ export const HeritagePage: React.FC = () => {
     return (
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Alert severity="warning">
-          No heritage information available for {villageName} yet.
+          No heritage information available for {locationName} yet.
         </Alert>
       </Container>
     );
@@ -107,20 +107,20 @@ export const HeritagePage: React.FC = () => {
     <>
       <Helmet>
         <title>
-          Heritage & History - Kinvia | Preserve Your Village Legacy
+          Heritage & History - Kinvia | Preserve Your Location Legacy
         </title>
         <meta
           name="description"
-          content="Explore and preserve the rich heritage and history of your village. Document ancestral legacy, traditions, and cultural heritage on Kinvia."
+          content="Explore and preserve the rich heritage and history of your location. Document ancestral legacy, traditions, and cultural heritage on Kinvia."
         />
         <meta
           name="keywords"
-          content="village heritage, history, genealogy, cultural heritage, ancestral legacy, traditions, village history"
+          content="location heritage, history, genealogy, cultural heritage, ancestral legacy, traditions, location history"
         />
         <meta property="og:title" content="Heritage & History - Kinvia" />
         <meta
           property="og:description"
-          content="Preserve your village's rich heritage and ancestral legacy."
+          content="Preserve your location's rich heritage and ancestral legacy."
         />
       </Helmet>
       {/* Hero Section */}
@@ -135,21 +135,21 @@ export const HeritagePage: React.FC = () => {
         <Container maxWidth="lg">
           <HistoryIcon sx={{ fontSize: 64, mb: 2 }} />
           <Typography variant="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            {villageName} Heritage
+            {locationName} Heritage
           </Typography>
           <Typography variant="h5" sx={{ fontWeight: 300 }}>
-            Preserving our village's rich history and ancestral legacy
+            Preserving our location's rich history and ancestral legacy
           </Typography>
         </Container>
       </Box>
 
       <Container maxWidth="lg" sx={{ py: 8 }}>
-        {/* Village History */}
+        {/* Location History */}
         <Box sx={{ mb: 8 }}>
           <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
             <LocationOnIcon sx={{ fontSize: 40, color: "#90C43C" }} />
             <Typography variant="h4" sx={{ fontWeight: 700 }}>
-              Village Origin & History
+              Location Origin & History
             </Typography>
           </Stack>
           <Paper elevation={2} sx={{ p: 4, bgcolor: "#f9f9f9" }}>
@@ -176,7 +176,7 @@ export const HeritagePage: React.FC = () => {
               paragraph
               sx={{ whiteSpace: "pre-wrap", lineHeight: 1.8 }}
             >
-              {heritageData.villageOrigin}
+              {heritageData.locationOrigin}
             </Typography>
           </Paper>
         </Box>
@@ -198,7 +198,7 @@ export const HeritagePage: React.FC = () => {
               </Typography>
             </Stack>
             <Typography variant="body1" paragraph sx={{ mb: 4 }}>
-              How the village name evolved over generations:
+              How the location name evolved over generations:
             </Typography>
 
             {/* Family Tree */}

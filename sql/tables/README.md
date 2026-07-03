@@ -17,8 +17,8 @@ Execute these files in the following order to maintain referential integrity:
 | 2     | `02_sub_caste.sql`                | sub_caste                | caste                |
 | 3     | `03_state.sql`                    | state                    | None                 |
 | 4     | `04_district.sql`                 | district                 | state                |
-| 5     | `05_village.sql`                  | village                  | district             |
-| 6     | `06_tree.sql`                     | tree                     | village              |
+| 5     | `05_location.sql`                  | location                 | district             |
+| 6     | `06_tree.sql`                     | tree                     | location             |
 | 7     | `07_people.sql`                   | people                   | tree                 |
 | 8     | `08_people_field.sql`             | people_field             | None                 |
 | 9     | `09_people_additional_detail.sql` | people_additional_detail | people, people_field |
@@ -37,7 +37,7 @@ caste
 
 state
   └── district
-      └── village
+      └── location
           └── tree
               └── people
                   ├── people_additional_detail (+ people_field)

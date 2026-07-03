@@ -2,7 +2,7 @@
 -- FUNCTION: get_dashboard_statistics
 -- =====================================================
 -- Description: Get dashboard statistics including total count of
--- people, trees, businesses, and professions across all villages
+-- people, trees, businesses, and professions across all locations
 --
 -- Parameters: None
 --
@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION get_dashboard_statistics()
 RETURNS TABLE (
   total_people BIGINT,
   total_trees BIGINT,
-  total_villages BIGINT,
+  total_locations BIGINT,
   total_businesses BIGINT,
   total_professions BIGINT,
   people_with_professions BIGINT,
@@ -28,8 +28,8 @@ BEGIN
     -- Total active trees
     (SELECT COUNT(*) FROM tree WHERE is_deleted = FALSE)::BIGINT as total_trees,
     
-    -- Total active villages
-    (SELECT COUNT(*) FROM village WHERE is_deleted = FALSE)::BIGINT as total_villages,
+    -- Total active locations
+    (SELECT COUNT(*) FROM location WHERE is_deleted = FALSE)::BIGINT as total_locations,
     
     -- Total active businesses
     (SELECT COUNT(*) FROM business WHERE is_deleted = FALSE)::BIGINT as total_businesses,

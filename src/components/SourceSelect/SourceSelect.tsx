@@ -18,7 +18,7 @@ import {
   TextField,
 } from "@mui/material";
 import { useSearchParams } from "react-router-dom";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAppSelector } from "../../store/hooks";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 
@@ -27,7 +27,7 @@ interface TreeItem {
   id: string;
   caste?: string;
   subCaste?: string;
-  villageName?: string;
+  locationName?: string;
 }
 
 interface SourceSelectProps {
@@ -47,7 +47,7 @@ export const SourceSelect = memo(function SourceSelect({
   const [value, setValue] = React.useState<string>(urlTreeId);
   const [selectedTreePreview, setSelectedTreePreview] = useState<TreeItem | null>(null);
   const valueRef = useRef(value);
-  const { selectedVillage, setSelectedVillage } = useVillage();
+  const { selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const casteMap = useMemo(
@@ -93,7 +93,7 @@ export const SourceSelect = memo(function SourceSelect({
         id: tree.id,
         caste: casteMap.get(tree.caste) || tree.caste,
         subCaste: subCasteMap.get(tree.subCaste) || tree.subCaste,
-        villageName: tree.village?.name || tree.villageName,
+        locationName: tree.location?.name || tree.locationName,
       })),
     [trees, casteMap, subCasteMap],
   );
@@ -107,7 +107,7 @@ export const SourceSelect = memo(function SourceSelect({
         item.name.toLowerCase().includes(lowerSearch) ||
         item.caste?.toLowerCase().includes(lowerSearch) ||
         item.subCaste?.toLowerCase().includes(lowerSearch) ||
-        item.villageName?.toLowerCase().includes(lowerSearch),
+        item.locationName?.toLowerCase().includes(lowerSearch),
     );
   }, [items, searchText]);
 
@@ -115,9 +115,9 @@ export const SourceSelect = memo(function SourceSelect({
     const loadTrees = async () => {
       const requestId = ++loadRequestIdRef.current;
       try {
-        // If a shared tree link points to a tree in a different village,
-        // switch village first so that tree appears in the filtered tree list.
-        // Do this only once per URL tree value to avoid blocking manual village changes.
+        // If a shared tree link points to a tree in a different location,
+        // switch location first so that tree appears in the filtered tree list.
+        // Do this only once per URL tree value to avoid blocking manual location changes.
         if (
           resolveSharedTreeOnInitRef.current &&
           urlTreeId &&
@@ -135,16 +135,16 @@ export const SourceSelect = memo(function SourceSelect({
                 caste: casteMap.get(targetTree.caste) || targetTree.caste,
                 subCaste:
                   subCasteMap.get(targetTree.subCaste) || targetTree.subCaste,
-                villageName: targetTree.village?.name,
+                locationName: targetTree.location?.name,
               });
             }
             if (
-              targetTree?.villageId &&
-              targetTree.villageId !== selectedVillage
+              targetTree?.locationId &&
+              targetTree.locationId !== selectedLocation
             ) {
               sharedTreeResolvedRef.current = urlTreeId;
               resolveSharedTreeOnInitRef.current = false;
-              setSelectedVillage(targetTree.villageId);
+              setSelectedLocation(targetTree.locationId);
               return;
             }
             sharedTreeResolvedRef.current = urlTreeId;
@@ -153,7 +153,7 @@ export const SourceSelect = memo(function SourceSelect({
             if (loadRequestIdRef.current !== requestId) {
               return;
             }
-            console.warn("Could not resolve shared tree village:", err);
+            console.warn("Could not resolve shared tree location:", err);
             sharedTreeResolvedRef.current = urlTreeId;
             resolveSharedTreeOnInitRef.current = false;
           }
@@ -163,7 +163,7 @@ export const SourceSelect = memo(function SourceSelect({
           resolveSharedTreeOnInitRef.current = false;
         }
 
-        const sourceTrees = await ApiService.getTrees(selectedVillage);
+        const sourceTrees = await ApiService.getTrees(selectedLocation);
         if (loadRequestIdRef.current !== requestId) {
           return;
         }
@@ -175,8 +175,8 @@ export const SourceSelect = memo(function SourceSelect({
         let nextValue = valueRef.current;
         let notifyValue: string | null = null;
 
-        // Keep URL tree only when it exists in the currently loaded village tree list.
-        // If not present (e.g. user switched village), fall back to a valid local tree.
+        // Keep URL tree only when it exists in the currently loaded location tree list.
+        // If not present (e.g. user switched location), fall back to a valid local tree.
         if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
           nextValue = urlTreeId;
         }
@@ -224,8 +224,8 @@ export const SourceSelect = memo(function SourceSelect({
   }, [
     autoNotifyOnInit,
     casteMap,
-    selectedVillage,
-    setSelectedVillage,
+    selectedLocation,
+    setSelectedLocation,
     subCasteMap,
     urlTreeId,
   ]);
@@ -257,9 +257,9 @@ export const SourceSelect = memo(function SourceSelect({
       >
         {item.name}
       </Typography>
-      {(item.caste || item.subCaste || item.villageName) && (
+      {(item.caste || item.subCaste || item.locationName) && (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {[item.caste, item.subCaste, item.villageName]
+          {[item.caste, item.subCaste, item.locationName]
             .filter(Boolean)
             .join(" • ")}
         </Typography>
@@ -315,7 +315,7 @@ export const SourceSelect = memo(function SourceSelect({
                 {item.name}
               </Typography>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {[item.caste, item.subCaste, item.villageName]
+                {[item.caste, item.subCaste, item.locationName]
                   .filter(Boolean)
                   .join(" • ")}
               </Typography>

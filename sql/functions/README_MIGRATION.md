@@ -18,7 +18,7 @@ sql/functions/
     ├── 02_sub_caste.sql
     ├── 03_state.sql
     ├── 04_district.sql
-    ├── 05_village.sql
+    ├── 05_location.sql
     ├── 06_tree.sql
     ├── 07_people.sql
     ├── 08_people_field.sql

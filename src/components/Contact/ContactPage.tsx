@@ -37,7 +37,7 @@ const defaultProfile: ProfileData = {
   title: "Full-Stack Engineer | Builder",
   bio: `I am a software engineer with over 10 years of experience in building scalable and user-friendly applications.
 
-This family tree app is a personal effort to digitally preserve our village’s lineage, relationships, and cultural heritage for future generations.
+This family tree app is a personal effort to digitally preserve our location’s lineage, relationships, and cultural heritage for future generations.
 
 If you have any feedback, corrections, or suggestions, feel free to contact me. Your input helps keep this data accurate and meaningful.`,
   email: "vikram@kinvia.in",

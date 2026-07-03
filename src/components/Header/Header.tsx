@@ -30,16 +30,17 @@ import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [villagePickerOpen, setVillagePickerOpen] = useState(false);
-  const [villageSearch, setVillageSearch] = useState("");
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [locationSearch, setLocationSearch] = useState("");
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [actionableRequestCount, setActionableRequestCount] = useState(0);
@@ -47,8 +48,39 @@ export const Header: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
   const navigate = useNavigate();
-  const { selectedVillage, setSelectedVillage, villages } = useVillage();
+  const { selectedLocation, setSelectedLocation, locations } = useLocations();
   const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
+  // Full hierarchy option for the selected location (village, district, state).
+  const [headerLocationOption, setHeaderLocationOption] =
+    useState<LocationCombinationOption | null>(null);
+
+  const applyLocation = useCallback(
+    (option: LocationCombinationOption | null) => {
+      setHeaderLocationOption(option);
+      setSelectedLocation(option?.locationId || "");
+    },
+    [setSelectedLocation],
+  );
+
+  // Resolve the selected id (e.g. auto-selected default) to its full hierarchy label.
+  useEffect(() => {
+    if (!selectedLocation) {
+      setHeaderLocationOption(null);
+      return;
+    }
+    if (headerLocationOption?.locationId === selectedLocation) return;
+    let active = true;
+    ApiService.searchLocationCombinations({ locationId: selectedLocation, limit: 1 })
+      .then((rows) => {
+        if (active) setHeaderLocationOption(rows[0] || null);
+      })
+      .catch(() => {
+        /* leave label empty on failure */
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedLocation, headerLocationOption?.locationId]);
 
   useEffect(() => {
     let active = true;
@@ -155,15 +187,15 @@ export const Header: React.FC = () => {
     [currentUser, navigate],
   );
 
-  const selectedVillageOption =
-    villages.find((village) => village.id === selectedVillage) || null;
-  const filteredVillages = useMemo(() => {
-    const search = villageSearch.trim().toLowerCase();
-    if (!search) return villages;
-    return villages.filter((village) =>
-      village.name.toLowerCase().includes(search),
+  const selectedLocationOption =
+    locations.find((location) => location.id === selectedLocation) || null;
+  const filteredLocations = useMemo(() => {
+    const search = locationSearch.trim().toLowerCase();
+    if (!search) return locations;
+    return locations.filter((location) =>
+      location.name.toLowerCase().includes(search),
     );
-  }, [villageSearch, villages]);
+  }, [locationSearch, locations]);
 
   const drawerContent = (
     <Box sx={{ width: 300, p: 2 }}>
@@ -173,16 +205,17 @@ export const Header: React.FC = () => {
         </IconButton>
       </Box>
 
-      {/* Village Selector for Mobile */}
+      {/* Location Selector for Mobile */}
       <Box sx={{ mb: 2, px: 2 }}>
         <Button
           fullWidth
           variant="outlined"
-          onClick={() => setVillagePickerOpen(true)}
+          onClick={() => setLocationPickerOpen(true)}
           sx={{ justifyContent: "flex-start", textTransform: "none" }}
         >
-          {selectedVillageOption?.name ||
-            (villages.length === 0 ? "Loading villages..." : "Select Village")}
+          {headerLocationOption?.label ||
+            selectedLocationOption?.name ||
+            (locations.length === 0 ? "Loading locations..." : "Select Location")}
         </Button>
       </Box>
 
@@ -395,62 +428,17 @@ export const Header: React.FC = () => {
             </Box>
           )}
 
-          {/* Village Selector */}
+          {/* Location Selector */}
           {!isMobile && (
-            <Autocomplete
-              options={villages}
-              value={selectedVillageOption}
-              onChange={(_event, value) => setSelectedVillage(value?.id || "")}
-              getOptionLabel={(option) => option.name}
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              noOptionsText={
-                villages.length === 0 ? "Loading villages..." : "No villages found"
-              }
-              sx={{
-                minWidth: 240,
-                ml: 2,
-                "& .MuiOutlinedInput-root": {
-                  color: "#0f172a",
-                  "& fieldset": {
-                    borderColor: "rgba(15,23,42,0.2)",
-                  },
-                  "&:hover fieldset": {
-                    borderColor: "rgba(13,110,253,0.65)",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "#0d6efd",
-                  },
-                },
-                "& .MuiInputLabel-root": {
-                  color: "#475569",
-                },
-                "& .MuiSvgIcon-root": {
-                  color: "#475569",
-                },
-                "& .MuiAutocomplete-input::placeholder": {
-                  color: "#64748b",
-                  opacity: 1,
-                },
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  placeholder={villages.length === 0 ? "Loading..." : "Search village"}
-                  InputProps={{
-                    ...params.InputProps,
-                    startAdornment: (
-                      <>
-                        <InputAdornment position="start">
-                          <LocationOnIcon fontSize="small" />
-                        </InputAdornment>
-                        {params.InputProps.startAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
-            />
+            <Box sx={{ minWidth: 280, ml: 2 }}>
+              <LocationPicker
+                value={headerLocationOption}
+                onChange={applyLocation}
+                label=""
+                placeholder="Search location"
+                size="small"
+              />
+            </Box>
           )}
 
           {/* Auth Buttons */}
@@ -552,7 +540,7 @@ export const Header: React.FC = () => {
                   color="inherit"
                   variant="outlined"
                   startIcon={<LocationOnIcon fontSize="small" />}
-                  onClick={() => setVillagePickerOpen(true)}
+                  onClick={() => setLocationPickerOpen(true)}
                   sx={{
                     textTransform: "none",
                     borderColor: "rgba(15,23,42,0.2)",
@@ -570,8 +558,8 @@ export const Header: React.FC = () => {
                   }}
                 >
                   <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {villages.find((v) => v.id === selectedVillage)?.name ||
-                      (villages.length === 0 ? "Loading..." : "Select Village")}
+                    {locations.find((v) => v.id === selectedLocation)?.name ||
+                      (locations.length === 0 ? "Loading..." : "Select Location")}
                   </Box>
                 </Button>
               </Box>
@@ -619,22 +607,22 @@ export const Header: React.FC = () => {
 
       <Dialog
         fullScreen
-        open={villagePickerOpen}
+        open={locationPickerOpen}
         onClose={() => {
-          setVillageSearch("");
-          setVillagePickerOpen(false);
+          setLocationSearch("");
+          setLocationPickerOpen(false);
         }}
       >
         <AppBar position="static" color="primary">
           <Toolbar>
             <Typography sx={{ flexGrow: 1 }} variant="h6">
-              Select Village
+              Select Location
             </Typography>
             <IconButton
               color="inherit"
               onClick={() => {
-                setVillageSearch("");
-                setVillagePickerOpen(false);
+                setLocationSearch("");
+                setLocationPickerOpen(false);
               }}
             >
               <CloseIcon />
@@ -642,39 +630,14 @@ export const Header: React.FC = () => {
           </Toolbar>
         </AppBar>
         <Box sx={{ p: 2 }}>
-          <TextField
-            fullWidth
-            placeholder="Search village"
-            value={villageSearch}
-            onChange={(e) => setVillageSearch(e.target.value)}
-            sx={{ mb: 2 }}
+          <LocationPicker
+            value={headerLocationOption}
+            onChange={(option) => {
+              applyLocation(option);
+              if (option) setLocationPickerOpen(false);
+            }}
+            autoFocus
           />
-          <List>
-            {villages.length === 0 && (
-              <ListItem>
-                <ListItemText primary="Loading villages..." />
-              </ListItem>
-            )}
-            {villages.length > 0 && filteredVillages.length === 0 && (
-              <ListItem>
-                <ListItemText primary="No villages found" />
-              </ListItem>
-            )}
-            {filteredVillages.map((village) => (
-              <ListItem key={village.id} disablePadding>
-                <ListItemButton
-                  selected={selectedVillage === village.id}
-                  onClick={() => {
-                    setSelectedVillage(village.id);
-                    setVillageSearch("");
-                    setVillagePickerOpen(false);
-                  }}
-                >
-                  <ListItemText primary={village.name} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
         </Box>
       </Dialog>
     </>

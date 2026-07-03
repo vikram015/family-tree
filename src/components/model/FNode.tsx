@@ -16,8 +16,8 @@ export type FNode = ExtNode & {
   customFields?: Record<string, string>; // Dynamic custom fields
   hierarchy?: Array<{ name: string; id: string }>; // Complete parent chain hierarchy
   treeId?: string; // Tree ID this node belongs to
-  villageId?: string; // Village ID this node belongs to
-  villageName?: string; // Village name
+  locationId?: string; // Location ID this node belongs to
+  locationName?: string; // Location name
   name_lowercase?: string; // Lowercase name for case-insensitive search
   relationStartDate?: string; // Optional relation start date when creating/linking spouse
   relationEndDate?: string; // Optional relation end date when creating/linking spouse

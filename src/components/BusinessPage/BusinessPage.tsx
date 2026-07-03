@@ -39,14 +39,14 @@ import NotesIcon from "@mui/icons-material/Notes";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
 import SearchIcon from "@mui/icons-material/Search";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
-  fetchBusinessesByVillage,
+  fetchBusinessesByLocation,
   selectBusinesses,
   selectBusinessLoading,
-  selectBusinessLoadedVillageId,
+  selectBusinessLoadedLocationId,
   clearBusinesses,
 } from "../../store/slices/businessSlice";
 import {
@@ -70,7 +70,7 @@ interface Business {
   ownerId?: string; // Link to person in family tree
   ownerName?: string; // Display name of owner
   contact?: string;
-  villageId: string;
+  locationId: string;
   createdAt?: any;
   updatedAt?: any;
   treeId?: string; // Tree ID for family page navigation
@@ -104,7 +104,7 @@ interface PersonSearchResult {
   dob?: string;
   treeId: string;
   hierarchy: any[];
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
 }
@@ -239,13 +239,13 @@ const OwnerLink: React.FC<{
 export const BusinessPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { selectedVillage, setSelectedVillage, villages } = useVillage();
+  const { selectedLocation, setSelectedLocation, locations } = useLocations();
   const { currentUser, isAdmin } = useAuth();
 
   // Redux state
   const businesses = useAppSelector(selectBusinesses);
   const loading = useAppSelector(selectBusinessLoading);
-  const loadedVillageId = useAppSelector(selectBusinessLoadedVillageId);
+  const loadedLocationId = useAppSelector(selectBusinessLoadedLocationId);
   const professions = useAppSelector(selectProfessions);
   const peopleWithProfessions = useAppSelector(selectPeopleWithProfessions);
   const professionsWithCount = useAppSelector(selectProfessionsWithCount);
@@ -273,7 +273,7 @@ export const BusinessPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
-  const defaultVillageAppliedForUserRef = useRef<string | null>(null);
+  const defaultLocationAppliedForUserRef = useRef<string | null>(null);
 
   // Initialize default categories (static - no need to fetch from DB)
   const initializeCategories = () => {
@@ -341,8 +341,8 @@ export const BusinessPage: React.FC = () => {
     setCategories(defaultCategories);
   };
 
-  const villageName =
-    villages.find((v) => v.id === selectedVillage)?.name || "Select a village";
+  const locationName =
+    locations.find((v) => v.id === selectedLocation)?.name || "Select a location";
 
   useEffect(() => {
     // Initialize categories on component mount
@@ -351,60 +351,60 @@ export const BusinessPage: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) {
-      defaultVillageAppliedForUserRef.current = null;
+      defaultLocationAppliedForUserRef.current = null;
       return;
     }
 
     const userKey = currentUser.uid || "current-user";
-    if (defaultVillageAppliedForUserRef.current === userKey) {
+    if (defaultLocationAppliedForUserRef.current === userKey) {
       return;
     }
 
     let active = true;
-    defaultVillageAppliedForUserRef.current = userKey;
+    defaultLocationAppliedForUserRef.current = userKey;
 
     ApiService.getDefaultUserTree()
       .then((target) => {
-        if (!active || !target?.villageId) {
+        if (!active || !target?.locationId) {
           return;
         }
 
-        const villageExists =
-          villages.length === 0 || villages.some((village) => village.id === target.villageId);
-        if (villageExists && selectedVillage !== target.villageId) {
-          setSelectedVillage(target.villageId);
+        const locationExists =
+          locations.length === 0 || locations.some((location) => location.id === target.locationId);
+        if (locationExists && selectedLocation !== target.locationId) {
+          setSelectedLocation(target.locationId);
         }
       })
       .catch((error) => {
         if (active) {
-          console.warn("Failed to resolve default business village:", error);
+          console.warn("Failed to resolve default business location:", error);
         }
       });
 
     return () => {
       active = false;
     };
-  }, [currentUser, selectedVillage, setSelectedVillage, villages]);
+  }, [currentUser, selectedLocation, setSelectedLocation, locations]);
 
-  // Fetch businesses when village changes - dispatches Redux action
+  // Fetch businesses when location changes - dispatches Redux action
   useEffect(() => {
-    if (!selectedVillage) {
+    if (!selectedLocation) {
       dispatch(clearBusinesses());
       return;
     }
 
-    dispatch(fetchBusinessesByVillage(selectedVillage));
-  }, [selectedVillage, dispatch]);
+    dispatch(fetchBusinessesByLocation(selectedLocation));
+  }, [selectedLocation, dispatch]);
 
   // Fetch professions and people with their professions - dispatches Redux action
   useEffect(() => {
-    if (!selectedVillage) {
+    if (!selectedLocation) {
       dispatch(clearProfessions());
       return;
     }
 
-    dispatch(fetchProfessionsData(selectedVillage));
-  }, [selectedVillage, dispatch]);
+    dispatch(fetchProfessionsData(selectedLocation));
+  }, [selectedLocation, dispatch]);
 
   const handleOpenProfessionDialog = (person: FNode) => {
     setSelectedPersonForProfession(person);
@@ -432,8 +432,8 @@ export const BusinessPage: React.FC = () => {
       );
 
       // Refresh professions data by dispatching Redux action
-      if (selectedVillage) {
-        dispatch(fetchProfessionsData(selectedVillage));
+      if (selectedLocation) {
+        dispatch(fetchProfessionsData(selectedLocation));
       }
       handleCloseProfessionDialog();
     } catch (error) {
@@ -450,8 +450,8 @@ export const BusinessPage: React.FC = () => {
       await ApiService.removeProfessionFromPerson(personId, professionId);
 
       // Refresh professions data by dispatching Redux action
-      if (selectedVillage) {
-        dispatch(fetchProfessionsData(selectedVillage));
+      if (selectedLocation) {
+        dispatch(fetchProfessionsData(selectedLocation));
       }
     } catch (error) {
       console.error("Error removing profession:", error);
@@ -472,8 +472,8 @@ export const BusinessPage: React.FC = () => {
       });
 
       // Refresh professions data by dispatching Redux action
-      if (selectedVillage) {
-        dispatch(fetchProfessionsData(selectedVillage));
+      if (selectedLocation) {
+        dispatch(fetchProfessionsData(selectedLocation));
       }
       setSelectedProfession(newProf);
       setNewProfessionName("");
@@ -542,25 +542,25 @@ export const BusinessPage: React.FC = () => {
 
   const handleBusinessSaved = () => {
     // Refresh businesses list by dispatching Redux action
-    if (selectedVillage) {
-      dispatch(fetchBusinessesByVillage(selectedVillage));
+    if (selectedLocation) {
+      dispatch(fetchBusinessesByLocation(selectedLocation));
     }
   };
 
-  if (!selectedVillage) {
+  if (!selectedLocation) {
     return (
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Alert severity="info">
-          Please select a village from the dropdown above to view businesses.
+          Please select a location from the dropdown above to view businesses.
         </Alert>
       </Container>
     );
   }
 
-  // Show the loader until the businesses for the CURRENTLY selected village have
-  // been loaded. Without the loadedVillageId check there's a flash where the page
+  // Show the loader until the businesses for the CURRENTLY selected location have
+  // been loaded. Without the loadedLocationId check there's a flash where the page
   // renders with stale/empty data before the fetch effect flips `loading` on.
-  if (loading || loadedVillageId !== selectedVillage) {
+  if (loading || loadedLocationId !== selectedLocation) {
     return (
       <Container maxWidth="lg" sx={{ py: 8, textAlign: "center" }}>
         <CircularProgress />
@@ -675,14 +675,14 @@ export const BusinessPage: React.FC = () => {
                   fontSize: { xs: 32, md: 44 },
                 }}
               >
-                {villageName} Business Network
+                {locationName} Business Network
               </Typography>
               <Typography
                 variant="h6"
                 sx={{ color: mutedText, maxWidth: 680, lineHeight: 1.55 }}
               >
                 Connect with family-run businesses, trusted services, and
-                professional talent from your village.
+                professional talent from your location.
               </Typography>
             </Box>
             {isAdmin() && (
@@ -720,7 +720,7 @@ export const BusinessPage: React.FC = () => {
                 Registered Businesses
               </Typography>
               <Typography variant="body1" sx={{ color: mutedText, mb: 3 }}>
-                Discover and connect with family-run businesses in {villageName}.
+                Discover and connect with family-run businesses in {locationName}.
               </Typography>
 
               <Stack
@@ -776,7 +776,7 @@ export const BusinessPage: React.FC = () => {
                     border: "1px solid rgba(13,110,253,0.16)",
                   }}
                 >
-                  No businesses registered yet for {villageName}.{" "}
+                  No businesses registered yet for {locationName}.{" "}
                   {isAdmin() && "Click 'Add Business' to get started!"}
                 </Alert>
               ) : filteredBusinesses.length === 0 ? (
@@ -1413,7 +1413,7 @@ export const BusinessPage: React.FC = () => {
         onClose={handleCloseDialog}
         business={editingBusiness}
         enableOwnerSelect
-        villageId={selectedVillage}
+        locationId={selectedLocation}
         onSaved={handleBusinessSaved}
       />
 
@@ -1445,7 +1445,7 @@ export const BusinessPage: React.FC = () => {
               setProfessionSearchInput(person.name);
             }}
             selectedPerson={selectedPersonForProfession}
-            villageId={selectedVillage}
+            locationId={selectedLocation}
           />
 
           <FormControl fullWidth sx={{ mb: 2 }}>

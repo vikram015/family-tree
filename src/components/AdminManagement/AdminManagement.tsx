@@ -49,8 +49,8 @@ import {
   blockAdminUser,
   deleteAdminUser,
   fetchAdminUsers,
-  fetchPendingVillageAccessRequests,
-  reviewVillageAccessRequest,
+  fetchPendingLocationAccessRequests,
+  reviewLocationAccessRequest,
   unblockAdminUser,
   updateAdminUser,
   verifyAdminUser,
@@ -67,7 +67,7 @@ import {
   selectCastes,
   selectSubCastes,
 } from "../../store/slices/casteSlice";
-import { fetchVillages, selectVillages } from "../../store/slices/villageSlice";
+import { fetchLocations, selectLocations } from "../../store/slices/locationSlice";
 import { useLocation, useNavigate } from "react-router-dom";
 
 interface TabPanelProps {
@@ -78,10 +78,10 @@ interface TabPanelProps {
 
 const TAB_KEYS = [
   "users",
-  "village-requests",
+  "location-requests",
   "states",
   "districts",
-  "villages",
+  "locations",
   "castes",
   "sub-castes",
 ] as const;
@@ -117,7 +117,7 @@ export const AdminManagement: React.FC = () => {
   // Redux state
   const states = useAppSelector(selectStates);
   const districts = useAppSelector(selectDistricts);
-  const villagesList = useAppSelector(selectVillages);
+  const locationsList = useAppSelector(selectLocations);
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
 
@@ -130,10 +130,10 @@ export const AdminManagement: React.FC = () => {
   const [userSearch, setUserSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [editUser, setEditUser] = useState<AppUser | null>(null);
-  const [editMode, setEditMode] = useState<"full" | "villages">("full");
+  const [editMode, setEditMode] = useState<"full" | "locations">("full");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
-  const [selectedVillages, setSelectedVillages] = useState<string[]>([]);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   // Block/unblock confirmation dialog state.
   const [blockTarget, setBlockTarget] = useState<AppUser | null>(null);
   const [blockReason, setBlockReason] = useState("");
@@ -147,7 +147,7 @@ export const AdminManagement: React.FC = () => {
   // Add dialog states
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addType, setAddType] = useState<
-    "state" | "district" | "village" | "caste" | "subcaste"
+    "state" | "district" | "location" | "caste" | "subcaste"
   >("state");
   const [newName, setNewName] = useState("");
   const [selectedParentId, setSelectedParentId] = useState("");
@@ -161,7 +161,7 @@ export const AdminManagement: React.FC = () => {
         return;
       }
       const data = await dispatch(
-        fetchPendingVillageAccessRequests(userId),
+        fetchPendingLocationAccessRequests(userId),
       ).unwrap();
       setPendingRequests(data || []);
     } catch (err) {
@@ -175,7 +175,7 @@ export const AdminManagement: React.FC = () => {
       await Promise.all([
         dispatch(fetchStates()),
         dispatch(fetchAllDistricts()),
-        dispatch(fetchVillages()),
+        dispatch(fetchLocations()),
         dispatch(fetchCastes()),
         dispatch(fetchAllSubCastes()),
       ]);
@@ -285,7 +285,7 @@ export const AdminManagement: React.FC = () => {
   }, [location.search, superAdmin]);
 
   const handleAddClick = (
-    type: "state" | "district" | "village" | "caste" | "subcaste",
+    type: "state" | "district" | "location" | "caste" | "subcaste",
   ) => {
     setAddType(type);
     setNewName("");
@@ -344,13 +344,13 @@ export const AdminManagement: React.FC = () => {
           name: newName,
           stateId: selectedParentId,
         });
-      } else if (addType === "village") {
+      } else if (addType === "location") {
         if (!selectedParentId) {
           setError("Please select a district");
           setLoading(false);
           return;
         }
-        await ApiService.createVillage?.({
+        await ApiService.createLocation?.({
           name: newName,
           districtId: selectedParentId,
         });
@@ -408,16 +408,16 @@ export const AdminManagement: React.FC = () => {
     setEditUser(user);
     setEditMode("full");
     setSelectedRole(user.role);
-    setSelectedVillages(user.villages || []);
+    setSelectedLocations(user.locations || []);
     setEditDialogOpen(true);
   };
 
-  const handleEditVillagesClick = (user: AppUser) => {
+  const handleEditLocationsClick = (user: AppUser) => {
     if (!isSuperAdmin()) return;
     setEditUser(user);
-    setEditMode("villages");
+    setEditMode("locations");
     setSelectedRole("admin");
-    setSelectedVillages(user.villages || []);
+    setSelectedLocations(user.locations || []);
     setEditDialogOpen(true);
   };
 
@@ -430,7 +430,7 @@ export const AdminManagement: React.FC = () => {
         updateAdminUser({
           userId: editUser.id,
           role: selectedRole,
-          villages: selectedRole === "superadmin" ? [] : selectedVillages,
+          locations: selectedRole === "superadmin" ? [] : selectedLocations,
           modifiedBy: userProfile?.id || null,
         }),
       ).unwrap();
@@ -490,11 +490,11 @@ export const AdminManagement: React.FC = () => {
     }
   };
 
-  const handleVillageToggle = (villageId: string) => {
-    setSelectedVillages((prev) =>
-      prev.includes(villageId)
-        ? prev.filter((v) => v !== villageId)
-        : [...prev, villageId],
+  const handleLocationToggle = (locationId: string) => {
+    setSelectedLocations((prev) =>
+      prev.includes(locationId)
+        ? prev.filter((v) => v !== locationId)
+        : [...prev, locationId],
     );
   };
 
@@ -508,7 +508,7 @@ export const AdminManagement: React.FC = () => {
         throw new Error("User profile not loaded");
       }
       const data = await dispatch(
-        reviewVillageAccessRequest({
+        reviewLocationAccessRequest({
           userId,
           requestId,
           action,
@@ -598,7 +598,7 @@ export const AdminManagement: React.FC = () => {
           )}
           {isSuperAdmin() && (
             <Tab
-              label="Villages"
+              label="Locations"
               id="admin-tab-4"
               aria-controls="admin-tabpanel-4"
             />
@@ -649,8 +649,8 @@ export const AdminManagement: React.FC = () => {
           </Box>
           {!isSuperAdmin() && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              Only superadmin can edit users. Admins can review village access
-              requests from the "Village Requests" tab.
+              Only superadmin can edit users. Admins can review location access
+              requests from the "Location Requests" tab.
             </Alert>
           )}
           <TableContainer sx={{ overflowX: "auto" }}>
@@ -895,19 +895,19 @@ export const AdminManagement: React.FC = () => {
           )}
         </TabPanel>
 
-        {/* Villages Tab */}
+        {/* Locations Tab */}
         <TabPanel value={tabValue} index={3}>
           {!isSuperAdmin() ? (
-            <Alert severity="info">Only superadmin can manage villages.</Alert>
+            <Alert severity="info">Only superadmin can manage locations.</Alert>
           ) : (
             <>
               <Box sx={{ mb: 2 }}>
                 <Button
                   variant="contained"
                   startIcon={<Add />}
-                  onClick={() => handleAddClick("village")}
+                  onClick={() => handleAddClick("location")}
                 >
-                  Add Village
+                  Add Location
                 </Button>
               </Box>
               <TableContainer sx={{ overflowX: "auto" }}>
@@ -921,20 +921,20 @@ export const AdminManagement: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {villagesList.map((village) => {
+                    {locationsList.map((location) => {
                       const district = districts.find(
-                        (d) => d.id === village.districtId,
+                        (d) => d.id === location.districtId,
                       );
                       const state = states.find(
                         (s) => s.id === district?.stateId,
                       );
                       return (
-                        <TableRow key={village.id}>
-                        <TableCell>{village.name}</TableCell>
+                        <TableRow key={location.id}>
+                        <TableCell>{location.name}</TableCell>
                         <TableCell>{district?.name || "-"}</TableCell>
                         <TableCell>{state?.name || "-"}</TableCell>
                         <TableCell>
-                            {formatDate(village.createdAt)}
+                            {formatDate(location.createdAt)}
                           </TableCell>
                         </TableRow>
                       );
@@ -1040,7 +1040,7 @@ export const AdminManagement: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
-            {(addType === "district" || addType === "village") && (
+            {(addType === "district" || addType === "location") && (
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>
                   {addType === "district" ? "State" : "District"}
@@ -1138,39 +1138,39 @@ export const AdminManagement: React.FC = () => {
               </FormControl>
             )}
 
-            {(selectedRole === "admin" || editMode === "villages") && (
+            {(selectedRole === "admin" || editMode === "locations") && (
               <Box>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Assign Villages:
+                  Assign Locations:
                 </Typography>
-                {villagesList.length === 0 ? (
+                {locationsList.length === 0 ? (
                   <Typography variant="caption" color="text.secondary">
-                    No villages available
+                    No locations available
                   </Typography>
                 ) : (
                   <Box
                     sx={{ display: "flex", flexDirection: "column", gap: 1 }}
                   >
-                    {villagesList.map((village) => (
+                    {locationsList.map((location) => (
                       <Box
-                        key={village.id}
+                        key={location.id}
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           p: 1,
                           border: 1,
-                          borderColor: selectedVillages.includes(village.id)
+                          borderColor: selectedLocations.includes(location.id)
                             ? "primary.main"
                             : "divider",
                           borderRadius: 1,
                           cursor: "pointer",
-                          bgcolor: selectedVillages.includes(village.id)
+                          bgcolor: selectedLocations.includes(location.id)
                             ? "action.selected"
                             : "transparent",
                         }}
-                        onClick={() => handleVillageToggle(village.id)}
+                        onClick={() => handleLocationToggle(location.id)}
                       >
-                        <Typography>{village.name}</Typography>
+                        <Typography>{location.name}</Typography>
                       </Box>
                     ))}
                   </Box>
@@ -1180,7 +1180,7 @@ export const AdminManagement: React.FC = () => {
 
             {selectedRole === "superadmin" && (
               <Alert severity="info" sx={{ mt: 2 }}>
-                Super admins have access to all villages automatically.
+                Super admins have access to all locations automatically.
               </Alert>
             )}
           </Box>

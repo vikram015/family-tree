@@ -22,7 +22,7 @@ interface PersonSearchResult {
   treeName?: string;
   hierarchy: any[];
   gotra?: string;
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
 }
@@ -79,7 +79,7 @@ interface PersonSearchFieldProps {
   ) => void;
   onPersonSelect: (person: PersonSearchResult) => void;
   selectedPerson?: PersonSearchResult | any | null;
-  villageId?: string;
+  locationId?: string;
   treeId?: string;
   /** When set, only candidates of this gender are shown in the results. */
   filterGender?: string;
@@ -98,7 +98,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   onSearchValueChange,
   onPersonSelect,
   selectedPerson,
-  villageId,
+  locationId,
   treeId,
   filterGender,
   disabled = false,
@@ -115,7 +115,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
 
   const handleSearch = useCallback(async () => {
     const trimmedSearch = searchValue.trim();
-    const hasScope = Boolean(treeId || villageId);
+    const hasScope = Boolean(treeId || locationId);
 
     if (!hasScope || trimmedSearch.length < minSearchLength) {
       setSearchResults([]);
@@ -129,7 +129,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     try {
       const results = await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
         treeId,
-        villageId,
+        locationId,
       });
 
       if (searchId !== latestSearchRef.current) {
@@ -148,7 +148,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           treeName: person.treeName,
           hierarchy: person.parentHierarchy || [],
           gotra: person.gotra,
-          villageName: person.villageName,
+          locationName: person.locationName,
           casteName: person.casteName,
           subCasteName: person.subCasteName,
         }))
@@ -168,7 +168,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         setSearchResults([]);
       }
     }
-  }, [minSearchLength, searchValue, treeId, villageId, filterGender]);
+  }, [minSearchLength, searchValue, treeId, locationId, filterGender]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
     setSearchResults([]);
@@ -308,7 +308,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
                     spacing={0.75}
                     sx={{ flexWrap: "wrap", rowGap: 0.75, mb: 0.75 }}
                   >
-                    {renderMetaPill("Village", person.villageName, "teal")}
+                    {renderMetaPill("Location", person.locationName, "teal")}
                     {renderMetaPill("Caste", person.casteName, "slate")}
                     {renderMetaPill("Sub caste", person.gotra || person.subCasteName, "slate")}
                   </Stack>

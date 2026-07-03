@@ -18,7 +18,7 @@ export const updateAdminUser = createAsyncThunk(
     payload: {
       userId: string;
       role: string;
-      villages: string[];
+      locations: string[];
       modifiedBy?: string | null;
     },
     { rejectWithValue },
@@ -26,7 +26,7 @@ export const updateAdminUser = createAsyncThunk(
     try {
       return await backendApi.patch<any>(`/api/admin/users/${payload.userId}`, {
         role: payload.role,
-        villages: payload.villages,
+        locations: payload.locations,
         modifiedBy: payload.modifiedBy || null,
       });
     } catch (error: any) {
@@ -94,21 +94,21 @@ export const unblockAdminUser = createAsyncThunk(
   },
 );
 
-export const fetchPendingVillageAccessRequests = createAsyncThunk(
-  "api/fetchPendingVillageAccessRequests",
+export const fetchPendingLocationAccessRequests = createAsyncThunk(
+  "api/fetchPendingLocationAccessRequests",
   async (userId: string, { rejectWithValue }) => {
     try {
-      return await backendApi.get<any[]>("/api/village-access/pending", { userId });
+      return await backendApi.get<any[]>("/api/location-access/pending", { userId });
     } catch (error: any) {
       return rejectWithValue(
-        error?.message || "Failed to fetch pending village access requests",
+        error?.message || "Failed to fetch pending location access requests",
       );
     }
   },
 );
 
-export const reviewVillageAccessRequest = createAsyncThunk(
-  "api/reviewVillageAccessRequest",
+export const reviewLocationAccessRequest = createAsyncThunk(
+  "api/reviewLocationAccessRequest",
   async (
     payload: {
       userId: string;
@@ -120,7 +120,7 @@ export const reviewVillageAccessRequest = createAsyncThunk(
   ) => {
     try {
       return await backendApi.post<{ success: boolean; message?: string; error?: string }>(
-        "/api/village-access/review",
+        "/api/location-access/review",
         {
           userId: payload.userId,
           requestId: payload.requestId,
@@ -134,33 +134,33 @@ export const reviewVillageAccessRequest = createAsyncThunk(
   },
 );
 
-export const fetchMyVillageAccessRequests = createAsyncThunk(
-  "api/fetchMyVillageAccessRequests",
+export const fetchMyLocationAccessRequests = createAsyncThunk(
+  "api/fetchMyLocationAccessRequests",
   async (userId: string, { rejectWithValue }) => {
     try {
-      return await backendApi.get<any[]>("/api/village-access/my-requests", { userId });
+      return await backendApi.get<any[]>("/api/location-access/my-requests", { userId });
     } catch (error: any) {
       return rejectWithValue(error?.message || "Failed to fetch your requests");
     }
   },
 );
 
-export const submitVillageAccessRequest = createAsyncThunk(
-  "api/submitVillageAccessRequest",
+export const submitLocationAccessRequest = createAsyncThunk(
+  "api/submitLocationAccessRequest",
   async (
     payload: {
       userId: string;
-      villageId: string;
+      locationId: string;
       requestMessage?: string | null;
     },
     { rejectWithValue },
   ) => {
     try {
       return await backendApi.post<{ success: boolean; message?: string; error?: string }>(
-        "/api/village-access/submit",
+        "/api/location-access/submit",
         {
           userId: payload.userId,
-          villageId: payload.villageId,
+          locationId: payload.locationId,
           requestMessage: payload.requestMessage || null,
         },
       );
@@ -170,11 +170,11 @@ export const submitVillageAccessRequest = createAsyncThunk(
   },
 );
 
-export const fetchVillageHeritage = createAsyncThunk(
-  "api/fetchVillageHeritage",
-  async (villageId: string, { rejectWithValue }) => {
+export const fetchLocationHeritage = createAsyncThunk(
+  "api/fetchLocationHeritage",
+  async (locationId: string, { rejectWithValue }) => {
     try {
-      return await backendApi.get<any>(`/api/heritage/${villageId}`);
+      return await backendApi.get<any>(`/api/heritage/${locationId}`);
     } catch (error: any) {
       return rejectWithValue(error?.message || "Failed to fetch heritage");
     }

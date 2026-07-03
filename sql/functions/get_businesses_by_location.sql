@@ -1,17 +1,17 @@
 -- =====================================================
--- FUNCTION: get_businesses_by_village
+-- FUNCTION: get_businesses_by_location
 -- =====================================================
--- Description: Get all businesses in a village with complete person details
+-- Description: Get all businesses in a location with complete person details
 -- including parent hierarchy up to 5 generations
 --
 -- Parameters:
---   p_village_id: The village to fetch businesses from
+--   p_location_id: The location to fetch businesses from
 --
 -- Returns: A table with business details and person hierarchy as JSON
 -- =====================================================
 
-CREATE OR REPLACE FUNCTION get_businesses_by_village(
-  p_village_id UUID
+CREATE OR REPLACE FUNCTION get_businesses_by_location(
+  p_location_id UUID
 )
 RETURNS TABLE (
   business_id UUID,
@@ -24,8 +24,8 @@ RETURNS TABLE (
   person_name VARCHAR,
   person_gender VARCHAR,
   person_dob DATE,
-  village_id UUID,
-  village_name VARCHAR,
+  location_id UUID,
+  location_name VARCHAR,
   caste_name VARCHAR,
   sub_caste_name VARCHAR,
   tree_id UUID,
@@ -35,11 +35,11 @@ RETURNS TABLE (
 DECLARE
   v_tree_ids UUID[];
 BEGIN
-  -- Get all tree IDs for the selected village
+  -- Get all tree IDs for the selected location
   SELECT ARRAY_AGG(t.id)
   INTO v_tree_ids
   FROM tree t
-  WHERE t.village_id = p_village_id AND t.is_deleted = FALSE;
+  WHERE t.location_id = p_location_id AND t.is_deleted = FALSE;
 
   -- Return early if no trees found
   IF v_tree_ids IS NULL OR ARRAY_LENGTH(v_tree_ids, 1) IS NULL THEN
@@ -95,8 +95,8 @@ BEGIN
       p.dob,
       p.tree_id,
       t.name as tree_name,
-      v.id as village_id,
-      v.name as village_name,
+      v.id as location_id,
+      v.name as location_name,
       c.name as caste_name,
       sc.name as sub_caste_name,
       JSONB_AGG(
@@ -108,7 +108,7 @@ BEGIN
       ) FILTER (WHERE pc.related_person_id IS NOT NULL) as parent_hierarchy
     FROM people p
     JOIN tree t ON p.tree_id = t.id
-    JOIN village v ON t.village_id = v.id
+    JOIN location v ON t.location_id = v.id
     LEFT JOIN caste c ON t.caste = c.id
     LEFT JOIN sub_caste sc ON t.sub_caste = sc.id
     LEFT JOIN parent_chain pc ON p.id = pc.id AND pc.generation >= 1
@@ -127,8 +127,8 @@ BEGIN
     pd.person_name,
     pd.gender,
     pd.dob,
-    pd.village_id,
-    pd.village_name,
+    pd.location_id,
+    pd.location_name,
     pd.caste_name,
     pd.sub_caste_name,
     pd.tree_id,

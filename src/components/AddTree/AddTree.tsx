@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
 import {
   Button,
   Dialog,
@@ -27,7 +28,7 @@ import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -44,7 +45,7 @@ interface AddTreeProps {
   hideTrigger?: boolean;
   open?: boolean;
   onClose?: () => void;
-  initialVillageId?: string;
+  initialLocationId?: string;
   initialCasteId?: string;
   initialSubCasteId?: string;
   title?: string;
@@ -143,7 +144,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
   hideTrigger = false,
   open,
   onClose,
-  initialVillageId,
+  initialLocationId,
   initialCasteId,
   initialSubCasteId,
   title = "Create a new tree",
@@ -168,14 +169,16 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const [showModal, setShowModal] = useState(false);
   const modalHistoryRef = useRef(false);
   const previousSelectedCasteRef = useRef("");
-  const [selectedVillageId, setSelectedVillageId] = useState<string>("");
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  const [selectedLocationOption, setSelectedLocationOption] =
+    useState<LocationCombinationOption | null>(null);
   const [casteInputValue, setCasteInputValue] = useState("");
   const [subCasteInputValue, setSubCasteInputValue] = useState("");
   const filteredSubCastes = useMemo(
     () => subCastes.filter((s) => !selectedCaste || s.casteId === selectedCaste),
     [subCastes, selectedCaste],
   );
-  const { villages, selectedVillage, setSelectedVillage } = useVillage();
+  const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
   const isControlledOpen = typeof open === "boolean";
@@ -304,7 +307,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
       return;
     }
 
-    setSelectedVillageId(initialVillageId || selectedVillage || "");
+    setSelectedLocationId(initialLocationId || selectedLocation || "");
     setSelectedCaste(initialCasteId || "");
     setSelectedSubCaste(initialSubCasteId || "");
     setCasteInputValue("");
@@ -314,10 +317,10 @@ export const AddTree: React.FC<AddTreeProps> = ({
     previousSelectedCasteRef.current = initialCasteId || "";
   }, [
     isModalOpen,
-    initialVillageId,
+    initialLocationId,
     initialCasteId,
     initialSubCasteId,
-    selectedVillage,
+    selectedLocation,
   ]);
 
   useEffect(() => {
@@ -367,7 +370,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
       // Create tree and store caste/subCaste as UUIDs
       const treeData = {
         name: name || "Default Tree",
-        villageId: selectedVillageId || selectedVillage || null,
+        locationId: selectedLocationId || selectedLocation || null,
         description: description || null,
         caste: selectedCaste || null,
         subCaste: selectedSubCaste || null,
@@ -410,7 +413,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
     setSelectedSubCaste(initialSubCasteId || "");
     setCasteInputValue("");
     setSubCasteInputValue("");
-    setSelectedVillageId(initialVillageId || selectedVillage || "");
+    setSelectedLocationId(initialLocationId || selectedLocation || "");
     previousSelectedCasteRef.current = initialCasteId || "";
     if (!isControlledOpen) {
       setShowModal(true);
@@ -516,37 +519,20 @@ export const AddTree: React.FC<AddTreeProps> = ({
       >
         <DialogTitle>{title}</DialogTitle>
         <DialogContent>
-          <Autocomplete
-            options={villages}
-            getOptionLabel={(option) => option.name}
-            value={villages.find((v) => v.id === selectedVillageId) || null}
-            onChange={(_e, newValue) => {
-              const id = newValue?.id || "";
-              setSelectedVillageId(id);
-              if (id) {
-                setSelectedVillage(id);
-              }
-            }}
-            disabled={loading}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                margin="dense"
-                label="Village"
-                placeholder="Search village..."
-                variant="outlined"
-                sx={inputWithIconSx}
-                InputProps={{
-                  ...params.InputProps,
-                  startAdornment: autocompleteStartAdornment(
-                    <LocationOnOutlinedIcon fontSize="small" />,
-                    params,
-                  ),
-                }}
-              />
-            )}
-            sx={{ mt: 1, mb: 2 }}
-          />
+          <Box sx={{ mt: 1, mb: 2 }}>
+            <LocationPicker
+              value={selectedLocationOption}
+              onChange={(option) => {
+                setSelectedLocationOption(option);
+                const id = option?.locationId || "";
+                setSelectedLocationId(id);
+                if (id) {
+                  setSelectedLocation(id);
+                }
+              }}
+              disabled={loading}
+            />
+          </Box>
 
           <TextField
             autoFocus

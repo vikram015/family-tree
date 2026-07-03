@@ -18,7 +18,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { AuthInitializer } from "../AuthInitializer";
-import { VillageInitializer } from "../VillageInitializer";
+import { LocationInitializer } from "../LocationInitializer";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
@@ -211,13 +211,13 @@ export default React.memo(function App() {
           <CssBaseline />
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <AuthInitializer>
-              <VillageInitializer>
+              <LocationInitializer>
                 <LoginModalProvider>
                   <BrowserRouter>
                     <AppContent />
                   </BrowserRouter>
                 </LoginModalProvider>
-              </VillageInitializer>
+              </LocationInitializer>
             </AuthInitializer>
           </LocalizationProvider>
         </ThemeProvider>

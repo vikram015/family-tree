@@ -49,8 +49,8 @@ interface BusinessFormDialogProps {
   personId?: string | null;
   /** Show an owner search/select field (used on the Business page). */
   enableOwnerSelect?: boolean;
-  /** Village scope for the owner search. */
-  villageId?: string;
+  /** Location scope for the owner search. */
+  locationId?: string;
   /** Contact number prefilled for NEW businesses (e.g. the person's phone). */
   defaultContact?: string;
   /** Called after a successful create/update with the API result. */
@@ -63,7 +63,7 @@ export function BusinessFormDialog({
   business,
   personId,
   enableOwnerSelect = false,
-  villageId,
+  locationId,
   defaultContact,
   onSaved,
 }: BusinessFormDialogProps) {
@@ -227,7 +227,7 @@ export function BusinessFormDialog({
                 setOwnerId(person?.id || "");
               }}
               selectedPerson={ownerId ? { id: ownerId, name: owner } : null}
-              villageId={villageId}
+              locationId={locationId}
               startIcon={<PersonOutlineIcon fontSize="small" />}
             />
           )}

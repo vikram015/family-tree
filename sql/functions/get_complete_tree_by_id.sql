@@ -12,7 +12,7 @@ DECLARE
   v_result JSON;
 BEGIN
   
-  -- Get tree information with village, district, state hierarchy
+  -- Get tree information with location, district, state hierarchy
   SELECT json_build_object(
     'id', t.id,
     'name', t.name,
@@ -21,7 +21,7 @@ BEGIN
     'sub_caste', t.sub_caste,
     'created_at', t.created_at,
     'modified_at', t.modified_at,
-    'village', CASE 
+    'location', CASE 
       WHEN v.id IS NOT NULL THEN json_build_object(
         'id', v.id,
         'name', v.name,
@@ -44,7 +44,7 @@ BEGIN
     END
   ) INTO v_tree_info
   FROM tree t
-  LEFT JOIN village v ON t.village_id = v.id
+  LEFT JOIN location v ON t.location_id = v.id
   LEFT JOIN district d ON v.district_id = d.id
   LEFT JOIN state s ON d.state_id = s.id
   WHERE t.id = p_tree_id;

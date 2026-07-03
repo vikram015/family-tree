@@ -22,7 +22,7 @@ type BackendUserProfile = {
   id: string;
   email?: string | null;
   role?: UserRole;
-  villages?: string[] | null;
+  locations?: string[] | null;
   peopleId?: string | null;
   name?: string | null;
   phone?: string | null;
@@ -39,7 +39,7 @@ function mapBackendUserToAppUser(row: BackendUserProfile): AppUser {
     id: row.id,
     email: row.email || "",
     role: (row.role || "admin") as UserRole,
-    villages: row.villages || [],
+    locations: row.locations || [],
     peopleId: row.peopleId || undefined,
     displayName: row.name || undefined,
     name: row.name || undefined,
@@ -182,16 +182,16 @@ export const selectIsAdmin = (state: any) =>
   state.auth.userProfile?.role === "admin" ||
   state.auth.userProfile?.role === "superadmin";
 
-export const selectCanManageVillage = (villageId: string) => (state: any) => {
+export const selectCanManageLocation = (locationId: string) => (state: any) => {
   const profile = state.auth.userProfile;
   if (!profile) return false;
   if (profile.role === "superadmin") return true;
-  if (profile.role === "admin" && profile.villages.includes(villageId)) return true;
+  if (profile.role === "admin" && profile.locations.includes(locationId)) return true;
   return false;
 };
 
 export const selectHasPermission =
-  (requiredRole?: UserRole, villageId?: string) => (state: any) => {
+  (requiredRole?: UserRole, locationId?: string) => (state: any) => {
     const profile = state.auth.userProfile;
     if (!profile) return false;
 
@@ -205,8 +205,8 @@ export const selectHasPermission =
       return false;
     }
 
-    if (villageId && profile.role !== "superadmin") {
-      return profile.villages.includes(villageId);
+    if (locationId && profile.role !== "superadmin") {
+      return profile.locations.includes(locationId);
     }
 
     return true;

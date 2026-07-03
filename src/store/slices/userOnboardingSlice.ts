@@ -19,7 +19,7 @@ const DEFAULT_USER_ONBOARDING_DATA: UserOnboardingData = {
   location: {
     stateId: null,
     districtId: null,
-    villageId: null,
+    locationId: null,
     casteId: null,
     subCasteId: null,
     completedAt: null,
@@ -133,7 +133,7 @@ export const searchUserOnboardingMatches = createAsyncThunk(
   async (
     payload: {
       searchName?: string | null;
-      villageId: string;
+      locationId: string;
       casteId?: string | null;
       subCasteId?: string | null;
     },
