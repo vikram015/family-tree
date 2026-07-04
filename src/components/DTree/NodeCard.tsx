@@ -284,69 +284,55 @@ function renderBirthdayBadge(x: number, y: number): string {
 }
 
 /**
- * Male placeholder icon (person silhouette)
+ * Derive up to two initials from a display name (first + last word).
  */
-function malePlaceholderSvg(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  bgColor: string,
-  iconColor: string,
-): string {
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  return (
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${bgColor}"/>` +
-    `<g transform="translate(${cx - 10}, ${cy - 12})">` +
-    `<circle cx="10" cy="6" r="5" fill="${iconColor}"/>` +
-    `<path d="M10 13c-5.5 0-10 2.5-10 5v2h20v-2c0-2.5-4.5-5-10-5z" fill="${iconColor}"/>` +
-    `</g>`
-  );
+function getNodeInitials(name: string): string {
+  const normalized = normalizeDisplayText((name || "").trim());
+  if (!normalized) return "?";
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  const firstGrapheme = (str: string): string => {
+    if (!str) return "";
+    if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
+      for (const seg of new Intl.Segmenter(undefined, {
+        granularity: "grapheme",
+      }).segment(str)) {
+        return seg.segment;
+      }
+      return "";
+    }
+    return Array.from(str)[0] || "";
+  };
+  const first = firstGrapheme(parts[0]);
+  const last = parts.length > 1 ? firstGrapheme(parts[parts.length - 1]) : "";
+  return (first + last) || "?";
 }
 
 /**
- * Female placeholder icon (person with dress silhouette)
+ * Avatar placeholder showing the person's initials (used when no photo).
  */
-function femalePlaceholderSvg(
+function initialsPlaceholderSvg(
   x: number,
   y: number,
   w: number,
   h: number,
   bgColor: string,
-  iconColor: string,
+  textColor: string,
+  initials: string,
 ): string {
   const cx = x + w / 2;
   const cy = y + h / 2;
-  return (
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${bgColor}"/>` +
-    `<g transform="translate(${cx - 10}, ${cy - 12})">` +
-    `<circle cx="10" cy="5" r="4.5" fill="${iconColor}"/>` +
-    `<path d="M10 11c-3 0-5.5 1-7 2.5L5 22h10l2-8.5c-1.5-1.5-4-2.5-7-2.5z" fill="${iconColor}"/>` +
-    `</g>`
-  );
-}
-
-/**
- * Neutral placeholder icon
- */
-function neutralPlaceholderSvg(
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  bgColor: string,
-  iconColor: string,
-): string {
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  return (
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${bgColor}"/>` +
-    `<g transform="translate(${cx - 10}, ${cy - 12})">` +
-    `<circle cx="10" cy="6" r="5" fill="${iconColor}"/>` +
-    `<path d="M10 13c-5.5 0-10 2.5-10 5v2h20v-2c0-2.5-4.5-5-10-5z" fill="${iconColor}" opacity="0.7"/>` +
-    `</g>`
-  );
+  const isDevanagari = hasDevanagari(initials);
+  const display = isDevanagari ? initials : initials.toUpperCase();
+  let out = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="16" fill="${bgColor}"/>`;
+  if (isDevanagari) {
+    // Devanagari needs HTML text layout (see the name rendering note below).
+    out += `<foreignObject x="${x}" y="${y}" width="${w}" height="${h}">`;
+    out += `<div xmlns="http://www.w3.org/1999/xhtml" lang="hi" style="width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;font-family:${DEVANAGARI_FONT_STACK};font-size:22px;font-weight:700;color:${textColor};">${escapeXml(display)}</div>`;
+    out += `</foreignObject>`;
+  } else {
+    out += `<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-family="${DEFAULT_FONT_STACK}" font-size="22" font-weight="700" fill="${textColor}">${encodeSvgTextContent(display)}</text>`;
+  }
+  return out;
 }
 
 /**
@@ -471,34 +457,20 @@ export function renderNodeCardSvg(
     svg += `x="${dim.img_x}" y="${dim.img_y}" width="${dim.img_w}" height="${dim.img_h}" `;
     svg += `clip-path="url(#${imgClipId})" preserveAspectRatio="xMidYMid slice"/>`;
   } else {
-    if (gender === "male") {
-      svg += malePlaceholderSvg(
-        dim.img_x,
-        dim.img_y,
-        dim.img_w,
-        dim.img_h,
-        colors.placeholderBg,
-        colors.placeholderIcon,
-      );
-    } else if (gender === "female") {
-      svg += femalePlaceholderSvg(
-        dim.img_x,
-        dim.img_y,
-        dim.img_w,
-        dim.img_h,
-        colors.placeholderBg,
-        colors.placeholderIcon,
-      );
-    } else {
-      svg += neutralPlaceholderSvg(
-        dim.img_x,
-        dim.img_y,
-        dim.img_w,
-        dim.img_h,
-        colors.placeholderBg,
-        colors.placeholderIcon,
-      );
-    }
+    // No photo: show the person's initials (prefer an English name source).
+    const initialsSource =
+      [extra?.nameEnglish, name, extra?.preferredName, normalizedName]
+        .map((s: any) => (s ? String(s).trim() : ""))
+        .find((s: string) => s && !hasDevanagari(s)) || normalizedName;
+    svg += initialsPlaceholderSvg(
+      dim.img_x,
+      dim.img_y,
+      dim.img_w,
+      dim.img_h,
+      colors.placeholderBg,
+      colors.accentEnd,
+      getNodeInitials(initialsSource),
+    );
   }
 
   svg += renderStatusAvatarBadge(
