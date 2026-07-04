@@ -36,7 +36,12 @@ import { ApiService, LocationCombinationOption } from "../../services/apiService
 import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  /** Locked mode: show only the brand (no nav, location picker, or account menu). */
+  locked?: boolean;
+}
+
+export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -162,6 +167,7 @@ export const Header: React.FC = () => {
     { label: "Business", path: "/business" },
     // { label: "Heritage", path: "/heritage" },
     { label: "Families", path: "/families" },
+    { label: "About", path: "/about" },
     { label: "Contact", path: "/contact" },
   ];
 
@@ -332,6 +338,50 @@ export const Header: React.FC = () => {
       </Box>
     </Box>
   );
+
+  // Locked mode (e.g. blocked account): brand only, no links or functionality.
+  if (locked) {
+    return (
+      <AppBar
+        position="static"
+        color="default"
+        elevation={0}
+        sx={{
+          bgcolor: "#ffffff",
+          color: "#0f172a",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Toolbar>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: { xs: 38, md: 42 },
+                height: { xs: 38, md: 42 },
+                p: "5px",
+                borderRadius: 2.5,
+                overflow: "hidden",
+                backgroundColor: "#ffffff",
+              }}
+            >
+              <img
+                src="/favicon.png"
+                alt="Kinvia"
+                style={{ width: "100%", height: "100%", display: "block" }}
+              />
+            </Box>
+            <Typography variant="h6" component="h1" sx={{ m: 0, fontWeight: 700 }}>
+              Kinvia
+            </Typography>
+          </Box>
+        </Toolbar>
+      </AppBar>
+    );
+  }
 
   return (
     <>

@@ -26,6 +26,7 @@ import { HomePage } from "../HomePage/HomePage";
 import { BusinessPage } from "../BusinessPage/BusinessPage";
 import { FamousPage } from "../FamousPage/FamousPage";
 import { ContactPage } from "../Contact/ContactPage";
+import { AboutPage } from "../AboutPage/AboutPage";
 import { DebugPage } from "../DebugPage/DebugPage";
 import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
@@ -132,7 +133,12 @@ function AppContent() {
   // A blocked user stays authenticated (so we can read the flag from /api/auth/me)
   // but must not see the app — replace everything with a blocked message.
   if (!loading && currentUser && userProfile?.isBlocked) {
-    return <BlockedScreen reason={userProfile.blockedReason} />;
+    return (
+      <>
+        <Header locked />
+        <BlockedScreen reason={userProfile.blockedReason} />
+      </>
+    );
   }
 
   console.log("AppContent: About to return JSX");
@@ -189,6 +195,7 @@ function AppContent() {
               <Route path="/business" element={<BusinessPage />} />
               <Route path="/famous" element={<FamousPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />

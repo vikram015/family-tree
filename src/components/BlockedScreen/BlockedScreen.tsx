@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Button, Paper, Typography } from "@mui/material";
+import { Box, Button, Link, Paper, Typography } from "@mui/material";
 import BlockIcon from "@mui/icons-material/Block";
 import { useAuth } from "../hooks/useAuth";
 
@@ -31,9 +31,14 @@ export const BlockedScreen: React.FC<BlockedScreenProps> = ({ reason }) => {
           Account blocked
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-          {reason && reason.trim()
-            ? reason
-            : "Your account has been blocked. Please contact an administrator for assistance."}
+          {"Your account has been blocked. Please contact us to resolve the issue."}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Need help? Contact us at{" "}
+          <Link href="mailto:info@kinvia.in" underline="hover">
+            info@kinvia.in
+          </Link>
+          .
         </Typography>
         <Button variant="contained" color="primary" onClick={() => void logout()}>
           Sign out
