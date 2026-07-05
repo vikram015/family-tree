@@ -24,6 +24,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
+import MenuIcon from "@mui/icons-material/Menu";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import LogoutIcon from "@mui/icons-material/Logout";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
@@ -35,6 +36,11 @@ import { useAuth } from "../hooks/useAuth";
 import { ApiService, LocationCombinationOption } from "../../services/apiService";
 import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
+import { setPostLoginRedirect } from "../../utils/postLoginRedirect";
+import { brand, brandGradient } from "../../theme/brand";
+
+// Nav destinations that require an authenticated user.
+const AUTH_REQUIRED_PATHS = new Set<string>(["/business"]);
 
 interface HeaderProps {
   /** Locked mode: show only the brand (no nav, location picker, or account menu). */
@@ -183,6 +189,14 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
 
   const handleNavLinkClick = useCallback(
     async (path: string) => {
+      // Auth-gated destinations: send guests to login and remember where they
+      // were headed so they land back here after login (and onboarding).
+      if (AUTH_REQUIRED_PATHS.has(path) && !currentUser) {
+        setPostLoginRedirect(path);
+        navigate("/login", { state: { from: { pathname: path } } });
+        return;
+      }
+
       if (path === "/families" && currentUser) {
         navigate(await resolveDefaultFamilyTreePath());
         return;
@@ -314,11 +328,13 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             <Button
               fullWidth
               variant="outlined"
+              color="error"
               startIcon={<LogoutIcon />}
               onClick={() => {
                 handleLogout();
                 setDrawerOpen(false);
               }}
+              sx={{ textTransform: "none", fontWeight: 700, borderRadius: 2 }}
             >
               Logout
             </Button>
@@ -327,10 +343,20 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
           <Button
             fullWidth
             variant="contained"
+            disableElevation
             startIcon={<LoginIcon />}
             component={Link}
             to="/login"
             onClick={() => setDrawerOpen(false)}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              borderRadius: 2,
+              py: 1,
+              color: "#fff",
+              background: brandGradient,
+              "&:hover": { background: brandGradient },
+            }}
           >
             Login
           </Button>
@@ -396,13 +422,14 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
           borderColor: "divider",
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ px: { xs: 2, md: 2.5 }, gap: 1 }}>
           <Box
             component={Link}
             to="/"
             sx={{
               flexGrow: 0,
-              mr: 2,
+              flexShrink: 0,
+              mr: 1,
               display: "flex",
               alignItems: "center",
               gap: 1.25,
@@ -450,50 +477,71 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               sx={{
                 flexGrow: 1,
                 display: "flex",
-                gap: 1,
+                gap: 0.5,
                 alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              {allNavLinks.map((link) => (
-                <Button
-                  key={link.path}
-                  color="inherit"
-                  onClick={() => {
-                    void handleNavLinkClick(link.path);
-                  }}
-                  sx={{
-                    fontWeight: isActive(link.path) ? "bold" : "normal",
-                    borderBottom: isActive(link.path)
-                      ? "2px solid #0d6efd"
-                      : "none",
-                    color: isActive(link.path) ? "#0d6efd" : "#334155",
-                    "&:hover": {
-                      bgcolor: "rgba(13,110,253,0.06)",
-                    },
-                  }}
-                >
-                  {link.label}
-                </Button>
-              ))}
+              {allNavLinks.map((link) => {
+                const active = isActive(link.path);
+                return (
+                  <Button
+                    key={link.path}
+                    color="inherit"
+                    onClick={() => {
+                      void handleNavLinkClick(link.path);
+                    }}
+                    sx={{
+                      px: 1.75,
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontSize: 15,
+                      fontWeight: active ? 700 : 500,
+                      color: active ? brand.primary : brand.slate,
+                      position: "relative",
+                      "&::after": {
+                        content: '""',
+                        position: "absolute",
+                        left: 12,
+                        right: 12,
+                        bottom: 6,
+                        height: 2,
+                        borderRadius: 2,
+                        bgcolor: brand.primary,
+                        transform: active ? "scaleX(1)" : "scaleX(0)",
+                        transformOrigin: "center",
+                        transition: "transform 180ms ease",
+                      },
+                      "&:hover": {
+                        color: brand.primary,
+                        bgcolor: brand.primarySoft,
+                      },
+                    }}
+                  >
+                    {link.label}
+                  </Button>
+                );
+              })}
             </Box>
           )}
 
           {/* Location Selector */}
           {!isMobile && (
-            <Box sx={{ minWidth: 280, ml: 2 }}>
+            <Box sx={{ minWidth: 240, flexShrink: 0, ml: 1 }}>
               <LocationPicker
                 value={headerLocationOption}
                 onChange={applyLocation}
                 label=""
                 placeholder="Search location"
                 size="small"
+                withTreesOnly
               />
             </Box>
           )}
 
           {/* Auth Buttons */}
           {!isMobile && (
-            <Box sx={{ ml: 2 }}>
+            <Box sx={{ ml: 1, flexShrink: 0 }}>
               {currentUser ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Button
@@ -504,7 +552,19 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                       display: "flex",
                       alignItems: "center",
                       gap: 1,
-                      mr: 1,
+                      pl: 0.75,
+                      pr: 1.25,
+                      py: 0.5,
+                      borderRadius: 999,
+                      border: "1px solid",
+                      borderColor: brand.border,
+                      bgcolor: "#fff",
+                      transition: "border-color 160ms ease, box-shadow 160ms ease",
+                      "&:hover": {
+                        borderColor: brand.primary,
+                        bgcolor: brand.primarySoft,
+                        boxShadow: "0 2px 10px rgba(15,118,110,0.12)",
+                      },
                     }}
                   >
                     <Badge
@@ -562,6 +622,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                         handleCloseAvatarMenu();
                         handleLogout();
                       }}
+                      sx={{ color: "error.main", fontWeight: 600 }}
                     >
                       <LogoutIcon fontSize="small" sx={{ mr: 1.25 }} />
                       Logout
@@ -570,12 +631,27 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 </Box>
               ) : (
                 <Button
-                  color="inherit"
                   startIcon={<LoginIcon />}
                   component={Link}
                   to="/login"
-                  variant="outlined"
-                  size="small"
+                  variant="contained"
+                  disableElevation
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    px: 2.25,
+                    py: 0.75,
+                    color: "#fff",
+                    background: brandGradient,
+                    boxShadow: "0 4px 14px rgba(15,118,110,0.28)",
+                    transition: "transform 160ms ease, box-shadow 160ms ease",
+                    "&:hover": {
+                      background: brandGradient,
+                      boxShadow: "0 6px 18px rgba(15,118,110,0.38)",
+                      transform: "translateY(-1px)",
+                    },
+                  }}
                 >
                   Login
                 </Button>
@@ -595,15 +671,16 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                     textTransform: "none",
                     borderColor: "rgba(15,23,42,0.2)",
                     color: "#0f172a",
-                    minWidth: 150,
-                    maxWidth: 220,
+                    // Give guests room for the Login button next to it.
+                    minWidth: currentUser ? 150 : 96,
+                    maxWidth: currentUser ? 220 : 150,
                     justifyContent: "flex-start",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                     "&:hover": {
-                      borderColor: "#0d6efd",
-                      backgroundColor: "rgba(13,110,253,0.06)",
+                      borderColor: brand.primary,
+                      backgroundColor: brand.primarySoft,
                     },
                   }}
                 >
@@ -613,35 +690,72 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                   </Box>
                 </Button>
               </Box>
-              <IconButton
-                color="inherit"
-                edge="end"
-                onClick={() => setDrawerOpen(!drawerOpen)}
-                sx={{ p: 0.25, ml: 1 }}
-              >
-                <Badge
-                  color="error"
-                  overlap="circular"
-                  variant={hasPendingActionRequests ? "dot" : undefined}
+              {currentUser ? (
+                <IconButton
+                  color="inherit"
+                  edge="end"
+                  onClick={() => setDrawerOpen(!drawerOpen)}
+                  sx={{ p: 0.25, ml: 1 }}
                 >
-                  <Avatar
-                    src={linkedPersonPhoto || undefined}
+                  <Badge
+                    color="error"
+                    overlap="circular"
+                    variant={hasPendingActionRequests ? "dot" : undefined}
+                  >
+                    <Avatar
+                      src={linkedPersonPhoto || undefined}
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        border: "1px solid rgba(15,23,42,0.12)",
+                        bgcolor: "#f8fafc",
+                        color: "#0f172a",
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {(userProfile?.displayName || currentUser?.email || "U")
+                        .charAt(0)
+                        .toUpperCase()}
+                    </Avatar>
+                  </Badge>
+                </IconButton>
+              ) : (
+                <>
+                  {/* Guests: an explicit Login CTA (so it's discoverable without
+                      opening the menu) plus a clear menu button for nav. */}
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disableElevation
+                    startIcon={<LoginIcon fontSize="small" />}
+                    component={Link}
+                    to="/login"
                     sx={{
-                      width: 34,
-                      height: 34,
-                      border: "1px solid rgba(15,23,42,0.12)",
-                      bgcolor: "#f8fafc",
-                      color: "#0f172a",
-                      fontSize: 14,
+                      ml: 1,
+                      textTransform: "none",
                       fontWeight: 700,
+                      borderRadius: 999,
+                      px: 1.5,
+                      whiteSpace: "nowrap",
+                      color: "#fff",
+                      background: brandGradient,
+                      "&:hover": { background: brandGradient },
                     }}
                   >
-                    {(userProfile?.displayName || currentUser?.email || "U")
-                      .charAt(0)
-                      .toUpperCase()}
-                  </Avatar>
-                </Badge>
-              </IconButton>
+                    Login
+                  </Button>
+                  <IconButton
+                    color="inherit"
+                    edge="end"
+                    aria-label="Open menu"
+                    onClick={() => setDrawerOpen(!drawerOpen)}
+                    sx={{ p: 0.5, ml: 0.5 }}
+                  >
+                    <MenuIcon />
+                  </IconButton>
+                </>
+              )}
             </>
           )}
         </Toolbar>
@@ -687,6 +801,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               if (option) setLocationPickerOpen(false);
             }}
             autoFocus
+            withTreesOnly
           />
         </Box>
       </Dialog>

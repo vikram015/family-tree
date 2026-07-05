@@ -786,6 +786,7 @@ export const ApiService = {
     query?: string;
     locationId?: string;
     limit?: number;
+    withTreesOnly?: boolean;
   }): Promise<LocationCombinationOption[]> {
     return backendApi.get<LocationCombinationOption[]>(
       "/api/lookup/location-combinations",
@@ -793,6 +794,7 @@ export const ApiService = {
         query: params.query,
         locationId: params.locationId,
         limit: params.limit,
+        withTreesOnly: params.withTreesOnly ? "true" : undefined,
       },
     );
   },

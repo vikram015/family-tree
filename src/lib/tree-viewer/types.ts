@@ -39,6 +39,8 @@ export type TreeViewerNodeRendererContext = {
   isHighlighted?: boolean;
   isMobile?: boolean;
   canEditNode?: boolean;
+  /** Whether the node name should render as a clickable "view details" target. */
+  allowNameDetailsClick?: boolean;
 };
 
 export type TreeViewerRenderers = {
@@ -79,6 +81,11 @@ export type TreeViewerFeatureFlags = {
   allowDeleteAction?: boolean;
   allowViewDetailsAction?: boolean;
   allowNameDetailsClick?: boolean;
+  /**
+   * Open the node action sheet on tap for ALL screen sizes (not just small
+   * screens). Use with `renderNodeSheet` to drive a custom sheet on desktop.
+   */
+  alwaysShowNodeSheet?: boolean;
 };
 
 export interface TreeViewerProps {
@@ -112,4 +119,14 @@ export interface TreeViewerProps {
   }) => void;
   features?: TreeViewerFeatureFlags;
   renderers?: TreeViewerRenderers;
+  /**
+   * Custom content for the node action sheet. When provided, it replaces the
+   * built-in action buttons — the caller owns the sheet body (e.g. the
+   * onboarding preview supplies its Link/Request UI). `api.close()` dismisses
+   * the sheet (which also expands the tree back to full height).
+   */
+  renderNodeSheet?: (
+    node: TreeViewerNode,
+    api: { close: () => void },
+  ) => ReactNode;
 }

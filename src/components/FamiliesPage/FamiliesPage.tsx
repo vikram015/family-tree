@@ -43,6 +43,7 @@ import { useLoginModal } from "../context/LoginModalContext";
 import { useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
+import { TimelineView } from "./timeline/TimelineView";
 import { InviteCollaboratorDialog } from "./InviteCollaboratorDialog";
 
 interface FamiliesPageProps {
@@ -102,6 +103,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     targetPersonId: null,
   });
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"tree" | "timeline">("tree");
   const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(
     null,
   );
@@ -1411,6 +1413,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         hasStats={nodes.length > 0 && !isLoading}
         statCards={statCards}
         onSourceChange={onSourceChange}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
       />
       {(isSuperAdmin() || isApproved) && (
         <Box
@@ -1576,6 +1580,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               border: "1px solid",
               borderColor: "divider",
               backgroundColor: theme.palette.background.paper,
+              // While the action sheet is open it fills the card's bottom edge,
+              // so flatten/hide the bottom border+corners to let it sit flush
+              // (matching the borderless preview sheet).
+              ...(isMobileSheetOpen && {
+                borderBottomWidth: 0,
+                borderBottomLeftRadius: 0,
+                borderBottomRightRadius: 0,
+              }),
             }}
           >
             <Stack
@@ -1641,7 +1653,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 </span>
               </Tooltip>
             </Stack>
-            {rootId && nodes.find((n) => n.id === rootId) ? (
+            {viewMode === "timeline" ? (
+              <TimelineView
+                nodes={nodes}
+                currentTreeId={treeId}
+                youPersonId={userProfile?.peopleId}
+                onViewDetails={handleViewDetails}
+              />
+            ) : rootId && nodes.find((n) => n.id === rootId) ? (
               (() => {
                 const initialFocusId = highlightedPersonId || userProfile?.peopleId;
                 const isInitialFocusInTree = Boolean(initialFocusId && nodes.find((n) => n.id === initialFocusId));

@@ -16,6 +16,7 @@ import {
   Select,
   MenuItem,
   InputLabel,
+  Divider,
   Paper,
   Stack,
   ToggleButton,
@@ -468,25 +469,23 @@ export default function AddNode({
     }
 
     try {
-      if (occupationType === "job") {
-        if (jobTitle) {
-          const existing = allProfessions.find(
-            (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
-          );
+      if (jobTitle.trim()) {
+        const existing = allProfessions.find(
+          (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
+        );
 
-          let profId = existing?.id;
+        let profId = existing?.id;
 
-          if (!profId) {
-            const newProf = await ApiService.createProfession({
-              name: jobTitle.trim(),
-              description: jobContact ? `Contact: ${jobContact}` : undefined,
-            });
-            profId = newProf?.id || (Array.isArray(newProf) && newProf[0]?.id);
-          }
+        if (!profId) {
+          const newProf = await ApiService.createProfession({
+            name: jobTitle.trim(),
+            description: jobContact ? `Contact: ${jobContact}` : undefined,
+          });
+          profId = newProf?.id || (Array.isArray(newProf) && newProf[0]?.id);
+        }
 
-          if (profId) {
-            await ApiService.addProfessionToPerson(savedNodeId, profId);
-          }
+        if (profId) {
+          await ApiService.addProfessionToPerson(savedNodeId, profId);
         }
       }
     } catch (error) {
@@ -508,7 +507,6 @@ export default function AddNode({
     isSavingDetails,
     jobContact,
     jobTitle,
-    occupationType,
     savedNodeId,
   ]);
 
@@ -711,9 +709,7 @@ export default function AddNode({
     if (step === 2) {
       onMobileSaveActionChange({
         onClick: handleSaveDetails,
-        disabled:
-          isSavingDetails ||
-          (occupationType === "job" && !jobTitle),
+        disabled: isSavingDetails,
         saving: isSavingDetails,
       });
       return () => onMobileSaveActionChange(null);
@@ -801,80 +797,80 @@ export default function AddNode({
           </Box>
 
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-            <Stack spacing={2.25}>
-              <FormControl fullWidth sx={inputWithIconSx}>
-                <InputLabel>Occupation Type</InputLabel>
-                <Select
-                  value={occupationType}
-                  onChange={(e) => setOccupationType(e.target.value as any)}
-                  label="Occupation Type"
-                  startAdornment={adornment(<WorkOutlineOutlinedIcon fontSize="small" />)}
-                >
-                  <MenuItem value="business">Business Owner</MenuItem>
-                  <MenuItem value="job">Salaried / Professional</MenuItem>
-                  <MenuItem value="other">Student / Homemaker / Other</MenuItem>
-                </Select>
-              </FormControl>
-
-          {occupationType === "business" && (
-            <>
-              {businessAdded ? (
-                <Paper
-                  variant="outlined"
-                  sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", gap: 1 }}
-                >
-                  <CheckCircleOutlineIcon color="success" fontSize="small" />
-                  <Typography variant="body2">Business details saved.</Typography>
-                  <Button
-                    size="small"
-                    onClick={() => setBusinessDialogOpen(true)}
-                    sx={{ ml: "auto" }}
+            <Stack spacing={2.5}>
+              {/* Business — optional, added immediately via the shared dialog */}
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                  <BusinessIcon fontSize="small" color="action" />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Business
+                  </Typography>
+                </Stack>
+                {businessAdded ? (
+                  <Paper
+                    variant="outlined"
+                    sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", gap: 1 }}
                   >
-                    Add another
+                    <CheckCircleOutlineIcon color="success" fontSize="small" />
+                    <Typography variant="body2">Business details saved.</Typography>
+                    <Button
+                      size="small"
+                      onClick={() => setBusinessDialogOpen(true)}
+                      sx={{ ml: "auto" }}
+                    >
+                      Add another
+                    </Button>
+                  </Paper>
+                ) : (
+                  <Button
+                    variant="outlined"
+                    startIcon={<BusinessIcon fontSize="small" />}
+                    onClick={() => setBusinessDialogOpen(true)}
+                    disabled={!savedNodeId}
+                  >
+                    Add Business Details
                   </Button>
-                </Paper>
-              ) : (
-                <Button
-                  variant="outlined"
-                  startIcon={<BusinessIcon fontSize="small" />}
-                  onClick={() => setBusinessDialogOpen(true)}
-                  disabled={!savedNodeId}
-                >
-                  Add Business Details
-                </Button>
-              )}
-            </>
-          )}
+                )}
+              </Box>
 
-          {occupationType === "job" && (
-            <>
-	              <TextField
-	                label="Job Title / Profession"
-	                fullWidth
-	                value={jobTitle}
-	                onChange={(e) => setJobTitle(e.target.value)}
-	                placeholder="e.g. Software Engineer, Doctor, Teacher"
-	                sx={inputWithIconSx}
-	                InputProps={{
-	                  startAdornment: adornment(<BadgeOutlinedIcon fontSize="small" />),
-	                }}
-	              />
-              <Typography variant="caption" color="text.secondary">
-                We will link this to the unified list of professions.
-              </Typography>
-	              <TextField
-	                label="Contact Number"
-	                fullWidth
-	                value={jobContact}
-	                onChange={(e) => setJobContact(e.target.value)}
-	                placeholder="Phone number (optional)"
-	                sx={inputWithIconSx}
-	                InputProps={{
-	                  startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />),
-	                }}
-	              />
-            </>
-          )}
+              <Divider />
+
+              {/* Profession — optional, saved on finish */}
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                  <WorkOutlineOutlinedIcon fontSize="small" color="action" />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Profession
+                  </Typography>
+                </Stack>
+                <Stack spacing={2}>
+                  <TextField
+                    label="Job Title / Profession"
+                    fullWidth
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="e.g. Software Engineer, Doctor, Teacher"
+                    sx={inputWithIconSx}
+                    InputProps={{
+                      startAdornment: adornment(<BadgeOutlinedIcon fontSize="small" />),
+                    }}
+                  />
+                  <Typography variant="caption" color="text.secondary">
+                    We will link this to the unified list of professions.
+                  </Typography>
+                  <TextField
+                    label="Contact Number"
+                    fullWidth
+                    value={jobContact}
+                    onChange={(e) => setJobContact(e.target.value)}
+                    placeholder="Phone number (optional)"
+                    sx={inputWithIconSx}
+                    InputProps={{
+                      startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />),
+                    }}
+                  />
+                </Stack>
+              </Box>
             </Stack>
           </Paper>
 
@@ -905,10 +901,7 @@ export default function AddNode({
                   <CircularProgress size={14} color="inherit" />
                 ) : undefined
               }
-              disabled={
-                isSavingDetails ||
-                (occupationType === "job" && !jobTitle)
-              }
+              disabled={isSavingDetails}
             >
               {isSavingDetails ? "Saving..." : "Save & Finish"}
             </Button>

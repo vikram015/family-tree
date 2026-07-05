@@ -11,7 +11,6 @@ import {
   CircularProgress,
   Stack,
   Alert,
-  Paper,
   Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -253,11 +252,6 @@ export const OnboardingTreePreviewDialog: React.FC<
     }
   };
 
-  const handleCloseActionBar = () => {
-    if (actionLoading) return;
-    setSelectedNode(null);
-  };
-
   const isLinkRequested = React.useMemo(() => {
     return myLinkRequests.some(
       (req) =>
@@ -326,6 +320,117 @@ export const OnboardingTreePreviewDialog: React.FC<
     return `You already have edit access to ${selectedNode.name}'s branch.`;
   }, [hasSelectedBranchAccess, selectedNode, treeWriteScope?.canWriteAll]);
 
+  // Content for the tree's built-in action sheet (the tree resizes to make room
+  // for it). This is the single place the Link / Request-access actions live.
+  const renderNodeActionSheet = (
+    node: { id: string; name?: string },
+    close: () => void,
+  ) => {
+    const name = selectedNode?.name || node.name || "Family member";
+    const dismiss = () => {
+      if (actionLoading) return;
+      setSelectedNode(null);
+      setActionSuccess("");
+      setActionError("");
+      close();
+    };
+
+    return (
+      <Box sx={{ maxWidth: 620, mx: "auto" }}>
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="flex-start"
+          sx={{ mb: 1.75 }}
+        >
+          <Box sx={{ pr: 1 }}>
+            <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.2 }}>
+              {name}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+              Link your profile to this person, or request edit access to their branch.
+            </Typography>
+          </Box>
+          <IconButton onClick={dismiss} disabled={actionLoading} size="small" sx={{ mt: -0.5, mr: -0.5 }}>
+            <CloseIcon fontSize="small" />
+          </IconButton>
+        </Stack>
+
+        {actionSuccess && (
+          <Alert severity="success" sx={{ mb: 1.75 }}>
+            {actionSuccess}
+          </Alert>
+        )}
+        {actionError && (
+          <Alert severity="error" sx={{ mb: 1.75 }}>
+            {actionError}
+          </Alert>
+        )}
+        {branchAccessStatusMessage && (
+          <Alert severity="success" sx={{ mb: 1.75 }}>
+            {branchAccessStatusMessage}
+          </Alert>
+        )}
+
+        {!actionSuccess && (
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <Tooltip
+              title={isLinkRequested ? "You already have a pending link request" : ""}
+              placement="top"
+              arrow
+            >
+              <span style={{ display: "block", width: "100%" }}>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
+                  onClick={handleCreateLinkRequest}
+                  disabled={actionLoading || isLinkRequested}
+                >
+                  {actionLoading ? "Sending..." : isLinkRequested ? "Link Requested" : "Link my profile"}
+                </Button>
+              </span>
+            </Tooltip>
+
+            <Tooltip
+              title={
+                hasSelectedBranchAccess
+                  ? branchAccessStatusMessage
+                  : isBranchAccessRequested
+                    ? "You have already requested edit access for this branch"
+                    : ""
+              }
+              placement="top"
+              arrow
+            >
+              <span style={{ display: "block", width: "100%" }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  fullWidth
+                  size="large"
+                  disableElevation
+                  sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
+                  onClick={handleCreateBranchAccessRequest}
+                  disabled={actionLoading || isBranchAccessRequested || hasSelectedBranchAccess}
+                >
+                  {actionLoading
+                    ? "Sending..."
+                    : hasSelectedBranchAccess
+                      ? "Already have access"
+                      : isBranchAccessRequested
+                        ? "Access Requested"
+                        : "Request branch access"}
+                </Button>
+              </span>
+            </Tooltip>
+          </Stack>
+        )}
+      </Box>
+    );
+  };
+
   return (
     <>
       <Dialog
@@ -388,121 +493,13 @@ export const OnboardingTreePreviewDialog: React.FC<
                 currentTreeId={treeId || ""}
                 onNodeClick={handleNodeClick}
                 allowNameDetailsClick={false}
+                alwaysShowNodeSheet
+                renderNodeSheet={(node, { close }) =>
+                  renderNodeActionSheet(node, close)
+                }
               />
             </Box>
           )}
-          {/* Bottom Action Sheet */}
-          <Box
-            sx={{
-              position: "absolute",
-              bottom: 24,
-              left: 0,
-              right: 0,
-              display: "flex",
-              justifyContent: "center",
-              pointerEvents: "none", // Let clicks pass through outside the paper
-              zIndex: 1300,
-            }}
-          >
-            <Slide direction="up" in={Boolean(selectedNode)} mountOnEnter unmountOnExit>
-              <Paper
-                elevation={6}
-                sx={{
-                  pointerEvents: "auto",
-                  width: "90%",
-                  maxWidth: 600,
-                  p: { xs: 2.5, sm: 3 },
-                  borderRadius: 3,
-                  border: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-                  <Box>
-                    <Typography variant="h6" fontWeight={700}>
-                      {selectedNode?.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      You can either link your profile directly to this node, or request
-                      branch edit access to modify this part of the tree.
-                    </Typography>
-                  </Box>
-                  <IconButton onClick={handleCloseActionBar} disabled={actionLoading} size="small" sx={{ mt: -0.5, mr: -1 }}>
-                    <CloseIcon />
-                  </IconButton>
-                </Stack>
-
-                {actionSuccess && (
-                  <Alert severity="success" sx={{ mb: 2 }}>
-                    {actionSuccess}
-                  </Alert>
-                )}
-
-                {actionError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    {actionError}
-                  </Alert>
-                )}
-
-                {branchAccessStatusMessage && (
-                  <Alert severity="success" sx={{ mb: 2 }}>
-                    {branchAccessStatusMessage}
-                  </Alert>
-                )}
-
-                {!actionSuccess && (
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                    <Tooltip title={isLinkRequested ? "You already have a pending link request" : ""} placement="top" arrow>
-                      <span style={{ display: 'block', width: '100%' }}>
-                        <Button
-                          variant="outlined"
-                          fullWidth
-                          onClick={handleCreateLinkRequest}
-                          disabled={actionLoading || isLinkRequested}
-                        >
-                          {actionLoading ? "Sending..." : isLinkRequested ? "Link Requested" : "Link my profile"}
-                        </Button>
-                      </span>
-                    </Tooltip>
-                    
-                    <Tooltip
-                      title={
-                        hasSelectedBranchAccess
-                          ? branchAccessStatusMessage
-                          : isBranchAccessRequested
-                            ? "You have already requested edit access for this branch"
-                            : ""
-                      }
-                      placement="top"
-                      arrow
-                    >
-                      <span style={{ display: 'block', width: '100%' }}>
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          fullWidth
-                          onClick={handleCreateBranchAccessRequest}
-                          disabled={
-                            actionLoading ||
-                            isBranchAccessRequested ||
-                            hasSelectedBranchAccess
-                          }
-                        >
-                          {actionLoading
-                            ? "Sending..."
-                            : hasSelectedBranchAccess
-                              ? "Already have access"
-                              : isBranchAccessRequested
-                                ? "Access Requested"
-                                : "Request branch access"}
-                        </Button>
-                      </span>
-                    </Tooltip>
-                  </Stack>
-                )}
-              </Paper>
-            </Slide>
-          </Box>
         </Box>
       </Dialog>
     </>

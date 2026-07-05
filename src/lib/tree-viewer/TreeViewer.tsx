@@ -107,6 +107,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   onPreferencesChange,
   features,
   renderers,
+  renderNodeSheet,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<any>(null);
@@ -163,6 +164,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       allowDeleteAction: features?.allowDeleteAction ?? true,
       allowViewDetailsAction: features?.allowViewDetailsAction ?? true,
       allowNameDetailsClick: features?.allowNameDetailsClick ?? true,
+      alwaysShowNodeSheet: features?.alwaysShowNodeSheet ?? false,
     }),
     [features],
   );
@@ -181,6 +183,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
             context.isHighlighted,
             context.isMobile,
             context.canEditNode ?? true,
+            context.allowNameDetailsClick ?? true,
           )),
       renderPlaceholderCardSvg:
         renderers?.renderPlaceholderCardSvg ?? renderPlaceholderCardSvg,
@@ -339,9 +342,14 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     onMobileSheetChange(
       effectiveFeatures.allowMobileActions &&
         Boolean(mobileSheetNodeId) &&
-        isMobileRef.current,
+        (isMobileRef.current || effectiveFeatures.alwaysShowNodeSheet),
     );
-  }, [effectiveFeatures.allowMobileActions, mobileSheetNodeId, onMobileSheetChange]);
+  }, [
+    effectiveFeatures.allowMobileActions,
+    effectiveFeatures.alwaysShowNodeSheet,
+    mobileSheetNodeId,
+    onMobileSheetChange,
+  ]);
 
   useEffect(() => {
     if (!rootId) return;
@@ -527,18 +535,51 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     }
   }, []);
 
+  // When the action sheet opens/closes, the in-flow sheet resizes the tree
+  // container (it shrinks to make room, and grows back when dismissed). There
+  // is no ResizeObserver on the container, so re-center explicitly within the
+  // new visible area — this keeps the focused node from hiding behind the
+  // sheet and makes "center" honor the tree container, not the whole viewport.
+  const sheetRecenterInitRef = useRef(false);
+  useEffect(() => {
+    if (!sheetRecenterInitRef.current) {
+      // Skip the initial mount; the load-time centering owns the first layout.
+      sheetRecenterInitRef.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (mobileSheetNodeId) {
+        centerOnNodeRef.current(mobileSheetNodeId);
+      } else if (showFullTree) {
+        centerTreeInViewport(220);
+      } else if (mainId) {
+        centerOnNodeRef.current(mainId);
+      } else if (rootId) {
+        centerOnNodeRef.current(rootId);
+      }
+    }, 90);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mobileSheetNodeId]);
+
   const handleNodeTap = useCallback(
     (nodeId: string) => {
       // Check window width directly to ensure mobile check is always fresh
       const isSmallScreen = window.innerWidth < 768;
+      // The sheet is used on small screens, or on any screen when the caller
+      // opts in via `alwaysShowNodeSheet` (e.g. the onboarding preview supplies
+      // a custom sheet body on desktop too).
+      const useSheet =
+        effectiveFeatures.allowMobileActions &&
+        (isSmallScreen || effectiveFeatures.alwaysShowNodeSheet);
 
       onNodeClick?.(nodeId);
 
-      // On small screens, show action bar with edit/add actions
-      if (isSmallScreen && effectiveFeatures.allowMobileActions) {
+      // Show the action sheet with node actions / custom content
+      if (useSheet) {
         setMobileSheetNodeId(nodeId);
       } else {
-        // On larger screens, ensure we clear any mobile sheet state
+        // Otherwise ensure any open sheet is cleared
         setMobileSheetNodeId(null);
       }
 
@@ -553,8 +594,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       // Per-spouse collapse: tapping a spouse of the currently focused person
       // toggles just that marriage's children, leaving other marriages expanded
       // (instead of switching focus to the spouse).
-      const handledByMobileSheet =
-        isSmallScreen && effectiveFeatures.allowMobileActions;
+      const handledByMobileSheet = useSheet;
       if (!handledByMobileSheet && mainId && nodeId !== mainId) {
         const focusedNode = nodes.find((n) => n.id === mainId);
         if (focusedNode?.spouses?.some((s) => s.id === nodeId)) {
@@ -582,6 +622,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     },
     [
       effectiveFeatures.allowMobileActions,
+      effectiveFeatures.alwaysShowNodeSheet,
       mainId,
       nodes,
       onNodeClick,
@@ -1504,6 +1545,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                 isHighlighted,
                 isMobile: isMobileRef.current,
                 canEditNode: isNodeEditable(extra?.id),
+                allowNameDetailsClick: effectiveFeatures.allowNameDetailsClick,
               },
             );
           },
@@ -1935,24 +1977,42 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         </Popper>
       )}
 
-      {/* Mobile inline action bar — no backdrop, tree shrinks to make room */}
+      {/* In-flow action sheet — occupies layout space so the tree above shrinks
+          to make room (and grows back when dismissed), rather than overlaying. */}
       {mobileSheetNode && effectiveFeatures.allowMobileActions && (
         <div
           style={{
-            position: "fixed",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 1300,
+            position: "relative",
+            zIndex: 20,
             width: "100%",
-            background: "#fff",
-            borderTop: "1px solid #e0e0e0",
-            padding: "8px 12px calc(8px + env(safe-area-inset-bottom))",
-            boxShadow: "0 -2px 8px rgba(0,0,0,0.08)",
-            animation: "slideUp 0.15s ease-out",
             flexShrink: 0,
+            maxHeight: "62%",
+            overflowY: "auto",
+            background: "#ffffff",
+            borderTop: "1px solid #e2e8f0",
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            padding: "8px 16px calc(16px + env(safe-area-inset-bottom))",
+            boxShadow: "0 -10px 30px rgba(15, 23, 42, 0.14)",
+            animation: "slideUp 0.18s ease-out",
           }}
         >
+          {/* Drag handle affordance */}
+          <div
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 999,
+              background: "#cbd5e1",
+              margin: "2px auto 10px",
+            }}
+          />
+          {renderNodeSheet ? (
+            renderNodeSheet(mobileSheetNode, {
+              close: () => setMobileSheetNodeId(null),
+            })
+          ) : (
+          <>
           {/* Node name + close */}
           <div
             style={{
@@ -1985,8 +2045,11 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns:
-                  isExternalNode || !canEditMobileNode ? "1fr 1fr" : "1fr 1fr 1fr",
+                gridTemplateColumns: isExternalNode
+                  ? "1fr 1fr"
+                  : canEditMobileNode
+                    ? "1fr 1fr 1fr"
+                    : "1fr",
                 gap: 6,
               }}
             >
@@ -2010,13 +2073,10 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                 View
               </button>
               )}
-              {isExternalNode || !canEditMobileNode ? (
+              {isExternalNode ? (
                 <button
                   onClick={() => {
-                    if (
-                      isExternalNode &&
-                      effectiveFeatures.allowExternalTreeNavigation
-                    ) {
+                    if (effectiveFeatures.allowExternalTreeNavigation) {
                       const tid = mobileSheetNode.treeId;
                       setMobileSheetNodeId(null);
                       if (tid) {
@@ -2035,9 +2095,9 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                     cursor: "pointer",
                   }}
                 >
-                  {isExternalNode ? "Open Tree" : "Read Only"}
+                  Open Tree
                 </button>
-              ) : (
+              ) : canEditMobileNode ? (
                 <>
                   {effectiveFeatures.allowEditAction && onEditNode && (
                   <button
@@ -2080,7 +2140,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                   </button>
                   )}
                 </>
-              )}
+              ) : null}
             </div>
             {canEditMobileNode &&
               effectiveFeatures.allowPlaceholderActions &&
@@ -2204,6 +2264,8 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
               </>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>

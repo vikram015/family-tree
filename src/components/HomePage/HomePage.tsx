@@ -47,11 +47,15 @@ import { ApiService } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
+import { AnimatedCounter } from "../common/AnimatedCounter";
+import { brand } from "../../theme/brand";
 
 interface SearchResult {
   id: string;
   name: string;
   type: "person" | "business" | "profession";
+  /** For business/profession results, the associated (owner) person id. */
+  personId?: string;
   treeId?: string;
   treeName?: string;
   personPhotoUrl?: string;
@@ -83,9 +87,9 @@ function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber"
 
   const styles =
     accent === "teal"
-      ? { bg: "#ecfeff", color: "#0f766e" }
+      ? { bg: brand.primarySoft, color: brand.primary }
       : accent === "amber"
-        ? { bg: "#fff7ed", color: "#b45309" }
+        ? { bg: brand.accentSoft, color: brand.accent }
         : { bg: "#f1f5f9", color: "#475569" };
 
   return (
@@ -159,6 +163,7 @@ export const HomePage: React.FC = () => {
           id: row.entityId,
           name: row.title || "Unknown",
           type: row.entityType,
+          personId: row.personId || undefined,
           treeId: row.treeId,
           extra:
             row.entityType === "person"
@@ -194,11 +199,18 @@ export const HomePage: React.FC = () => {
     setSearchQuery("");
     if (result.type === "person" && result.id) {
       navigate(`/profile/person/${result.id}`);
+    } else if (result.type === "business") {
+      // Open the business owner's profile when we know them; else the listing.
+      if (result.personId) {
+        navigate(`/profile/person/${result.personId}`);
+      } else {
+        navigate("/business");
+      }
     } else if (result.treeId) {
       const params = new URLSearchParams();
       params.set("tree", result.treeId);
       navigate(`/families?${params.toString()}`);
-    } else if (result.type === "business" || result.type === "profession") {
+    } else if (result.type === "profession") {
       navigate("/business");
     }
   };
@@ -364,8 +376,7 @@ export const HomePage: React.FC = () => {
 
       <Box
         sx={{
-          background:
-            "linear-gradient(120deg, #fff7ed 0%, #eefaf4 40%, #e8f1ff 100%)",
+          background: `linear-gradient(120deg, ${brand.primarySoft} 0%, ${brand.canvas} 55%, ${brand.primarySoft} 100%)`,
           borderBottom: "1px solid",
           borderColor: "divider",
         }}
@@ -425,7 +436,7 @@ export const HomePage: React.FC = () => {
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
-                            <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                            <SearchIcon sx={{ color: brand.primary, mr: 1 }} />
                           </InputAdornment>
                         ),
                         endAdornment: isSearching ? (
@@ -467,7 +478,7 @@ export const HomePage: React.FC = () => {
                         InputProps={{
                           startAdornment: (
                             <InputAdornment position="start">
-                              <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                              <SearchIcon sx={{ color: brand.primary, mr: 1 }} />
                             </InputAdornment>
                           ),
                           endAdornment: isSearching ? (
@@ -498,8 +509,8 @@ export const HomePage: React.FC = () => {
                   endIcon={<ArrowForwardIcon />}
                   sx={{
                     fontWeight: 700,
-                    bgcolor: "#b45309",
-                    "&:hover": { bgcolor: "#92400e" },
+                    bgcolor: brand.primary,
+                    "&:hover": { bgcolor: brand.primaryDark },
                   }}
                 >
                   {continueTreeLoading ? "Opening..." : currentUser ? "Continue Your Tree" : "Explore Family Trees"}
@@ -508,7 +519,7 @@ export const HomePage: React.FC = () => {
                   variant="outlined"
                   component={Link}
                   to="/business"
-                  sx={{ fontWeight: 700, borderColor: "#0f766e", color: "#0f766e" }}
+                  sx={{ fontWeight: 700, borderColor: brand.primary, color: brand.primary }}
                 >
                   Explore Family Business
                 </Button>
@@ -519,8 +530,10 @@ export const HomePage: React.FC = () => {
               sx={{
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
+                // Two equal rows that fill the block height so the bottom edge
+                // aligns with the welcome card (block stretches via the outer grid).
+                gridTemplateRows: { xs: "auto auto", md: "1fr 1fr" },
                 gap: 1.5,
-                alignContent: "start",
               }}
             >
               {[
@@ -529,16 +542,40 @@ export const HomePage: React.FC = () => {
                 { label: "Locations", value: totalLocations, icon: <LocationCityIcon /> },
                 { label: "Businesses", value: totalBusinesses, icon: <BusinessIcon /> },
               ].map((item) => (
-                <Card key={item.label} sx={{ borderRadius: 2.5 }}>
-                  <CardContent sx={{ py: 2.5 }}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Box sx={{ color: "#0f766e", display: "flex" }}>{item.icon}</Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {item.label}
-                      </Typography>
-                    </Stack>
-                    <Typography sx={{ fontSize: 28, fontWeight: 800, mt: 1 }}>
-                      {loadingStats ? "-" : item.value}
+                <Card
+                  key={item.label}
+                  sx={{
+                    borderRadius: 2.5,
+                    height: "100%",
+                    display: "flex",
+                  }}
+                >
+                  <CardContent
+                    sx={{
+                      py: 2.5,
+                      width: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      "&:last-child": { pb: 2.5 },
+                    }}
+                  >
+                    <Box sx={{ color: brand.primary, display: "flex", mb: 1.5 }}>
+                      {item.icon}
+                    </Box>
+                    <Typography
+                      sx={{
+                        textTransform: "uppercase",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        letterSpacing: "0.06em",
+                        color: "text.secondary",
+                      }}
+                    >
+                      {item.label}
+                    </Typography>
+                    <Typography sx={{ fontSize: 28, fontWeight: 800, mt: 0.5, color: brand.ink }}>
+                      <AnimatedCounter value={item.value} loading={loadingStats} />
                     </Typography>
                   </CardContent>
                 </Card>
@@ -555,9 +592,10 @@ export const HomePage: React.FC = () => {
             gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
             gap: 2,
             mb: 5,
+            alignItems: "stretch",
           }}
         >
-          <Card>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary">
                 Your Contribution Snapshot
@@ -571,18 +609,24 @@ export const HomePage: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary">
                 Profile Completeness
               </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>
-                {professionCoverage}%
+              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: brand.accent }}>
+                <AnimatedCounter value={professionCoverage} loading={loadingStats} />%
               </Typography>
               <LinearProgress
                 variant="determinate"
                 value={professionCoverage}
-                sx={{ mt: 1.3, height: 8, borderRadius: 6 }}
+                sx={{
+                  mt: 1.3,
+                  height: 8,
+                  borderRadius: 6,
+                  bgcolor: brand.accentSoft,
+                  "& .MuiLinearProgress-bar": { bgcolor: brand.accent },
+                }}
               />
               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
                 Based on profession mapping across members
@@ -590,7 +634,7 @@ export const HomePage: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary">
                 Suggested Next Action
@@ -602,7 +646,7 @@ export const HomePage: React.FC = () => {
                 component={Link}
                 to="/families"
                 size="small"
-                sx={{ mt: 1, px: 0, fontWeight: 700 }}
+                sx={{ mt: 1, px: 0, fontWeight: 700, color: brand.primary }}
                 endIcon={<ArrowForwardIcon />}
               >
                 Complete now
@@ -616,12 +660,13 @@ export const HomePage: React.FC = () => {
             display: "grid",
             gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
             gap: 2,
+            alignItems: "stretch",
           }}
         >
-          <Card sx={{ borderRadius: 3 }}>
+          <Card sx={{ borderRadius: 3, height: "100%" }}>
             <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <PeopleIcon sx={{ color: "#b45309" }} />
+                <PeopleIcon sx={{ color: brand.primary }} />
                 <Typography variant="h6" sx={{ fontWeight: 800 }}>
                   Top Contributors
                 </Typography>
@@ -654,8 +699,8 @@ export const HomePage: React.FC = () => {
                           label={`#${index + 1}`}
                           size="small"
                           sx={{
-                            bgcolor: "#fff7ed",
-                            color: "#b45309",
+                            bgcolor: brand.primarySoft,
+                            color: brand.primary,
                             fontWeight: 700,
                             minWidth: 42,
                           }}
@@ -678,10 +723,10 @@ export const HomePage: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card sx={{ borderRadius: 3 }}>
+          <Card sx={{ borderRadius: 3, height: "100%" }}>
             <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <TimelineIcon sx={{ color: "#0f766e" }} />
+                <TimelineIcon sx={{ color: brand.primary }} />
                 <Typography variant="h6" sx={{ fontWeight: 800 }}>
                   Family Pulse
                 </Typography>
@@ -689,7 +734,7 @@ export const HomePage: React.FC = () => {
               <Stack spacing={1.2}>
                 {pulseItems.map((item) => (
                   <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
-                    <TaskAltIcon sx={{ color: "#0f766e", fontSize: 19, mt: 0.2 }} />
+                    <TaskAltIcon sx={{ color: brand.accent, fontSize: 19, mt: 0.2 }} />
                     <Typography variant="body2" color="text.secondary">
                       {item}
                     </Typography>
@@ -699,10 +744,10 @@ export const HomePage: React.FC = () => {
             </CardContent>
           </Card>
 
-          <Card sx={{ borderRadius: 3 }}>
+          <Card sx={{ borderRadius: 3, height: "100%" }}>
             <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <HistoryEduIcon sx={{ color: "#b45309" }} />
+                <HistoryEduIcon sx={{ color: brand.primary }} />
                 <Typography variant="h6" sx={{ fontWeight: 800 }}>
                   Today in Family History
                 </Typography>
@@ -711,9 +756,9 @@ export const HomePage: React.FC = () => {
                 {historyTodayItems.map((item, idx) => (
                   <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
                     {idx === 0 ? (
-                      <AutoStoriesIcon sx={{ color: "#b45309", fontSize: 19, mt: 0.2 }} />
+                      <AutoStoriesIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
                     ) : (
-                      <FavoriteBorderIcon sx={{ color: "#b45309", fontSize: 19, mt: 0.2 }} />
+                      <FavoriteBorderIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
                     )}
                     <Typography variant="body2" color="text.secondary">
                       {item}
@@ -739,7 +784,7 @@ export const HomePage: React.FC = () => {
               variant="contained"
               component={Link}
               to="/families"
-              sx={{ bgcolor: "#0f766e", "&:hover": { bgcolor: "#115e59" }, fontWeight: 700 }}
+              sx={{ bgcolor: brand.primary, "&:hover": { bgcolor: brand.primaryDark }, fontWeight: 700 }}
             >
               Open Family Trees
             </Button>

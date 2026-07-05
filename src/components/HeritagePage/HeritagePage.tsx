@@ -21,6 +21,7 @@ import LocationOnIcon from "@mui/icons-material/LocationOn";
 import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch } from "../../store/hooks";
 import { fetchLocationHeritage } from "../../store/thunks/apiThunks";
+import { brand } from "../../theme/brand";
 
 interface HeritageData {
   locationOrigin: string;
@@ -152,7 +153,7 @@ export const HeritagePage: React.FC = () => {
               Location Origin & History
             </Typography>
           </Stack>
-          <Paper elevation={2} sx={{ p: 4, bgcolor: "#f9f9f9" }}>
+          <Paper elevation={2} sx={{ p: 4, bgcolor: brand.canvas }}>
             {heritageData.foundedYear && (
               <Typography
                 variant="h6"
@@ -166,7 +167,7 @@ export const HeritagePage: React.FC = () => {
               <Typography
                 variant="body2"
                 gutterBottom
-                sx={{ mb: 2, color: "#666" }}
+                sx={{ mb: 2, color: brand.slateMuted }}
               >
                 <strong>Founders:</strong> {heritageData.founders}
               </Typography>

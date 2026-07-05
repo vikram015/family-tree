@@ -13,6 +13,7 @@ import {
   Card,
   CardContent,
 } from "@mui/material";
+import { brand } from "../../theme/brand";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import EmailIcon from "@mui/icons-material/Email";
 import LinkedInIcon from "@mui/icons-material/LinkedIn";
@@ -71,7 +72,7 @@ export const ContactPage: React.FC = () => {
       <Box
         sx={{
           background:
-            "linear-gradient(130deg, #fff7ed 0%, #ecfdf5 45%, #eff6ff 100%)",
+            `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
           minHeight: "100%",
           py: { xs: 4, md: 6 },
         }}
@@ -107,7 +108,7 @@ export const ContactPage: React.FC = () => {
                     sx={{
                       width: { xs: 72, md: 92 },
                       height: { xs: 72, md: 92 },
-                      border: "3px solid #fff",
+                      border: `3px solid ${brand.surface}`,
                     }}
                   />
                   <Box>
@@ -135,8 +136,8 @@ export const ContactPage: React.FC = () => {
                     fullWidth
                     sx={{
                       minWidth: { sm: 120 },
-                      bgcolor: "#b45309",
-                      "&:hover": { bgcolor: "#92400e" },
+                      bgcolor: brand.accent,
+                      "&:hover": { bgcolor: brand.accentDark },
                     }}
                   >
                     Email
@@ -150,8 +151,8 @@ export const ContactPage: React.FC = () => {
                     fullWidth
                     sx={{
                       minWidth: { sm: 120 },
-                      bgcolor: "#16a34a",
-                      "&:hover": { bgcolor: "#15803d" },
+                      bgcolor: brand.accent,
+                      "&:hover": { bgcolor: brand.accentDark },
                     }}
                   >
                     WhatsApp
@@ -183,19 +184,19 @@ export const ContactPage: React.FC = () => {
                   </Typography>
                   <Stack spacing={1.3}>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <FamilyRestroomIcon fontSize="small" sx={{ color: "#0f766e" }} />
+                      <FamilyRestroomIcon fontSize="small" sx={{ color: brand.primary }} />
                       <Typography variant="body2" color="text.secondary">
                         Family profile corrections and lineage updates
                       </Typography>
                     </Stack>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <HistoryEduIcon fontSize="small" sx={{ color: "#0f766e" }} />
+                      <HistoryEduIcon fontSize="small" sx={{ color: brand.primary }} />
                       <Typography variant="body2" color="text.secondary">
                         Story and heritage documentation support
                       </Typography>
                     </Stack>
                     <Stack direction="row" spacing={1} alignItems="center">
-                      <VerifiedUserIcon fontSize="small" sx={{ color: "#0f766e" }} />
+                      <VerifiedUserIcon fontSize="small" sx={{ color: brand.primary }} />
                       <Typography variant="body2" color="text.secondary">
                         Account, access, and admin workflow help
                       </Typography>
@@ -207,7 +208,7 @@ export const ContactPage: React.FC = () => {
                   <Card variant="outlined" sx={{ borderRadius: 2.5 }}>
                     <CardContent>
                       <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 0.5 }}>
-                        <EmailIcon sx={{ color: "#b45309" }} />
+                        <EmailIcon sx={{ color: brand.accent }} />
                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                           Email
                         </Typography>
@@ -221,7 +222,7 @@ export const ContactPage: React.FC = () => {
                   <Card variant="outlined" sx={{ borderRadius: 2.5 }}>
                     <CardContent>
                       <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 0.5 }}>
-                        <PhoneIcon sx={{ color: "#0f766e" }} />
+                        <PhoneIcon sx={{ color: brand.primary }} />
                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                           Mobile
                         </Typography>

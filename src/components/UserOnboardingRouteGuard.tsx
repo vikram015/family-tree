@@ -68,9 +68,11 @@ export const UserOnboardingRouteGuard: React.FC = () => {
       return;
     }
 
-    if (!needsOnboarding && location.pathname === "/onboarding") {
-      navigate("/families", { replace: true });
-    }
+    // NOTE: the post-completion redirect (honoring the remembered origin, else
+    // the tree) is owned by UserOnboardingPage's completion handlers, so this
+    // guard deliberately does NOT navigate on completion. That keeps
+    // UserOnboardingPage the single consumer of the post-login redirect token
+    // and avoids a race where two navigators would both consume it.
   }, [
     currentUser,
     loading,

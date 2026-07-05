@@ -16,6 +16,13 @@ interface LocationPickerProps {
   disabled?: boolean;
   size?: "small" | "medium";
   autoFocus?: boolean;
+  /**
+   * Only list locations that already have a tree created, and show that full
+   * list as soon as the picker is opened (no typing required). Used by the
+   * header type-ahead. Other usages (e.g. create-tree) keep the default
+   * type-to-search behavior over all locations.
+   */
+  withTreesOnly?: boolean;
 }
 
 /**
@@ -31,6 +38,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
   disabled = false,
   size = "medium",
   autoFocus = false,
+  withTreesOnly = false,
 }) => {
   const [inputValue, setInputValue] = useState(value?.label || "");
   const [options, setOptions] = useState<LocationCombinationOption[]>([]);
@@ -42,18 +50,26 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     setInputValue(value?.label || "");
   }, [value?.locationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced search on typed input (skip when the input equals the selection).
+  // Debounced search on typed input. In withTreesOnly mode an empty box (or one
+  // still showing the selected label) lists all tree-backed locations instead
+  // of skipping the fetch, so the header dropdown is populated on open.
   useEffect(() => {
     const q = inputValue.trim();
     // Invalidate any in-flight search so its result/loading state is ignored.
     const id = ++latest.current;
-    if (!q || (value && q === value.label)) {
+    const isSelectionLabel = !!value && q === value.label;
+    const searchQuery = isSelectionLabel ? "" : q;
+    if (!searchQuery && !withTreesOnly) {
       setLoading(false);
       return;
     }
     setLoading(true);
     const timer = window.setTimeout(() => {
-      ApiService.searchLocationCombinations({ query: q, limit: 12 })
+      ApiService.searchLocationCombinations({
+        query: searchQuery,
+        limit: withTreesOnly ? 50 : 12,
+        withTreesOnly,
+      })
         .then((rows) => {
           if (id === latest.current) setOptions(rows || []);
         })
@@ -65,7 +81,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [inputValue, value]);
+  }, [inputValue, value, withTreesOnly]);
 
   return (
     <Autocomplete
@@ -83,7 +99,13 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
       loading={loading}
       disabled={disabled}
       size={size}
-      noOptionsText={inputValue.trim() ? "No matches" : "Type to search"}
+      noOptionsText={
+        inputValue.trim()
+          ? "No matches"
+          : withTreesOnly
+            ? "No locations with trees yet"
+            : "Type to search"
+      }
       renderInput={(params) => (
         <TextField
           {...params}

@@ -12,10 +12,8 @@ import {
   IconButton,
   InputAdornment,
   CircularProgress,
-  useMediaQuery,
-  useTheme,
 } from "@mui/material";
-import { Close, LockOutlined, PhoneIphone, VerifiedUserOutlined } from "@mui/icons-material";
+import { Close, LockOutlined, VerifiedUserOutlined } from "@mui/icons-material";
 import {
   ConfirmationResult,
   RecaptchaVerifier,
@@ -23,6 +21,9 @@ import {
 } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
 import { ApiService } from "../../services/apiService";
+import { OtpInput } from "./OtpInput";
+import { OTP_LENGTH } from "../../config/otp";
+import { brand } from "../../theme/brand";
 
 const OTP_RESEND_BASE_DELAY_SECONDS = 30;
 const OTP_RESEND_MAX_DELAY_SECONDS = 5 * 60;
@@ -69,9 +70,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     useState<ConfirmationResult | null>(null);
   const [otpSendCount, setOtpSendCount] = useState(0);
   const [resendCooldownSeconds, setResendCooldownSeconds] = useState(0);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -225,8 +223,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    if (!otp.trim()) {
-      setError("Please enter OTP");
+    if (otp.length < OTP_LENGTH) {
+      setError(`Please enter the ${OTP_LENGTH}-digit code`);
       return;
     }
 
@@ -263,13 +261,52 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     onClose();
   };
 
+  // Shared input styling used by both the phone and OTP fields.
+  const fieldSx = {
+    mb: 2,
+    "& .MuiOutlinedInput-root": {
+      minHeight: 56,
+      borderRadius: 2.5,
+      bgcolor: "#fbfdff",
+      fontWeight: 600,
+      "& fieldset": { borderColor: "rgba(15,23,42,0.12)" },
+      "&:hover fieldset": { borderColor: "rgba(15,23,42,0.25)" },
+      "&.Mui-focused fieldset": { borderColor: brand.primary, borderWidth: 2 },
+    },
+    "& input::placeholder": { color: brand.slateMuted, opacity: 1 },
+  } as const;
+
+  const fieldLabelSx = {
+    display: "block",
+    fontSize: 13,
+    fontWeight: 700,
+    color: brand.slate,
+    mb: 0.75,
+  } as const;
+
+  const primaryButtonSx = {
+    minHeight: 52,
+    px: 4,
+    mt: 0.5,
+    borderRadius: 2.5,
+    bgcolor: brand.primary,
+    boxShadow: "0 14px 30px rgba(13,110,253,0.28)",
+    fontWeight: 800,
+    fontSize: 16,
+    textTransform: "none",
+    "&:hover": {
+      bgcolor: brand.primaryDark,
+      boxShadow: "0 16px 32px rgba(13,110,253,0.32)",
+    },
+  } as const;
+
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="sm"
+      maxWidth="xs"
       fullWidth
-      fullScreen={isMobile}
+      scroll="paper"
       BackdropProps={{
         sx: {
           background:
@@ -279,12 +316,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }}
       PaperProps={{
         sx: {
-          borderRadius: isMobile ? 0 : 3,
+          // Centered card on every screen (incl. mobile) — never a top-aligned
+          // full-screen sheet.
+          m: { xs: 2, sm: 3 },
+          width: { xs: "calc(100% - 32px)", sm: "100%" },
+          maxHeight: { xs: "calc(100% - 32px)", sm: "calc(100% - 48px)" },
+          borderRadius: 4,
           overflow: "hidden",
-          boxShadow: isMobile
-            ? "none"
-            : "0 24px 80px rgba(15, 23, 42, 0.28)",
-          border: isMobile ? 0 : "1px solid rgba(255,255,255,0.7)",
+          boxShadow: "0 24px 80px rgba(15, 23, 42, 0.28)",
+          border: "1px solid rgba(255,255,255,0.7)",
         },
       }}
     >
@@ -292,14 +332,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         sx={{
           p: 0,
           background:
-            "linear-gradient(135deg, #f8fafc 0%, #eef7f1 46%, #fff7ed 100%)",
+            `linear-gradient(135deg, ${brand.canvas} 0%, ${brand.primarySoft} 46%, ${brand.accentSoft} 100%)`,
           borderBottom: "1px solid rgba(15,23,42,0.08)",
         }}
       >
         <Box
           sx={{
             position: "relative",
-            p: { xs: 2.25, sm: 3 },
+            p: { xs: 2.75, sm: 3.5 },
             pr: { xs: 6, sm: 7 },
           }}
         >
@@ -309,91 +349,102 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             size="small"
             sx={{
               position: "absolute",
-              top: 14,
-              right: 14,
+              top: 16,
+              right: 16,
               bgcolor: "rgba(255,255,255,0.72)",
-              "&:hover": { bgcolor: "#ffffff" },
+              "&:hover": { bgcolor: brand.surface },
             }}
           >
-            <Close />
+            <Close fontSize="small" />
           </IconButton>
-          <Stack direction="row" spacing={1.5} alignItems="center">
+
+          <Stack direction="row" spacing={1.25} alignItems="center">
             <Box
               component="img"
               src="/favicon2.png"
               alt="Kinvia"
               sx={{
-                width: 58,
-                height: 58,
-                borderRadius: 2,
-                boxShadow: "0 10px 26px rgba(15,23,42,0.16)",
-                bgcolor: "#fff",
+                width: 34,
+                height: 34,
+                borderRadius: 1.5,
+                display: "block",
+                boxShadow: "0 6px 16px rgba(15,23,42,0.16)",
+                bgcolor: brand.surface,
               }}
             />
-            <Box>
-              <Typography
-                variant="overline"
-                sx={{
-                  color: "#0f766e",
-                  fontWeight: 800,
-                  letterSpacing: 0.4,
-                  lineHeight: 1,
-                }}
-              >
-                Kinvia
-              </Typography>
-              <Typography
-                variant={isMobile ? "h5" : "h4"}
-                sx={{ fontWeight: 900, letterSpacing: 0, color: "#0f172a" }}
-              >
-                Welcome back
-              </Typography>
-              <Typography variant="body2" sx={{ color: "#475569", mt: 0.5 }}>
-                Sign in securely to continue your family story.
-              </Typography>
-            </Box>
+            <Typography
+              sx={{
+                color: brand.primary,
+                fontWeight: 800,
+                letterSpacing: 2,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+            >
+              KINVIA
+            </Typography>
           </Stack>
+
+          <Typography
+            sx={{
+              mt: 2,
+              fontWeight: 900,
+              fontSize: { xs: 32, sm: 38 },
+              lineHeight: 1.1,
+              color: brand.ink,
+            }}
+          >
+            {confirmationResult ? "Verify your number" : "Welcome back"}
+          </Typography>
+          <Typography sx={{ mt: 1, color: brand.slate, fontSize: 15 }}>
+            {confirmationResult
+              ? `Enter the ${OTP_LENGTH}-digit code we just sent you.`
+              : "Sign in securely to continue your family story."}
+          </Typography>
         </Box>
       </DialogTitle>
+
       <DialogContent
         sx={{
-          p: { xs: 2.25, sm: 3 },
-          bgcolor: "#ffffff",
+          p: { xs: 2.75, sm: 3.5 },
+          bgcolor: brand.surface,
         }}
       >
-        <Box>
-          <Stack
-            direction="row"
-            spacing={1}
-            useFlexGap
-            flexWrap="wrap"
-            sx={{ mb: 2.5 }}
-          >
-            {[
-              { icon: <VerifiedUserOutlined sx={{ fontSize: 16 }} />, label: "Verified access" },
-              { icon: <LockOutlined sx={{ fontSize: 16 }} />, label: "OTP protected" },
-            ].map((item) => (
-              <Box
-                key={item.label}
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 0.75,
-                  px: 1.2,
-                  py: 0.65,
-                  borderRadius: 999,
-                  bgcolor: "#f8fafc",
-                  border: "1px solid rgba(15,23,42,0.08)",
-                  color: "#334155",
-                  fontSize: 12,
-                  fontWeight: 700,
-                }}
-              >
-                {item.icon}
-                {item.label}
-              </Box>
-            ))}
-          </Stack>
+        <Box mt={3}>
+          {!confirmationResult && (
+            <Stack
+              direction="row"
+              spacing={1}
+              useFlexGap
+              flexWrap="wrap"
+              sx={{ mb: 3 }}
+            >
+              {[
+                { icon: <VerifiedUserOutlined sx={{ fontSize: 16 }} />, label: "Verified access" },
+                { icon: <LockOutlined sx={{ fontSize: 16 }} />, label: "OTP protected" },
+              ].map((item) => (
+                <Box
+                  key={item.label}
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    px: 1.4,
+                    py: 0.7,
+                    borderRadius: 999,
+                    bgcolor: brand.canvas,
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    color: brand.slate,
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                  }}
+                >
+                  {item.icon}
+                  {item.label}
+                </Box>
+              ))}
+            </Stack>
+          )}
 
           {successMessage && (
             <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
@@ -407,148 +458,162 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </Alert>
           )}
 
-          <form onSubmit={confirmationResult ? handleVerifyOtp : handleSendOtp}>
-            <TextField
-              label="Mobile Number"
-              fullWidth
-              variant="outlined"
-              value={phone}
-              onChange={(e) => {
-                const digitsOnly = e.target.value
-                  .replace(/\D/g, "")
-                  .slice(0, 10);
-                setPhone(digitsOnly);
-              }}
-              placeholder="9876543210"
-              sx={{
-                mb: 2,
-                "& .MuiOutlinedInput-root": {
-                  minHeight: 58,
-                  borderRadius: 2,
-                  bgcolor: "#fbfdff",
-                },
-              }}
-              disabled={loading || !!confirmationResult}
-              inputProps={{
-                inputMode: "numeric",
-                pattern: "[0-9]*",
-                maxLength: 10,
-              }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Stack direction="row" spacing={0.75} alignItems="center">
-                      <PhoneIphone sx={{ fontSize: 18, color: "#0f766e" }} />
-                      <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
-                        +91
-                      </Typography>
-                    </Stack>
-                  </InputAdornment>
-                ),
-              }}
-            />
-
-            {confirmationResult && (
+          {!confirmationResult ? (
+            <form onSubmit={handleSendOtp}>
+              <Typography component="label" sx={fieldLabelSx}>
+                Mobile number
+              </Typography>
               <TextField
-                label="OTP"
                 fullWidth
                 variant="outlined"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="Enter verification code"
-                sx={{
-                  mb: 2,
-                  "& .MuiOutlinedInput-root": {
-                    minHeight: 58,
-                    borderRadius: 2,
-                    bgcolor: "#fbfdff",
-                  },
+                value={phone}
+                onChange={(e) => {
+                  const digitsOnly = e.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 10);
+                  setPhone(digitsOnly);
                 }}
-                type="password"
+                placeholder="98765 43210"
+                sx={fieldSx}
                 disabled={loading}
+                inputProps={{
+                  inputMode: "numeric",
+                  pattern: "[0-9]*",
+                  maxLength: 10,
+                }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <LockOutlined sx={{ fontSize: 18, color: "#0f766e" }} />
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Typography sx={{ fontWeight: 800, color: brand.ink }}>
+                          +91
+                        </Typography>
+                        <Box
+                          sx={{
+                            width: "1px",
+                            height: 22,
+                            bgcolor: "rgba(15,23,42,0.18)",
+                          }}
+                        />
+                      </Stack>
                     </InputAdornment>
                   ),
                 }}
               />
-            )}
 
-            <Button
-              type="submit"
-              variant="contained"
-              fullWidth
-              size="large"
-              disabled={loading}
-              sx={{
-                minHeight: 48,
-                px: 4,
-                mb: 1.25,
-                borderRadius: 2,
-                bgcolor: "#0d6efd",
-                boxShadow: "0 10px 20px rgba(13,110,253,0.22)",
-                fontWeight: 800,
-                textTransform: "none",
-                "&:hover": {
-                  bgcolor: "#0b5ed7",
-                  boxShadow: "0 12px 22px rgba(13,110,253,0.26)",
-                },
-              }}
-            >
-              {loading ? (
-                <CircularProgress size={20} color="inherit" />
-              ) : confirmationResult ? (
-                "Verify OTP"
-              ) : (
-                "Send OTP"
-              )}
-            </Button>
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading}
+                sx={primaryButtonSx}
+              >
+                {loading ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  "Send OTP"
+                )}
+              </Button>
 
-            {confirmationResult && (
-              <>
-                <Button
-                  variant="text"
-                  fullWidth
-                  onClick={handleResendOtp}
-                  disabled={loading || resendCooldownSeconds > 0}
-                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+              <Typography
+                variant="caption"
+                sx={{
+                  display: "block",
+                  mt: 2,
+                  color: brand.slateMuted,
+                  textAlign: "center",
+                  lineHeight: 1.5,
+                }}
+              >
+                We use your phone number only to verify your Kinvia account access.
+              </Typography>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyOtp}>
+              <Typography sx={{ ...fieldLabelSx, mb: 1.25 }}>
+                Enter the code sent to{" "}
+                <Box component="span" sx={{ color: brand.ink, fontWeight: 800 }}>
+                  +91 {phone}
+                </Box>
+              </Typography>
+
+              <OtpInput
+                length={OTP_LENGTH}
+                value={otp}
+                onChange={setOtp}
+                disabled={loading}
+                autoFocus
+              />
+
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                size="large"
+                disabled={loading || otp.length < OTP_LENGTH}
+                sx={{ ...primaryButtonSx, mt: 2.5 }}
+              >
+                {loading ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  "Verify and continue"
+                )}
+              </Button>
+
+              <Typography
+                variant="body2"
+                sx={{ mt: 1.75, textAlign: "center", color: brand.slateMuted }}
+              >
+                Didn't get a code?{" "}
+                <Box
+                  component="span"
+                  role="button"
+                  onClick={() => {
+                    if (!loading && resendCooldownSeconds <= 0) {
+                      void handleResendOtp();
+                    }
+                  }}
+                  sx={{
+                    fontWeight: 800,
+                    color:
+                      loading || resendCooldownSeconds > 0
+                        ? brand.slateMuted
+                        : brand.primary,
+                    cursor:
+                      loading || resendCooldownSeconds > 0
+                        ? "default"
+                        : "pointer",
+                  }}
                 >
                   {resendCooldownSeconds > 0
                     ? `Resend OTP in ${formatCooldown(resendCooldownSeconds)}`
                     : "Resend OTP"}
-                </Button>
+                </Box>
+              </Typography>
 
-                <Button
-                  variant="text"
-                  fullWidth
-                  onClick={() => {
-                    resetOtpFlow();
-                    setSuccessMessage("");
-                    setError("");
-                  }}
-                  disabled={loading}
-                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
-                >
-                  Use different phone number
-                </Button>
-              </>
-            )}
-          </form>
+              <Button
+                variant="text"
+                fullWidth
+                onClick={() => {
+                  resetOtpFlow();
+                  setSuccessMessage("");
+                  setError("");
+                }}
+                disabled={loading}
+                sx={{
+                  mt: 0.5,
+                  borderRadius: 2,
+                  textTransform: "none",
+                  fontWeight: 700,
+                  color: brand.slate,
+                }}
+              >
+                Change mobile number
+              </Button>
+            </form>
+          )}
 
-          <Typography
-            variant="caption"
-            sx={{
-              display: "block",
-              mt: 2,
-              color: "#64748b",
-              textAlign: "center",
-              lineHeight: 1.5,
-            }}
-          >
-            We use your phone number only to verify your Kinvia account access.
-          </Typography>
           <Box ref={recaptchaContainerRef} sx={{ mt: 1 }} />
         </Box>
       </DialogContent>

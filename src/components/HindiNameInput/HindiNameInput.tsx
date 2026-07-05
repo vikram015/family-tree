@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Autocomplete,
   CircularProgress,
   InputAdornment,
   TextField,
   Typography,
 } from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import { FullScreenMobileAutocomplete } from "../FullScreenMobilePicker";
 
 interface HindiNameInputProps {
   sourceText: string;
@@ -109,7 +109,9 @@ export function HindiNameInput({
   }, [options, value]);
 
   return (
-    <Autocomplete
+    <FullScreenMobileAutocomplete<string, false, false, true>
+      pickerTitle={label}
+      closeLabel={`Close ${label}`}
       freeSolo
       options={mergedOptions}
       value={value}
@@ -143,6 +145,10 @@ export function HindiNameInput({
       sx={{
         "& .MuiAutocomplete-popupIndicator": {
           transform: "none",
+        },
+        // Match the rounded radius used by the other form fields (inputWithIconSx).
+        "& .MuiOutlinedInput-root": {
+          borderRadius: 2,
         },
       }}
       renderInput={(params) => (

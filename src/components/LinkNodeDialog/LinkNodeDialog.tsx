@@ -28,6 +28,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch } from "../../store/hooks";
 import { submitLocationAccessRequest } from "../../store/thunks/apiThunks";
+import { brand } from "../../theme/brand";
 
 interface SelectedPerson {
   id: string;
@@ -463,7 +464,7 @@ export const LinkNodeDialog: React.FC = () => {
               startIcon={
                 linking ? <CircularProgress size={16} /> : <LinkIcon />
               }
-              sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
+              sx={{ background: `linear-gradient(135deg, ${brand.primary}, ${brand.accent})` }}
             >
               {linking ? "Linking..." : "Link My Account"}
             </Button>
@@ -488,7 +489,7 @@ export const LinkNodeDialog: React.FC = () => {
               startIcon={
                 requesting ? <CircularProgress size={16} /> : undefined
               }
-              sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
+              sx={{ background: `linear-gradient(135deg, ${brand.primary}, ${brand.accent})` }}
             >
               {hasAssignedLocation
                 ? "Done"

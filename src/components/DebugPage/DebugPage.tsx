@@ -10,6 +10,7 @@ import {
 import { runHierarchyMigrationForAllTrees } from "../../utils/hierarchyMigration";
 import { MigrationService } from "../../services/migrationService";
 import { backendApi } from "../../services/backendApi";
+import { brand } from "../../theme/brand";
 
 export const DebugPage: React.FC = () => {
   const [locations, setLocations] = useState<any[]>([]);
@@ -195,7 +196,7 @@ export const DebugPage: React.FC = () => {
               </Alert>
             )}
             {migrationResults && (
-              <Box sx={{ mt: 3, bgcolor: "white", p: 2, borderRadius: 1 }}>
+              <Box sx={{ mt: 3, bgcolor: brand.surface, p: 2, borderRadius: 1 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
                   Migration Results:
                 </Typography>
@@ -226,7 +227,7 @@ export const DebugPage: React.FC = () => {
               {locations.map((location, idx) => (
                 <Box
                   key={idx}
-                  sx={{ mb: 2, p: 1, bgcolor: "white", borderRadius: 0.5 }}
+                  sx={{ mb: 2, p: 1, bgcolor: brand.surface, borderRadius: 0.5 }}
                 >
                   <Typography variant="body2">
                     <strong>ID:</strong> {location.id}
@@ -249,7 +250,7 @@ export const DebugPage: React.FC = () => {
               {heritageData.map((doc: any, idx: number) => (
                 <Box
                   key={idx}
-                  sx={{ mb: 2, p: 1, bgcolor: "white", borderRadius: 0.5 }}
+                  sx={{ mb: 2, p: 1, bgcolor: brand.surface, borderRadius: 0.5 }}
                 >
                   <Typography variant="body2">
                     <strong>Document ID:</strong> {doc.id}

@@ -13,6 +13,7 @@ import {
   Divider,
   Link,
 } from "@mui/material";
+import { brand } from "../../theme/brand";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
@@ -21,6 +22,7 @@ import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import HistoryEduOutlinedIcon from "@mui/icons-material/HistoryEduOutlined";
 import PhoneIphoneOutlinedIcon from "@mui/icons-material/PhoneIphoneOutlined";
+import LinkedInIcon from "@mui/icons-material/LinkedIn";
 
 const features = [
   {
@@ -71,7 +73,7 @@ export const AboutPage: React.FC = () => {
       <Box
         sx={{
           background:
-            "linear-gradient(130deg, #fff7ed 0%, #ecfdf5 45%, #eff6ff 100%)",
+            `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
           minHeight: "100%",
           py: { xs: 4, md: 6 },
         }}
@@ -110,7 +112,7 @@ export const AboutPage: React.FC = () => {
                 <Button
                   variant="contained"
                   onClick={() => navigate("/families")}
-                  sx={{ bgcolor: "#b45309", "&:hover": { bgcolor: "#92400e" } }}
+                  sx={{ bgcolor: brand.accent, "&:hover": { bgcolor: brand.accentDark } }}
                 >
                   Explore family trees
                 </Button>
@@ -145,7 +147,7 @@ export const AboutPage: React.FC = () => {
                 {features.map((f) => (
                   <Card key={f.title} variant="outlined" sx={{ borderRadius: 2.5, height: "100%" }}>
                     <CardContent>
-                      <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 1, color: "#0f766e" }}>
+                      <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 1, color: brand.primary }}>
                         {f.icon}
                         <Typography variant="subtitle1" sx={{ fontWeight: 700, color: "text.primary" }}>
                           {f.title}
@@ -173,18 +175,32 @@ export const AboutPage: React.FC = () => {
                 justifyContent="space-between"
               >
                 <Stack direction="row" spacing={1.2} alignItems="center">
-                  <PhoneIphoneOutlinedIcon sx={{ color: "#0f766e" }} />
+                  <PhoneIphoneOutlinedIcon sx={{ color: brand.primary }} />
                   <Typography variant="body2" color="text.secondary">
                     Works on any device and can be installed to your home screen
                     like an app.
                   </Typography>
                 </Stack>
                 <Stack direction="row" spacing={1.2} alignItems="center">
-                  <GroupsOutlinedIcon sx={{ color: "#b45309" }} />
+                  <GroupsOutlinedIcon sx={{ color: brand.accent }} />
                   <Typography variant="body2" color="text.secondary">
                     Questions or corrections?{" "}
                     <Link href="mailto:info@kinvia.in" underline="hover">
                       info@kinvia.in
+                    </Link>
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                  <LinkedInIcon sx={{ color: "#0a66c2" }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Follow us on{" "}
+                    <Link
+                      href="https://www.linkedin.com/company/kinvia-in/about/"
+                      target="_blank"
+                      rel="noreferrer"
+                      underline="hover"
+                    >
+                      LinkedIn
                     </Link>
                   </Typography>
                 </Stack>

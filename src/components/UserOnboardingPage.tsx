@@ -43,6 +43,7 @@ import AddTree from "./AddTree/AddTree";
 import { useAuth } from "./hooks/useAuth";
 import { useLocations } from "./hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
+import { consumePostLoginRedirect } from "../utils/postLoginRedirect";
 import {
   fetchAllSubCastes,
   fetchCastes,
@@ -72,6 +73,7 @@ import {
 } from "../services/apiService";
 import { OnboardingTreePreviewDialog } from "./OnboardingTreePreviewDialog";
 import { FullScreenMobileAutocomplete } from "./FullScreenMobilePicker";
+import { brand } from "../theme/brand";
 
 const STEP_INDEX: Record<string, number> = {
   profile: 0,
@@ -84,8 +86,8 @@ const ONBOARDING_STEPS = [
   { key: "location", label: "Community" },
   { key: "match", label: "Find Family Tree" },
 ] as const;
-const onboardingBlue = "#0d6efd";
-const onboardingGreen = "#16a34a";
+const onboardingBlue = brand.primary;
+const onboardingGreen = brand.accent;
 const profileFormMaxWidth = 560;
 const locationFormMaxWidth = 640;
 
@@ -391,17 +393,17 @@ export const UserOnboardingPage: React.FC = () => {
       left: 52,
       top: 8,
       transform: "none",
-      color: "#475569",
+      color: brand.slate,
       fontSize: 12,
       fontWeight: 600,
       lineHeight: 1.2,
       pointerEvents: "none",
       zIndex: 1,
       "&.Mui-focused": {
-        color: "#475569",
+        color: brand.slate,
       },
       "&.Mui-disabled": {
-        color: "#64748b",
+        color: brand.slateMuted,
       },
       "&.MuiInputLabel-shrink": {
         transform: "none",
@@ -431,12 +433,12 @@ export const UserOnboardingPage: React.FC = () => {
       pt: 3,
       pb: 1.25,
       fontWeight: 600,
-      color: "#0f172a",
+      color: brand.ink,
     },
     "& .MuiInputAdornment-root": {
       mt: "0 !important",
       alignSelf: "center",
-      color: "#0f172a",
+      color: brand.ink,
     },
   };
   const primaryOnboardingButtonSx = {
@@ -448,7 +450,7 @@ export const UserOnboardingPage: React.FC = () => {
     fontWeight: 800,
     textTransform: "none",
     "&:hover": {
-      bgcolor: "#0b5ed7",
+      bgcolor: brand.primaryDark,
       boxShadow: "0 12px 22px rgba(13,110,253,0.26)",
     },
   };
@@ -501,7 +503,7 @@ export const UserOnboardingPage: React.FC = () => {
               <Typography
                 variant="caption"
                 sx={{
-                  color: active || completed ? "#0f172a" : "#64748b",
+                  color: active || completed ? brand.ink : brand.slateMuted,
                   fontWeight: active ? 800 : 600,
                   textAlign: "center",
                 }}
@@ -510,15 +512,25 @@ export const UserOnboardingPage: React.FC = () => {
               </Typography>
             </Stack>
             {index < ONBOARDING_STEPS.length - 1 && (
+              // Wrapper matches the circle's height (32px) so the 2px line sits
+              // exactly on the circle's vertical center, not near the top.
               <Box
                 sx={{
                   flex: 1,
-                  height: 2,
-                  mt: 2,
                   maxWidth: 160,
-                  bgcolor: index < activeStepIndex ? onboardingGreen : "#e2e8f0",
+                  height: 32,
+                  display: "flex",
+                  alignItems: "center",
                 }}
-              />
+              >
+                <Box
+                  sx={{
+                    width: "100%",
+                    height: 2,
+                    bgcolor: index < activeStepIndex ? onboardingGreen : brand.border,
+                  }}
+                />
+              </Box>
             )}
           </React.Fragment>
         );
@@ -1313,7 +1325,9 @@ export const UserOnboardingPage: React.FC = () => {
       }),
     ).unwrap();
     await dispatch(fetchUserOnboarding()).unwrap();
-    navigate(targetUrl, { replace: true });
+    // Onboarding is done — return to where the login flow was initiated (e.g.
+    // the Business page), falling back to the tree the user just linked into.
+    navigate(consumePostLoginRedirect() || targetUrl, { replace: true });
   };
 
   const handleOpenCreateTree = async () => {
@@ -1342,9 +1356,10 @@ export const UserOnboardingPage: React.FC = () => {
     if (selectedLocationId) {
       setSelectedLocation(selectedLocationId);
     }
-    navigate(`/families?tree=${encodeURIComponent(treeId)}&createRoot=1`, {
-      replace: true,
-    });
+    // Return to where login was initiated if we remember it; otherwise open the
+    // freshly created tree so the user can add its root person.
+    const treeUrl = `/families?tree=${encodeURIComponent(treeId)}&createRoot=1`;
+    navigate(consumePostLoginRedirect() || treeUrl, { replace: true });
   };
 
   const renderTreeCard = (tree: (typeof matchResults)[number]) => (
@@ -1375,8 +1390,8 @@ export const UserOnboardingPage: React.FC = () => {
               sx={{
                 width: 42,
                 height: 42,
-                bgcolor: tree.matchedPeople.length > 0 ? "#dcfce7" : "#f1f5f9",
-                color: tree.matchedPeople.length > 0 ? "#15803d" : "#64748b",
+                bgcolor: tree.matchedPeople.length > 0 ? brand.accentSoft : "#f1f5f9",
+                color: tree.matchedPeople.length > 0 ? brand.accentDark : brand.slateMuted,
                 fontWeight: 900,
               }}
             >
@@ -1410,10 +1425,10 @@ export const UserOnboardingPage: React.FC = () => {
                 size="small"
                 icon={<LocationOnOutlinedIcon />}
                 label={tree.locationName}
-                sx={{ bgcolor: "#f8fafc" }}
+                sx={{ bgcolor: brand.canvas }}
               />
-              <Chip size="small" label={tree.casteName || "No caste"} sx={{ bgcolor: "#f8fafc" }} />
-              <Chip size="small" label={tree.subCasteName || "No sub-caste"} sx={{ bgcolor: "#f8fafc" }} />
+              <Chip size="small" label={tree.casteName || "No caste"} sx={{ bgcolor: brand.canvas }} />
+              <Chip size="small" label={tree.subCasteName || "No sub-caste"} sx={{ bgcolor: brand.canvas }} />
             </Stack>
           </Box>
           </Stack>
@@ -1432,7 +1447,7 @@ export const UserOnboardingPage: React.FC = () => {
           </Stack>
         </Stack>
       </AccordionSummary>
-      <AccordionDetails sx={{ bgcolor: "#f8fafc", px: { xs: 1.5, sm: 2 } }}>
+      <AccordionDetails sx={{ bgcolor: brand.canvas, px: { xs: 1.5, sm: 2 } }}>
 
         {tree.matchedPeople.length > 0 ? (
           <Stack spacing={2}>
@@ -1863,8 +1878,13 @@ export const UserOnboardingPage: React.FC = () => {
                         filterOptions={(options, params) =>
                           buildCreatableLookupOptions(options, params, "caste")
                         }
-                        onInputChange={(_event, value) => {
-                          setCasteInputValue(value);
+                        onInputChange={(_event, value, reason) => {
+                          // Only react to real user typing/clearing. The hidden
+                          // mobile trigger fires "reset" when this value changes,
+                          // which would otherwise wipe what the user just typed.
+                          if (reason === "input" || reason === "clear") {
+                            setCasteInputValue(value);
+                          }
                         }}
                         onChange={async (_event, value) => {
                           if (!value) {
@@ -1945,8 +1965,13 @@ export const UserOnboardingPage: React.FC = () => {
                             "sub-caste",
                           )
                         }
-                        onInputChange={(_event, value) => {
-                          setSubCasteInputValue(value);
+                        onInputChange={(_event, value, reason) => {
+                          // Only react to real user typing/clearing (ignore the
+                          // "reset" the hidden mobile trigger emits, which would
+                          // otherwise clear the text as it's typed).
+                          if (reason === "input" || reason === "clear") {
+                            setSubCasteInputValue(value);
+                          }
                         }}
                         onChange={async (_event, value) => {
                           if (!value) {
@@ -2029,8 +2054,8 @@ export const UserOnboardingPage: React.FC = () => {
                         sx={{
                           p: { xs: 1.5, sm: 2.25 },
                           borderRadius: 3,
-                          bgcolor: "#eff6ff",
-                          color: "#0f172a",
+                          bgcolor: brand.primarySoft,
+                          color: brand.ink,
                           border: "1px solid rgba(13,110,253,0.22)",
                           boxShadow: "0 10px 24px rgba(13,110,253,0.06)",
                         }}
@@ -2045,7 +2070,7 @@ export const UserOnboardingPage: React.FC = () => {
                             <Box>
                               <Typography
                                 variant="subtitle1"
-                                sx={{ color: "#0f172a", fontWeight: 800 }}
+                                sx={{ color: brand.ink, fontWeight: 800 }}
                               >
                                 Search criteria
                               </Typography>
@@ -2261,7 +2286,10 @@ export const UserOnboardingPage: React.FC = () => {
 
             <Box
               sx={{
-                px: { xs: 0, sm: 0 },
+                // Match the content Box padding so the full-width match-step
+                // actions line up with the content above (centered steps keep 0
+                // padding since they align via maxWidth + mx:auto instead).
+                px: displayStep === "match" ? { xs: 0, sm: 2 } : { xs: 0, sm: 0 },
                 py: { xs: 2, sm: 2.5 },
                 width: "100%",
                 maxWidth: actionMaxWidth,

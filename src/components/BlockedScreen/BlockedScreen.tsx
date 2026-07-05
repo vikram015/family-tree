@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Button, Link, Paper, Typography } from "@mui/material";
 import BlockIcon from "@mui/icons-material/Block";
 import { useAuth } from "../hooks/useAuth";
+import { brand } from "../../theme/brand";
 
 interface BlockedScreenProps {
   reason?: string | null;
@@ -22,7 +23,7 @@ export const BlockedScreen: React.FC<BlockedScreenProps> = ({ reason }) => {
         alignItems: "center",
         justifyContent: "center",
         p: 2,
-        bgcolor: "#f8fafc",
+        bgcolor: brand.canvas,
       }}
     >
       <Paper sx={{ p: 4, maxWidth: 440, textAlign: "center", borderRadius: 3 }}>

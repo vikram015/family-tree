@@ -43,6 +43,10 @@ export interface DTreeComponentProps {
   initialShowFullTree?: boolean;
   allowNameDetailsClick?: boolean;
   allowHoverPreview?: boolean;
+  /** Open the node action sheet on any screen size (not just mobile). */
+  alwaysShowNodeSheet?: boolean;
+  /** Custom content for the node action sheet (replaces the default actions). */
+  renderNodeSheet?: TreeViewerProps["renderNodeSheet"];
 }
 
 function normalizePreferenceLanguage(
@@ -111,7 +115,9 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   initialMainId = null,
   initialShowFullTree = true,
   allowNameDetailsClick = true,
-  allowHoverPreview = false,  
+  allowHoverPreview = false,
+  alwaysShowNodeSheet = false,
+  renderNodeSheet,
 }) => {
   const dispatch = useAppDispatch();
   const { currentUser } = useAuth();
@@ -213,6 +219,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           context.isHighlighted,
           context.isMobile,
           context.canEditNode ?? true,
+          context.allowNameDetailsClick ?? true,
         ),
       renderPlaceholderCardSvg,
       renderMarriageNodeSvg,
@@ -221,8 +228,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   );
 
   const features: TreeViewerProps["features"] = useMemo(
-    () => ({ allowNameDetailsClick,allowHoverPreview }),
-    [allowNameDetailsClick, allowHoverPreview],
+    () => ({ allowNameDetailsClick, allowHoverPreview, alwaysShowNodeSheet }),
+    [allowNameDetailsClick, allowHoverPreview, alwaysShowNodeSheet],
   );
 
   return (
@@ -249,6 +256,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       onPreferencesChange={setViewerPreferences}
       features={features}
       renderers={renderers}
+      renderNodeSheet={renderNodeSheet}
     />
   );
 };

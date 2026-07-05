@@ -60,6 +60,7 @@ import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "./PersonSearchField";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { FNode } from "../model/FNode";
+import { brand } from "../../theme/brand";
 
 interface Business {
   id: string;
@@ -117,10 +118,10 @@ const buildFamilyPagePath = (treeId?: string, personId?: string): string => {
   return query ? `/families?${query}` : "/families";
 };
 
-const businessBlue = "#0d6efd";
-const businessGreen = "#16a34a";
-const slateText = "#0f172a";
-const mutedText = "#64748b";
+const businessBlue = brand.primary;
+const businessGreen = brand.accent;
+const slateText = brand.ink;
+const mutedText = brand.slateMuted;
 
 const primaryButtonSx = {
   bgcolor: businessBlue,
@@ -129,7 +130,7 @@ const primaryButtonSx = {
   fontWeight: 800,
   textTransform: "none",
   "&:hover": {
-    bgcolor: "#0b5ed7",
+    bgcolor: brand.primaryDark,
     boxShadow: "0 12px 24px rgba(13,110,253,0.22)",
   },
 };
@@ -154,7 +155,7 @@ const dialogFieldSx = {
   },
   "& .MuiOutlinedInput-root": {
     borderRadius: 2,
-    bgcolor: "#ffffff",
+    bgcolor: brand.surface,
     "& fieldset": {
       borderColor: "rgba(15,23,42,0.14)",
     },
@@ -226,7 +227,7 @@ const OwnerLink: React.FC<{
           color: businessBlue,
           cursor: "pointer",
           textDecoration: "underline",
-          "&:hover": { color: "#0b5ed7", fontWeight: 600 },
+          "&:hover": { color: brand.primaryDark, fontWeight: 600 },
           transition: "all 0.2s",
         }}
       >
@@ -641,7 +642,7 @@ export const BusinessPage: React.FC = () => {
       {/* Hero Section */}
       <Box
         sx={{
-          bgcolor: "#ffffff",
+          bgcolor: brand.surface,
           color: slateText,
           py: { xs: 4, md: 6 },
           borderBottom: "1px solid rgba(15,23,42,0.08)",
@@ -660,7 +661,7 @@ export const BusinessPage: React.FC = () => {
                 label="Business Directory"
                 sx={{
                   mb: 2,
-                  bgcolor: "#eff6ff",
+                  bgcolor: brand.primarySoft,
                   color: businessBlue,
                   fontWeight: 800,
                   borderRadius: 2,
@@ -700,7 +701,7 @@ export const BusinessPage: React.FC = () => {
         </Container>
       </Box>
 
-      <Box sx={{ bgcolor: "#f8fafc", minHeight: "100vh" }}>
+      <Box sx={{ bgcolor: brand.canvas, minHeight: "100vh" }}>
         <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
         {loading ? (
           <Box sx={{ textAlign: "center", py: 8 }}>
@@ -734,7 +735,7 @@ export const BusinessPage: React.FC = () => {
                   placeholder="Search by name, owner, category, or phone"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  sx={{ bgcolor: "#fff", width: { xs: "100%", md: 380 } }}
+                  sx={{ bgcolor: brand.surface, width: { xs: "100%", md: 380 } }}
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
@@ -743,7 +744,7 @@ export const BusinessPage: React.FC = () => {
                     ),
                   }}
                 />
-                <FormControl size="small" sx={{ bgcolor: "#fff", minWidth: 200 }}>
+                <FormControl size="small" sx={{ bgcolor: brand.surface, minWidth: 200 }}>
                   <InputLabel>Category</InputLabel>
                   <Select
                     value={activeCategory}
@@ -807,7 +808,7 @@ export const BusinessPage: React.FC = () => {
                           ...cardSx,
                           display: "flex",
                           flexDirection: "column",
-                          bgcolor: "#ffffff",
+                          bgcolor: brand.surface,
                         }}
                       >
                         <CardContent sx={{ flexGrow: 1, p: 3 }}>
@@ -827,7 +828,7 @@ export const BusinessPage: React.FC = () => {
                                 borderRadius: 2,
                                 bgcolor: categoryLabel
                                   ? `${categoryColor}14`
-                                  : "#f1f5f9",
+                                  : brand.canvas,
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
@@ -844,7 +845,7 @@ export const BusinessPage: React.FC = () => {
                                   borderColor: `${categoryColor}55`,
                                   color: categoryColor,
                                   fontWeight: 700,
-                                  bgcolor: "#ffffff",
+                                  bgcolor: brand.surface,
                                   maxWidth: 160,
                                 }}
                               />
@@ -957,7 +958,7 @@ export const BusinessPage: React.FC = () => {
                 {businessCategories.map((category) => (
                   <Card
                     key={category.category}
-                    sx={{ ...cardSx, bgcolor: "#ffffff" }}
+                    sx={{ ...cardSx, bgcolor: brand.surface }}
                   >
                     <CardContent sx={{ textAlign: "center", p: 3 }}>
                       <Box
@@ -967,7 +968,7 @@ export const BusinessPage: React.FC = () => {
                           mx: "auto",
                           mb: 2,
                           borderRadius: 2,
-                          bgcolor: "#eff6ff",
+                          bgcolor: brand.primarySoft,
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -1225,7 +1226,7 @@ export const BusinessPage: React.FC = () => {
                     return (
                       <Card
                         key={professionData.professionId}
-                        sx={{ ...cardSx, bgcolor: "#ffffff" }}
+                        sx={{ ...cardSx, bgcolor: brand.surface }}
                       >
                         <CardContent>
                           <Typography
@@ -1306,7 +1307,7 @@ export const BusinessPage: React.FC = () => {
                                     }
                                     sx={{
                                       p: 1.5,
-                                      bgcolor: "#f8fafc",
+                                      bgcolor: brand.canvas,
                                       borderRadius: 2,
                                       border: "1px solid rgba(15,23,42,0.08)",
                                       cursor: "pointer",
@@ -1314,7 +1315,7 @@ export const BusinessPage: React.FC = () => {
                                       textDecoration: "underline",
                                       transition: "all 0.2s",
                                       "&:hover": {
-                                        bgcolor: "#eff6ff",
+                                        bgcolor: brand.primarySoft,
                                         fontWeight: 600,
                                         transform: "translateX(4px)",
                                       },
@@ -1466,7 +1467,7 @@ export const BusinessPage: React.FC = () => {
             </Select>
           </FormControl>
 
-          <Box sx={{ border: "1px solid #ddd", p: 2, mb: 2, borderRadius: 1 }}>
+          <Box sx={{ border: `1px solid ${brand.border}`, p: 2, mb: 2, borderRadius: 1 }}>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               Or Create New Profession
             </Typography>

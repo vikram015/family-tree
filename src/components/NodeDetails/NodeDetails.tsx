@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogActions,
   Box,
+  Divider,
   Typography,
   IconButton,
   Tooltip,
@@ -54,20 +55,25 @@ import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
 import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
+import HowToRegOutlinedIcon from "@mui/icons-material/HowToRegOutlined";
+import HourglassTopOutlinedIcon from "@mui/icons-material/HourglassTopOutlined";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { ProfessionFormDialog } from "../Profession/ProfessionFormDialog";
 import { businessCategoryLabel } from "../Business/businessCategories";
 import { phoneFromCustomFields } from "../Business/businessContact";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
-import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { ApiService, LocationCombinationOption, LinkRequest } from "../../services/apiService";
 import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import { brand } from "../../theme/brand";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
     default: m.DatePicker,
@@ -347,8 +353,10 @@ export const NodeDetails = memo(function NodeDetails({
     Record<string, string>
   >({});
   const [businesses, setBusinesses] = useState<any[]>([]);
+  const [professions, setProfessions] = useState<any[]>([]);
   const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
+  const [professionDialogOpen, setProfessionDialogOpen] = useState(false);
   const [requestingAccess, setRequestingAccess] = useState(false);
   const [branchAccessRequested, setBranchAccessRequested] = useState(false);
   const [mobileAddSaveAction, setMobileAddSaveAction] = useState<{
@@ -359,6 +367,14 @@ export const NodeDetails = memo(function NodeDetails({
 
   const { currentUser, userProfile, isSuperAdmin } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
+
+  // Self-link ("This is me"): a logged-in user not yet linked to any person node
+  // can request the tree owner to link their account to this profile.
+  const isUnlinkedUser = Boolean(currentUser && !userProfile?.peopleId);
+  const [selfLinkConfirmOpen, setSelfLinkConfirmOpen] = useState(false);
+  const [selfLinkRequesting, setSelfLinkRequesting] = useState(false);
+  const [myPendingSelfLinkRequest, setMyPendingSelfLinkRequest] =
+    useState<LinkRequest | null>(null);
 
   useEffect(() => {
     if (view === "link-external" && locations.length === 0) {
@@ -388,14 +404,18 @@ export const NodeDetails = memo(function NodeDetails({
         setDisplayCustomFields(fields);
       });
 
-      // Fetch this person's businesses for the Business section
+      // Fetch businesses & professions so we know whether the person has any to
+      // reveal; the details themselves stay behind the login prompt for guests.
       ApiService.getBusinessesByPerson(node.id)
         .then((biz) => setBusinesses(biz || []))
         .catch(() => setBusinesses([]));
+      ApiService.getProfessionsByPerson(node.id)
+        .then((profs) => setProfessions(profs || []))
+        .catch(() => setProfessions([]));
 
       setBranchAccessRequested(false);
     }
-  }, [node, initialView, parsePickerValue]);
+  }, [node, initialView, parsePickerValue, currentUser]);
 
   const refreshBusinesses = useCallback(async () => {
     if (!node) return;
@@ -404,6 +424,16 @@ export const NodeDetails = memo(function NodeDetails({
       setBusinesses(biz || []);
     } catch {
       setBusinesses([]);
+    }
+  }, [node]);
+
+  const refreshProfessions = useCallback(async () => {
+    if (!node) return;
+    try {
+      const profs = await ApiService.getProfessionsByPerson(node.id);
+      setProfessions(profs || []);
+    } catch {
+      setProfessions([]);
     }
   }, [node]);
 
@@ -444,6 +474,63 @@ export const NodeDetails = memo(function NodeDetails({
       setRequestingAccess(false);
     }
   }, [node, treeId, showSnackbar]);
+
+  // Load any pending "link my account to a node" request so the self-link icon
+  // can reflect its state. Only one such request may be pending per user, so a
+  // single global lookup (not per node) is enough.
+  useEffect(() => {
+    if (!node || !isUnlinkedUser) {
+      setMyPendingSelfLinkRequest(null);
+      return;
+    }
+    let cancelled = false;
+    ApiService.getMyLinkRequests("user_to_tree_node")
+      .then((rows) => {
+        if (cancelled) return;
+        setMyPendingSelfLinkRequest(
+          (rows || []).find((r) => r.status === "pending") || null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setMyPendingSelfLinkRequest(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // node.id keeps this fresh when navigating between nodes in the open dialog.
+  }, [node?.id, isUnlinkedUser]);
+
+  const handleSelfLinkClick = useCallback(() => {
+    if (!node) return;
+    if (!currentUser) {
+      openLoginModal(() => setSelfLinkConfirmOpen(true));
+      return;
+    }
+    setSelfLinkConfirmOpen(true);
+  }, [node, currentUser, openLoginModal]);
+
+  const handleConfirmSelfLink = useCallback(async () => {
+    if (!node) return;
+    setSelfLinkRequesting(true);
+    try {
+      const created = await ApiService.createUserNodeLinkRequest({
+        targetPersonId: node.id,
+      });
+      setMyPendingSelfLinkRequest(created);
+      setSelfLinkConfirmOpen(false);
+      showSnackbar(
+        "Profile link request sent. It's pending owner approval.",
+        "success",
+      );
+    } catch (error: any) {
+      showSnackbar(
+        error?.message || "Failed to send profile link request.",
+        "error",
+      );
+    } finally {
+      setSelfLinkRequesting(false);
+    }
+  }, [node, showSnackbar]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -1044,6 +1131,42 @@ export const NodeDetails = memo(function NodeDetails({
                         <ShareOutlinedIcon />
                       </IconButton>
                     </Tooltip>
+                    {isUnlinkedUser && (
+                      <Tooltip
+                        title={
+                          myPendingSelfLinkRequest
+                            ? myPendingSelfLinkRequest.targetPersonId === node.id
+                              ? "Your request to link this profile is pending owner approval."
+                              : "You already have a profile link request pending owner approval."
+                            : "This is me — request to link this profile to my account"
+                        }
+                      >
+                        {/* span wrapper lets the tooltip show while the button is disabled */}
+                        <span>
+                          <IconButton
+                            size="large"
+                            color="primary"
+                            onClick={handleSelfLinkClick}
+                            disabled={
+                              Boolean(myPendingSelfLinkRequest) ||
+                              selfLinkRequesting
+                            }
+                            sx={{
+                              border: 1,
+                              borderColor: "divider",
+                              width: 48,
+                              height: 48,
+                            }}
+                          >
+                            {myPendingSelfLinkRequest ? (
+                              <HourglassTopOutlinedIcon />
+                            ) : (
+                              <HowToRegOutlinedIcon />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
                   </Stack>
                   <Stack
                     direction="row"
@@ -1219,79 +1342,165 @@ export const NodeDetails = memo(function NodeDetails({
                   </Stack>
                 </Paper>
 
+                {(currentUser || businesses.length > 0 || professions.length > 0) && (
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                    sx={{ mb: businesses.length > 0 ? 1.5 : 0 }}
-                  >
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <BusinessOutlinedIcon fontSize="small" color="action" />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                        Businesses
+                  {!currentUser ? (
+                    <Box sx={{ textAlign: "center", py: 1.5 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        Log in to see this person's businesses and professions.
                       </Typography>
-                    </Stack>
-                    {canEditCurrentNode && (
                       <Button
                         size="small"
-                        startIcon={<AddIcon fontSize="small" />}
-                        onClick={() => {
-                          setEditingBusiness(null);
-                          setBusinessDialogOpen(true);
-                        }}
+                        variant="outlined"
+                        onClick={() =>
+                          openLoginModal(() => {
+                            void refreshBusinesses();
+                            void refreshProfessions();
+                          })
+                        }
                       >
-                        Add
+                        Log in
                       </Button>
-                    )}
-                  </Stack>
-
-                  {businesses.length > 0 ? (
-                    <Stack spacing={1}>
-                      {businesses.map((biz) => (
-                        <Box
-                          key={biz.id}
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 1,
-                            p: 1,
-                            borderRadius: 2,
-                            bgcolor: "action.hover",
-                          }}
+                    </Box>
+                  ) : (
+                    <Stack spacing={2.5}>
+                      {/* Businesses */}
+                      <Box>
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          sx={{ mb: businesses.length > 0 ? 1.5 : 0.5 }}
                         >
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                              {biz.name}
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <BusinessOutlinedIcon fontSize="small" color="action" />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              Businesses
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {[businessCategoryLabel(biz.category), biz.contact]
-                                .filter(Boolean)
-                                .join(" • ")}
-                            </Typography>
-                          </Box>
+                          </Stack>
                           {canEditCurrentNode && (
-                            <IconButton
+                            <Button
                               size="small"
-                              aria-label="Edit business"
+                              startIcon={<AddIcon fontSize="small" />}
                               onClick={() => {
-                                setEditingBusiness(biz);
+                                setEditingBusiness(null);
                                 setBusinessDialogOpen(true);
                               }}
                             >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
+                              Add
+                            </Button>
                           )}
-                        </Box>
-                      ))}
+                        </Stack>
+
+                        {businesses.length > 0 ? (
+                          <Stack spacing={1}>
+                            {businesses.map((biz) => (
+                              <Box
+                                key={biz.id}
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 1,
+                                  p: 1,
+                                  borderRadius: 2,
+                                  bgcolor: "action.hover",
+                                }}
+                              >
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                                    {biz.name}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {[businessCategoryLabel(biz.category), biz.contact]
+                                      .filter(Boolean)
+                                      .join(" • ")}
+                                  </Typography>
+                                </Box>
+                                {canEditCurrentNode && (
+                                  <IconButton
+                                    size="small"
+                                    aria-label="Edit business"
+                                    onClick={() => {
+                                      setEditingBusiness(biz);
+                                      setBusinessDialogOpen(true);
+                                    }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No businesses added yet.
+                          </Typography>
+                        )}
+                      </Box>
+
+                      <Divider />
+
+                      {/* Professions */}
+                      <Box>
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          sx={{ mb: professions.length > 0 ? 1.5 : 0.5 }}
+                        >
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <WorkOutlineOutlinedIcon fontSize="small" color="action" />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              Professions
+                            </Typography>
+                          </Stack>
+                          {canEditCurrentNode && (
+                            <Button
+                              size="small"
+                              startIcon={<AddIcon fontSize="small" />}
+                              onClick={() => setProfessionDialogOpen(true)}
+                            >
+                              Add
+                            </Button>
+                          )}
+                        </Stack>
+
+                        {professions.length > 0 ? (
+                          <Stack spacing={1}>
+                            {professions.map((prof) => (
+                              <Box
+                                key={prof.id}
+                                sx={{
+                                  p: 1,
+                                  borderRadius: 2,
+                                  bgcolor: "action.hover",
+                                  minWidth: 0,
+                                }}
+                              >
+                                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                                  {prof.name}
+                                </Typography>
+                                {(prof.category || prof.description) && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {[prof.category, prof.description]
+                                      .filter(Boolean)
+                                      .join(" • ")}
+                                  </Typography>
+                                )}
+                              </Box>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No professions added yet.
+                          </Typography>
+                        )}
+                      </Box>
                     </Stack>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No businesses added yet.
-                    </Typography>
                   )}
                 </Paper>
+                )}
 
                 <Accordion defaultExpanded={true} sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
                   <AccordionSummary
@@ -1452,6 +1661,7 @@ export const NodeDetails = memo(function NodeDetails({
 	                        value={editedDob}
 	                        onChange={(value) => setEditedDob(value)}
 	                        slotProps={{
+	                          field: { clearable: true },
 	                          textField: {
 	                            fullWidth: true,
 	                            sx: inputWithIconSx,
@@ -1546,6 +1756,7 @@ export const NodeDetails = memo(function NodeDetails({
 	                      value={editedDeceasedDate}
 	                      onChange={(value) => setEditedDeceasedDate(value)}
 	                      slotProps={{
+	                        field: { clearable: true },
 	                        textField: {
 	                          fullWidth: true,
 	                          sx: inputWithIconSx,
@@ -1710,7 +1921,7 @@ export const NodeDetails = memo(function NodeDetails({
                     </Stack>
                   </Paper>
                 )}
-                <Accordion variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+                <Accordion defaultExpanded variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                       Additional details
@@ -1833,7 +2044,7 @@ export const NodeDetails = memo(function NodeDetails({
                 startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
               />
               {node.gender && (
-                <Typography variant="caption" sx={{ display: "block", mb: 1, color: "#64748b" }}>
+                <Typography variant="caption" sx={{ display: "block", mb: 1, color: brand.slateMuted }}>
                   Only {node.gender === Gender.female ? "female" : node.gender === Gender.male ? "male" : node.gender}{" "}
                   profiles are shown, matching the placeholder being replaced.
                 </Typography>
@@ -1910,11 +2121,11 @@ export const NodeDetails = memo(function NodeDetails({
                     mt: 2.5,
                     p: 1.75,
                     borderRadius: 2,
-                    border: "1px solid #e2e8f0",
-                    bgcolor: "#f8fafc",
+                    border: `1px solid ${brand.border}`,
+                    bgcolor: brand.canvas,
                   }}
                 >
-                  <Typography variant="subtitle2" sx={{ mb: 1, color: "#334155" }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, color: brand.slate }}>
                     Review this change
                   </Typography>
                   {loadingExternalDetails ? (
@@ -1925,7 +2136,7 @@ export const NodeDetails = memo(function NodeDetails({
                       </Typography>
                     </Stack>
                   ) : (
-                    <Typography variant="body2" sx={{ color: "#475569" }}>
+                    <Typography variant="body2" sx={{ color: brand.slate }}>
                       Replacing placeholder <strong>{node.name}</strong> with{" "}
                       <strong>{selectedExternalPerson.name}</strong>
                       {selectedExternalPerson?.locationName
@@ -1998,7 +2209,7 @@ export const NodeDetails = memo(function NodeDetails({
                                 />
                               ))}
                             </RadioGroup>
-                            <Typography variant="caption" sx={{ color: "#b45309", mt: 0.5 }}>
+                            <Typography variant="caption" sx={{ color: "warning.main", mt: 0.5 }}>
                               Merging removes the selected person from the other
                               tree and moves their children/parents onto{" "}
                               {anchorSpouseName}.
@@ -2053,7 +2264,7 @@ export const NodeDetails = memo(function NodeDetails({
               : ""}
             . This can’t be undone.
           </Typography>
-          <Typography variant="body2" sx={{ mt: 1, color: "#64748b" }}>
+          <Typography variant="body2" sx={{ mt: 1, color: brand.slateMuted }}>
             {anchorSpouseName} and {selectedExternalPerson?.name}’s shared children
             (and their father’s-line descendants) will be moved into{" "}
             {anchorSpouseName}’s tree. Children from any other marriage stay where
@@ -2270,6 +2481,60 @@ export const NodeDetails = memo(function NodeDetails({
       </Dialog>
 
       {node && (
+        <Dialog
+          open={selfLinkConfirmOpen}
+          onClose={() => !selfLinkRequesting && setSelfLinkConfirmOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              Link this profile?
+            </Typography>
+            <IconButton
+              onClick={() => setSelfLinkConfirmOpen(false)}
+              size="small"
+              disabled={selfLinkRequesting}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 1, mb: 2 }}>
+              <Typography variant="h6" color="text.primary">
+                {node.name}
+              </Typography>
+            </Box>
+            <Typography>Are you sure this is you?</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              We'll send a request to the tree owner to link your account to this
+              profile. You'll be able to manage your branch once it's approved.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setSelfLinkConfirmOpen(false)}
+              disabled={selfLinkRequesting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmSelfLink}
+              variant="contained"
+              disabled={selfLinkRequesting}
+              startIcon={
+                selfLinkRequesting ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : undefined
+              }
+            >
+              {selfLinkRequesting ? "Sending…" : "Yes, this is me"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {node && (
         <BusinessFormDialog
           open={businessDialogOpen}
           onClose={() => setBusinessDialogOpen(false)}
@@ -2277,6 +2542,15 @@ export const NodeDetails = memo(function NodeDetails({
           personId={node.id}
           defaultContact={phoneFromCustomFields(displayCustomFields)}
           onSaved={() => void refreshBusinesses()}
+        />
+      )}
+
+      {node && (
+        <ProfessionFormDialog
+          open={professionDialogOpen}
+          onClose={() => setProfessionDialogOpen(false)}
+          personId={node.id}
+          onSaved={() => void refreshProfessions()}
         />
       )}
 

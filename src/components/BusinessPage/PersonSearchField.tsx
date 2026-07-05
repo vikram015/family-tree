@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { ApiService } from "../../services/apiService";
+import { brand } from "../../theme/brand";
 
 interface PersonSearchResult {
   id: string;
@@ -42,10 +43,10 @@ function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber"
 
   const styles =
     accent === "teal"
-      ? { bg: "#ecfeff", color: "#0f766e" }
+      ? { bg: brand.primarySoft, color: brand.primary }
       : accent === "amber"
-        ? { bg: "#fff7ed", color: "#b45309" }
-        : { bg: "#f1f5f9", color: "#475569" };
+        ? { bg: brand.accentSoft, color: brand.accent }
+        : { bg: brand.canvas, color: brand.slate };
 
   return (
     <Box
@@ -256,7 +257,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
             mt: 1,
             maxHeight: 300,
             overflow: "auto",
-            border: "1px solid #ddd",
+            border: `1px solid ${brand.border}`,
             boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
             position: "absolute",
             width: "100%",
@@ -278,7 +279,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
                 p: 2,
                 borderBottom: "1px solid #eee",
                 cursor: "pointer",
-                backgroundColor: "#fff",
+                backgroundColor: brand.surface,
                 transition: "backgroundColor 0.2s",
                 "&:hover": { backgroundColor: "#f5f5f5" },
                 "&:last-child": { borderBottom: "none" },
@@ -333,7 +334,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           sx={{
             mt: 1,
             p: 2,
-            border: "1px solid #ddd",
+            border: `1px solid ${brand.border}`,
             textAlign: "center",
             position: "absolute",
             width: "100%",

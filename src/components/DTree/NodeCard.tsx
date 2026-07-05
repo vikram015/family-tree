@@ -351,6 +351,8 @@ export function renderNodeCardSvg(
   canEditNode: boolean = true,
   isNameClickable: boolean = true,
 ): string {
+  // On mobile the name should not be clickable (tapping the card opens details).
+  isNameClickable = isNameClickable && !isMobile;
   const gender = extra?.gender || "";
   const isDeceased = extra?.isAlive === false;
   const isReadOnly = extra?.isReadOnly === true;

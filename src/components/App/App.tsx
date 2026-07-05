@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, Suspense } from "react";
 import {
   ThemeProvider,
-  createTheme,
   CssBaseline,
   Box,
   CircularProgress,
 } from "@mui/material";
+import { theme } from "../../theme/theme";
 import {
   BrowserRouter,
   Routes,
@@ -37,6 +37,7 @@ import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
 import { UserOnboardingPage } from "../UserOnboardingPage";
 import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
+import { RequireAuth } from "../RequireAuth/RequireAuth";
 import { BlockedScreen } from "../BlockedScreen/BlockedScreen";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
@@ -47,17 +48,6 @@ const FamiliesPage = React.lazy(() =>
     default: module.FamiliesPage,
   })),
 );
-
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: "#1976d2",
-    },
-    secondary: {
-      main: "#dc004e",
-    },
-  },
-});
 
 function AppContent() {
   console.log("AppContent: Rendering");
@@ -192,7 +182,14 @@ function AppContent() {
                   </Suspense>
                 }
               />
-              <Route path="/business" element={<BusinessPage />} />
+              <Route
+                path="/business"
+                element={
+                  <RequireAuth>
+                    <BusinessPage />
+                  </RequireAuth>
+                }
+              />
               <Route path="/famous" element={<FamousPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/about" element={<AboutPage />} />

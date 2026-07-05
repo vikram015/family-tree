@@ -5,8 +5,12 @@ import {
   Chip,
   Paper,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import { alpha } from "@mui/material/styles";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 
@@ -40,6 +44,8 @@ interface FamiliesPageHeaderProps {
   hasStats: boolean;
   statCards: StatCard[];
   onSourceChange: (value: string, nodes: readonly any[]) => void;
+  viewMode: "tree" | "timeline";
+  onViewModeChange: (mode: "tree" | "timeline") => void;
 }
 
 export function FamiliesPageHeader({
@@ -50,6 +56,8 @@ export function FamiliesPageHeader({
   hasStats,
   statCards,
   onSourceChange,
+  viewMode,
+  onViewModeChange,
 }: FamiliesPageHeaderProps) {
   return (
     <Box
@@ -77,7 +85,7 @@ export function FamiliesPageHeader({
               direction="row"
               spacing={1}
               alignItems="center"
-              sx={{ mb: { xs: 0.25, sm: 0.75 }, flexWrap: "wrap" }}
+              sx={{ flexWrap: "wrap", width: "100%", mb: { xs: 0.25, sm: 0.75 } }}
             >
               <Typography variant={isMobile ? "h6" : "h4"} sx={{ fontWeight: 800 }}>
                 Family Tree
@@ -89,6 +97,23 @@ export function FamiliesPageHeader({
                 variant={treeStatus.color === "default" ? "outlined" : "filled"}
                 size="small"
               />
+              {/* View toggle — sits next to the chip on desktop; pinned right (icon-only) on mobile. */}
+              <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                size="small"
+                onChange={(_e, value) => value && onViewModeChange(value)}
+                sx={{ ml: { xs: "auto", md: 0 }, flexShrink: 0 }}
+              >
+                <ToggleButton value="tree" sx={{ textTransform: "none", px: { xs: 1, sm: 1.5 } }}>
+                  <AccountTreeOutlinedIcon fontSize="small" sx={{ mr: { xs: 0, sm: 0.5 } }} />
+                  {!isMobile && "Tree"}
+                </ToggleButton>
+                <ToggleButton value="timeline" sx={{ textTransform: "none", px: { xs: 1, sm: 1.5 } }}>
+                  <TimelineOutlinedIcon fontSize="small" sx={{ mr: { xs: 0, sm: 0.5 } }} />
+                  {!isMobile && "Timeline"}
+                </ToggleButton>
+              </ToggleButtonGroup>
             </Stack>
             {!isMobile && (
               <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 780 }}>

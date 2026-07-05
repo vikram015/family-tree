@@ -94,7 +94,7 @@ export const FullScreenMobilePicker: React.FC<FullScreenMobilePickerProps> = ({
             <CloseIcon />
           </IconButton>
         </DialogTitle>
-        <DialogContent sx={{ pt: 1.5 }}>
+        <DialogContent sx={{ pt: 3 }}>
           {dialogContent(renderProps)}
         </DialogContent>
       </Dialog>

@@ -33,6 +33,7 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useLoginModal } from "../context/LoginModalContext";
 import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
@@ -83,6 +84,7 @@ export const ProfilePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
     useAuth();
+  const { openLoginModal } = useLoginModal();
   const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
@@ -215,6 +217,8 @@ export const ProfilePage: React.FC = () => {
         setProfilePhotoUrl((personWithTree as any)?.photoUrl || undefined);
 
         const [profs, biz, allProfs, customFields] = await Promise.all([
+          // Fetched so we know whether the person has any to reveal; the actual
+          // details stay hidden behind the login prompt for guests.
           ApiService.getProfessionsByPerson(effectivePersonId),
           ApiService.getBusinessesByPerson(effectivePersonId),
           canManagePerson ? ApiService.getAllProfessions() : Promise.resolve([]),
@@ -235,7 +239,7 @@ export const ProfilePage: React.FC = () => {
     };
 
     void fetchDetails();
-  }, [effectivePersonId, canManagePerson, refreshPersonDetails]);
+  }, [effectivePersonId, canManagePerson, refreshPersonDetails, currentUser]);
 
   const loadMyLocationRequests = useCallback(async () => {
     try {
@@ -891,8 +895,10 @@ export const ProfilePage: React.FC = () => {
         </Grid>
         )}
 
-        {/* Business & Professional Details Section */}
-        {effectivePersonId && (
+        {/* Business & Professional Details Section — hidden for guests when the
+            person has neither a business nor a profession to reveal. */}
+        {effectivePersonId &&
+          (currentUser || businesses.length > 0 || professions.length > 0) && (
           <Grid size={{ xs: 12 }}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -900,6 +906,27 @@ export const ProfilePage: React.FC = () => {
               </Typography>
               <Divider sx={{ mb: 3 }} />
 
+              {!currentUser ? (
+                <Box sx={{ textAlign: "center", py: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Log in to see this person's businesses and professions.
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() =>
+                      openLoginModal(() => {
+                        if (effectivePersonId) {
+                          void refreshProfessions(effectivePersonId);
+                          void refreshBusinesses(effectivePersonId);
+                        }
+                      })
+                    }
+                  >
+                    Log in
+                  </Button>
+                </Box>
+              ) : (
               <Grid container spacing={4}>
                 {/* Professions Column */}
                 <Grid size={{ xs: 12, md: 6 }}>
@@ -1105,6 +1132,7 @@ export const ProfilePage: React.FC = () => {
                   )}
                 </Grid>
               </Grid>
+              )}
             </Paper>
           </Grid>
         )}

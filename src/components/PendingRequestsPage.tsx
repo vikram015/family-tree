@@ -24,6 +24,22 @@ function formatRequestType(requestType: LinkRequest["requestType"]) {
   return "Profile link request";
 }
 
+/**
+ * Display title that also distinguishes a plain spouse link ("Link Spouse")
+ * from one that replaces a placeholder ("Link & Replace").
+ */
+function formatRequestTitle(request: LinkRequest) {
+  if (request.requestType === "spouse_link_request") {
+    return request.payload?.replacePersonName
+      ? "Link & Replace request"
+      : "Link Spouse request";
+  }
+  if (request.requestType === "user_to_tree_node") {
+    return "Link Profile request";
+  }
+  return formatRequestType(request.requestType);
+}
+
 export const PendingRequestsPage: React.FC = () => {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<LinkRequest[]>([]);
@@ -137,7 +153,7 @@ export const PendingRequestsPage: React.FC = () => {
               <Stack spacing={1.5}>
                 <Box>
                   <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {formatRequestType(request.requestType)}
+                    {formatRequestTitle(request)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Requested by {request.requesterName || request.requesterEmail || "Unknown user"}
@@ -215,7 +231,7 @@ export const PendingRequestsPage: React.FC = () => {
                 <Paper key={request.id} sx={{ p: 2.5, borderRadius: 4 }}>
                   <Stack spacing={0.75}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                      {formatRequestType(request.requestType)}
+                      {formatRequestTitle(request)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {request.targetPersonName || request.payload?.targetPersonName || "Selected person"} in{" "}
@@ -246,7 +262,8 @@ export const PendingRequestsPage: React.FC = () => {
         {reviewTarget && (
           <>
             <DialogTitle>
-              {reviewTarget.action === "approved" ? "Approve request?" : "Reject request?"}
+              {reviewTarget.action === "approved" ? "Approve" : "Reject"}{" "}
+              {formatRequestTitle(reviewTarget.request)}?
             </DialogTitle>
             <DialogContent dividers>
               <Stack spacing={1.25}>
@@ -269,20 +286,21 @@ export const PendingRequestsPage: React.FC = () => {
                 <Divider />
 
                 {reviewTarget.request.requestType === "spouse_link_request" ? (
-                  <>
-                    <Typography variant="body2">
-                      <strong>Will be linked:</strong>{" "}
-                      {reviewTarget.request.targetPersonName ||
-                        reviewTarget.request.payload?.targetPersonName ||
-                        "the selected person"}{" "}
-                      as spouse of{" "}
-                      {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}
-                      {reviewTarget.request.payload?.sourceTreeName
-                        ? ` (${reviewTarget.request.payload.sourceTreeName})`
-                        : ""}
-                      .
-                    </Typography>
-                    {reviewTarget.request.payload?.replacePersonName && (
+                  reviewTarget.request.payload?.replacePersonName ? (
+                    /* --- Link & Replace: a placeholder spouse is replaced --- */
+                    <>
+                      <Typography variant="body2">
+                        <strong>Will be linked:</strong>{" "}
+                        {reviewTarget.request.targetPersonName ||
+                          reviewTarget.request.payload?.targetPersonName ||
+                          "the selected person"}{" "}
+                        as spouse of{" "}
+                        {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}
+                        {reviewTarget.request.payload?.sourceTreeName
+                          ? ` (${reviewTarget.request.payload.sourceTreeName})`
+                          : ""}
+                        .
+                      </Typography>
                       <Typography variant="body2">
                         <strong>Will be removed:</strong> placeholder{" "}
                         {reviewTarget.request.payload.replacePersonName} (its children move to{" "}
@@ -291,27 +309,81 @@ export const PendingRequestsPage: React.FC = () => {
                           "the linked person"}
                         ).
                       </Typography>
-                    )}
-                    <Typography variant="body2" color="text.secondary">
-                      The couple’s shared children (and their father’s-line
-                      descendants) will be moved into{" "}
-                      {reviewTarget.request.payload?.sourceTreeName || "the requester’s tree"}.
-                      Children from any other marriage stay where they are.
+                      <Typography variant="body2" color="text.secondary">
+                        The couple’s shared children (and their father’s-line
+                        descendants) will be moved into{" "}
+                        {reviewTarget.request.payload?.sourceTreeName || "the requester’s tree"}.
+                        Children from any other marriage stay where they are.
+                      </Typography>
+                      {reviewTarget.request.payload?.mergeSpouseId && (
+                        <Alert severity="warning">
+                          <strong>
+                            {reviewTarget.request.payload?.mergeSpouseName || "The existing spouse"}
+                          </strong>
+                          {reviewTarget.request.payload?.mergeSpouseTreeName
+                            ? ` (in ${reviewTarget.request.payload.mergeSpouseTreeName})`
+                            : ""}{" "}
+                          will be <strong>merged</strong> into{" "}
+                          {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}{" "}
+                          and removed — their children and parents move over, and any other marriages
+                          they have are removed. This can’t be undone.
+                        </Alert>
+                      )}
+                    </>
+                  ) : (
+                    /* --- Link Spouse: link a real person as spouse, no placeholder replaced --- */
+                    <>
+                      <Typography variant="body2">
+                        <strong>Will be linked:</strong>{" "}
+                        {reviewTarget.request.targetPersonName ||
+                          reviewTarget.request.payload?.targetPersonName ||
+                          "the selected person"}{" "}
+                        as spouse of{" "}
+                        {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}
+                        {reviewTarget.request.payload?.sourceTreeName
+                          ? ` (${reviewTarget.request.payload.sourceTreeName})`
+                          : ""}
+                        .
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        No placeholder is removed — this simply adds the link between the two
+                        people. The couple’s shared children (and their father’s-line descendants)
+                        will be moved into{" "}
+                        {reviewTarget.request.payload?.sourceTreeName || "the requester’s tree"}.
+                        Children from any other marriage stay where they are.
+                      </Typography>
+                      {reviewTarget.request.payload?.mergeSpouseId && (
+                        <Alert severity="warning">
+                          <strong>
+                            {reviewTarget.request.payload?.mergeSpouseName || "The existing spouse"}
+                          </strong>
+                          {reviewTarget.request.payload?.mergeSpouseTreeName
+                            ? ` (in ${reviewTarget.request.payload.mergeSpouseTreeName})`
+                            : ""}{" "}
+                          will be <strong>merged</strong> into{" "}
+                          {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}{" "}
+                          and removed — their children and parents move over, and any other marriages
+                          they have are removed. This can’t be undone.
+                        </Alert>
+                      )}
+                    </>
+                  )
+                ) : reviewTarget.request.requestType === "user_to_tree_node" ? (
+                  /* --- Link Profile: a user claims a person node as their profile --- */
+                  <>
+                    <Typography variant="body2">
+                      <strong>Will be linked:</strong>{" "}
+                      {reviewTarget.request.requesterName ||
+                        reviewTarget.request.requesterEmail ||
+                        "The requester"}
+                      ’s account to{" "}
+                      {reviewTarget.request.targetPersonName || "the selected person"} in{" "}
+                      {reviewTarget.request.targetTreeName || "the tree"}.
                     </Typography>
-                    {reviewTarget.request.payload?.mergeSpouseId && (
-                      <Alert severity="warning">
-                        <strong>
-                          {reviewTarget.request.payload?.mergeSpouseName || "The existing spouse"}
-                        </strong>
-                        {reviewTarget.request.payload?.mergeSpouseTreeName
-                          ? ` (in ${reviewTarget.request.payload.mergeSpouseTreeName})`
-                          : ""}{" "}
-                        will be <strong>merged</strong> into{" "}
-                        {reviewTarget.request.payload?.sourcePersonName || "the requester's person"}{" "}
-                        and removed — their children and parents move over, and any other marriages
-                        they have are removed. This can’t be undone.
-                      </Alert>
-                    )}
+                    <Typography variant="body2" color="text.secondary">
+                      Approving lets them manage this profile as their own — no tree
+                      structure or relationships change.
+                    </Typography>
                   </>
                 ) : (
                   <Typography variant="body2">
