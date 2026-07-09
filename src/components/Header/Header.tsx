@@ -174,7 +174,8 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
     // { label: "Heritage", path: "/heritage" },
     { label: "Families", path: "/families" },
     { label: "About", path: "/about" },
-    { label: "Contact", path: "/contact" },
+    // Contact page hidden for now (kept in code, just not linked).
+    // { label: "Contact", path: "/contact" },
   ];
 
   // Add admin link for superadmin

@@ -83,16 +83,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [nodeDetailsAddInfo, setNodeDetailsAddInfo] = useState<
     { relation: "child" | "spouse" | "parent"; gender?: string } | undefined
   >(undefined);
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
-    open: boolean;
-    personId: string | null;
-    childrenCount: number;
-    personName?: string;
-  }>({
-    open: false,
-    personId: null,
-    childrenCount: 0,
-  });
   const [externalTreeConfirm, setExternalTreeConfirm] = useState<{
     open: boolean;
     targetTreeId: string | null;
@@ -773,17 +763,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
 
       try {
-        // Delete person using Supabase
         const result = await ApiService.deletePerson(nodeId, force);
 
-        if (result?.requiresConfirmation) {
-          const person = nodes.find((n) => n.id === nodeId);
-          setDeleteConfirmation({
-            open: true,
-            personId: nodeId,
-            childrenCount: result.childrenCount,
-            personName: person?.name,
-          });
+        // Only leaf nodes are deletable — the server refuses a person with
+        // children (or any other blocker) and returns success: false.
+        if (result?.success === false) {
+          showSnackbar(
+            result.error || "This person can't be deleted.",
+            "warning",
+          );
           return;
         }
 
@@ -791,7 +779,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         await loadTreeData(true);
         // Clear selection
         setSelectId(undefined);
-        setDeleteConfirmation((prev) => ({ ...prev, open: false }));
       } catch (err) {
         console.error("Failed to delete node:", err);
         showSnackbar(
@@ -802,7 +789,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         );
       }
     },
-    [canEditNode, loadTreeData, nodes, showSnackbar],
+    [canEditNode, loadTreeData, showSnackbar],
   );
 
   const onAdd = useCallback(
@@ -1791,51 +1778,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             // Pass the callback to handle completion
           />
         </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={deleteConfirmation.open}
-        onClose={() =>
-          setDeleteConfirmation((prev) => ({ ...prev, open: false }))
-        }
-      >
-        <DialogTitle>Confirm Deletion</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            {deleteConfirmation.personName || "This person"} has{" "}
-            <strong>{deleteConfirmation.childrenCount} children</strong> in the
-            tree.
-            <br />
-            <br />
-            Deleting them will leave these children as <strong>
-              orphans
-            </strong>{" "}
-            (disconnected from the main lineage).
-            <br />
-            <br />
-            Are you sure you want to proceed?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() =>
-              setDeleteConfirmation((prev) => ({ ...prev, open: false }))
-            }
-          >
-            Cancel
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={() => {
-              if (deleteConfirmation.personId) {
-                onDelete(deleteConfirmation.personId, true);
-              }
-            }}
-          >
-            Force Delete
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* External tree navigation confirmation */}

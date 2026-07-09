@@ -61,6 +61,7 @@ import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import HowToRegOutlinedIcon from "@mui/icons-material/HowToRegOutlined";
 import HourglassTopOutlinedIcon from "@mui/icons-material/HourglassTopOutlined";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
@@ -71,6 +72,7 @@ import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService, LocationCombinationOption, LinkRequest } from "../../services/apiService";
+import { namesLooselyMatch } from "../../utils/nameMatch";
 import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { brand } from "../../theme/brand";
@@ -358,7 +360,6 @@ export const NodeDetails = memo(function NodeDetails({
   const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
   const [professionDialogOpen, setProfessionDialogOpen] = useState(false);
   const [requestingAccess, setRequestingAccess] = useState(false);
-  const [branchAccessRequested, setBranchAccessRequested] = useState(false);
   const [mobileAddSaveAction, setMobileAddSaveAction] = useState<{
     onClick: () => void;
     disabled: boolean;
@@ -373,8 +374,11 @@ export const NodeDetails = memo(function NodeDetails({
   const isUnlinkedUser = Boolean(currentUser && !userProfile?.peopleId);
   const [selfLinkConfirmOpen, setSelfLinkConfirmOpen] = useState(false);
   const [selfLinkRequesting, setSelfLinkRequesting] = useState(false);
-  const [myPendingSelfLinkRequest, setMyPendingSelfLinkRequest] =
-    useState<LinkRequest | null>(null);
+  // The signed-in user's own pending link requests (self-link + branch-access),
+  // used to reflect already-requested state on the relevant buttons.
+  const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
+  const myPendingSelfLinkRequest =
+    myPendingRequests.find((r) => r.requestType === "user_to_tree_node") || null;
 
   useEffect(() => {
     if (view === "link-external" && locations.length === 0) {
@@ -412,8 +416,6 @@ export const NodeDetails = memo(function NodeDetails({
       ApiService.getProfessionsByPerson(node.id)
         .then((profs) => setProfessions(profs || []))
         .catch(() => setProfessions([]));
-
-      setBranchAccessRequested(false);
     }
   }, [node, initialView, parsePickerValue, currentUser]);
 
@@ -462,11 +464,11 @@ export const NodeDetails = memo(function NodeDetails({
     if (!node || !treeId) return;
     setRequestingAccess(true);
     try {
-      await ApiService.createBranchAccessRequest({
+      const created = await ApiService.createBranchAccessRequest({
         targetTreeId: treeId,
         targetPersonId: node.id,
       });
-      setBranchAccessRequested(true);
+      setMyPendingRequests((prev) => [...prev, created]);
       showSnackbar(`Branch access request sent for ${node.name || "this"} branch.`, "success");
     } catch (error: any) {
       showSnackbar(error?.message || "Failed to request branch access.", "error");
@@ -475,30 +477,28 @@ export const NodeDetails = memo(function NodeDetails({
     }
   }, [node, treeId, showSnackbar]);
 
-  // Load any pending "link my account to a node" request so the self-link icon
-  // can reflect its state. Only one such request may be pending per user, so a
-  // single global lookup (not per node) is enough.
+  // Load the user's pending link requests so the self-link icon and the
+  // "Request Branch Access" button can reflect an already-requested state (both
+  // survive a reload, not just an in-session click).
   useEffect(() => {
-    if (!node || !isUnlinkedUser) {
-      setMyPendingSelfLinkRequest(null);
+    if (!node || !currentUser) {
+      setMyPendingRequests([]);
       return;
     }
     let cancelled = false;
-    ApiService.getMyLinkRequests("user_to_tree_node")
+    ApiService.getMyLinkRequests()
       .then((rows) => {
         if (cancelled) return;
-        setMyPendingSelfLinkRequest(
-          (rows || []).find((r) => r.status === "pending") || null,
-        );
+        setMyPendingRequests((rows || []).filter((r) => r.status === "pending"));
       })
       .catch(() => {
-        if (!cancelled) setMyPendingSelfLinkRequest(null);
+        if (!cancelled) setMyPendingRequests([]);
       });
     return () => {
       cancelled = true;
     };
     // node.id keeps this fresh when navigating between nodes in the open dialog.
-  }, [node?.id, isUnlinkedUser]);
+  }, [node?.id, currentUser]);
 
   const handleSelfLinkClick = useCallback(() => {
     if (!node) return;
@@ -516,7 +516,7 @@ export const NodeDetails = memo(function NodeDetails({
       const created = await ApiService.createUserNodeLinkRequest({
         targetPersonId: node.id,
       });
-      setMyPendingSelfLinkRequest(created);
+      setMyPendingRequests((prev) => [...prev, created]);
       setSelfLinkConfirmOpen(false);
       showSnackbar(
         "Profile link request sent. It's pending owner approval.",
@@ -968,10 +968,42 @@ export const NodeDetails = memo(function NodeDetails({
     "the current spouse";
   const canEditCurrentNode = canEditNode ? canEditNode(node.id) : true;
   const isSuperAdminUser = typeof isSuperAdmin === "function" ? isSuperAdmin() : Boolean(isSuperAdmin);
-  // Superadmins already have full access, so they never need to request branch access.
-  const canRequestBranchAccess = Boolean(
-    currentUser && !isSuperAdminUser && !canEditCurrentNode && treeId,
+  // If the user already has a pending self-link request for this node (or an
+  // ancestor of it, meaning this node is within that pending branch), hide the
+  // "Request Branch Access" button — approving the link already grants that
+  // branch. `node.hierarchy` is the male-parent chain, matching how branch
+  // access is scoped. The button returns once the link request is rejected.
+  const pendingSelfLinkTargetId = myPendingSelfLinkRequest?.targetPersonId;
+  const isNodeInPendingLinkBranch = Boolean(
+    pendingSelfLinkTargetId &&
+      (node.id === pendingSelfLinkTargetId ||
+        (node.hierarchy || []).some((h) => h.id === pendingSelfLinkTargetId)),
   );
+  // Whether a branch-access request already covers this node — either it targets
+  // this node directly or it targets an ancestor (so this node is within that
+  // pending branch). `node.hierarchy` is the male-parent chain, matching how
+  // branch access is scoped. The button stays visible but disabled with a tooltip.
+  const pendingBranchAccessTargetIds = new Set(
+    myPendingRequests
+      .filter((r) => r.requestType === "branch_access_request" && r.targetPersonId)
+      .map((r) => r.targetPersonId as string),
+  );
+  const hasPendingBranchAccessForNode =
+    pendingBranchAccessTargetIds.has(node.id) ||
+    (node.hierarchy || []).some((h) => pendingBranchAccessTargetIds.has(h.id));
+  // Superadmins already have full access, so they never need to request branch access.
+  // A user who already has (edit) access to this node or its descendants also
+  // never sees it, via `!canEditCurrentNode`.
+  const canRequestBranchAccess = Boolean(
+    currentUser &&
+      !isSuperAdminUser &&
+      !canEditCurrentNode &&
+      treeId &&
+      !isNodeInPendingLinkBranch,
+  );
+  // When the profile being claimed doesn't match the signed-in user's name, the
+  // self-link confirm dialog becomes a warning instead of a plain confirmation.
+  const selfLinkNameMismatch = !namesLooselyMatch(node.name, userProfile?.name);
   const summaryItems = [
     {
       key: "gender",
@@ -1257,19 +1289,32 @@ export const NodeDetails = memo(function NodeDetails({
                         </Button>
                       )}
                       {canRequestBranchAccess && (
-                        <Button
-                          variant="outlined"
-                          color="secondary"
-                          startIcon={<LockOpenOutlinedIcon />}
-                          onClick={handleRequestBranchAccess}
-                          disabled={requestingAccess || branchAccessRequested}
+                        <Tooltip
+                          title={
+                            hasPendingBranchAccessForNode
+                              ? "Your branch access request is pending owner approval."
+                              : ""
+                          }
                         >
-                          {branchAccessRequested
-                            ? "Access Requested"
-                            : requestingAccess
-                              ? "Requesting…"
-                              : "Request Branch Access"}
-                        </Button>
+                          {/* span wrapper lets the tooltip show while the button is disabled */}
+                          <span>
+                            <Button
+                              variant="outlined"
+                              color="secondary"
+                              startIcon={<LockOpenOutlinedIcon />}
+                              onClick={handleRequestBranchAccess}
+                              disabled={
+                                requestingAccess || hasPendingBranchAccessForNode
+                              }
+                            >
+                              {hasPendingBranchAccessForNode
+                                ? "Access Requested"
+                                : requestingAccess
+                                  ? "Requesting…"
+                                  : "Request Branch Access"}
+                            </Button>
+                          </span>
+                        </Tooltip>
                       )}
                     </Box>
                   </Stack>
@@ -2462,11 +2507,26 @@ export const NodeDetails = memo(function NodeDetails({
                 : "Hierarchy: (Root Node)"}
             </Typography>
           </Box>
-          <Typography>Are you sure you want to delete this person?</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This action cannot be undone. All relationships to this person will
-            be removed.
-          </Typography>
+          {(node.children?.length || 0) > 0 ? (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              {node.name || "This person"} has{" "}
+              <strong>
+                {node.children!.length} child
+                {node.children!.length === 1 ? "" : "ren"}
+              </strong>{" "}
+              and can’t be deleted. Only people with no children can be removed —
+              remove or reattach the {node.children!.length === 1 ? "child" : "children"} first.
+            </Alert>
+          ) : (
+            <>
+              <Typography>Are you sure you want to delete this person?</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                This action cannot be undone. All relationships, custom details,
+                business/profession links, and account linking for this person
+                will be removed.
+              </Typography>
+            </>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
@@ -2474,6 +2534,7 @@ export const NodeDetails = memo(function NodeDetails({
             onClick={handleConfirmDelete}
             color="error"
             variant="contained"
+            disabled={(node.children?.length || 0) > 0}
           >
             Delete
           </Button>
@@ -2488,8 +2549,15 @@ export const NodeDetails = memo(function NodeDetails({
           fullWidth
         >
           <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              Link this profile?
+            {selfLinkNameMismatch && (
+              <WarningAmberRoundedIcon fontSize="small" color="warning" />
+            )}
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{ flexGrow: 1, color: selfLinkNameMismatch ? "warning.main" : undefined }}
+            >
+              {selfLinkNameMismatch ? "Name doesn't match" : "Link this profile?"}
             </Typography>
             <IconButton
               onClick={() => setSelfLinkConfirmOpen(false)}
@@ -2505,6 +2573,18 @@ export const NodeDetails = memo(function NodeDetails({
                 {node.name}
               </Typography>
             </Box>
+            {selfLinkNameMismatch && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <strong>{node.name}</strong> doesn't match your name
+                {userProfile?.name ? (
+                  <>
+                    {" "}
+                    (<strong>{userProfile.name}</strong>)
+                  </>
+                ) : null}
+                .
+              </Alert>
+            )}
             <Typography>Are you sure this is you?</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
               We'll send a request to the tree owner to link your account to this
@@ -2521,6 +2601,7 @@ export const NodeDetails = memo(function NodeDetails({
             <Button
               onClick={handleConfirmSelfLink}
               variant="contained"
+              color={selfLinkNameMismatch ? "warning" : "primary"}
               disabled={selfLinkRequesting}
               startIcon={
                 selfLinkRequesting ? (
@@ -2528,7 +2609,11 @@ export const NodeDetails = memo(function NodeDetails({
                 ) : undefined
               }
             >
-              {selfLinkRequesting ? "Sending…" : "Yes, this is me"}
+              {selfLinkRequesting
+                ? "Sending…"
+                : selfLinkNameMismatch
+                  ? "Yes, link anyway"
+                  : "Yes, this is me"}
             </Button>
           </DialogActions>
         </Dialog>

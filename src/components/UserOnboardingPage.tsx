@@ -38,6 +38,7 @@ import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AddTree from "./AddTree/AddTree";
 import { useAuth } from "./hooks/useAuth";
@@ -73,6 +74,7 @@ import {
 } from "../services/apiService";
 import { OnboardingTreePreviewDialog } from "./OnboardingTreePreviewDialog";
 import { FullScreenMobileAutocomplete } from "./FullScreenMobilePicker";
+import { CreateLocationDialog } from "./LocationPicker/CreateLocationDialog";
 import { brand } from "../theme/brand";
 
 const STEP_INDEX: Record<string, number> = {
@@ -216,15 +218,6 @@ export const UserOnboardingPage: React.FC = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [createLocationOpen, setCreateLocationOpen] = useState(false);
   const [createLocationName, setCreateLocationName] = useState("");
-  const [createLocationStateId, setCreateLocationStateId] = useState("");
-  const [createLocationDistrictId, setCreateLocationDistrictId] = useState("");
-  const [createLocationStates, setCreateLocationStates] = useState<any[]>([]);
-  const [createLocationDistricts, setCreateLocationDistricts] = useState<any[]>([]);
-  const [createLocationLoadingStates, setCreateLocationLoadingStates] = useState(false);
-  const [createLocationLoadingDistricts, setCreateLocationLoadingDistricts] =
-    useState(false);
-  const [createLocationSaving, setCreateLocationSaving] = useState(false);
-  const [createLocationError, setCreateLocationError] = useState("");
   const [localError, setLocalError] = useState("");
   const [linkRequestSuccess, setLinkRequestSuccess] = useState("");
   const [myLinkRequests, setMyLinkRequests] = useState<LinkRequest[]>([]);
@@ -329,20 +322,6 @@ export const UserOnboardingPage: React.FC = () => {
       ) || null,
     [filteredSubCastes, selectedSubCasteId],
   );
-  const selectedCreateLocationState = useMemo(
-    () =>
-      createLocationStates.find(
-        (state: any) => state.id === createLocationStateId,
-      ) || null,
-    [createLocationStateId, createLocationStates],
-  );
-  const selectedCreateLocationDistrict = useMemo(
-    () =>
-      createLocationDistricts.find(
-        (district: any) => district.id === createLocationDistrictId,
-      ) || null,
-    [createLocationDistrictId, createLocationDistricts],
-  );
   const buildCreatableLookupOptions = (
     options: LookupOption[],
     params: FilterOptionsState<LookupAutocompleteOption>,
@@ -370,6 +349,40 @@ export const UserOnboardingPage: React.FC = () => {
     }
 
     return filtered;
+  };
+
+  // Subtle "Add … as new" option rendering, consistent with the create-tree
+  // (AddTree) lookup styling on both pages.
+  const renderLookupOption = (
+    props: React.HTMLAttributes<HTMLLIElement> & { key?: React.Key },
+    option: LookupAutocompleteOption,
+  ) => {
+    if (!isCreateLookupOption(option)) {
+      return <li {...(props as any)}>{option.name}</li>;
+    }
+    const { key, ...rest } = props as any;
+    return (
+      <Box
+        component="li"
+        key={key}
+        {...rest}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          borderTop: "1px solid",
+          borderColor: "divider",
+          mt: 0.5,
+          pt: 1,
+          pb: 1,
+        }}
+      >
+        <AddCircleOutlineIcon fontSize="small" color="primary" />
+        <Box component="span" sx={{ fontWeight: 700, color: "primary.main" }}>
+          {option.name}
+        </Box>
+      </Box>
+    );
   };
   const pendingUserNodeLinkRequest = useMemo(
     () =>
@@ -886,65 +899,6 @@ export const UserOnboardingPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [locationInputValue, selectedLocationOption]);
 
-  useEffect(() => {
-    if (!createLocationOpen || createLocationStates.length > 0) {
-      return;
-    }
-
-    let active = true;
-    setCreateLocationLoadingStates(true);
-    ApiService.getStates()
-      .then((rows) => {
-        if (active) {
-          setCreateLocationStates(rows || []);
-        }
-      })
-      .catch((error: any) => {
-        if (active) {
-          setCreateLocationError(error?.message || "Failed to load states.");
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setCreateLocationLoadingStates(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [createLocationOpen, createLocationStates.length]);
-
-  useEffect(() => {
-    if (!createLocationOpen || !createLocationStateId) {
-      setCreateLocationDistricts([]);
-      setCreateLocationDistrictId("");
-      return;
-    }
-
-    let active = true;
-    setCreateLocationLoadingDistricts(true);
-    ApiService.getDistricts(createLocationStateId)
-      .then((rows) => {
-        if (active) {
-          setCreateLocationDistricts(rows || []);
-        }
-      })
-      .catch((error: any) => {
-        if (active) {
-          setCreateLocationError(error?.message || "Failed to load districts.");
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setCreateLocationLoadingDistricts(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [createLocationOpen, createLocationStateId]);
 
   useEffect(() => {
     if (displayStep !== "match") {
@@ -1035,80 +989,34 @@ export const UserOnboardingPage: React.FC = () => {
 
   const handleOpenCreateLocation = (locationName?: string) => {
     setCreateLocationName(locationName || trimmedLocationQuery);
-    setCreateLocationStateId(selectedStateId || "");
-    setCreateLocationDistrictId(selectedDistrictId || "");
-    setCreateLocationError("");
     setCreateLocationOpen(true);
   };
 
   const handleCloseCreateLocation = () => {
-    if (createLocationSaving) {
-      return;
-    }
     setCreateLocationOpen(false);
-    setCreateLocationError("");
   };
 
-  const handleCreateLocation = async () => {
-    const locationName = createLocationName.trim();
-    if (!createLocationStateId || !createLocationDistrictId || !locationName) {
-      setCreateLocationError("State, district, and location name are required.");
-      return;
-    }
-
-    setCreateLocationSaving(true);
-    setCreateLocationError("");
+  const handleLocationCreated = async (option: LocationCombinationOption) => {
     setLocalError("");
-
-    try {
-      const state = selectedCreateLocationState;
-      const district = selectedCreateLocationDistrict;
-      if (!state || !district) {
-        setCreateLocationError("State and district are required.");
-        return;
-      }
-
-      const location = await ApiService.createLocation({
-        name: locationName,
-        districtId: createLocationDistrictId,
-      });
-      const option = {
-        stateId: state.id,
-        stateName: state.name,
-        districtId: district.id,
-        districtName: district.name,
-        locationId: location.id,
-        locationName: location.name,
-        label: [location.name, district.name, state.name].join(", "),
-      };
-
-      setSelectedLocationOption(option);
-      setSelectedStateId(option.stateId);
-      setSelectedDistrictId(option.districtId);
-      setSelectedLocationId(option.locationId);
-      setLocationInputValue(option.label);
-      setLocationOptions((prev) => {
-        const remaining = prev.filter(
-          (item) => item.locationId !== option.locationId,
-        );
-        return [option, ...remaining];
-      });
-      setCreateLocationOpen(false);
-      setSelectedLocation(option.locationId);
-      await dispatch(
-        updateUserOnboarding({
-          location: {
-            stateId: option.stateId,
-            districtId: option.districtId,
-            locationId: option.locationId,
-          },
-        }),
-      ).unwrap();
-    } catch (error: any) {
-      setCreateLocationError(error?.message || "Failed to create location.");
-    } finally {
-      setCreateLocationSaving(false);
-    }
+    setSelectedLocationOption(option);
+    setSelectedStateId(option.stateId);
+    setSelectedDistrictId(option.districtId);
+    setSelectedLocationId(option.locationId);
+    setLocationInputValue(option.label);
+    setLocationOptions((prev) => [
+      option,
+      ...prev.filter((item) => item.locationId !== option.locationId),
+    ]);
+    setSelectedLocation(option.locationId);
+    await dispatch(
+      updateUserOnboarding({
+        location: {
+          stateId: option.stateId,
+          districtId: option.districtId,
+          locationId: option.locationId,
+        },
+      }),
+    ).unwrap();
   };
 
   const handleCreateCaste = async (nameToCreate: string) => {
@@ -1398,22 +1306,44 @@ export const UserOnboardingPage: React.FC = () => {
               {tree.matchedPeople.length || "•"}
             </Avatar>
             <Box>
-            <Typography 
-              variant="h6"
-              color="text.primary"
-              sx={{
-                cursor: "pointer",
-                display: "inline-block",
-                fontWeight: 900,
-                "&:hover": { textDecoration: "underline" }
-              }}
+            <Box
+              role="button"
+              tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
                 openPreview(tree.treeId, tree.treeName);
               }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openPreview(tree.treeId, tree.treeName);
+                }
+              }}
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.5,
+                cursor: "pointer",
+                color: "primary.main",
+                "& .tree-name-text": {
+                  textDecoration: "underline",
+                  textUnderlineOffset: "3px",
+                },
+                "&:hover .tree-name-text": {
+                  textDecorationThickness: "2px",
+                },
+              }}
             >
-              {tree.treeName}
-            </Typography>
+              <Typography
+                className="tree-name-text"
+                variant="h6"
+                sx={{ fontWeight: 900, color: "inherit" }}
+              >
+                {tree.treeName}
+              </Typography>
+              <VisibilityOutlinedIcon fontSize="small" />
+            </Box>
             <Stack
               direction="row"
               spacing={1}
@@ -1924,24 +1854,7 @@ export const UserOnboardingPage: React.FC = () => {
                             }}
                           />
                         )}
-                        renderOption={(props, option) => (
-                          <Box component="li" {...props}>
-                            {isCreateLookupOption(option) ? (
-                              <Stack direction="row" spacing={1.25} alignItems="center">
-                                <AddCircleOutlineIcon color="success" fontSize="small" />
-                                <Typography
-                                  variant="body1"
-                                  color="success.dark"
-                                  sx={{ fontWeight: 700 }}
-                                >
-                                  {option.name}
-                                </Typography>
-                              </Stack>
-                            ) : (
-                              option.name
-                            )}
-                          </Box>
-                        )}
+                        renderOption={renderLookupOption}
                       />
                       <FullScreenMobileAutocomplete<LookupAutocompleteOption, false, false, false>
                         pickerTitle="Select Sub-caste"
@@ -2011,24 +1924,7 @@ export const UserOnboardingPage: React.FC = () => {
                             }}
                           />
                         )}
-                        renderOption={(props, option) => (
-                          <Box component="li" {...props}>
-                            {isCreateLookupOption(option) ? (
-                              <Stack direction="row" spacing={1.25} alignItems="center">
-                                <AddCircleOutlineIcon color="success" fontSize="small" />
-                                <Typography
-                                  variant="body1"
-                                  color="success.dark"
-                                  sx={{ fontWeight: 700 }}
-                                >
-                                  {option.name}
-                                </Typography>
-                              </Stack>
-                            ) : (
-                              option.name
-                            )}
-                          </Box>
-                        )}
+                        renderOption={renderLookupOption}
                       />
                       </Stack>
                     </Stack>
@@ -2358,105 +2254,12 @@ export const UserOnboardingPage: React.FC = () => {
         </Container>
       </Box>
 
-      <Dialog
+      <CreateLocationDialog
         open={createLocationOpen}
         onClose={handleCloseCreateLocation}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>Add location</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            {createLocationError && (
-              <Alert severity="error">{createLocationError}</Alert>
-            )}
-            <Autocomplete
-              options={createLocationStates}
-              value={selectedCreateLocationState}
-              loading={createLocationLoadingStates}
-              getOptionLabel={(option: any) => option?.name || ""}
-              isOptionEqualToValue={(option: any, value: any) =>
-                option.id === value.id
-              }
-              onChange={(_event, value: any | null) => {
-                setCreateLocationStateId(value?.id || "");
-                setCreateLocationDistrictId("");
-                setCreateLocationError("");
-              }}
-              disabled={createLocationSaving}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="State"
-                  placeholder="Search state"
-                  helperText={
-                    createLocationLoadingStates ? "Loading states..." : undefined
-                  }
-                />
-              )}
-            />
-            <Autocomplete
-              options={createLocationDistricts}
-              value={selectedCreateLocationDistrict}
-              loading={createLocationLoadingDistricts}
-              getOptionLabel={(option: any) => option?.name || ""}
-              isOptionEqualToValue={(option: any, value: any) =>
-                option.id === value.id
-              }
-              onChange={(_event, value: any | null) => {
-                setCreateLocationDistrictId(value?.id || "");
-                setCreateLocationError("");
-              }}
-              disabled={createLocationSaving || !createLocationStateId}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="District"
-                  placeholder="Search district"
-                  helperText={
-                    createLocationLoadingDistricts
-                      ? "Loading districts..."
-                      : !createLocationStateId
-                        ? "Select a state first"
-                        : undefined
-                  }
-                />
-              )}
-            />
-            <TextField
-              label="Location"
-              value={createLocationName}
-              onChange={(event) => {
-                setCreateLocationName(event.target.value);
-                setCreateLocationError("");
-              }}
-              disabled={createLocationSaving}
-              autoFocus
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseCreateLocation} disabled={createLocationSaving}>
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleCreateLocation}
-            disabled={
-              createLocationSaving ||
-              !createLocationStateId ||
-              !createLocationDistrictId ||
-              !createLocationName.trim()
-            }
-            startIcon={
-              createLocationSaving ? <CircularProgress size={16} /> : undefined
-            }
-          >
-            {createLocationSaving ? "Saving..." : "Add location"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        initialName={createLocationName}
+        onCreated={handleLocationCreated}
+      />
 
       <AddTree
         hideTrigger
@@ -2476,6 +2279,7 @@ export const UserOnboardingPage: React.FC = () => {
         treeId={previewTreeId!}
         treeName={previewTreeName}
         personId={previewPersonId}
+        searchName={searchDisplayName}
         myLinkRequests={myLinkRequests}
         onRequestCompleted={handleOnboardingRequestCompleted}
         onClose={closePreview}

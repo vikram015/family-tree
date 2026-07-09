@@ -27,6 +27,7 @@ export type TreeViewerNode = {
   hierarchy?: Array<{ name: string; id: string }>;
   treeId?: string;
   isAlive?: boolean;
+  deceasedDate?: string;
   parents: TreeViewerRelation[];
   children: TreeViewerRelation[];
   spouses: TreeViewerRelation[];

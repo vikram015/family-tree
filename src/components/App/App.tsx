@@ -191,7 +191,9 @@ function AppContent() {
                 }
               />
               <Route path="/famous" element={<FamousPage />} />
-              <Route path="/contact" element={<ContactPage />} />
+              {/* Contact page hidden for now — route disabled so it's unreachable.
+                  ContactPage import kept so restoring is a one-line uncomment. */}
+              {/* <Route path="/contact" element={<ContactPage />} /> */}
               <Route path="/about" element={<AboutPage />} />
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />

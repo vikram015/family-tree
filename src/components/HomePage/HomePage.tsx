@@ -788,9 +788,11 @@ export const HomePage: React.FC = () => {
             >
               Open Family Trees
             </Button>
+            {/* Contact page hidden for now.
             <Button variant="outlined" component={Link} to="/contact" sx={{ fontWeight: 700 }}>
               Contact Support
             </Button>
+            */}
           </Stack>
         </Box>
       </Container>

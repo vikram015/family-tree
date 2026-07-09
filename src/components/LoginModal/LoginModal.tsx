@@ -22,6 +22,7 @@ import {
 import { firebaseAuth } from "../../firebase";
 import { ApiService } from "../../services/apiService";
 import { OtpInput } from "./OtpInput";
+import { useSmsOtpAutofill } from "../hooks/useSmsOtpAutofill";
 import { OTP_LENGTH } from "../../config/otp";
 import { brand } from "../../theme/brand";
 
@@ -215,15 +216,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     await sendOtp();
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const verifyOtp = async (code: string) => {
     if (!confirmationResult) {
       setError("Please request OTP first");
       return;
     }
 
-    if (otp.length < OTP_LENGTH) {
+    const trimmedCode = code.trim();
+    if (trimmedCode.length < OTP_LENGTH) {
       setError(`Please enter the ${OTP_LENGTH}-digit code`);
       return;
     }
@@ -233,7 +233,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setSuccessMessage("");
       setLoading(true);
 
-      await confirmationResult.confirm(otp.trim());
+      await confirmationResult.confirm(trimmedCode);
 
       // Record the login (best-effort — never block sign-in on this).
       try {
@@ -251,6 +251,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setLoading(false);
     }
   };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await verifyOtp(otp);
+  };
+
+  // Auto-fetch the SMS OTP (Android Chrome via WebOTP) while the OTP step is
+  // showing. Fill the field and submit automatically once the full code arrives.
+  useSmsOtpAutofill(
+    Boolean(confirmationResult) && !loading,
+    (code) => {
+      setOtp(code);
+      if (code.length >= OTP_LENGTH) {
+        void verifyOtp(code);
+      }
+    },
+    OTP_LENGTH,
+  );
 
   const handleClose = () => {
     clearRecaptcha();

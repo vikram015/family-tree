@@ -1392,14 +1392,11 @@ export const BusinessPage: React.FC = () => {
                     Add a Business
                   </Button>
                 ) : (
-                  <Button
-                    variant="contained"
-                    size="large"
-                    sx={primaryButtonSx}
-                    href="/contact"
-                  >
-                    Contact Us to Get Listed
-                  </Button>
+                  // Contact page hidden for now — CTA suppressed for non-admins.
+                  // <Button variant="contained" size="large" sx={primaryButtonSx} href="/contact">
+                  //   Contact Us to Get Listed
+                  // </Button>
+                  null
                 )}
               </Card>
             </Box>

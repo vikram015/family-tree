@@ -11,7 +11,6 @@ import {
   Alert,
   CircularProgress,
   Box,
-  Chip,
   Fab,
   Autocomplete,
   Tooltip,
@@ -111,29 +110,18 @@ function renderLookupOption(
       sx={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
         gap: 1,
-        px: 1.5,
-        py: 1,
-        borderLeft: "4px solid",
-        borderColor: "success.main",
-        bgcolor: "success.50",
-        color: "success.dark",
+        borderTop: "1px solid",
+        borderColor: "divider",
+        mt: 0.5,
+        pt: 1,
+        pb: 1,
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <AddCircleOutlineIcon fontSize="small" color="success" />
-        <Box component="span" sx={{ fontWeight: 600 }}>
-          {option.name}
-        </Box>
+      <AddCircleOutlineIcon fontSize="small" color="primary" />
+      <Box component="span" sx={{ fontWeight: 700, color: "primary.main" }}>
+        {option.name}
       </Box>
-      <Chip
-        label="New"
-        size="small"
-        color="success"
-        variant="filled"
-        sx={{ fontWeight: 700 }}
-      />
     </Box>
   );
 }
@@ -531,6 +519,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
                 }
               }}
               disabled={loading}
+              allowCreate
             />
           </Box>
 

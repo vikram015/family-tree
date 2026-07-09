@@ -74,6 +74,7 @@ function toTreeViewerNode(
     hierarchy: node.hierarchy,
     treeId: node.treeId,
     isAlive: node.isAlive,
+    deceasedDate: node.deceasedDate,
     parents: (node.parents || []).map((parent) => ({
       id: parent.id,
       type: parent.type,

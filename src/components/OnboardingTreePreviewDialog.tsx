@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react";
 import {
   Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
   AppBar,
   Toolbar,
   IconButton,
@@ -14,10 +18,12 @@ import {
   Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { TransitionProps } from "@mui/material/transitions";
 import { DTreeComponent } from "./DTree/DTreeComponent";
 import { ApiService, LinkRequest, TreeWriteScope } from "../services/apiService";
 import { FNode } from "./model/FNode";
+import { namesLooselyMatch } from "../utils/nameMatch";
 import { Gender, RelType } from "relatives-tree/lib/types";
 
 const Transition = React.forwardRef(function Transition(
@@ -35,6 +41,9 @@ interface OnboardingTreePreviewDialogProps {
   treeId: string | null;
   treeName: string | null;
   personId: string | null;
+  /** The name the user searched with (their profile name) — used to warn when
+   * the claimed node's name doesn't match. */
+  searchName?: string | null;
   myLinkRequests?: LinkRequest[];
   onRequestCompleted?: (input: {
     requestType: "user_to_tree_node" | "branch_access_request";
@@ -51,6 +60,7 @@ export const OnboardingTreePreviewDialog: React.FC<
   treeId,
   treeName,
   personId,
+  searchName,
   myLinkRequests = [],
   onRequestCompleted,
 }) => {
@@ -64,6 +74,13 @@ export const OnboardingTreePreviewDialog: React.FC<
   const [actionSuccess, setActionSuccess] = useState("");
   const [actionError, setActionError] = useState("");
   const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(null);
+  const [linkConfirmOpen, setLinkConfirmOpen] = useState(false);
+
+  // Whether the selected node's name diverges from the name the user searched
+  // with — drives the warning vs. plain confirmation modal.
+  const linkNameMismatch = selectedNode
+    ? !namesLooselyMatch(selectedNode.name, searchName)
+    : false;
 
   useEffect(() => {
     if (!open || !treeId) {
@@ -209,6 +226,7 @@ export const OnboardingTreePreviewDialog: React.FC<
 
   const handleCreateLinkRequest = async () => {
     if (!treeId || !selectedNode) return;
+    setLinkConfirmOpen(false);
     setActionLoading(true);
     setActionError("");
     try {
@@ -385,7 +403,7 @@ export const OnboardingTreePreviewDialog: React.FC<
                   fullWidth
                   size="large"
                   sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
-                  onClick={handleCreateLinkRequest}
+                  onClick={() => setLinkConfirmOpen(true)}
                   disabled={actionLoading || isLinkRequested}
                 >
                   {actionLoading ? "Sending..." : isLinkRequested ? "Link Requested" : "Link my profile"}
@@ -501,6 +519,61 @@ export const OnboardingTreePreviewDialog: React.FC<
             </Box>
           )}
         </Box>
+      </Dialog>
+
+      <Dialog
+        open={linkConfirmOpen}
+        onClose={() => !actionLoading && setLinkConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        sx={{ zIndex: 1400 }}
+      >
+        <DialogTitle
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            color: linkNameMismatch ? "warning.main" : undefined,
+          }}
+        >
+          {linkNameMismatch && <WarningAmberRoundedIcon fontSize="small" />}
+          {linkNameMismatch ? "Name doesn't match" : "Confirm profile link"}
+        </DialogTitle>
+        <DialogContent>
+          {linkNameMismatch && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              <strong>{selectedNode?.name}</strong> doesn't match the name you
+              searched
+              {searchName ? (
+                <>
+                  {" "}
+                  (<strong>{searchName}</strong>)
+                </>
+              ) : null}
+              .
+            </Alert>
+          )}
+          <DialogContentText>
+            Are you sure <strong>{selectedNode?.name}</strong> is you? We'll send a
+            link request to the tree owner for approval.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setLinkConfirmOpen(false)}
+            disabled={actionLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateLinkRequest}
+            variant="contained"
+            color={linkNameMismatch ? "warning" : "primary"}
+            disabled={actionLoading}
+          >
+            {linkNameMismatch ? "Yes, link anyway" : "Yes, this is me"}
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   );

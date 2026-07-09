@@ -14,10 +14,16 @@ import IconButton from "@mui/material/IconButton";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import InputLabel from "@mui/material/InputLabel";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import Divider from "@mui/material/Divider";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import dTree from "./dTree";
 import "./dTree.css";
 import {
@@ -264,6 +270,39 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     [canEditTree, canEditNode],
   );
   const canEditMobileNode = Boolean(mobileSheetNode && !isExternalNode && isNodeEditable(mobileSheetNode.id));
+
+  // Desktop right-click context menu (mirrors the node "Quick actions").
+  const [contextMenu, setContextMenu] = useState<{
+    mouseX: number;
+    mouseY: number;
+    nodeId: string;
+  } | null>(null);
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const contextNode = contextMenu
+    ? nodes.find((n) => n.id === contextMenu.nodeId) || null
+    : null;
+  const contextParentNodes = contextNode
+    ? contextNode.parents.map((p) => nodes.find((n) => n.id === p.id)).filter(Boolean)
+    : [];
+  const contextIsExternal = Boolean(
+    currentTreeId && contextNode?.treeId && contextNode.treeId !== currentTreeId,
+  );
+  const canEditContextNode = Boolean(
+    contextNode && !contextIsExternal && isNodeEditable(contextNode.id),
+  );
+  const contextShowFather = Boolean(
+    contextNode && !contextParentNodes.some((p) => p?.gender === "male"),
+  );
+  const contextShowMother = Boolean(
+    contextNode && !contextParentNodes.some((p) => p?.gender === "female"),
+  );
+  const runContextAction = useCallback(
+    (fn: () => void) => {
+      setContextMenu(null);
+      fn();
+    },
+    [],
+  );
   const isTreeControlsOpen = Boolean(treeControlsAnchorEl);
 
   useEffect(() => {
@@ -651,6 +690,33 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       return value;
     };
 
+    // Desktop-only right-click context menu on a node card.
+    const handleContextMenu = (e: MouseEvent) => {
+      if (isMobileRef.current) return; // desktop / non-touch only
+      // Nothing to show (e.g. the read-only onboarding preview) — let the
+      // browser's native menu through instead of opening an empty one.
+      const hasAnyAction =
+        (effectiveFeatures.allowViewDetailsAction && !!onViewDetails) ||
+        (effectiveFeatures.allowEditAction && !!onEditNode) ||
+        (effectiveFeatures.allowPlaceholderActions && !!onAddRelative);
+      if (!hasAnyAction) return;
+      const target = e.target as Element | null;
+      if (!target) return;
+      const nodeG = target.closest("g.node") as any;
+      if (!nodeG || !nodeG.__data__) return;
+      const d = nodeG.__data__;
+      if (d.data?.extra?._placeholder || d.data?.isMarriage || !d.data?.extra?.id) {
+        return;
+      }
+      e.preventDefault();
+      setHoverInfo(null);
+      setContextMenu({
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        nodeId: d.data.extra.id,
+      });
+    };
+
     // Event delegation for icons and placeholder clicks
     const handleContainerClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -893,6 +959,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       });
       container.addEventListener("mousemove", handleContainerMouseMove);
       container.addEventListener("mouseleave", handleContainerMouseLeave);
+      container.addEventListener("contextmenu", handleContextMenu);
     }
 
     return () => {
@@ -906,6 +973,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         });
         container.removeEventListener("mousemove", handleContainerMouseMove);
         container.removeEventListener("mouseleave", handleContainerMouseLeave);
+        container.removeEventListener("contextmenu", handleContextMenu);
       }
     };
   }, [
@@ -1004,6 +1072,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         treeId: person.treeId,
         photo: person.photo,
         isAlive: person.isAlive,
+        deceasedDate: person.deceasedDate,
         parentsCount: person.parents?.length || 0,
         childrenCount: person.children?.length || 0,
         spousesCount: person.spouses?.length || 0,
@@ -1168,6 +1237,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
               treeId: spouseNode.treeId,
               photo: spouseNode.photo,
               isAlive: spouseNode.isAlive,
+              deceasedDate: spouseNode.deceasedDate,
               parentsCount: spouseNode.parents?.length || 0,
               // Per-marriage child count (children shared by this person + spouse),
               // not the spouse's total children across all relationships.
@@ -2267,6 +2337,104 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
           </>
           )}
         </div>
+      )}
+
+      {/* Desktop right-click context menu — mirrors the node "Quick actions". */}
+      {contextMenu && (
+        <Menu
+          open
+          onClose={closeContextMenu}
+          anchorReference="anchorPosition"
+          anchorPosition={{ top: contextMenu.mouseY, left: contextMenu.mouseX }}
+          MenuListProps={{ dense: true }}
+        >
+          {effectiveFeatures.allowViewDetailsAction && onViewDetails && (
+            <MenuItem
+              onClick={() => runContextAction(() => onViewDetails(contextMenu.nodeId))}
+            >
+              <ListItemIcon>
+                <VisibilityOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              View details
+            </MenuItem>
+          )}
+          {effectiveFeatures.allowEditAction && onEditNode && (
+            <MenuItem
+              disabled={!canEditContextNode}
+              onClick={() => runContextAction(() => onEditNode(contextMenu.nodeId))}
+            >
+              <ListItemIcon>
+                <EditOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              Edit
+            </MenuItem>
+          )}
+
+          {effectiveFeatures.allowPlaceholderActions &&
+            onAddRelative &&
+            canEditContextNode && <Divider />}
+          {effectiveFeatures.allowPlaceholderActions &&
+            onAddRelative &&
+            canEditContextNode && (
+              <>
+                {contextShowFather && (
+                  <MenuItem
+                    onClick={() =>
+                      runContextAction(() => onAddRelative(contextMenu.nodeId, "father"))
+                    }
+                  >
+                    <ListItemIcon>
+                      <PersonAddAltOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    Add father
+                  </MenuItem>
+                )}
+                {contextShowMother && (
+                  <MenuItem
+                    onClick={() =>
+                      runContextAction(() => onAddRelative(contextMenu.nodeId, "mother"))
+                    }
+                  >
+                    <ListItemIcon>
+                      <PersonAddAltOutlinedIcon fontSize="small" />
+                    </ListItemIcon>
+                    Add mother
+                  </MenuItem>
+                )}
+                <MenuItem
+                  onClick={() =>
+                    runContextAction(() => onAddRelative(contextMenu.nodeId, "spouse"))
+                  }
+                >
+                  <ListItemIcon>
+                    <PersonAddAltOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  Add spouse
+                </MenuItem>
+                <MenuItem
+                  onClick={() =>
+                    runContextAction(() => onAddRelative(contextMenu.nodeId, "son"))
+                  }
+                >
+                  <ListItemIcon>
+                    <PersonAddAltOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  Add son
+                </MenuItem>
+                <MenuItem
+                  onClick={() =>
+                    runContextAction(() => onAddRelative(contextMenu.nodeId, "daughter"))
+                  }
+                >
+                  <ListItemIcon>
+                    <PersonAddAltOutlinedIcon fontSize="small" />
+                  </ListItemIcon>
+                  Add daughter
+                </MenuItem>
+              </>
+            )}
+
+        </Menu>
       )}
     </div>
   );
