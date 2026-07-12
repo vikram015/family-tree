@@ -52,6 +52,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
+import WcOutlinedIcon from "@mui/icons-material/WcOutlined";
 import { ApiService, LinkRequest } from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
@@ -649,6 +651,42 @@ export const ProfilePage: React.FC = () => {
                 <PhoneIcon fontSize="small" />
                 <Typography variant="body2">{userProfile.phone}</Typography>
               </Box>
+            )}
+            {canManagePerson && (
+              <>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 1,
+                    mb: 1,
+                    color: "text.secondary",
+                  }}
+                >
+                  <CakeOutlinedIcon fontSize="small" />
+                  <Typography variant="body2">
+                    {linkedPersonDetails?.dob
+                      ? formatDisplayDate(linkedPersonDetails.dob)
+                      : "Date of birth not set"}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 1,
+                    mb: 1,
+                    color: "text.secondary",
+                  }}
+                >
+                  <WcOutlinedIcon fontSize="small" />
+                  <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
+                    {linkedPersonDetails?.gender || "Gender not set"}
+                  </Typography>
+                </Box>
+              </>
             )}
 
             <Divider sx={{ my: 2 }} />
