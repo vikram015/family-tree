@@ -124,7 +124,10 @@ export const ProfilePage: React.FC = () => {
     name: "",
     phone: "",
     email: "",
+    dob: "",
+    gender: "",
   });
+  const [savingProfile, setSavingProfile] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>();
   const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
   const [linkedPersonDetails, setLinkedPersonDetails] = useState<any | null>(
@@ -183,14 +186,17 @@ export const ProfilePage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (userProfile) {
-      setEditProfileData({
-        name: userProfile.displayName || userProfile.name || "",
-        phone: userProfile.phone || "",
-        email: userProfile.email || "",
-      });
-    }
-  }, [userProfile]);
+    setEditProfileData({
+      name: userProfile?.displayName || userProfile?.name || "",
+      phone: userProfile?.phone || "",
+      email: userProfile?.email || "",
+      // Date input needs YYYY-MM-DD; the stored value may be an ISO timestamp.
+      dob: linkedPersonDetails?.dob
+        ? String(linkedPersonDetails.dob).split("T")[0]
+        : "",
+      gender: linkedPersonDetails?.gender || "",
+    });
+  }, [userProfile, linkedPersonDetails]);
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -291,6 +297,8 @@ export const ProfilePage: React.FC = () => {
   }, [currentUser, userProfile?.role, loadMyLocationRequests]);
 
   const handleUpdateProfile = async () => {
+    setSavingProfile(true);
+    setError("");
     try {
       if (updateUserProfile) {
         await updateUserProfile(
@@ -298,10 +306,26 @@ export const ProfilePage: React.FC = () => {
           userProfile?.phone || "",
           editProfileData.email,
         );
-        setOpenEditProfileDialog(false);
       }
-    } catch (err) {
+
+      // Date of birth and gender live on the linked person record — update them
+      // too when the user manages this profile.
+      if (canManagePerson && effectivePersonId) {
+        await ApiService.updatePerson(effectivePersonId, {
+          dob: editProfileData.dob || undefined,
+          gender: (editProfileData.gender || undefined) as any,
+        });
+        const refreshed = await refreshPersonDetails(effectivePersonId);
+        if (refreshed) setLinkedPersonDetails(refreshed);
+      }
+
+      setOpenEditProfileDialog(false);
+      setSuccess("Profile updated successfully.");
+    } catch (err: any) {
       console.error("Error updating profile:", err);
+      setError(err?.message || "Failed to update profile.");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -702,13 +726,21 @@ export const ProfilePage: React.FC = () => {
                     </Typography>
                   )}
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-                    {linkedPersonDetails.gender && (
-                      <Chip size="small" label={linkedPersonDetails.gender} />
-                    )}
-                    {linkedPersonDetails.dob && (
+                    {(linkedPersonDetails.gender || canManagePerson) && (
                       <Chip
                         size="small"
-                        label={`DOB: ${formatDisplayDate(linkedPersonDetails.dob)}`}
+                        label={`Gender: ${linkedPersonDetails.gender || "Not set"}`}
+                        sx={{ textTransform: "capitalize" }}
+                      />
+                    )}
+                    {(linkedPersonDetails.dob || canManagePerson) && (
+                      <Chip
+                        size="small"
+                        label={`DOB: ${
+                          linkedPersonDetails.dob
+                            ? formatDisplayDate(linkedPersonDetails.dob)
+                            : "Not set"
+                        }`}
                       />
                     )}
                   </Stack>
@@ -1375,6 +1407,27 @@ export const ProfilePage: React.FC = () => {
               gap: 2,
             }}
           >
+            <Box sx={{ display: "flex", justifyContent: "center" }}>
+              {userProfile?.peopleId ? (
+                <Suspense fallback={<Box sx={{ height: 112 }} />}>
+                  <ImageCropper
+                    currentPhoto={
+                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
+                    }
+                    previewVariant="rounded"
+                    onCropped={handleProfilePhotoUpload}
+                    onRemove={handleProfilePhotoRemove}
+                    uploading={profilePhotoUploading}
+                    previewSize={112}
+                  />
+                </Suspense>
+              ) : (
+                <Alert severity="info">
+                  Link your account to a family tree profile before adding a
+                  profile image.
+                </Alert>
+              )}
+            </Box>
             <TextField
               fullWidth
               label="Display Name"
@@ -1402,41 +1455,57 @@ export const ProfilePage: React.FC = () => {
               disabled
               helperText="Mobile number is verified and cannot be edited here."
             />
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                Profile Image
-              </Typography>
-              {userProfile?.peopleId ? (
-                <Suspense fallback={<Box sx={{ height: 112 }} />}>
-                  <ImageCropper
-                    currentPhoto={
-                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
+            {canManagePerson ? (
+              <>
+                <TextField
+                  fullWidth
+                  label="Date of Birth"
+                  type="date"
+                  value={editProfileData.dob}
+                  onChange={(e) =>
+                    setEditProfileData({
+                      ...editProfileData,
+                      dob: e.target.value,
+                    })
+                  }
+                  InputLabelProps={{ shrink: true }}
+                />
+                <FormControl fullWidth>
+                  <InputLabel id="profile-gender-label">Gender</InputLabel>
+                  <Select
+                    labelId="profile-gender-label"
+                    label="Gender"
+                    value={editProfileData.gender}
+                    onChange={(e) =>
+                      setEditProfileData({
+                        ...editProfileData,
+                        gender: e.target.value,
+                      })
                     }
-                    previewVariant="rounded"
-                    onCropped={handleProfilePhotoUpload}
-                    onRemove={handleProfilePhotoRemove}
-                    uploading={profilePhotoUploading}
-                    previewSize={112}
-                  />
-                </Suspense>
-              ) : (
-                <Alert severity="info">
-                  Link your account to a family tree profile before adding a
-                  profile image.
-                </Alert>
-              )}
-            </Box>
+                  >
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                  </Select>
+                </FormControl>
+              </>
+            ) : null}
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenEditProfileDialog(false)}>
+          <Button
+            onClick={() => setOpenEditProfileDialog(false)}
+            disabled={savingProfile}
+          >
             Cancel
           </Button>
           <Button
             onClick={handleUpdateProfile}
             variant="contained"
+            disabled={savingProfile}
+            startIcon={savingProfile ? <CircularProgress size={16} /> : undefined}
           >
-            Save
+            {savingProfile ? "Saving..." : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

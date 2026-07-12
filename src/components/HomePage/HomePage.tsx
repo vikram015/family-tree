@@ -563,7 +563,7 @@ export const HomePage: React.FC = () => {
 
       <Box
         sx={{
-          background: `linear-gradient(120deg, ${brand.primarySoft} 0%, ${brand.canvas} 55%, ${brand.primarySoft} 100%)`,
+          background: `linear-gradient(120deg, ${brand.warmSoft} 0%, ${brand.warm} 55%, ${brand.warmSoft} 100%)`,
           borderBottom: "1px solid",
           borderColor: "divider",
         }}

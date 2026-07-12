@@ -25,6 +25,10 @@ export const brand = {
   border: "#e2e8f0",
   surface: "#ffffff",
   canvas: "#f8fafc",
+
+  // Warm (cream) — heritage tones for soft, inviting surfaces (e.g. the home hero)
+  warmSoft: "#fdfbf7",
+  warm: "#f6efe3",
 } as const;
 
 /** Primary call-to-action gradient (blue). */
