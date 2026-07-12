@@ -38,7 +38,7 @@ export const LoginPage: React.FC = () => {
     if (isAdmin && !onboardingLoaded) {
       return;
     }
-    const needsOnboarding = isAdmin && onboarding.status !== "completed";
+    const needsOnboarding = isAdmin && onboarding.status === "in_progress";
     if (needsOnboarding) {
       // Navigate to onboarding ourselves instead of waiting for the global
       // onboarding guard to react. The cross-component handoff races with the

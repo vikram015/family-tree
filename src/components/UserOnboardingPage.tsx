@@ -45,6 +45,7 @@ import { useAuth } from "./hooks/useAuth";
 import { useLocations } from "./hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { consumePostLoginRedirect } from "../utils/postLoginRedirect";
+import { formatDisplayDate } from "../utils/dateFormatter";
 import {
   fetchAllSubCastes,
   fetchCastes,
@@ -224,6 +225,11 @@ export const UserOnboardingPage: React.FC = () => {
   const [linkRequestLoading, setLinkRequestLoading] = useState(false);
   const [linkRequestSubmittingPersonId, setLinkRequestSubmittingPersonId] =
     useState<string | null>(null);
+  // Confirmation shown right after a link request is sent (pending approval).
+  const [linkRequestSent, setLinkRequestSent] = useState<{
+    personName: string;
+    treeName: string;
+  } | null>(null);
   const [createTreeOpen, setCreateTreeOpen] = useState(false);
   const previewTreeId = searchParams.get("previewTreeId");
   const previewTreeName = searchParams.get("previewTreeName");
@@ -1184,20 +1190,50 @@ export const UserOnboardingPage: React.FC = () => {
     }
   };
 
-  const handleCreateLinkRequest = async (personId: string, treeId: string) => {
+  // Records a just-sent profile-link request as PENDING approval (the user is
+  // NOT linked yet) and surfaces the confirmation screen. Onboarding is marked
+  // "skipped" so the user isn't force-redirected while they wait; approval
+  // flips it to "completed" server-side.
+  const markLinkRequestPending = async (input: {
+    treeId: string;
+    personId: string;
+    personName?: string;
+    treeName?: string;
+  }) => {
+    await dispatch(
+      updateUserOnboarding({
+        status: "skipped",
+        match: {
+          ...onboarding.match,
+          selectedTreeId: input.treeId,
+          selectedPersonId: input.personId,
+          action: "link",
+        },
+      }),
+    ).unwrap();
+    await dispatch(fetchUserOnboarding()).unwrap();
+    setLinkRequestSent({
+      personName: input.personName || "the selected profile",
+      treeName: input.treeName || "the selected tree",
+    });
+  };
+
+  const handleCreateLinkRequest = async (
+    personId: string,
+    treeId: string,
+    personName?: string,
+    treeName?: string,
+  ) => {
     setLocalError("");
     setLinkRequestSuccess("");
     setLinkRequestSubmittingPersonId(personId);
 
     try {
-      await ApiService.createUserNodeLinkRequest({
+      const created = await ApiService.createUserNodeLinkRequest({
         targetPersonId: personId,
       });
-      await handleOnboardingRequestCompleted({
-        requestType: "user_to_tree_node",
-        treeId,
-        personId,
-      });
+      setMyLinkRequests((prev) => [...prev, created]);
+      await markLinkRequestPending({ treeId, personId, personName, treeName });
     } catch (error: any) {
       setLocalError(error?.message || "Failed to create link request.");
     } finally {
@@ -1209,7 +1245,18 @@ export const UserOnboardingPage: React.FC = () => {
     requestType: "user_to_tree_node" | "branch_access_request";
     treeId: string;
     personId: string;
+    personName?: string;
+    treeName?: string;
   }) => {
+    // A profile-link request is only PENDING approval — show the confirmation
+    // screen rather than falsely reporting the user as linked.
+    if (input.requestType === "user_to_tree_node") {
+      closePreview();
+      await markLinkRequestPending(input);
+      return;
+    }
+
+    // Branch-access request — existing behavior: record and return to the tree.
     const targetUrl = input.treeId
       ? `/families?tree=${encodeURIComponent(input.treeId)}&personId=${encodeURIComponent(
           input.personId,
@@ -1233,14 +1280,31 @@ export const UserOnboardingPage: React.FC = () => {
       }),
     ).unwrap();
     await dispatch(fetchUserOnboarding()).unwrap();
-    // Onboarding is done — return to where the login flow was initiated (e.g.
-    // the Business page), falling back to the tree the user just linked into.
     navigate(consumePostLoginRedirect() || targetUrl, { replace: true });
   };
 
   const handleOpenCreateTree = async () => {
     setLocalError("");
     setCreateTreeOpen(true);
+  };
+
+  const [skipping, setSkipping] = useState(false);
+
+  // "Skip for now" — mark onboarding skipped (progress is preserved so the user
+  // can resume later from the homepage nudge) and let them into the app.
+  const handleSkipOnboarding = async () => {
+    setSkipping(true);
+    setLocalError("");
+    try {
+      await dispatch(
+        updateUserOnboarding({ status: "skipped" }),
+      ).unwrap();
+      await dispatch(fetchUserOnboarding()).unwrap();
+      navigate(consumePostLoginRedirect() || "/", { replace: true });
+    } catch (error: any) {
+      setLocalError(error?.message || "Failed to skip onboarding.");
+      setSkipping(false);
+    }
   };
 
   const handleTreeCreated = async (treeId: string) => {
@@ -1270,7 +1334,30 @@ export const UserOnboardingPage: React.FC = () => {
     navigate(consumePostLoginRedirect() || treeUrl, { replace: true });
   };
 
-  const renderTreeCard = (tree: (typeof matchResults)[number]) => (
+  const renderTreeCard = (tree: (typeof matchResults)[number]) => {
+    // Why is this tree shown? Compare it against the user's own onboarding
+    // selections so we can label the reasons explicitly.
+    const matchedName = tree.matchedPeople.length > 0;
+    const matchedLocation = Boolean(
+      onboarding.location.locationId &&
+        tree.locationId === onboarding.location.locationId,
+    );
+    const matchedCaste = Boolean(
+      onboarding.location.casteId && tree.casteId === onboarding.location.casteId,
+    );
+    const matchedSubCaste = Boolean(
+      onboarding.location.subCasteId &&
+        tree.subCasteId === onboarding.location.subCasteId,
+    );
+
+    // A reason-aware chip: highlighted (green + check) when it matches the
+    // user's own detail, plain otherwise.
+    const reasonChipSx = (matched: boolean) =>
+      matched
+        ? { bgcolor: brand.accentSoft, color: brand.accentDark, fontWeight: 700 }
+        : { bgcolor: brand.canvas };
+
+    return (
     <Accordion
       key={tree.treeId}
       disableGutters
@@ -1351,14 +1438,32 @@ export const UserOnboardingPage: React.FC = () => {
               useFlexGap
               sx={{ mt: 0.75 }}
             >
+              {matchedName && (
+                <Chip
+                  size="small"
+                  icon={<CheckCircleIcon />}
+                  label={`Name match (${tree.matchedPeople.length})`}
+                  sx={{ bgcolor: brand.accentSoft, color: brand.accentDark, fontWeight: 700 }}
+                />
+              )}
               <Chip
                 size="small"
-                icon={<LocationOnOutlinedIcon />}
+                icon={matchedLocation ? <CheckCircleIcon /> : <LocationOnOutlinedIcon />}
                 label={tree.locationName}
-                sx={{ bgcolor: brand.canvas }}
+                sx={reasonChipSx(matchedLocation)}
               />
-              <Chip size="small" label={tree.casteName || "No caste"} sx={{ bgcolor: brand.canvas }} />
-              <Chip size="small" label={tree.subCasteName || "No sub-caste"} sx={{ bgcolor: brand.canvas }} />
+              <Chip
+                size="small"
+                icon={matchedCaste ? <CheckCircleIcon /> : undefined}
+                label={tree.casteName || "No caste"}
+                sx={reasonChipSx(matchedCaste)}
+              />
+              <Chip
+                size="small"
+                icon={matchedSubCaste ? <CheckCircleIcon /> : undefined}
+                label={tree.subCasteName || "No sub-caste"}
+                sx={reasonChipSx(matchedSubCaste)}
+              />
             </Stack>
           </Box>
           </Stack>
@@ -1369,11 +1474,6 @@ export const UserOnboardingPage: React.FC = () => {
             <Typography variant="body2" color="text.secondary">
               Nodes: {tree.totalNodes}
             </Typography>
-            {tree.matchedPeople.length > 0 && (
-              <Typography variant="body2" sx={{ color: "success.main", fontWeight: 700 }}>
-                Name matches: {tree.matchedPeople.length}
-              </Typography>
-            )}
           </Stack>
         </Stack>
       </AccordionSummary>
@@ -1435,7 +1535,7 @@ export const UserOnboardingPage: React.FC = () => {
                     )}
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                       {person.gender || "Unknown gender"}
-                      {person.dob ? ` • DOB: ${person.dob}` : ""}
+                      {person.dob ? ` • DOB: ${formatDisplayDate(person.dob)}` : ""}
                     </Typography>
                   </Box>
                 </Stack>
@@ -1514,10 +1614,15 @@ export const UserOnboardingPage: React.FC = () => {
                     justifyContent="space-between"
                     sx={{ mt: 2 }}
                   >
-                    <Typography variant="body2" color="text.secondary">
-                      Request approval from this tree’s owner or editor to link this
-                      profile.
-                    </Typography>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        Is this you?
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Send a request to the tree’s owner to link this profile as
+                        your own account.
+                      </Typography>
+                    </Box>
                     <Button
                       variant={isPendingForThisPerson ? "outlined" : "contained"}
                       disabled={
@@ -1527,10 +1632,16 @@ export const UserOnboardingPage: React.FC = () => {
                         isBlockedByAnotherPendingRequest
                       }
                       onClick={() =>
-                        void handleCreateLinkRequest(person.personId, tree.treeId)
+                        void handleCreateLinkRequest(
+                          person.personId,
+                          tree.treeId,
+                          person.name,
+                          tree.treeName,
+                        )
                       }
                       sx={{
-                        minWidth: 150,
+                        width: { xs: "100%", sm: "auto" },
+                        minWidth: { sm: 150 },
                         bgcolor: isPendingForThisPerson ? undefined : onboardingBlue,
                       }}
                     >
@@ -1540,7 +1651,7 @@ export const UserOnboardingPage: React.FC = () => {
                           ? "Request pending"
                           : isBlockedByAnotherPendingRequest
                             ? "Another request pending"
-                            : "Link profile"}
+                            : "This is me"}
                     </Button>
                   </Stack>
                 )}
@@ -1556,7 +1667,8 @@ export const UserOnboardingPage: React.FC = () => {
         )}
       </AccordionDetails>
     </Accordion>
-  );
+    );
+  };
 
   return (
     <>
@@ -1591,6 +1703,17 @@ export const UserOnboardingPage: React.FC = () => {
                 pb: { xs: 2, sm: 3 },
               }}
             >
+              <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleSkipOnboarding}
+                  disabled={skipping || onboardingLoading || !onboardingLoaded}
+                  sx={{ color: brand.slateMuted, fontWeight: 700, textTransform: "none" }}
+                >
+                  {skipping ? "Skipping…" : "Skip for now"}
+                </Button>
+              </Box>
               {renderOnboardingStepRail()}
             </Box>
             <Box sx={{ px: { xs: 0, sm: 2 }, py: { xs: 1, sm: 2 } }}>
@@ -1683,7 +1806,8 @@ export const UserOnboardingPage: React.FC = () => {
                           Where is your family from?
                         </Typography>
                         <Typography variant="body1" color="text.secondary">
-                          Your community details help us find matching family trees.
+                          We use your location, caste and sub-caste only to find your
+                          family tree — they’re never shared publicly.
                         </Typography>
                       </Box>
                       <Stack
@@ -1930,7 +2054,74 @@ export const UserOnboardingPage: React.FC = () => {
                     </Stack>
                   )}
 
-                  {displayStep === "match" && (
+                  {displayStep === "match" && linkRequestSent && (
+                    <Stack
+                      spacing={3}
+                      alignItems="center"
+                      sx={{ textAlign: "center", py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 0 } }}
+                    >
+                      <CheckCircleIcon
+                        sx={{ fontSize: { xs: 56, sm: 72 }, color: onboardingGreen }}
+                      />
+                      <Box sx={{ maxWidth: 620 }}>
+                        <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 900, mb: 1 }}>
+                          Request sent!
+                        </Typography>
+                        <Typography variant="body1" color="text.secondary">
+                          Your request to link with{" "}
+                          <strong>{linkRequestSent.personName}</strong> in{" "}
+                          <strong>{linkRequestSent.treeName}</strong> has been sent to
+                          the tree’s owner for approval.
+                        </Typography>
+                      </Box>
+
+                      <Paper
+                        variant="outlined"
+                        sx={{ p: 2, borderRadius: 3, bgcolor: brand.primarySoft, maxWidth: 460 }}
+                      >
+                        <Typography variant="body2" color="text.secondary">
+                          <strong>What happens next?</strong> Once the owner approves,
+                          your account is linked and you can manage your profile. You can
+                          explore the app in the meantime — we’ll keep the request pending.
+                        </Typography>
+                      </Paper>
+
+                      <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1.5}
+                        justifyContent="center"
+                        sx={{ width: { xs: "100%", sm: "auto" } }}
+                      >
+                        <Button
+                          variant="contained"
+                          onClick={() =>
+                            navigate(consumePostLoginRedirect() || "/", { replace: true })
+                          }
+                          sx={{
+                            bgcolor: onboardingBlue,
+                            fontWeight: 700,
+                            width: { xs: "100%", sm: "auto" },
+                            minWidth: { sm: 170 },
+                          }}
+                        >
+                          Explore the app
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={() => navigate("/requests")}
+                          sx={{
+                            ...secondaryOnboardingButtonSx,
+                            width: { xs: "100%", sm: "auto" },
+                            minWidth: { sm: 170 },
+                          }}
+                        >
+                          View my requests
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  )}
+
+                  {displayStep === "match" && !linkRequestSent && (
                     <Stack spacing={2.25}>
                       <Box sx={{ textAlign: "center", mx: "auto" }}>
                         <Typography
@@ -2094,10 +2285,116 @@ export const UserOnboardingPage: React.FC = () => {
                           )}
 
                           {matchResults.length === 0 && (
-                            <Alert severity="info">
-                              No matching tree was found yet. You can go back
-                              and adjust the filters, or create a new tree.
-                            </Alert>
+                            <Stack spacing={2}>
+                              <Box sx={{ textAlign: "center", py: 1 }}>
+                                <SearchOutlinedIcon
+                                  sx={{ fontSize: 52, color: brand.slateMuted, mb: 0.5 }}
+                                />
+                                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                                  We couldn’t find your family tree
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  No tree matched your name or community details yet.
+                                  Here’s what you can do:
+                                </Typography>
+                              </Box>
+
+                              {/* 1 — Refine the search */}
+                              <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                                <CardContent>
+                                  <Stack
+                                    direction={{ xs: "column", sm: "row" }}
+                                    spacing={2}
+                                    justifyContent="space-between"
+                                    alignItems={{ xs: "flex-start", sm: "center" }}
+                                  >
+                                    <Stack direction="row" spacing={1.5} alignItems="center">
+                                      <SearchOutlinedIcon sx={{ color: brand.primary }} />
+                                      <Box>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                          Refine your search
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                          Adjust your name, location, caste or sub-caste
+                                          and try again.
+                                        </Typography>
+                                      </Box>
+                                    </Stack>
+                                    <Button
+                                      variant="outlined"
+                                      onClick={handleBackToLocation}
+                                      sx={{
+                                        ...secondaryOnboardingButtonSx,
+                                        width: { xs: "100%", sm: "auto" },
+                                        minWidth: { sm: 150 },
+                                      }}
+                                    >
+                                      Edit search
+                                    </Button>
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+
+                              {/* 2 — Create your own tree */}
+                              <Card
+                                variant="outlined"
+                                sx={{ borderRadius: 3, borderStyle: "dashed", borderColor: "primary.main" }}
+                              >
+                                <CardContent>
+                                  <Stack
+                                    direction={{ xs: "column", sm: "row" }}
+                                    spacing={2}
+                                    justifyContent="space-between"
+                                    alignItems={{ xs: "flex-start", sm: "center" }}
+                                  >
+                                    <Stack direction="row" spacing={1.5} alignItems="center">
+                                      <AddIcon sx={{ color: brand.primary }} />
+                                      <Box>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                          Create your own tree
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                          Start a new family tree with your selected
+                                          location already filled in.
+                                        </Typography>
+                                      </Box>
+                                    </Stack>
+                                    <Button
+                                      variant="contained"
+                                      startIcon={<AddIcon />}
+                                      onClick={handleOpenCreateTree}
+                                      sx={{
+                                        bgcolor: onboardingBlue,
+                                        fontWeight: 700,
+                                        width: { xs: "100%", sm: "auto" },
+                                        minWidth: { sm: 150 },
+                                      }}
+                                    >
+                                      Create tree
+                                    </Button>
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+
+                              {/* 3 — Ask family for an invite */}
+                              <Card variant="outlined" sx={{ borderRadius: 3 }}>
+                                <CardContent>
+                                  <Stack direction="row" spacing={1.5} alignItems="center">
+                                    <GroupsOutlinedIcon sx={{ color: brand.primary }} />
+                                    <Box>
+                                      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                        Ask family for an invite
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary">
+                                        If a relative already keeps your family tree, ask
+                                        them to send you an invite link — opening it adds
+                                        you straight into their tree.
+                                      </Typography>
+                                    </Box>
+                                  </Stack>
+                                </CardContent>
+                              </Card>
+                            </Stack>
                           )}
 
                           {matchedTrees.length > 0 && (
@@ -2131,41 +2428,43 @@ export const UserOnboardingPage: React.FC = () => {
                             </Stack>
                           )}
 
-                          <Card
-                            variant="outlined"
-                            sx={{
-                              borderStyle: "dashed",
-                              borderColor: "primary.main",
-                            }}
-                          >
-                            <CardContent>
-                              <Stack
-                                direction={{ xs: "column", md: "row" }}
-                                spacing={2}
-                                justifyContent="space-between"
-                                alignItems={{ xs: "flex-start", md: "center" }}
-                              >
-                                <Box>
-                                  <Typography variant="h6">
-                                    Create a new family tree
-                                  </Typography>
-                                  <Typography variant="body2" color="text.secondary">
-                                    If none of the matches belong to you, start a
-                                    new tree with the selected location already
-                                    filled in.
-                                  </Typography>
-                                </Box>
-                                <Button
-                                  variant="outlined"
-                                  startIcon={<AddIcon />}
-                                  onClick={handleOpenCreateTree}
-                                  sx={secondaryOnboardingButtonSx}
+                          {matchResults.length > 0 && (
+                            <Card
+                              variant="outlined"
+                              sx={{
+                                borderStyle: "dashed",
+                                borderColor: "primary.main",
+                              }}
+                            >
+                              <CardContent>
+                                <Stack
+                                  direction={{ xs: "column", md: "row" }}
+                                  spacing={2}
+                                  justifyContent="space-between"
+                                  alignItems={{ xs: "flex-start", md: "center" }}
                                 >
-                                  Create new tree
-                                </Button>
-                              </Stack>
-                            </CardContent>
-                          </Card>
+                                  <Box>
+                                    <Typography variant="h6">
+                                      Create a new family tree
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                      If none of the matches belong to you, start a
+                                      new tree with the selected location already
+                                      filled in.
+                                    </Typography>
+                                  </Box>
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<AddIcon />}
+                                    onClick={handleOpenCreateTree}
+                                    sx={secondaryOnboardingButtonSx}
+                                  >
+                                    Create new tree
+                                  </Button>
+                                </Stack>
+                              </CardContent>
+                            </Card>
+                          )}
                         </Stack>
                       )}
                     </Stack>
@@ -2200,7 +2499,7 @@ export const UserOnboardingPage: React.FC = () => {
                 backgroundColor: "transparent",
               }}
             >
-              {displayStep === "match" && (
+              {displayStep === "match" && !linkRequestSent && (
                 <Button
                   variant="outlined"
                   onClick={handleBackToLocation}

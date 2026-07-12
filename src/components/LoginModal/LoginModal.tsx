@@ -75,8 +75,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
 
   const clearRecaptcha = () => {
-    recaptchaRef.current?.clear();
+    try {
+      recaptchaRef.current?.clear();
+    } catch {
+      // Verifier may already be torn down — ignore.
+    }
     recaptchaRef.current = null;
+    // Firebase's clear() can leave residual grecaptcha markup in the container,
+    // which makes a later render() throw "reCAPTCHA has already been rendered in
+    // this element". Emptying the node guarantees a clean re-render.
+    if (recaptchaContainerRef.current) {
+      recaptchaContainerRef.current.innerHTML = "";
+    }
   };
 
   const initializeRecaptcha = async () => {
@@ -88,18 +98,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     // verifier for each OTP send/resend attempt.
     clearRecaptcha();
 
-    recaptchaRef.current = new RecaptchaVerifier(
-      firebaseAuth,
-      recaptchaContainerRef.current,
-      {
-        size: "invisible",
-        callback: () => {},
-        "expired-callback": () => {
-          setError("reCAPTCHA expired. Please try again.");
-          clearRecaptcha();
-        },
+    // Render into a brand-new child element rather than the persistent
+    // container. grecaptcha tracks the element it rendered into by reference, so
+    // reusing the same node throws "reCAPTCHA has already been rendered in this
+    // element" (e.g. after "Change mobile number"). A fresh node each time is
+    // always clean.
+    const host = document.createElement("div");
+    recaptchaContainerRef.current.appendChild(host);
+
+    recaptchaRef.current = new RecaptchaVerifier(firebaseAuth, host, {
+      size: "invisible",
+      callback: () => {},
+      "expired-callback": () => {
+        setError("reCAPTCHA expired. Please try again.");
+        clearRecaptcha();
       },
-    );
+    });
 
     await recaptchaRef.current.render();
   };
@@ -129,6 +143,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setConfirmationResult(null);
     setOtpSendCount(0);
     setResendCooldownSeconds(0);
+    // Tear down the verifier so returning to the number entry (e.g. "Change
+    // mobile number") can render a fresh reCAPTCHA on the next send.
+    clearRecaptcha();
   };
 
   const sendOtp = async () => {
@@ -491,7 +508,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     .slice(0, 10);
                   setPhone(digitsOnly);
                 }}
-                placeholder="98765 43210"
+                placeholder="Enter your mobile number"
                 sx={fieldSx}
                 disabled={loading}
                 inputProps={{

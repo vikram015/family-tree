@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Button,
   Dialog,
@@ -81,6 +81,29 @@ export function InviteCollaboratorDialog({
 }: InviteCollaboratorDialogProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
+  // Close on the mobile/browser Back button: push a history entry while open so
+  // Back pops it (firing popstate) instead of navigating away from the tree.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ inviteDialog: true }, "");
+    const handlePopState = () => onCloseRef.current();
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      // Closed some other way (button/backdrop) — pop the entry we added so the
+      // history stays balanced. (The listener is already removed, so this
+      // history.back() won't re-trigger onClose.)
+      if (window.history.state?.inviteDialog) {
+        window.history.back();
+      }
+    };
+  }, [open]);
+
   const iconAdornment = (icon: React.ReactNode) => (
     <InputAdornment position="start" sx={{ color: "action.active", mr: 0.25 }}>
       {icon}

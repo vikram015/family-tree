@@ -24,7 +24,7 @@ export interface UserPreferenceResponse {
   modifiedBy: string | null;
 }
 
-export type OnboardingStatus = "in_progress" | "completed";
+export type OnboardingStatus = "in_progress" | "completed" | "skipped";
 export type OnboardingCurrentStep =
   | "profile"
   | "location"
@@ -124,6 +124,43 @@ export type LinkRequestType =
   | "branch_access_request"
   | "spouse_link_request";
 export type LinkRequestStatus = "pending" | "approved" | "rejected";
+
+export interface FamilyBirthday {
+  id: string;
+  name: string;
+  nameHindi?: string | null;
+  gender?: string | null;
+  photoUrl?: string | null;
+  dob: string;
+  age: number;
+}
+
+export interface FamilyDeceased {
+  id: string;
+  name: string;
+  nameHindi?: string | null;
+  gender?: string | null;
+  photoUrl?: string | null;
+  deceasedDate: string;
+  yearsAgo: number;
+}
+
+export interface FamilyAnniversary {
+  person1Id: string;
+  person1Name: string;
+  person1PhotoUrl?: string | null;
+  person2Id: string;
+  person2Name: string;
+  person2PhotoUrl?: string | null;
+  startDate: string;
+  years: number;
+}
+
+export interface FamilyEvents {
+  birthdays: FamilyBirthday[];
+  deceased: FamilyDeceased[];
+  anniversaries: FamilyAnniversary[];
+}
 
 export interface LinkRequest {
   id: string;
@@ -1185,6 +1222,14 @@ export const ApiService = {
    */
   async getDashboardStatistics(): Promise<any> {
     return backendApi.get<any>('/api/dashboard/statistics');
+  },
+
+  /**
+   * Today's family events (birthdays, death anniversaries, wedding
+   * anniversaries) scoped to the logged-in user's tree.
+   */
+  async getTodaysFamilyEvents(): Promise<FamilyEvents> {
+    return backendApi.get<FamilyEvents>('/api/family-events/today');
   },
 
   // =====================================================

@@ -25,10 +25,26 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
   return url.toString();
 }
 
+/**
+ * Resolve the current user's ID token, waiting for Firebase to restore the
+ * persisted session first. On a fresh page load `currentUser` is null until the
+ * async auth-state restore completes; without waiting, requests go out with no
+ * bearer token and the backend rejects them ("missing authorization bearer
+ * token"). `authStateReady()` resolves once the initial state is known.
+ */
+async function getAuthToken(): Promise<string | undefined> {
+  try {
+    await firebaseAuth.authStateReady();
+  } catch {
+    // Defensive: older SDKs may lack authStateReady — fall back to currentUser.
+  }
+  return firebaseAuth.currentUser?.getIdToken();
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", query, body } = options;
 
-  const token = await firebaseAuth.currentUser?.getIdToken();
+  const token = await getAuthToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -71,7 +87,7 @@ export const backendApi = {
     return request<T>(path, { method: "DELETE", query });
   },
   async upload<T>(path: string, formData: FormData, query?: Record<string, QueryValue>) {
-    const token = await firebaseAuth.currentUser?.getIdToken();
+    const token = await getAuthToken();
     const headers: Record<string, string> = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;

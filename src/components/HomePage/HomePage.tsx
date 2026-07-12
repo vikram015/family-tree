@@ -37,13 +37,16 @@ import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
+import FavoriteIcon from "@mui/icons-material/Favorite";
+import LocalFloristOutlinedIcon from "@mui/icons-material/LocalFloristOutlined";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchDashboardStatistics,
   selectStatistics,
   selectStatisticsLoading,
 } from "../../store/slices/statisticsSlice";
-import { ApiService } from "../../services/apiService";
+import { ApiService, FamilyEvents } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
@@ -70,6 +73,8 @@ interface SearchResult {
 interface DashboardContributor {
   personName: string;
   peopleAdded: number;
+  personId?: string | null;
+  treeId?: string | null;
 }
 
 function getInitials(value?: string): string {
@@ -125,6 +130,22 @@ export const HomePage: React.FC = () => {
   const [showResults, setShowResults] = useState(false);
   const [continueTreeLoading, setContinueTreeLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Personalized profile insight for the logged-in user (completeness + next action).
+  const [profileInsight, setProfileInsight] = useState<{
+    completeness: number;
+    completed: number;
+    total: number;
+    nextAction: { title: string; description: string; to: string; cta: string } | null;
+    // Pending branch-access requests the user has raised (write access to a branch).
+    pendingBranchAccess: Array<{ label: string }>;
+  } | null>(null);
+  const [profileInsightLoading, setProfileInsightLoading] = useState(false);
+
+  // Today's family events (birthdays, remembrances, anniversaries) for the
+  // logged-in user's tree.
+  const [familyEvents, setFamilyEvents] = useState<FamilyEvents | null>(null);
+  const [familyEventsLoading, setFamilyEventsLoading] = useState(false);
 
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
@@ -215,6 +236,17 @@ export const HomePage: React.FC = () => {
     }
   };
 
+  const handleContributorClick = useCallback(
+    (contributor: DashboardContributor) => {
+      if (!contributor.personId) return;
+      const params = new URLSearchParams();
+      if (contributor.treeId) params.set("tree", contributor.treeId);
+      params.set("personId", contributor.personId);
+      navigate(`/families?${params.toString()}`);
+    },
+    [navigate],
+  );
+
   const handleContinueToYourTree = useCallback(async () => {
     if (!currentUser) {
       navigate("/families");
@@ -232,6 +264,161 @@ export const HomePage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
+
+  // Compute the logged-in user's own profile completeness and the single most
+  // useful next action to fill in. Only personalized when signed in.
+  useEffect(() => {
+    let cancelled = false;
+
+    const computeProfileInsight = async () => {
+      if (!currentUser || !userProfile) {
+        setProfileInsight(null);
+        return;
+      }
+
+      const peopleId = userProfile.peopleId;
+
+      // Load all of the user's pending requests once, so we can reflect both a
+      // pending profile link and any pending branch-access requests.
+      let pendingRequests: any[] = [];
+      try {
+        const requests = await ApiService.getMyLinkRequests();
+        pendingRequests = (requests || []).filter((r) => r.status === "pending");
+      } catch (err) {
+        console.error("Failed to load link requests:", err);
+      }
+      if (cancelled) return;
+
+      const pendingBranchAccess = pendingRequests
+        .filter((r) => r.requestType === "branch_access_request")
+        .map((r) => ({
+          label:
+            r.targetPersonName || r.targetTreeName
+              ? `${r.targetPersonName || r.targetTreeName} branch`
+              : "a branch",
+        }));
+
+      // Not yet linked to a person in the tree — the most important step,
+      // unless a link request is already awaiting the owner's approval.
+      if (!peopleId) {
+        const pendingLink = pendingRequests.find(
+          (r) => r.requestType === "user_to_tree_node",
+        );
+
+        setProfileInsight({
+          completeness: 0,
+          completed: 0,
+          total: 1,
+          pendingBranchAccess,
+          nextAction: pendingLink
+            ? {
+                title: "Profile link pending approval",
+                description: `Your request to link with ${pendingLink.targetPersonName || "your family member"} is awaiting the tree owner's approval.`,
+                to: "/profile",
+                cta: "View request",
+              }
+            : {
+                title: "Finish setting up your profile",
+                description: "Find yourself in the family tree and link your account.",
+                to: "/onboarding",
+                cta: "Finish setting up",
+              },
+        });
+        return;
+      }
+
+      setProfileInsightLoading(true);
+      try {
+        const [person, professions] = await Promise.all([
+          ApiService.getPersonById(peopleId),
+          ApiService.getProfessionsByPerson(peopleId).catch(() => []),
+        ]);
+        if (cancelled) return;
+
+        const checklist: Array<{ done: boolean; title: string; description: string }> = [
+          {
+            done: Boolean((person as any)?.photoUrl),
+            title: "Add a profile photo",
+            description: "A photo helps relatives recognize you in the tree.",
+          },
+          {
+            done: Boolean(person?.dob),
+            title: "Add your date of birth",
+            description: "Dates keep the lineage timeline accurate.",
+          },
+          {
+            done: Boolean(person?.gender),
+            title: "Add your gender",
+            description: "Gender helps place you correctly in the family tree.",
+          },
+          {
+            done: Boolean(userProfile.phone),
+            title: "Add a contact number",
+            description: "A phone number helps family reconnect with you.",
+          },
+          {
+            done: Array.isArray(professions) && professions.length > 0,
+            title: "Add your profession",
+            description: "Share what you do to enrich the family network.",
+          },
+        ];
+
+        const total = checklist.length;
+        const completed = checklist.filter((item) => item.done).length;
+        const completeness = Math.round((completed / total) * 100);
+        const firstMissing = checklist.find((item) => !item.done);
+
+        setProfileInsight({
+          completeness,
+          completed,
+          total,
+          pendingBranchAccess,
+          nextAction: firstMissing
+            ? {
+                title: firstMissing.title,
+                description: firstMissing.description,
+                to: "/profile",
+                cta: "Complete now",
+              }
+            : null,
+        });
+      } catch (err) {
+        console.error("Failed to compute profile insight:", err);
+        if (!cancelled) setProfileInsight(null);
+      } finally {
+        if (!cancelled) setProfileInsightLoading(false);
+      }
+    };
+
+    void computeProfileInsight();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile]);
+
+  // Load today's family events for the logged-in, tree-linked user.
+  useEffect(() => {
+    if (!currentUser || !userProfile?.peopleId) {
+      setFamilyEvents(null);
+      return;
+    }
+    let cancelled = false;
+    setFamilyEventsLoading(true);
+    ApiService.getTodaysFamilyEvents()
+      .then((events) => {
+        if (!cancelled) setFamilyEvents(events);
+      })
+      .catch((err) => {
+        console.error("Failed to load family events:", err);
+        if (!cancelled) setFamilyEvents(null);
+      })
+      .finally(() => {
+        if (!cancelled) setFamilyEventsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile?.peopleId]);
 
   const renderSearchResults = (onPick?: () => void) => {
     if (!showResults) return null;
@@ -589,7 +776,10 @@ export const HomePage: React.FC = () => {
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+            gridTemplateColumns: {
+              xs: "1fr",
+              md: currentUser ? "1fr 1fr 1fr" : "1fr",
+            },
             gap: 2,
             mb: 5,
             alignItems: "stretch",
@@ -609,17 +799,21 @@ export const HomePage: React.FC = () => {
             </CardContent>
           </Card>
 
+          {currentUser && (
           <Card sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary">
                 Profile Completeness
               </Typography>
               <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: brand.accent }}>
-                <AnimatedCounter value={professionCoverage} loading={loadingStats} />%
+                <AnimatedCounter
+                  value={profileInsight ? profileInsight.completeness : professionCoverage}
+                  loading={profileInsight ? profileInsightLoading : loadingStats}
+                />%
               </Typography>
               <LinearProgress
                 variant="determinate"
-                value={professionCoverage}
+                value={profileInsight ? profileInsight.completeness : professionCoverage}
                 sx={{
                   mt: 1.3,
                   height: 8,
@@ -629,30 +823,89 @@ export const HomePage: React.FC = () => {
                 }}
               />
               <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
-                Based on profession mapping across members
+                {profileInsight
+                  ? `${profileInsight.completed} of ${profileInsight.total} profile details completed`
+                  : "Based on profession mapping across members"}
               </Typography>
             </CardContent>
           </Card>
+          )}
 
+          {currentUser && (
           <Card sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle2" color="text.secondary">
                 Suggested Next Action
               </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
-                Complete missing family details
-              </Typography>
-              <Button
-                component={Link}
-                to="/families"
-                size="small"
-                sx={{ mt: 1, px: 0, fontWeight: 700, color: brand.primary }}
-                endIcon={<ArrowForwardIcon />}
-              >
-                Complete now
-              </Button>
+              {profileInsight && !profileInsight.nextAction ? (
+                <>
+                  <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
+                    Your profile is complete 🎉
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
+                    Help others by completing their family details too.
+                  </Typography>
+                  <Button
+                    onClick={() => void handleContinueToYourTree()}
+                    disabled={continueTreeLoading}
+                    size="small"
+                    sx={{ mt: 1, px: 0, fontWeight: 700, color: brand.primary }}
+                    endIcon={<ArrowForwardIcon />}
+                  >
+                    {continueTreeLoading ? "Opening..." : "Open Your Tree"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
+                    {profileInsight?.nextAction?.title || "Complete missing family details"}
+                  </Typography>
+                  {profileInsight?.nextAction?.description && (
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
+                      {profileInsight.nextAction.description}
+                    </Typography>
+                  )}
+                  <Button
+                    component={Link}
+                    to={profileInsight?.nextAction?.to || "/families"}
+                    size="small"
+                    sx={{ mt: 1, px: 0, fontWeight: 700, color: brand.primary }}
+                    endIcon={<ArrowForwardIcon />}
+                  >
+                    {profileInsight?.nextAction?.cta || "Complete now"}
+                  </Button>
+                </>
+              )}
+
+              {profileInsight && profileInsight.pendingBranchAccess.length > 0 && (
+                <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                    Branch access pending approval
+                  </Typography>
+                  <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75, mt: 0.8 }}>
+                    {profileInsight.pendingBranchAccess.map((item, idx) => (
+                      <Chip
+                        key={`${item.label}-${idx}`}
+                        size="small"
+                        label={item.label}
+                        sx={{ bgcolor: brand.primarySoft, color: brand.primary, fontWeight: 600 }}
+                      />
+                    ))}
+                  </Stack>
+                  <Button
+                    component={Link}
+                    to="/requests"
+                    size="small"
+                    sx={{ mt: 0.8, px: 0, fontWeight: 700, color: brand.primary }}
+                    endIcon={<ArrowForwardIcon />}
+                  >
+                    View requests
+                  </Button>
+                </Box>
+              )}
             </CardContent>
           </Card>
+          )}
         </Box>
 
         <Box
@@ -705,7 +958,22 @@ export const HomePage: React.FC = () => {
                             minWidth: 42,
                           }}
                         />
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        <Typography
+                          variant="body2"
+                          onClick={
+                            item.personId
+                              ? () => handleContributorClick(item)
+                              : undefined
+                          }
+                          sx={{
+                            fontWeight: 600,
+                            ...(item.personId && {
+                              cursor: "pointer",
+                              color: brand.primary,
+                              "&:hover": { textDecoration: "underline" },
+                            }),
+                          }}
+                        >
                           {item.personName}
                         </Typography>
                       </Stack>
@@ -749,23 +1017,95 @@ export const HomePage: React.FC = () => {
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
                 <HistoryEduIcon sx={{ color: brand.primary }} />
                 <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Today in Family History
+                  {familyEvents ? "Family Events Today" : "Today in Family History"}
                 </Typography>
               </Stack>
-              <Stack spacing={1.2}>
-                {historyTodayItems.map((item, idx) => (
-                  <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
-                    {idx === 0 ? (
-                      <AutoStoriesIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
-                    ) : (
-                      <FavoriteBorderIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
-                    )}
-                    <Typography variant="body2" color="text.secondary">
-                      {item}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
+
+              {familyEvents ? (
+                familyEventsLoading ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Loading today's events...
+                  </Typography>
+                ) : familyEvents.birthdays.length === 0 &&
+                  familyEvents.anniversaries.length === 0 &&
+                  familyEvents.deceased.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No birthdays, anniversaries or remembrances in your family today.
+                  </Typography>
+                ) : (
+                  <Stack spacing={1.4}>
+                    {familyEvents.birthdays.map((person) => (
+                      <Box
+                        key={`bday-${person.id}`}
+                        onClick={() => navigate(`/profile/person/${person.id}`)}
+                        sx={{ display: "flex", gap: 1.2, alignItems: "flex-start", cursor: "pointer" }}
+                      >
+                        <CakeOutlinedIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
+                            {person.name}
+                          </Box>{" "}
+                          {person.age > 0
+                            ? `turns ${person.age} today 🎂`
+                            : "has a birthday today 🎂"}
+                        </Typography>
+                      </Box>
+                    ))}
+
+                    {familyEvents.anniversaries.map((a) => (
+                      <Box
+                        key={`anniv-${a.person1Id}-${a.person2Id}`}
+                        onClick={() => navigate(`/profile/person/${a.person1Id}`)}
+                        sx={{ display: "flex", gap: 1.2, alignItems: "flex-start", cursor: "pointer" }}
+                      >
+                        <FavoriteIcon sx={{ color: brand.accent, fontSize: 19, mt: 0.2 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
+                            {a.person1Name} & {a.person2Name}
+                          </Box>{" "}
+                          {a.years > 0
+                            ? `celebrate ${a.years} year${a.years === 1 ? "" : "s"} together 💍`
+                            : "celebrate their anniversary today 💍"}
+                        </Typography>
+                      </Box>
+                    ))}
+
+                    {familyEvents.deceased.map((person) => (
+                      <Box
+                        key={`dec-${person.id}`}
+                        onClick={() => navigate(`/profile/person/${person.id}`)}
+                        sx={{ display: "flex", gap: 1.2, alignItems: "flex-start", cursor: "pointer" }}
+                      >
+                        <LocalFloristOutlinedIcon sx={{ color: brand.slate, fontSize: 19, mt: 0.2 }} />
+                        <Typography variant="body2" color="text.secondary">
+                          Remembering{" "}
+                          <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
+                            {person.name}
+                          </Box>
+                          {person.yearsAgo > 0
+                            ? ` — ${person.yearsAgo} year${person.yearsAgo === 1 ? "" : "s"} ago`
+                            : ""}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                )
+              ) : (
+                <Stack spacing={1.2}>
+                  {historyTodayItems.map((item, idx) => (
+                    <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
+                      {idx === 0 ? (
+                        <AutoStoriesIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
+                      ) : (
+                        <FavoriteBorderIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
+                      )}
+                      <Typography variant="body2" color="text.secondary">
+                        {item}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              )}
             </CardContent>
           </Card>
         </Box>
@@ -776,24 +1116,9 @@ export const HomePage: React.FC = () => {
           <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5 }}>
             Your legacy grows with every update
           </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          <Typography variant="body1" color="text.secondary">
             Preserve roots, reconnect generations, and keep family memory alive.
           </Typography>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="center">
-            <Button
-              variant="contained"
-              component={Link}
-              to="/families"
-              sx={{ bgcolor: brand.primary, "&:hover": { bgcolor: brand.primaryDark }, fontWeight: 700 }}
-            >
-              Open Family Trees
-            </Button>
-            {/* Contact page hidden for now.
-            <Button variant="outlined" component={Link} to="/contact" sx={{ fontWeight: 700 }}>
-              Contact Support
-            </Button>
-            */}
-          </Stack>
         </Box>
       </Container>
     </>

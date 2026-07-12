@@ -61,7 +61,9 @@ export const UserOnboardingRouteGuard: React.FC = () => {
       return;
     }
 
-    const needsOnboarding = onboarding.status !== "completed";
+    // Only actively-in-progress users are forced into onboarding. A user who
+    // has completed OR explicitly skipped it may roam the app freely.
+    const needsOnboarding = onboarding.status === "in_progress";
 
     if (needsOnboarding && location.pathname !== "/onboarding") {
       navigate("/onboarding", { replace: true });

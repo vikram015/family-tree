@@ -1096,7 +1096,20 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         return;
       }
 
-      const shareLink = invite.inviteLink || `${window.location.origin}/families?tree=${treeId}&inviteToken=${invite.inviteToken || ""}`;
+      // Always build the link on the CURRENT browser domain (the backend's
+      // inviteLink is generated with a hard-coded host). Keep the backend link's
+      // path + query (which carries the token) but swap in this origin.
+      const inviteOrigin = window.location.origin;
+      const fallbackLink = `${inviteOrigin}/families?tree=${treeId}&inviteToken=${invite.inviteToken || ""}`;
+      let shareLink = fallbackLink;
+      if (invite.inviteLink) {
+        try {
+          const parsed = new URL(invite.inviteLink);
+          shareLink = `${inviteOrigin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+        } catch {
+          shareLink = fallbackLink;
+        }
+      }
       const targetScope = personId ? `branch from ${nodes.find((n) => n.id === personId)?.name || "selected person"}` : "full tree";
       const targetPhone = normalizedInvitePhone ? `Phone: ${normalizedInvitePhone}\n` : "";
       const shareText = `You are invited to edit the family tree (${targetScope}).\n${targetPhone}${shareLink}`;

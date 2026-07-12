@@ -49,6 +49,8 @@ interface OnboardingTreePreviewDialogProps {
     requestType: "user_to_tree_node" | "branch_access_request";
     treeId: string;
     personId: string;
+    personName?: string;
+    treeName?: string;
   }) => Promise<void> | void;
 }
 
@@ -237,6 +239,8 @@ export const OnboardingTreePreviewDialog: React.FC<
         requestType: "user_to_tree_node",
         treeId,
         personId: selectedNode.id,
+        personName: selectedNode.name,
+        treeName: treeName ?? undefined,
       });
       setActionSuccess(`Successfully sent link request to ${selectedNode.name}.`);
     } catch (err: any) {
@@ -259,6 +263,8 @@ export const OnboardingTreePreviewDialog: React.FC<
         requestType: "branch_access_request",
         treeId,
         personId: selectedNode.id,
+        personName: selectedNode.name,
+        treeName: treeName ?? undefined,
       });
       setActionSuccess(
         `Successfully sent branch edit access request for ${selectedNode.name}'s branch.`,

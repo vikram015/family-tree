@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Container,
   Dialog,
@@ -12,6 +13,12 @@ import {
   Divider,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -38,6 +45,15 @@ function formatRequestTitle(request: LinkRequest) {
     return "Link Profile request";
   }
   return formatRequestType(request.requestType);
+}
+
+function statusChipColor(
+  status: LinkRequest["status"],
+): "warning" | "success" | "error" | "default" {
+  if (status === "approved") return "success";
+  if (status === "rejected") return "error";
+  if (status === "pending") return "warning";
+  return "default";
 }
 
 export const PendingRequestsPage: React.FC = () => {
@@ -125,7 +141,7 @@ export const PendingRequestsPage: React.FC = () => {
   );
 
   return (
-    <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
+    <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
@@ -147,109 +163,170 @@ export const PendingRequestsPage: React.FC = () => {
 
         {emptyState}
 
-        {!loading &&
-          requests.map((request) => (
-            <Paper key={request.id} sx={{ p: 2.5, borderRadius: 4 }}>
-              <Stack spacing={1.5}>
-                <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                    {formatRequestTitle(request)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Requested by {request.requesterName || request.requesterEmail || "Unknown user"}
-                  </Typography>
-                </Box>
-
-                <Stack spacing={0.5}>
-                  <Typography variant="body2">
-                    <strong>Tree:</strong> {request.targetTreeName || "Unknown tree"}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Person:</strong> {request.targetPersonName || "Unknown person"}
-                  </Typography>
-                  {request.requestType === "spouse_link_request" && (
-                    <Typography variant="body2">
-                      <strong>Source:</strong>{" "}
-                      {request.payload?.sourcePersonName || "Selected spouse"} in{" "}
-                      {request.payload?.sourceTreeName || "source tree"}
-                    </Typography>
-                  )}
-                    <Typography variant="body2">
-                    <strong>Phone:</strong> {request.requesterPhone || "Unknown phone"}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Requested:</strong> {new Date(request.createdAt).toLocaleString()}
-                  </Typography>
-                  {request.requestMessage && (
-                    <Typography variant="body2">
-                      <strong>Message:</strong> {request.requestMessage}
-                    </Typography>
-                  )}
-                </Stack>
-
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                  <Button
-                    variant="outlined"
-                    onClick={() =>
-                      navigate(
-                        `/families?tree=${encodeURIComponent(
-                          request.targetTreeId || "",
-                        )}&personId=${encodeURIComponent(request.targetPersonId || "")}`,
-                      )
-                    }
-                  >
-                    Open Tree
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color="success"
-                    disabled={reviewingRequestId === request.id}
-                    onClick={() => openReview(request, "approved")}
-                  >
-                    {reviewingRequestId === request.id ? "Saving..." : "Approve"}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    disabled={reviewingRequestId === request.id}
-                    onClick={() => openReview(request, "rejected")}
-                  >
-                    {reviewingRequestId === request.id ? "Saving..." : "Reject"}
-                  </Button>
-                </Stack>
-              </Stack>
-            </Paper>
-          ))}
+        {!loading && requests.length > 0 && (
+          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Requests to review
+            </Typography>
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table size="small" sx={{ minWidth: 720 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Request</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Requested by</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Tree</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Person</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Submitted</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>
+                    Actions
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {requests.map((request) => (
+                  <TableRow key={request.id} hover>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {formatRequestTitle(request)}
+                      </Typography>
+                      {request.requestType === "spouse_link_request" && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                          Source: {request.payload?.sourcePersonName || "Selected spouse"} in{" "}
+                          {request.payload?.sourceTreeName || "source tree"}
+                        </Typography>
+                      )}
+                      {request.requestMessage && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                          “{request.requestMessage}”
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">
+                        {request.requesterName || request.requesterEmail || "Unknown user"}
+                      </Typography>
+                      {request.requesterPhone && (
+                        <Typography variant="caption" color="text.secondary">
+                          {request.requesterPhone}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>{request.targetTreeName || "Unknown tree"}</TableCell>
+                    <TableCell>{request.targetPersonName || "Unknown person"}</TableCell>
+                    <TableCell>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(request.createdAt).toLocaleString()}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        justifyContent="flex-end"
+                        flexWrap="wrap"
+                        useFlexGap
+                      >
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() =>
+                            navigate(
+                              `/families?tree=${encodeURIComponent(
+                                request.targetTreeId || "",
+                              )}&personId=${encodeURIComponent(request.targetPersonId || "")}`,
+                            )
+                          }
+                        >
+                          Open Tree
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          disabled={reviewingRequestId === request.id}
+                          onClick={() => openReview(request, "approved")}
+                        >
+                          {reviewingRequestId === request.id ? "Saving..." : "Approve"}
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="error"
+                          disabled={reviewingRequestId === request.id}
+                          onClick={() => openReview(request, "rejected")}
+                        >
+                          {reviewingRequestId === request.id ? "Saving..." : "Reject"}
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        )}
 
         {!loading && myRequests.length > 0 && (
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, mt: 2, mb: 1.5 }}>
+          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
               My Requests
             </Typography>
-            <Stack spacing={1.5}>
-              {myRequests.map((request) => (
-                <Paper key={request.id} sx={{ p: 2.5, borderRadius: 4 }}>
-                  <Stack spacing={0.75}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                      {formatRequestTitle(request)}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {request.targetPersonName || request.payload?.targetPersonName || "Selected person"} in{" "}
-                      {request.targetTreeName || request.payload?.targetTreeName || "selected tree"}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Status:</strong> {request.status}
-                    </Typography>
-                    {request.status === "rejected" && request.reviewNote && (
-                      <Alert severity="error">
-                        <strong>Rejection reason:</strong> {request.reviewNote}
-                      </Alert>
-                    )}
-                  </Stack>
-                </Paper>
-              ))}
-            </Stack>
-          </Box>
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table size="small" sx={{ minWidth: 640 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Request</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Target</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Submitted</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {myRequests.map((request) => (
+                    <TableRow key={request.id} hover>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatRequestTitle(request)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {request.targetPersonName ||
+                          request.payload?.targetPersonName ||
+                          "Selected person"}{" "}
+                        in{" "}
+                        {request.targetTreeName ||
+                          request.payload?.targetTreeName ||
+                          "selected tree"}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary">
+                          {new Date(request.createdAt).toLocaleString()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={request.status}
+                          color={statusChipColor(request.status)}
+                          sx={{ textTransform: "capitalize" }}
+                        />
+                        {request.status === "rejected" && request.reviewNote && (
+                          <Typography
+                            variant="caption"
+                            color="error"
+                            sx={{ display: "block", mt: 0.5 }}
+                          >
+                            {request.reviewNote}
+                          </Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
         )}
       </Stack>
 

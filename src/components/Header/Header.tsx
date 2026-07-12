@@ -269,18 +269,12 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 mb: 2,
               }}
             >
-              <Badge
-                color="error"
-                overlap="circular"
-                variant={hasPendingActionRequests ? "dot" : undefined}
+              <Avatar
+                src={linkedPersonPhoto || undefined}
+                sx={{ width: 32, height: 32 }}
               >
-                <Avatar
-                  src={linkedPersonPhoto || undefined}
-                  sx={{ width: 32, height: 32 }}
-                >
-                  {userProfile?.displayName?.charAt(0) || "U"}
-                </Avatar>
-              </Badge>
+                {userProfile?.displayName?.charAt(0) || "U"}
+              </Avatar>
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
                   {userProfile?.displayName || "User"}
@@ -307,7 +301,22 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                   onClick={() => setDrawerOpen(false)}
                 >
                   <ListItemText
-                    primary="Requests"
+                    primary={
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        Requests
+                        {hasPendingActionRequests && (
+                          <Box
+                            sx={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              bgcolor: "error.main",
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                      </Box>
+                    }
                     secondary={
                       hasPendingActionRequests
                         ? `${actionableRequestCount} pending request${actionableRequestCount === 1 ? "" : "s"}`

@@ -7,6 +7,7 @@ import {
   Button,
   Grid,
   Alert,
+  Autocomplete,
   Avatar,
   Divider,
   FormControl,
@@ -51,7 +52,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LinkRequest } from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
 import { formatDisplayDate } from "../../utils/dateFormatter";
@@ -82,8 +83,7 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { personId: routePersonId } = useParams<{ personId?: string }>();
   const dispatch = useAppDispatch();
-  const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
-    useAuth();
+  const { userProfile, currentUser, updateUserProfile } = useAuth();
   const { openLoginModal } = useLoginModal();
   const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
@@ -92,6 +92,10 @@ export const ProfilePage: React.FC = () => {
   const [searchValue, setSearchValue] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [linking, setLinking] = useState(false);
+  // Pending self-link request (account -> tree person) awaiting owner approval.
+  const [pendingLinkRequest, setPendingLinkRequest] = useState<LinkRequest | null>(null);
+  // Confirmation modal shown before a link request is sent.
+  const [linkConfirmOpen, setLinkConfirmOpen] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -240,6 +244,28 @@ export const ProfilePage: React.FC = () => {
 
     void fetchDetails();
   }, [effectivePersonId, canManagePerson, refreshPersonDetails, currentUser]);
+
+  // Load any pending self-link request so an unlinked user sees its status
+  // instead of being able to send a duplicate.
+  useEffect(() => {
+    if (!currentUser || userProfile?.peopleId) {
+      setPendingLinkRequest(null);
+      return;
+    }
+    let cancelled = false;
+    ApiService.getMyLinkRequests("user_to_tree_node")
+      .then((requests) => {
+        if (cancelled) return;
+        const pending = (requests || []).find((r) => r.status === "pending");
+        setPendingLinkRequest(pending || null);
+      })
+      .catch(() => {
+        if (!cancelled) setPendingLinkRequest(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile?.peopleId]);
 
   const loadMyLocationRequests = useCallback(async () => {
     try {
@@ -399,19 +425,27 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  // Send a self-link request (pending owner approval) instead of linking
+  // directly — mirrors the "This is me" flow on the family-tree node details.
   const handleLink = async () => {
     if (!selectedPerson) return;
     setLinking(true);
     setError("");
     setSuccess("");
     try {
-      await linkUserToNode(selectedPerson.id, selectedPerson.treeId);
-      setSuccess("Successfully linked your profile to the family tree!");
+      const created = await ApiService.createUserNodeLinkRequest({
+        targetPersonId: selectedPerson.id,
+      });
+      setPendingLinkRequest(created);
+      setSuccess(
+        "Link request sent. It's pending the tree owner's approval.",
+      );
+      setLinkConfirmOpen(false);
       setIsLinking(false);
       setSelectedPerson(null);
       setSearchValue("");
     } catch (e: any) {
-      setError(e.message || "Failed to link. Please try again.");
+      setError(e.message || "Failed to send link request. Please try again.");
     } finally {
       setLinking(false);
     }
@@ -702,8 +736,8 @@ export const ProfilePage: React.FC = () => {
           </Grid>
         )}
 
-        {/* Tree Linking Section */}
-        {false && (
+        {/* Tree Linking Section — logged-in user not yet linked to a person. */}
+        {isOwnAccountView && currentUser && !userProfile?.peopleId && (
         <Grid size={{ xs: 12, md: 8 }}>
           <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
             <Box
@@ -715,61 +749,22 @@ export const ProfilePage: React.FC = () => {
               }}
             >
               <Typography variant="h6">Family Tree Connection</Typography>
-              {userProfile?.peopleId && <VerifiedUserIcon color="success" />}
             </Box>
 
             <Divider sx={{ mb: 3 }} />
 
-            {userProfile?.peopleId ? (
+            {pendingLinkRequest ? (
               <Box>
-                <Alert severity="success" sx={{ mb: 3 }}>
-                  Your account is successfully linked to a profile in the family
-                  tree.
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Your request to link with{" "}
+                  <strong>
+                    {pendingLinkRequest.targetPersonName || "a family member"}
+                  </strong>{" "}
+                  is pending the tree owner's approval.
                 </Alert>
-                {linkedPersonDetails ? (
-                  <Box>
-                    <Typography variant="body1">
-                      <strong>Name:</strong>{" "}
-                      <Link
-                        component="button"
-                        type="button"
-                        underline="hover"
-                        onClick={handleOpenLinkedProfileInTree}
-                      >
-                        {linkedPersonDetails.name}
-                      </Link>
-                    </Typography>
-                    {linkedPersonDetails.tree && (
-                      <>
-                        <Typography variant="body1">
-                          <strong>Caste:</strong> {linkedTreeCaste || "N/A"}
-                        </Typography>
-                        <Typography variant="body1">
-                          <strong>Sub-Caste:</strong>{" "}
-                          {linkedTreeSubCaste || "N/A"}
-                        </Typography>
-                        <Typography variant="body1">
-                          <strong>Location:</strong>{" "}
-                          {linkedPersonDetails.tree.location?.name || "N/A"}
-                        </Typography>
-                      </>
-                    )}
-                  </Box>
-                ) : (
-                  <Typography variant="body1">
-                    Linked Profile ID: <strong>{userProfile.peopleId}</strong>
-                  </Typography>
-                )}
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 1 }}
-                >
-                  To change this link, please contact superadmin at{" "}
-                  <Link href="mailto:support@kinvia.in" underline="hover">
-                    support@kinvia.in
-                  </Link>
-                  .
+                <Typography variant="body2" color="text.secondary">
+                  You'll be able to manage your profile once the owner approves
+                  the request.
                 </Typography>
               </Box>
             ) : (
@@ -785,8 +780,9 @@ export const ProfilePage: React.FC = () => {
                       color="text.secondary"
                       paragraph
                     >
-                      Linking your account allows you to manage your own profile
-                      and helps admins verify your identity.
+                      Find yourself in the tree and send a link request — the
+                      tree owner approves it, then you can manage your own
+                      profile.
                     </Typography>
                     <Button
                       variant="contained"
@@ -803,23 +799,32 @@ export const ProfilePage: React.FC = () => {
                       Find your profile in the tree
                     </Typography>
 
-                    <FormControl fullWidth sx={{ mb: 3 }}>
-                      <InputLabel id="location-select-label">
-                        Select Location
-                      </InputLabel>
-                      <Select
-                        labelId="location-select-label"
-                        value={selectedLocation || ""}
-                        label="Select Location"
-                        onChange={(e) => setSelectedLocation(e.target.value)}
-                      >
-                        {locations.map((location) => (
-                          <MenuItem key={location.id} value={location.id}>
-                            {location.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <Autocomplete
+                      fullWidth
+                      sx={{ mb: 3 }}
+                      options={locations}
+                      autoHighlight
+                      getOptionLabel={(option) => option?.name || ""}
+                      isOptionEqualToValue={(option, value) =>
+                        option.id === value.id
+                      }
+                      value={
+                        locations.find((l) => l.id === selectedLocation) || null
+                      }
+                      onChange={(_e, newValue) => {
+                        setSelectedLocation(newValue ? newValue.id : "");
+                        // Clear a previously picked person when the location changes.
+                        setSelectedPerson(null);
+                        setSearchValue("");
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="Select Location"
+                          placeholder="Search your location..."
+                        />
+                      )}
+                    />
 
                     <PersonSearchField
                       label="Search Your Name"
@@ -874,17 +879,11 @@ export const ProfilePage: React.FC = () => {
                       </Button>
                       <Button
                         variant="contained"
-                        onClick={handleLink}
+                        onClick={() => setLinkConfirmOpen(true)}
                         disabled={!selectedPerson || linking}
-                        startIcon={
-                          linking ? (
-                            <CircularProgress size={16} />
-                          ) : (
-                            <LinkIcon />
-                          )
-                        }
+                        startIcon={<LinkIcon />}
                       >
-                        {linking ? "Linking..." : "Confirm Link"}
+                        Send Link Request
                       </Button>
                     </Box>
                   </Box>
@@ -1438,6 +1437,102 @@ export const ProfilePage: React.FC = () => {
             variant="contained"
           >
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirm before sending a self-link request */}
+      <Dialog
+        open={linkConfirmOpen}
+        onClose={() => !linking && setLinkConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Confirm your profile</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Please confirm this is you. A link request will be sent to the tree
+            owner for approval.
+          </Typography>
+
+          {selectedPerson && (
+            <Stack direction="row" spacing={2} alignItems="flex-start">
+              <Avatar
+                src={selectedPerson.photoUrl || undefined}
+                sx={{ width: 56, height: 56, bgcolor: "primary.main" }}
+              >
+                {(selectedPerson.name || "?").charAt(0).toUpperCase()}
+              </Avatar>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                  {selectedPerson.name}
+                </Typography>
+
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  flexWrap="wrap"
+                  useFlexGap
+                  sx={{ mt: 1 }}
+                >
+                  {selectedPerson.locationName && (
+                    <Chip size="small" label={selectedPerson.locationName} />
+                  )}
+                  {selectedPerson.casteName && (
+                    <Chip
+                      size="small"
+                      label={`Caste: ${selectedPerson.casteName}`}
+                    />
+                  )}
+                  {(selectedPerson.subCasteName || selectedPerson.gotra) && (
+                    <Chip
+                      size="small"
+                      label={`Sub-caste: ${selectedPerson.subCasteName || selectedPerson.gotra}`}
+                    />
+                  )}
+                </Stack>
+
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1.5, display: "block" }}
+                >
+                  <strong>Lineage:</strong>{" "}
+                  {Array.isArray(selectedPerson.hierarchy) &&
+                  selectedPerson.hierarchy.length > 0
+                    ? selectedPerson.hierarchy
+                        .slice(-5)
+                        .map((a: any) => a?.name)
+                        .filter(Boolean)
+                        .join(" → ")
+                    : "No ancestry data"}
+                </Typography>
+              </Box>
+            </Stack>
+          )}
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setLinkConfirmOpen(false)}
+            disabled={linking}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleLink}
+            disabled={!selectedPerson || linking}
+            startIcon={
+              linking ? <CircularProgress size={16} /> : <LinkIcon />
+            }
+          >
+            {linking ? "Sending..." : "Confirm & Send Request"}
           </Button>
         </DialogActions>
       </Dialog>
