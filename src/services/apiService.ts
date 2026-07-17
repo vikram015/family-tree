@@ -1140,6 +1140,25 @@ export const ApiService = {
   },
 
   /**
+   * Same as searchPeopleWithHierarchy, but restricted to people the logged-in
+   * user has write access to (a superadmin gets everyone). Used to pick an owner
+   * you're actually allowed to manage.
+   */
+  async searchWritablePeopleWithHierarchy(
+    searchTerm: string,
+    options: {
+      locationId?: string;
+      treeId?: string;
+    },
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/people/search/by-location/writable", {
+      searchTerm,
+      locationId: options.locationId,
+      treeId: options.treeId,
+    });
+  },
+
+  /**
    * Search people by name in a location with parent hierarchy.
    * Kept as a compatibility wrapper for existing callers.
    */

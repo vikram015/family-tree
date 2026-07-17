@@ -148,7 +148,19 @@ function AppContent() {
       <UserOnboardingRouteGuard />
       <Header />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
-        <Box sx={{ flex: 1, minHeight: 0, width: "100%" }}>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            width: "100%",
+            // Contain page scrolling here so the shell stays viewport-height and
+            // the header above never scrolls off — i.e. a sticky navbar. Pages
+            // that manage their own height (e.g. FamiliesPage) fit exactly and
+            // don't gain a second scrollbar.
+            overflowY: "auto",
+            overflowX: "hidden",
+          }}
+        >
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<HomePage />} />

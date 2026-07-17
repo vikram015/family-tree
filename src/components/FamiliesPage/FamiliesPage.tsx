@@ -13,6 +13,7 @@ import {
   DialogContentText,
   Paper,
   Stack,
+  TextField,
   Tooltip,
   IconButton,
   Snackbar,
@@ -28,12 +29,11 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
-import { getNodeHierarchy } from "../const";
 import { ApiService } from "../../services/apiService";
-import type { LinkRequest, TreeWriteScope } from "../../services/apiService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import AddTree from "../AddTree/AddTree";
@@ -45,6 +45,9 @@ import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
 import { TimelineView } from "./timeline/TimelineView";
 import { InviteCollaboratorDialog } from "./InviteCollaboratorDialog";
+import { useTreeWriteAccess } from "./hooks/useTreeWriteAccess";
+import { useTreeData } from "./hooks/useTreeData";
+import { useLinkRequests } from "./hooks/useLinkRequests";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -69,10 +72,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const highlightedPersonId = searchParams.get("personId");
   const inviteToken = searchParams.get("inviteToken");
   const shouldCreateRootFromQuery = searchParams.get("createRoot") === "1";
-  const [nodes, setNodes] = useState<Array<FNode>>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [rootId, setRootId] = useState("");
-  const [locationId, setLocationId] = useState<string | undefined>(undefined);
   const [selectId, setSelectId] = useState<string>();
   const [autoExpandNodeId, setAutoExpandNodeId] = useState<string | null>(null);
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
@@ -94,9 +93,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   });
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"tree" | "timeline">("tree");
-  const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(
-    null,
-  );
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [invitePhone, setInvitePhone] = useState("");
   const [inviteRole, setInviteRole] = useState("write");
@@ -122,167 +118,59 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   );
   // Bumped to force a tree-data reload (e.g. after accepting an invite grants access).
   const [treeReloadKey, setTreeReloadKey] = useState(0);
-  const [pendingLinkRequests, setPendingLinkRequests] = useState<LinkRequest[]>([]);
-  const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
-  const [linkRequestsLoading, setLinkRequestsLoading] = useState(false);
-  const [reviewingLinkRequestId, setReviewingLinkRequestId] = useState<string | null>(
+  const [requestingAccess, setRequestingAccess] = useState(false);
+  // Tree id for which the view-only banner has been dismissed (re-shows per tree).
+  const [accessBannerDismissedFor, setAccessBannerDismissedFor] = useState<string | null>(
     null,
   );
-  const [linkRequestReviewError, setLinkRequestReviewError] = useState("");
-  const [linkRequestReviewSuccess, setLinkRequestReviewSuccess] = useState("");
-  const loadRequestIdRef = useRef(0);
+  const [rejectDialog, setRejectDialog] = useState<{
+    open: boolean;
+    requestId: string | null;
+    note: string;
+  }>({ open: false, requestId: null, note: "" });
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
-  const isSuperAdminUser = isSuperAdmin();
-  const hasLocationAdminAccess = hasPermission("admin", locationId);
-  const hasBranchWriteScope = Boolean(
-    treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length,
-  );
-  const canWriteCurrentTree = Boolean(
-    currentUser && (isSuperAdminUser || hasLocationAdminAccess || hasBranchWriteScope),
-  );
-  const canWriteAnyBranch =
-    canWriteCurrentTree &&
-    (isSuperAdminUser ||
-      Boolean(treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length));
-  const canCreateRootNode =
-    canWriteCurrentTree && (isSuperAdminUser || Boolean(treeWriteScope?.canWriteAll));
-  const canManageInvites = Boolean(
-    canWriteCurrentTree && (isSuperAdminUser || treeWriteScope?.canWriteAll),
-  );
-  const editableNodeIds = useMemo(() => {
-    const editable = new Set<string>();
-    if (!canWriteCurrentTree) return editable;
-    if (isSuperAdminUser) {
-      nodes.forEach((node) => editable.add(node.id));
-      return editable;
-    }
-    if (!treeWriteScope) return editable;
-    if (treeWriteScope.canWriteAll) {
-      nodes.forEach((node) => editable.add(node.id));
-      return editable;
-    }
 
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
-    const queue = [...treeWriteScope.rootPersonIds];
-    while (queue.length > 0) {
-      const currentId = queue.shift();
-      if (!currentId || editable.has(currentId)) continue;
-      editable.add(currentId);
-      const current = nodeMap.get(currentId);
-      (current?.spouses || []).forEach((spouse) => {
-        if (spouse?.id) {
-          editable.add(spouse.id);
-        }
-      });
-      (current?.children || []).forEach((child) => {
-        if (child?.id && !editable.has(child.id)) {
-          queue.push(child.id);
-        }
-      });
-    }
-    return editable;
-  }, [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, nodes]);
+  const resetSelection = useCallback(() => setSelectId(undefined), []);
 
-  const canEditNode = useCallback(
-    (nodeId?: string | null) => {
-      if (!nodeId || !canWriteCurrentTree) return false;
-      if (isSuperAdminUser) return true;
-      if (!treeWriteScope) return false;
-      if (treeWriteScope.canWriteAll) return true;
-      return editableNodeIds.has(nodeId);
-    },
-    [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, editableNodeIds],
-  );
+  const {
+    nodes,
+    rootId,
+    isLoading,
+    setIsLoading,
+    locationId,
+    loadTreeData,
+    mergeAffectedNodes,
+  } = useTreeData({ treeId, treeReloadKey, resetSelection });
 
-  const loadPendingLinkRequests = useCallback(async () => {
-    if (!currentUser || !treeId) {
-      setPendingLinkRequests([]);
-      return;
-    }
+  const {
+    treeWriteScope,
+    setTreeWriteScope,
+    isSuperAdminUser,
+    canWriteCurrentTree,
+    canWriteAnyBranch,
+    canCreateRootNode,
+    canManageInvites,
+    canEditNode,
+  } = useTreeWriteAccess({
+    treeId,
+    currentUser,
+    nodes,
+    locationId,
+    isSuperAdmin,
+    hasPermission,
+  });
 
-    try {
-      setLinkRequestsLoading(true);
-      setLinkRequestReviewError("");
-      const rows = await ApiService.getPendingTreeLinkRequests(treeId);
-      setPendingLinkRequests(
-        (rows || []).filter((request) => request.requesterUserId !== currentUser?.uid),
-      );
-    } catch (error: any) {
-      console.error("Failed to load pending link requests:", error);
-      setPendingLinkRequests([]);
-      if (
-        error?.message &&
-        String(error.message).toLowerCase().includes("permission denied")
-      ) {
-        setLinkRequestReviewError("");
-      } else {
-        setLinkRequestReviewError(
-          error?.message || "Failed to load pending profile link requests.",
-        );
-      }
-    } finally {
-      setLinkRequestsLoading(false);
-    }
-  }, [currentUser, treeId]);
-
-  useEffect(() => {
-    let active = true;
-
-    if (!treeId || !currentUser) {
-      setTreeWriteScope(null);
-      return () => {
-        active = false;
-      };
-    }
-
-    ApiService.getTreeWriteScope(treeId)
-      .then((scope) => {
-        if (!active) return;
-        setTreeWriteScope(scope);
-      })
-      .catch((error) => {
-        if (!active) return;
-        console.warn("Failed to load tree write scope:", error);
-        setTreeWriteScope({ treeId, canWriteAll: false, rootPersonIds: [] });
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [treeId, currentUser]);
-
-  useEffect(() => {
-    void loadPendingLinkRequests();
-  }, [loadPendingLinkRequests]);
-
-  useEffect(() => {
-    let active = true;
-
-    if (!currentUser) {
-      setMyPendingRequests([]);
-      return () => {
-        active = false;
-      };
-    }
-
-    ApiService.getMyLinkRequests()
-      .then((rows) => {
-        if (!active) return;
-        setMyPendingRequests(
-          (rows || []).filter((request) => request.status === "pending"),
-        );
-      })
-      .catch((error) => {
-        if (!active) return;
-        console.warn("Failed to load my pending link requests:", error);
-        setMyPendingRequests([]);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [currentUser]);
+  const {
+    pendingLinkRequests,
+    myPendingRequests,
+    setMyPendingRequests,
+    linkRequestsLoading,
+    reviewingLinkRequestId,
+    linkRequestReviewError,
+    linkRequestReviewSuccess,
+    handleReviewLinkRequest,
+  } = useLinkRequests({ treeId, currentUser });
 
   useEffect(() => {
     if (!inviteToken || loading) {
@@ -373,315 +261,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     shouldCreateRootFromQuery,
     treeId,
   ]);
-
-  const loadTreeData = useCallback(
-    async (keepRoot = false) => {
-      const requestId = ++loadRequestIdRef.current;
-      if (!treeId || treeId === "") {
-        if (requestId !== loadRequestIdRef.current) return;
-        setNodes([]);
-        setSelectId(undefined);
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        if (!keepRoot) {
-          setIsLoading(true);
-        }
-        // Fetch complete tree from Supabase using the PostgreSQL function
-        const treeData = await ApiService.getCompleteTreeById(treeId);
-        if (requestId !== loadRequestIdRef.current) return;
-        setLocationId(treeData.tree?.location?.id);
-
-        // Convert tree data to FNode format
-        const items: Readonly<FNode>[] = (treeData.members || []).map(
-          (person: any) =>
-            ({
-              id: person.id,
-              name: person.name,
-              nameHindi: person.nameHindi || undefined,
-              gender: person.gender as Gender,
-              dob: person.dob || "",
-              parents:
-                person.parents?.map((p: any) => ({
-                  id: p.id,
-                  type: (p.type || RelType.blood) as RelType,
-                })) || [],
-              children:
-                person.children?.map((c: any) => ({
-                  id: c.id,
-                  type: (c.type || RelType.blood) as RelType,
-                })) || [],
-              spouses:
-                person.spouses?.map((s: any) => ({
-                  id: s.id,
-                  type: (s.type || RelType.married) as RelType,
-                  relationSubtype: s.relationSubtype || s.type || RelType.married,
-                  startDate: s.startDate || undefined,
-                  endDate: s.endDate || undefined,
-                })) || [],
-              siblings:
-                person.siblings?.map((s: any) => ({
-                  id: s.id,
-                  type: RelType.blood,
-                })) || [],
-              treeId: person.treeId || treeId,
-              photo: person.photoUrl || undefined,
-              createdAt: person.createdAt || undefined,
-              createdBy: person.createdBy || undefined,
-              createdByName: person.createdByName || undefined,
-              bloodGroup: person.bloodGroup || undefined,
-              isAlive: person.isAlive !== false,
-              deceasedDate: person.deceasedDate || undefined,
-            }) as FNode,
-        );
-
-        // Populate hierarchy for all nodes
-        const itemsWithHierarchy = items.map((node) => ({
-          ...node,
-          hierarchy: getNodeHierarchy(node.id, items),
-        }));
-
-        setNodes(itemsWithHierarchy);
-        setSelectId(undefined);
-
-        if (items.length === 0) {
-          if (requestId !== loadRequestIdRef.current) return;
-          setIsLoading(false);
-          return;
-        }
-
-        // If keepRoot is true, we want to see if the current root ID is still valid in the new data.
-        // We can access the current rootId via the state setter to make a decision,
-        // OR we can just allow the caller to handle the root preservation logic?
-        // No, the caller just says "reload data".
-
-        // Let's use a functional state update to determine if we need to CHANGE the root.
-        // But we need to calculate the *new potential root* first.
-
-        // -------------------------------------------------------------
-        // Root Selection Logic Refined
-
-        // -------------------------------------------------------------
-        // Root Selection Logic Refined
-        // 1. Candidate must belong to the current tree.
-        // 2. Candidate must have NO parents.
-        // 3. If Candidate has a spouse in the SAME tree, that spouse must NOT have parents.
-        //    (If the spouse has parents, then the spouse's lineage is the true root, and Candidate is just an in-law).
-        // -------------------------------------------------------------
-
-        const currentTreeId = treeId;
-        const rawMembers = treeData.members || [];
-        const memberMap = new Map(rawMembers.map((m: any) => [m.id, m]));
-
-        // Step 1 & 2: Filter by Tree ID and No Parents
-        const baseCandidates = rawMembers.filter((m: any) => {
-          const isInCurrentTree = m.treeId === currentTreeId;
-          const hasNoParents = !m.parents || m.parents.length === 0;
-          return isInCurrentTree && hasNoParents;
-        });
-
-        // Step 3: Filter out "In-Laws" (whose spouses are in-tree and have parents)
-        const validCandidates = baseCandidates.filter((candidate: any) => {
-          const spouses = candidate.spouses || [];
-
-          // Check if ANY spouse disqualifies this candidate
-          const isDisqualified = spouses.some((s: any) => {
-            const spouseNode = memberMap.get(s.id);
-
-            if (!spouseNode) return false; // Spouse data missing, ignore
-
-            // Condition: Spouse is in the SAME tree
-            if (spouseNode.treeId === currentTreeId) {
-              // Check if this spouse has parents (meaning the root is higher up on their side)
-              if (spouseNode.parents && spouseNode.parents.length > 0) {
-                return true; // Disqualify Candidate
-              }
-            }
-            return false;
-          });
-
-          return !isDisqualified;
-        });
-
-        // Tie-Breaking: Use Descendant Count and Age
-        const countDescendants = (
-          nodeId: string,
-          depth = 0,
-          memo = new Map<string, number>(),
-        ): number => {
-          if (depth > 50) return 0;
-          if (memo.has(nodeId)) return memo.get(nodeId)!;
-
-          const node = memberMap.get(nodeId);
-          if (!node || !node.children || node.children.length === 0) {
-            memo.set(nodeId, 0);
-            return 0;
-          }
-
-          let count = 0;
-          node.children.forEach((child: any) => {
-            count += 1 + countDescendants(child.id, depth + 1, memo);
-          });
-
-          memo.set(nodeId, count);
-          return count;
-        };
-
-        const finalCandidates =
-          validCandidates.length > 0 ? validCandidates : baseCandidates;
-
-        // Sort candidates
-        finalCandidates.sort((a: any, b: any) => {
-          // Priority 1: Descendant Count
-          const aDesc = countDescendants(a.id);
-          const bDesc = countDescendants(b.id);
-          if (aDesc !== bDesc) return bDesc - aDesc;
-
-          // Priority 2: Creation Date (Oldest First)
-          const aTime = new Date(a.createdAt).getTime() || 0;
-          const bTime = new Date(b.createdAt).getTime() || 0;
-          return aTime - bTime;
-        });
-
-        if (finalCandidates.length > 0) {
-          const bestRootId = finalCandidates[0].id;
-          setRootId((prevRoot) => {
-            if (keepRoot && prevRoot && items.find((n) => n.id === prevRoot)) {
-              return prevRoot;
-            }
-            return bestRootId;
-          });
-        } else if (items.length > 0) {
-          const firstItemId = items[0].id;
-          setRootId((prevRoot) => {
-            if (keepRoot && prevRoot && items.find((n) => n.id === prevRoot)) {
-              return prevRoot;
-            }
-            return firstItemId;
-          });
-        }
-
-        setIsLoading(false);
-      } catch (error) {
-        if (requestId !== loadRequestIdRef.current) return;
-        console.error("FamiliesPage: Failed to load tree data:", error);
-        setNodes([]);
-        setIsLoading(false);
-      }
-    },
-    [treeId, treeReloadKey],
-  );
-
-  useEffect(() => {
-    // Prevent stale tree content/icons while switching between trees.
-    setNodes([]);
-    setRootId("");
-    setSelectId(undefined);
-    loadTreeData();
-  }, [loadTreeData]);
-
-  useEffect(() => {
-    // Prevent stale tree content/icons while switching between trees.
-    console.log("Invite Person ID changed:", invitePersonId);
-  }, [invitePersonId]);
-
-  /**
-   * Merges affected nodes from add_person_to_tree into the current state.
-   * - New nodes (not in current state) are added.
-   * - Existing nodes (already in state) have their relationship arrays updated.
-   * - Hierarchy is recalculated for all nodes that changed.
-   * This avoids a full tree reload.
-   */
-  const mergeAffectedNodes = useCallback(
-    (affectedRaw: any[], newPersonId?: string) => {
-      setNodes((prevNodes) => {
-        const nodeMap = new Map(prevNodes.map((n) => [n.id, { ...n }]));
-
-        for (const raw of affectedRaw) {
-          const fnode: FNode = {
-            id: raw.id,
-            name: raw.name,
-            nameHindi: raw.nameHindi || undefined,
-            gender: (raw.gender as Gender) || ("" as any),
-            dob: raw.dob || "",
-            parents:
-              raw.parents?.map((p: any) => ({
-                id: p.id,
-                type: (p.type || RelType.blood) as RelType,
-              })) || [],
-            children:
-              raw.children?.map((c: any) => ({
-                id: c.id,
-                type: (c.type || RelType.blood) as RelType,
-              })) || [],
-            spouses:
-              raw.spouses?.map((s: any) => ({
-                id: s.id,
-                type: (s.type || RelType.married) as RelType,
-                relationSubtype: s.relationSubtype || s.type || RelType.married,
-                startDate: s.startDate || undefined,
-                endDate: s.endDate || undefined,
-              })) || [],
-            siblings:
-              raw.siblings?.map((s: any) => ({
-                id: s.id,
-                type: RelType.blood,
-              })) || [],
-            treeId: raw.treeId || treeId,
-            photo: raw.photoUrl || undefined,
-            createdAt: raw.createdAt || undefined,
-            createdBy: raw.createdBy || undefined,
-            createdByName: raw.createdByName || undefined,
-            bloodGroup: raw.bloodGroup || undefined,
-            isAlive: raw.isAlive !== false,
-            deceasedDate: raw.deceasedDate || undefined,
-          } as FNode;
-
-          nodeMap.set(raw.id, fnode);
-        }
-
-        // Rebuild hierarchy for all nodes (cheap — just walks parent pointers)
-        const allNodes = Array.from(nodeMap.values());
-        const result = allNodes.map((node) => ({
-          ...node,
-          hierarchy: getNodeHierarchy(node.id, allNodes),
-        }));
-
-        // Update rootId if needed:
-        // - Tree was empty (prevNodes was []) → set root to the new person
-        // - A new parent was added (reverse relation) → new person has no parents, should be root
-        setRootId((prevRoot) => {
-          // If we already have a valid root in the updated data, keep it
-          if (prevRoot && result.find((n) => n.id === prevRoot)) {
-            // But if the new person is a parent (has no parents, and the old root
-            // now has parents), switch to the new root
-            if (newPersonId) {
-              const newNode = result.find((n) => n.id === newPersonId);
-              const oldRootNode = result.find((n) => n.id === prevRoot);
-              if (
-                newNode &&
-                oldRootNode &&
-                newNode.parents.length === 0 &&
-                oldRootNode.parents.length > 0
-              ) {
-                return newPersonId;
-              }
-            }
-            return prevRoot;
-          }
-          // No valid root — pick the new person or first parentless node
-          if (newPersonId) return newPersonId;
-          const parentless = result.find((n) => n.parents.length === 0);
-          return parentless?.id || (result.length > 0 ? result[0].id : "");
-        });
-
-        return result;
-      });
-    },
-    [treeId],
-  );
 
   const selected = useMemo(
     () => nodes.find((item) => item.id === selectId),
@@ -1140,38 +719,76 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     }
   }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes, showSnackbar]);
 
-  const handleReviewLinkRequest = useCallback(
-    async (requestId: string, action: "approved" | "rejected") => {
-      setLinkRequestReviewError("");
-      setLinkRequestReviewSuccess("");
-      setReviewingLinkRequestId(requestId);
+  const handleConfirmRejectRequest = useCallback(async () => {
+    const note = rejectDialog.note.trim();
+    const requestId = rejectDialog.requestId;
+    if (!requestId || !note) return;
+    setRejectDialog({ open: false, requestId: null, note: "" });
+    await handleReviewLinkRequest(requestId, "rejected", note);
+  }, [rejectDialog, handleReviewLinkRequest]);
 
-      try {
-        const reviewNote =
-          action === "rejected"
-            ? window.prompt("Reason for rejecting this request")?.trim()
-            : null;
-        if (action === "rejected" && !reviewNote) {
-          setReviewingLinkRequestId(null);
-          return;
-        }
-        await ApiService.reviewLinkRequest(requestId, { action, reviewNote });
-        setLinkRequestReviewSuccess(
-          `Link request ${action === "approved" ? "approved" : "rejected"} successfully.`,
-        );
-        await loadPendingLinkRequests();
-        window.dispatchEvent(new Event("link-requests-updated"));
-      } catch (error: any) {
-        console.error("Failed to review link request:", error);
-        setLinkRequestReviewError(
-          error?.message || "Failed to review profile link request.",
-        );
-      } finally {
-        setReviewingLinkRequestId(null);
-      }
+  // Focus a person from the header search. Sets the `personId` query param, which
+  // drives the tree to highlight + center on that node (and the timeline to scroll
+  // to it). This is a navigation action — it does not open the details panel.
+  const handleSearchSelect = useCallback(
+    (personId: string) => {
+      if (!personId) return;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("personId", personId);
+          return next;
+        },
+        { replace: true },
+      );
     },
-    [loadPendingLinkRequests],
+    [setSearchParams],
   );
+
+  // A pending full-tree access request for the current tree (target person is null),
+  // used to switch the "Request edit access" button into a pending state.
+  const pendingFullTreeAccessRequest = useMemo(
+    () =>
+      myPendingRequests.find(
+        (request) =>
+          request.requestType === "branch_access_request" &&
+          request.targetTreeId === treeId &&
+          !request.targetPersonId,
+      ),
+    [myPendingRequests, treeId],
+  );
+
+  const handleRequestAccess = useCallback(async () => {
+    if (!currentUser) {
+      openLoginModal();
+      return;
+    }
+    if (!treeId) return;
+
+    try {
+      setRequestingAccess(true);
+      await ApiService.createBranchAccessRequest({
+        targetTreeId: treeId,
+        targetPersonId: null,
+        requestMessage: "Requesting edit access to this tree.",
+      });
+      // Refresh so the button flips to its pending state and the status banner appears.
+      const rows = await ApiService.getMyLinkRequests();
+      setMyPendingRequests((rows || []).filter((request) => request.status === "pending"));
+      window.dispatchEvent(new Event("link-requests-updated"));
+      showSnackbar(
+        "Access request sent. A tree admin or super admin can approve it.",
+        "success",
+      );
+    } catch (error) {
+      showSnackbar(
+        `Failed to request access: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    } finally {
+      setRequestingAccess(false);
+    }
+  }, [currentUser, treeId, openLoginModal, showSnackbar]);
 
   // Handler for "View Details" — opens NodeDetails in details view
   const handleViewDetails = useCallback((nodeId: string) => {
@@ -1260,15 +877,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     const totalPeople = nodes.length;
     const maleCount = nodes.filter((n) => n.gender === Gender.male).length;
     const femaleCount = nodes.filter((n) => n.gender === Gender.female).length;
-    const generationsSet = new Set<number>();
-
+    // `hierarchy` is the male-line ancestor chain (root → the node's parent), so its
+    // length is the node's depth. The generation count is the deepest chain + 1 (to
+    // include the root's own generation). Using max depth — not the count of distinct
+    // depths — keeps it correct when a depth level happens to be unpopulated.
+    let maxDepth = 0;
     nodes.forEach((node) => {
-      if (node.hierarchy && node.hierarchy.length > 0) {
-        generationsSet.add(node.hierarchy.length);
-      }
+      const depth = node.hierarchy?.length ?? 0;
+      if (depth > maxDepth) maxDepth = depth;
     });
 
-    const generations = generationsSet.size || 1;
+    const generations = totalPeople > 0 ? maxDepth + 1 : 1;
 
     return {
       totalPeople,
@@ -1415,6 +1034,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         onSourceChange={onSourceChange}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
+        nodes={nodes}
+        onSearchSelect={handleSearchSelect}
       />
       {(isSuperAdmin() || isApproved) && (
         <Box
@@ -1505,7 +1126,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                             {request.requestType === "spouse_link_request"
                               ? `Wants to link spouse ${request.payload?.sourcePersonName || "from another branch"} to ${request.targetPersonName || "selected profile"}`
                               : request.requestType === "branch_access_request"
-                                ? `Wants branch access for ${request.targetPersonName || "selected profile"}`
+                                ? request.targetPersonName
+                                  ? `Wants branch access for ${request.targetPersonName}`
+                                  : "Wants edit access to the whole tree"
                                 : `Wants to link to ${request.targetPersonName || "selected profile"}`}
                           </Typography>
                           <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5 }}>
@@ -1529,7 +1152,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                             variant="outlined"
                             color="error"
                             disabled={reviewingLinkRequestId === request.id}
-                            onClick={() => void handleReviewLinkRequest(request.id, "rejected")}
+                            onClick={() =>
+                              setRejectDialog({
+                                open: true,
+                                requestId: request.id,
+                                note: "",
+                              })
+                            }
                           >
                             Reject
                           </Button>
@@ -1542,6 +1171,58 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             )}
           </Stack>
         )}
+        {treeId &&
+          !canWriteAnyBranch &&
+          !(isAdmin() && !isApproved) &&
+          accessBannerDismissedFor !== treeId && (
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{
+                mb: 1.5,
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "info.light",
+                backgroundColor: alpha(theme.palette.info.light, 0.08),
+              }}
+            >
+              <LockOutlinedIcon sx={{ fontSize: 18, color: "info.main", flexShrink: 0 }} />
+              <Typography
+                variant="body2"
+                sx={{ color: "text.secondary", minWidth: 0, flex: 1 }}
+                noWrap
+              >
+                View-only access
+              </Typography>
+              <Button
+                size="small"
+                variant="text"
+                color="info"
+                disabled={requestingAccess || Boolean(pendingFullTreeAccessRequest)}
+                onClick={() => void handleRequestAccess()}
+                sx={{ flexShrink: 0, whiteSpace: "nowrap", textTransform: "none" }}
+              >
+                {!currentUser
+                  ? "Sign in to request"
+                  : pendingFullTreeAccessRequest
+                    ? "Request pending"
+                    : requestingAccess
+                      ? "Sending…"
+                      : "Request edit access"}
+              </Button>
+              <IconButton
+                size="small"
+                aria-label="Dismiss"
+                onClick={() => setAccessBannerDismissedFor(treeId)}
+                sx={{ flexShrink: 0 }}
+              >
+                <CloseOutlinedIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Stack>
+          )}
         {isLoading ? (
           <Paper
             elevation={0}
@@ -1658,6 +1339,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 nodes={nodes}
                 currentTreeId={treeId}
                 youPersonId={userProfile?.peopleId}
+                focusPersonId={highlightedPersonId || selectId || userProfile?.peopleId}
                 onViewDetails={handleViewDetails}
               />
             ) : rootId && nodes.find((n) => n.id === rootId) ? (
@@ -1793,6 +1475,50 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         </DialogContent>
       </Dialog>
 
+      {/* Reject link request — capture a reason before rejecting */}
+      <Dialog
+        open={rejectDialog.open}
+        onClose={() => setRejectDialog({ open: false, requestId: null, note: "" })}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Reject request</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            Let the requester know why this request is being rejected.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={2}
+            label="Reason for rejection"
+            value={rejectDialog.note}
+            onChange={(e) =>
+              setRejectDialog((prev) => ({ ...prev, note: e.target.value }))
+            }
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setRejectDialog({ open: false, requestId: null, note: "" })}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={
+              !rejectDialog.note.trim() ||
+              reviewingLinkRequestId === rejectDialog.requestId
+            }
+            onClick={() => void handleConfirmRejectRequest()}
+          >
+            Reject
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* External tree navigation confirmation */}
       <Dialog
         open={externalTreeConfirm.open}
@@ -1886,7 +1612,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }}
         onInvitePersonSearchChange={setInvitePersonSearch}
         onInvitePersonSelect={(person) => {
-          console.log("Selected person:", person);
           setInvitePersonId(person?.id || "");
           setInviteSelectedPersonName(person?.name || "");
           setInvitePersonSearch(person?.name || "");

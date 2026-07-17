@@ -228,6 +228,7 @@ export function BusinessFormDialog({
               }}
               selectedPerson={ownerId ? { id: ownerId, name: owner } : null}
               locationId={locationId}
+              writableOnly
               startIcon={<PersonOutlineIcon fontSize="small" />}
             />
           )}

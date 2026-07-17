@@ -17,6 +17,7 @@ import {
 import AddLocationAltOutlinedIcon from "@mui/icons-material/AddLocationAltOutlined";
 import LocationCityOutlinedIcon from "@mui/icons-material/LocationCityOutlined";
 import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { toTitleCase } from "../../utils/textCase";
 
 interface CreateLocationDialogProps {
   open: boolean;
@@ -104,7 +105,7 @@ export const CreateLocationDialog: React.FC<CreateLocationDialogProps> = ({
   };
 
   const handleCreate = async () => {
-    const trimmed = name.trim();
+    const trimmed = toTitleCase(name);
     if (!stateId || !districtId || !trimmed) {
       setError("State, district, and location name are required.");
       return;

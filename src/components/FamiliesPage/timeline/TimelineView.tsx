@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, Box, Chip, Stack, Typography } from "@mui/material";
 import FavoriteIcon from "@mui/icons-material/Favorite";
 import type { FNode } from "../../model/FNode";
@@ -10,6 +10,9 @@ interface TimelineViewProps {
   nodes: FNode[];
   currentTreeId?: string;
   youPersonId?: string | null;
+  /** Person to scroll to and briefly highlight when the timeline opens or a search
+   *  selection is made — keeps focus continuous when toggling from the tree view. */
+  focusPersonId?: string | null;
   onViewDetails?: (nodeId: string) => void;
 }
 
@@ -28,12 +31,35 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
   nodes,
   currentTreeId,
   youPersonId,
+  focusPersonId,
   onViewDetails,
 }) => {
   const generations = useMemo(
     () => buildGenerations(nodes, currentTreeId),
     [nodes, currentTreeId],
   );
+
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  // Scroll to and briefly highlight the focused person once the rows are rendered.
+  useEffect(() => {
+    if (!focusPersonId) return;
+    const timer = window.setTimeout(() => {
+      const el = cardRefs.current.get(focusPersonId);
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightId(focusPersonId);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [focusPersonId, generations]);
+
+  // Fade the highlight ring out after a moment.
+  useEffect(() => {
+    if (!highlightId) return;
+    const timer = window.setTimeout(() => setHighlightId(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [highlightId]);
 
   if (generations.length === 0) {
     return (
@@ -142,7 +168,21 @@ export const TimelineView: React.FC<TimelineViewProps> = ({
                   const showHeart = next && pairs.has(pairKey(person.id, next.id));
                   return (
                     <React.Fragment key={person.id}>
-                      <Box sx={{ width: { xs: "100%", sm: 230 } }}>
+                      <Box
+                        ref={(el: HTMLElement | null) => {
+                          if (el) cardRefs.current.set(person.id, el);
+                          else cardRefs.current.delete(person.id);
+                        }}
+                        sx={{
+                          width: { xs: "100%", sm: 230 },
+                          borderRadius: 2,
+                          transition: "box-shadow 0.3s ease",
+                          boxShadow:
+                            highlightId === person.id
+                              ? (t) => `0 0 0 3px ${t.palette.primary.main}`
+                              : "none",
+                        }}
+                      >
                         <PersonTimelineCard
                           node={person}
                           isYou={!!youPersonId && person.id === youPersonId}

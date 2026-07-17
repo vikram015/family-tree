@@ -13,6 +13,8 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import { alpha } from "@mui/material/styles";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
+import { TreePersonSearch } from "./TreePersonSearch";
+import type { FNode } from "../model/FNode";
 
 export type TreeStatus = {
   label: string;
@@ -46,6 +48,8 @@ interface FamiliesPageHeaderProps {
   onSourceChange: (value: string, nodes: readonly any[]) => void;
   viewMode: "tree" | "timeline";
   onViewModeChange: (mode: "tree" | "timeline") => void;
+  nodes: FNode[];
+  onSearchSelect: (personId: string) => void;
 }
 
 export function FamiliesPageHeader({
@@ -58,6 +62,8 @@ export function FamiliesPageHeader({
   onSourceChange,
   viewMode,
   onViewModeChange,
+  nodes,
+  onSearchSelect,
 }: FamiliesPageHeaderProps) {
   return (
     <Box
@@ -182,7 +188,12 @@ export function FamiliesPageHeader({
               justifySelf: { xs: "stretch", md: "end" },
             }}
           >
-            <SourceSelect onChange={onSourceChange} />
+            <Stack spacing={{ xs: 0.75, sm: 1 }}>
+              <SourceSelect onChange={onSourceChange} />
+              {nodes.length > 0 && (
+                <TreePersonSearch nodes={nodes} onSelect={onSearchSelect} />
+              )}
+            </Stack>
           </Box>
         </Box>
 

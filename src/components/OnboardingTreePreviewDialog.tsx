@@ -21,6 +21,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { TransitionProps } from "@mui/material/transitions";
 import { DTreeComponent } from "./DTree/DTreeComponent";
+import { TreePersonSearch } from "./FamiliesPage/TreePersonSearch";
 import { ApiService, LinkRequest, TreeWriteScope } from "../services/apiService";
 import { FNode } from "./model/FNode";
 import { namesLooselyMatch } from "../utils/nameMatch";
@@ -77,6 +78,24 @@ export const OnboardingTreePreviewDialog: React.FC<
   const [actionError, setActionError] = useState("");
   const [treeWriteScope, setTreeWriteScope] = useState<TreeWriteScope | null>(null);
   const [linkConfirmOpen, setLinkConfirmOpen] = useState(false);
+  // Search focus: `focusPersonId` drives the highlight ring; `expandFocusId` triggers
+  // the tree to expand + center on the picked person (collapsed-mode focus). Both
+  // start from the claimed `personId` and update when a search result is chosen.
+  const [focusPersonId, setFocusPersonId] = useState<string | null>(personId);
+  const [expandFocusId, setExpandFocusId] = useState<string | null>(null);
+
+  // Keep the highlight in sync with the claimed person whenever the dialog is
+  // (re)opened for a different person.
+  useEffect(() => {
+    setFocusPersonId(personId);
+    setExpandFocusId(null);
+  }, [personId, open]);
+
+  const handleSearchSelect = (id: string) => {
+    if (!id) return;
+    setFocusPersonId(id);
+    setExpandFocusId(id);
+  };
 
   // Whether the selected node's name diverges from the name the user searched
   // with — drives the warning vs. plain confirmation modal.
@@ -479,6 +498,25 @@ export const OnboardingTreePreviewDialog: React.FC<
             </Typography>
           </Toolbar>
         </AppBar>
+        {!loading && !error && nodes.length > 0 && (
+          <Box
+            sx={{
+              px: { xs: 1.5, sm: 2 },
+              py: { xs: 1, sm: 1.25 },
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              bgcolor: "background.paper",
+            }}
+          >
+            <Box sx={{ width: "100%", maxWidth: { sm: 420 }, mx: { xs: 0, sm: "auto" } }}>
+              <TreePersonSearch
+                nodes={nodes}
+                onSelect={handleSearchSelect}
+                placeholder="Search this tree…"
+              />
+            </Box>
+          </Box>
+        )}
         <Box sx={{ flex: 1, position: "relative", bgcolor: "background.default", overflow: "hidden" }}>
           {loading && (
             <Box
@@ -512,7 +550,9 @@ export const OnboardingTreePreviewDialog: React.FC<
                 rootId={rootId}
                 initialMainId={personId}
                 initialShowFullTree={false}
-                highlightedPersonId={personId || undefined}
+                highlightedPersonId={focusPersonId || undefined}
+                autoExpandNodeId={expandFocusId}
+                onAutoExpandHandled={() => setExpandFocusId(null)}
                 canEditTree={false}
                 currentTreeId={treeId || ""}
                 onNodeClick={handleNodeClick}

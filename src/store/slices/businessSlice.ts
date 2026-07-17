@@ -9,6 +9,7 @@ interface Business {
   owner: string;
   ownerId: string;
   ownerName: string;
+  ownerUserId: string;
   contact: string;
   locationId: string;
   treeId: string;
@@ -52,6 +53,7 @@ export const fetchBusinessesByLocation = createAsyncThunk(
         owner: business.personName || '',
         ownerId: business.personId || '',
         ownerName: business.personName || '',
+        ownerUserId: business.ownerUserId || '',
         contact: business.businessContact || '',
         locationId: locationId,
         treeId: business.treeId || '',

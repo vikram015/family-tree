@@ -150,6 +150,13 @@ export const HomePage: React.FC = () => {
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
 
+  // Signed in but not yet linked to a person node — the hero CTA becomes
+  // "Complete Your Profile" and points at the same destination as the
+  // Suggested Next Action (onboarding, or the pending request view).
+  const needsProfileCompletion = Boolean(
+    currentUser && userProfile && !userProfile.peopleId,
+  );
+  const completeProfileTo = profileInsight?.nextAction?.to || "/onboarding";
   const displayName = userProfile?.displayName || userProfile?.name || "Family Member";
   const loggedInLabel =
     userProfile?.displayName ||
@@ -689,19 +696,35 @@ export const HomePage: React.FC = () => {
               </FullScreenMobilePicker>
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                <Button
-                  variant="contained"
-                  onClick={() => void handleContinueToYourTree()}
-                  disabled={continueTreeLoading}
-                  endIcon={<ArrowForwardIcon />}
-                  sx={{
-                    fontWeight: 700,
-                    bgcolor: brand.primary,
-                    "&:hover": { bgcolor: brand.primaryDark },
-                  }}
-                >
-                  {continueTreeLoading ? "Opening..." : currentUser ? "Continue Your Tree" : "Explore Family Trees"}
-                </Button>
+                {needsProfileCompletion ? (
+                  <Button
+                    variant="contained"
+                    component={Link}
+                    to={completeProfileTo}
+                    endIcon={<ArrowForwardIcon />}
+                    sx={{
+                      fontWeight: 700,
+                      bgcolor: brand.primary,
+                      "&:hover": { bgcolor: brand.primaryDark },
+                    }}
+                  >
+                    Complete Your Profile
+                  </Button>
+                ) : (
+                  <Button
+                    variant="contained"
+                    onClick={() => void handleContinueToYourTree()}
+                    disabled={continueTreeLoading}
+                    endIcon={<ArrowForwardIcon />}
+                    sx={{
+                      fontWeight: 700,
+                      bgcolor: brand.primary,
+                      "&:hover": { bgcolor: brand.primaryDark },
+                    }}
+                  >
+                    {continueTreeLoading ? "Opening..." : currentUser ? "Continue Your Tree" : "Explore Family Trees"}
+                  </Button>
+                )}
                 <Button
                   variant="outlined"
                   component={Link}

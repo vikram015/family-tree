@@ -34,6 +34,7 @@ import BusinessIcon from "@mui/icons-material/Business";
 import HandshakeIcon from "@mui/icons-material/Handshake";
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import AddIcon from "@mui/icons-material/Add";
+import EditIcon from "@mui/icons-material/Edit";
 import CategoryIcon from "@mui/icons-material/Category";
 import NotesIcon from "@mui/icons-material/Notes";
 import PhoneIcon from "@mui/icons-material/Phone";
@@ -69,6 +70,7 @@ interface Business {
   description: string;
   owner: string;
   ownerId?: string; // Link to person in family tree
+  ownerUserId?: string; // User account linked to the owner person
   ownerName?: string; // Display name of owner
   contact?: string;
   locationId: string;
@@ -241,7 +243,18 @@ export const BusinessPage: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { selectedLocation, setSelectedLocation, locations } = useLocations();
-  const { currentUser, isAdmin } = useAuth();
+  const { currentUser, isAdmin, userProfile } = useAuth();
+  const myPeopleId = userProfile?.peopleId;
+  const myUserId = userProfile?.id;
+  // Professions are editable only on the card for MY linked person — not every
+  // card (admins don't get a blanket edit here).
+  const canEditPerson = (personId?: string | null) =>
+    Boolean(myPeopleId && personId && personId === myPeopleId);
+  // A business is editable here only when its owner person is linked to MY user
+  // account — i.e. the node I'm linked to. Admins do not get a blanket edit on
+  // every business in the location from this page.
+  const canEditBusiness = (business: { ownerUserId?: string | null }) =>
+    Boolean(myUserId && business.ownerUserId && business.ownerUserId === myUserId);
 
   // Redux state
   const businesses = useAppSelector(selectBusinesses);
@@ -598,6 +611,25 @@ export const BusinessPage: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
+  // Float the logged-in user's own businesses to the top (stable sort keeps the
+  // rest of the order intact).
+  const orderedBusinesses = myUserId
+    ? [...filteredBusinesses].sort(
+        (a, b) =>
+          (a.ownerUserId === myUserId ? 0 : 1) -
+          (b.ownerUserId === myUserId ? 0 : 1),
+      )
+    : filteredBusinesses;
+
+  // Likewise float the user's own profession card to the top.
+  const orderedPeopleWithProfessions = myPeopleId
+    ? [...peopleWithProfessions].sort(
+        (a, b) =>
+          (a.person.id === myPeopleId ? 0 : 1) -
+          (b.person.id === myPeopleId ? 0 : 1),
+      )
+    : peopleWithProfessions;
+
   const benefits = [
     {
       title: "Family Network",
@@ -797,9 +829,10 @@ export const BusinessPage: React.FC = () => {
                     gap: 3,
                   }}
                 >
-                  {filteredBusinesses.map((business) => {
+                  {orderedBusinesses.map((business) => {
                     const categoryLabel = getCategoryLabel(business.category);
                     const categoryColor = getCategoryColor(business.category);
+                    const canEditThisBusiness = canEditBusiness(business);
 
                     return (
                       <Card
@@ -851,6 +884,18 @@ export const BusinessPage: React.FC = () => {
                               />
                             )}
                           </Box>
+                          {canEditThisBusiness && (
+                            <Tooltip title="Edit business">
+                              <IconButton
+                                size="small"
+                                aria-label="Edit business"
+                                onClick={() => handleOpenDialog(business)}
+                                sx={{ color: businessBlue }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                         </Box>
 
                         <Typography
@@ -1109,7 +1154,7 @@ export const BusinessPage: React.FC = () => {
                     gap: 2,
                   }}
                 >
-                  {peopleWithProfessions.map((item) => (
+                  {orderedPeopleWithProfessions.map((item) => (
                     <Card
                       key={item.person.id}
                       sx={{
@@ -1123,7 +1168,21 @@ export const BusinessPage: React.FC = () => {
                     >
                       <Stack spacing={2}>
                         <Box>
-                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                          <Typography
+                            variant="h6"
+                            component="span"
+                            onClick={() =>
+                              navigate(`/profile/person/${item.person.id}`)
+                            }
+                            sx={{
+                              fontWeight: 700,
+                              color: businessBlue,
+                              cursor: "pointer",
+                              textDecoration: "underline",
+                              "&:hover": { color: brand.primaryDark },
+                              transition: "all 0.2s",
+                            }}
+                          >
                             {item.person.name}
                           </Typography>
                         </Box>
@@ -1147,7 +1206,7 @@ export const BusinessPage: React.FC = () => {
                                     key={prof.id}
                                     label={prof.name}
                                     onDelete={
-                                      isAdmin()
+                                      canEditPerson(item.person.id)
                                         ? () =>
                                             handleRemoveProfession(
                                               item.person.id,
@@ -1171,7 +1230,7 @@ export const BusinessPage: React.FC = () => {
                           )}
                         </Box>
 
-                        {isAdmin() && (
+                        {canEditPerson(item.person.id) && (
                           <Button
                             variant="outlined"
                             size="small"
@@ -1444,6 +1503,7 @@ export const BusinessPage: React.FC = () => {
             }}
             selectedPerson={selectedPersonForProfession}
             locationId={selectedLocation}
+            writableOnly
           />
 
           <FormControl fullWidth sx={{ mb: 2 }}>

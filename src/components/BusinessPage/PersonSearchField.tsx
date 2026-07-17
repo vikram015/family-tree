@@ -90,6 +90,9 @@ interface PersonSearchFieldProps {
   hideSearchButton?: boolean;
   noResultsText?: string;
   startIcon?: React.ReactNode;
+  /** When true, only return people the logged-in user can write to (superadmin
+   *  still sees everyone). Used when picking an owner you're allowed to manage. */
+  writableOnly?: boolean;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -108,6 +111,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   hideSearchButton = false,
   noResultsText = "No results found",
   startIcon,
+  writableOnly = false,
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -128,10 +132,15 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     const searchId = ++latestSearchRef.current;
 
     try {
-      const results = await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
-        treeId,
-        locationId,
-      });
+      const results = writableOnly
+        ? await ApiService.searchWritablePeopleWithHierarchy(trimmedSearch, {
+            treeId,
+            locationId,
+          })
+        : await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
+            treeId,
+            locationId,
+          });
 
       if (searchId !== latestSearchRef.current) {
         return;
@@ -169,7 +178,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         setSearchResults([]);
       }
     }
-  }, [minSearchLength, searchValue, treeId, locationId, filterGender]);
+  }, [minSearchLength, searchValue, treeId, locationId, filterGender, writableOnly]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
     setSearchResults([]);

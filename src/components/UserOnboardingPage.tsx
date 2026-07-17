@@ -46,6 +46,7 @@ import { useLocations } from "./hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../store/hooks";
 import { consumePostLoginRedirect } from "../utils/postLoginRedirect";
 import { formatDisplayDate } from "../utils/dateFormatter";
+import { toTitleCase } from "../utils/textCase";
 import {
   fetchAllSubCastes,
   fetchCastes,
@@ -117,6 +118,28 @@ type CreatableLocationOption = LocationCombinationOption & {
 
 const CREATE_LOCATION_OPTION_ID = "__create_location__";
 const lookupFilter = createFilterOptions<LookupAutocompleteOption>();
+
+// Title-case a location option's display fields so inconsistently-stored place
+// names render uniformly. Normalizing at ingestion keeps every downstream use
+// (option label, input value, and the label-equality checks) consistent.
+function normalizeLocationOptionCasing<
+  T extends {
+    locationName?: string;
+    districtName?: string;
+    stateName?: string;
+    label?: string;
+  },
+>(option: T): T {
+  return {
+    ...option,
+    locationName:
+      option.locationName != null ? toTitleCase(option.locationName) : option.locationName,
+    districtName:
+      option.districtName != null ? toTitleCase(option.districtName) : option.districtName,
+    stateName: option.stateName != null ? toTitleCase(option.stateName) : option.stateName,
+    label: option.label != null ? toTitleCase(option.label) : option.label,
+  };
+}
 
 function isCreateLookupOption(
   option: LookupAutocompleteOption,
@@ -364,7 +387,7 @@ export const UserOnboardingPage: React.FC = () => {
     option: LookupAutocompleteOption,
   ) => {
     if (!isCreateLookupOption(option)) {
-      return <li {...(props as any)}>{option.name}</li>;
+      return <li {...(props as any)}>{toTitleCase(option.name)}</li>;
     }
     const { key, ...rest } = props as any;
     return (
@@ -804,13 +827,13 @@ export const UserOnboardingPage: React.FC = () => {
 
   useEffect(() => {
     if (selectedCaste) {
-      setCasteInputValue(selectedCaste.name);
+      setCasteInputValue(toTitleCase(selectedCaste.name));
     }
   }, [selectedCaste]);
 
   useEffect(() => {
     if (selectedSubCaste) {
-      setSubCasteInputValue(selectedSubCaste.name);
+      setSubCasteInputValue(toTitleCase(selectedSubCaste.name));
     }
   }, [selectedSubCaste]);
 
@@ -836,7 +859,7 @@ export const UserOnboardingPage: React.FC = () => {
         if (locationRequestIdRef.current !== currentRequestId) {
           return;
         }
-        const option = rows[0] || null;
+        const option = rows[0] ? normalizeLocationOptionCasing(rows[0]) : null;
         setSelectedLocationOption(option);
         if (option) {
           setLocationInputValue(option.label);
@@ -887,7 +910,7 @@ export const UserOnboardingPage: React.FC = () => {
           if (locationRequestIdRef.current !== currentRequestId) {
             return;
           }
-          setLocationOptions(rows || []);
+          setLocationOptions((rows || []).map(normalizeLocationOptionCasing));
         })
         .catch((error: any) => {
           if (locationRequestIdRef.current !== currentRequestId) {
@@ -1002,7 +1025,8 @@ export const UserOnboardingPage: React.FC = () => {
     setCreateLocationOpen(false);
   };
 
-  const handleLocationCreated = async (option: LocationCombinationOption) => {
+  const handleLocationCreated = async (rawOption: LocationCombinationOption) => {
+    const option = normalizeLocationOptionCasing(rawOption);
     setLocalError("");
     setSelectedLocationOption(option);
     setSelectedStateId(option.stateId);
@@ -1035,11 +1059,11 @@ export const UserOnboardingPage: React.FC = () => {
     setLocalError("");
 
     try {
-      const created = await ApiService.createCaste({ name: trimmedName });
+      const created = await ApiService.createCaste({ name: toTitleCase(trimmedName) });
       await dispatch(fetchCastes()).unwrap();
       setSelectedCasteId(created.id);
       setSelectedSubCasteId("");
-      setCasteInputValue(created.name);
+      setCasteInputValue(toTitleCase(created.name));
       setSubCasteInputValue("");
       previousSelectedCasteRef.current = created.id;
     } catch (error: any) {
@@ -1064,12 +1088,12 @@ export const UserOnboardingPage: React.FC = () => {
 
     try {
       const created = await ApiService.createSubCaste({
-        name: trimmedName,
+        name: toTitleCase(trimmedName),
         casteId: selectedCasteId,
       });
       await dispatch(fetchAllSubCastes()).unwrap();
       setSelectedSubCasteId(created.id);
-      setSubCasteInputValue(created.name);
+      setSubCasteInputValue(toTitleCase(created.name));
     } catch (error: any) {
       setLocalError(error?.message || "Failed to create sub-caste.");
     } finally {
@@ -1925,7 +1949,9 @@ export const UserOnboardingPage: React.FC = () => {
                         selectOnFocus
                         clearOnBlur
                         handleHomeEndKeys
-                        getOptionLabel={(option) => option.name}
+                        getOptionLabel={(option) =>
+                          isCreateLookupOption(option) ? option.name : toTitleCase(option.name)
+                        }
                         isOptionEqualToValue={(option, value) =>
                           option.id === value.id
                         }
@@ -1956,7 +1982,7 @@ export const UserOnboardingPage: React.FC = () => {
 
                           setSelectedCasteId(value.id);
                           setSelectedSubCasteId("");
-                          setCasteInputValue(value.name);
+                          setCasteInputValue(toTitleCase(value.name));
                           setSubCasteInputValue("");
                         }}
                         renderInput={(params) => (
@@ -1991,7 +2017,9 @@ export const UserOnboardingPage: React.FC = () => {
                         selectOnFocus
                         clearOnBlur
                         handleHomeEndKeys
-                        getOptionLabel={(option) => option.name}
+                        getOptionLabel={(option) =>
+                          isCreateLookupOption(option) ? option.name : toTitleCase(option.name)
+                        }
                         isOptionEqualToValue={(option, value) =>
                           option.id === value.id
                         }
@@ -2023,7 +2051,7 @@ export const UserOnboardingPage: React.FC = () => {
                           }
 
                           setSelectedSubCasteId(value.id);
-                          setSubCasteInputValue(value.name);
+                          setSubCasteInputValue(toTitleCase(value.name));
                         }}
                         renderInput={(params) => (
                           <TextField
@@ -2194,12 +2222,12 @@ export const UserOnboardingPage: React.FC = () => {
                             />
                             <Chip
                               icon={<GroupsOutlinedIcon />}
-                              label={selectedCaste?.name || "Not set"}
+                              label={selectedCaste ? toTitleCase(selectedCaste.name) : "Not set"}
                               sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                             <Chip
                               icon={<BadgeOutlinedIcon />}
-                              label={selectedSubCaste?.name || "Not set"}
+                              label={selectedSubCaste ? toTitleCase(selectedSubCaste.name) : "Not set"}
                               sx={{ bgcolor: "#fff", fontWeight: 700 }}
                             />
                           </Stack>

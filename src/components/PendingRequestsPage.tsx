@@ -212,7 +212,12 @@ export const PendingRequestsPage: React.FC = () => {
                       )}
                     </TableCell>
                     <TableCell>{request.targetTreeName || "Unknown tree"}</TableCell>
-                    <TableCell>{request.targetPersonName || "Unknown person"}</TableCell>
+                    <TableCell>
+                      {request.targetPersonName ||
+                        (request.requestType === "branch_access_request"
+                          ? "Full tree access"
+                          : "Unknown person")}
+                    </TableCell>
                     <TableCell>
                       <Typography variant="caption" color="text.secondary">
                         {new Date(request.createdAt).toLocaleString()}
@@ -466,8 +471,14 @@ export const PendingRequestsPage: React.FC = () => {
                   <Typography variant="body2">
                     {reviewTarget.action === "approved" ? "Approve" : "Reject"} this{" "}
                     {formatRequestType(reviewTarget.request.requestType).toLowerCase()} for{" "}
-                    {reviewTarget.request.targetPersonName || "the selected person"} in{" "}
-                    {reviewTarget.request.targetTreeName || "the tree"}?
+                    {reviewTarget.request.targetPersonName
+                      ? `${reviewTarget.request.targetPersonName} in ${
+                          reviewTarget.request.targetTreeName || "the tree"
+                        }`
+                      : `full edit access to ${
+                          reviewTarget.request.targetTreeName || "the tree"
+                        }`}
+                    ?
                   </Typography>
                 )}
 
