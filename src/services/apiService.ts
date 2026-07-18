@@ -1159,6 +1159,20 @@ export const ApiService = {
   },
 
   /**
+   * Of the given person ids, returns those the logged-in user may manage
+   * (edit/delete a business or professions): superadmin gets all; otherwise a
+   * node they've claimed, or an unclaimed node they have write access to.
+   */
+  async getManageablePeople(personIds: string[]): Promise<string[]> {
+    if (!personIds || personIds.length === 0) return [];
+    const res = await backendApi.post<{ manageableIds: string[] }>(
+      "/api/people/manageable",
+      { personIds },
+    );
+    return res?.manageableIds || [];
+  },
+
+  /**
    * Search people by name in a location with parent hierarchy.
    * Kept as a compatibility wrapper for existing callers.
    */

@@ -15,6 +15,10 @@ import {
   CircularProgress,
   Alert,
   Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
   TextField,
   FormControl,
   InputLabel,
@@ -35,6 +39,7 @@ import HandshakeIcon from "@mui/icons-material/Handshake";
 import ApartmentIcon from "@mui/icons-material/Apartment";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import CategoryIcon from "@mui/icons-material/Category";
 import NotesIcon from "@mui/icons-material/Notes";
 import PhoneIcon from "@mui/icons-material/Phone";
@@ -246,15 +251,17 @@ export const BusinessPage: React.FC = () => {
   const { currentUser, isAdmin, userProfile } = useAuth();
   const myPeopleId = userProfile?.peopleId;
   const myUserId = userProfile?.id;
-  // Professions are editable only on the card for MY linked person — not every
-  // card (admins don't get a blanket edit here).
+  // The set of owner person ids the current user may manage (edit/delete a
+  // business or professions), resolved once per page by the backend under the
+  // shared rule: superadmin → all; claimer → own node; admin → unclaimed nodes
+  // they have write access to.
+  const [manageableOwnerIds, setManageableOwnerIds] = useState<Set<string>>(
+    new Set(),
+  );
   const canEditPerson = (personId?: string | null) =>
-    Boolean(myPeopleId && personId && personId === myPeopleId);
-  // A business is editable here only when its owner person is linked to MY user
-  // account — i.e. the node I'm linked to. Admins do not get a blanket edit on
-  // every business in the location from this page.
-  const canEditBusiness = (business: { ownerUserId?: string | null }) =>
-    Boolean(myUserId && business.ownerUserId && business.ownerUserId === myUserId);
+    Boolean(personId && manageableOwnerIds.has(personId));
+  const canEditBusiness = (business: { ownerId?: string | null }) =>
+    Boolean(business.ownerId && manageableOwnerIds.has(business.ownerId));
 
   // Redux state
   const businesses = useAppSelector(selectBusinesses);
@@ -264,12 +271,49 @@ export const BusinessPage: React.FC = () => {
   const peopleWithProfessions = useAppSelector(selectPeopleWithProfessions);
   const professionsWithCount = useAppSelector(selectProfessionsWithCount);
 
+  // Resolve, in one batched call, which displayed owner nodes the current user
+  // may manage (business owners + profession people). Re-runs when the lists or
+  // the signed-in user change.
+  useEffect(() => {
+    let active = true;
+    const candidateIds = Array.from(
+      new Set(
+        [
+          ...businesses.map((b) => b.ownerId),
+          ...peopleWithProfessions.map((item) => item.person.id),
+        ].filter(Boolean),
+      ),
+    ) as string[];
+
+    if (!currentUser || candidateIds.length === 0) {
+      setManageableOwnerIds(new Set());
+      return () => {
+        active = false;
+      };
+    }
+
+    ApiService.getManageablePeople(candidateIds)
+      .then((ids) => {
+        if (active) setManageableOwnerIds(new Set(ids));
+      })
+      .catch((error) => {
+        console.error("Failed to load manageable owners:", error);
+        if (active) setManageableOwnerIds(new Set());
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [businesses, peopleWithProfessions, currentUser]);
+
   // Local component state
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
   const [people, setPeople] = useState<PersonSearchResult[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Business | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [selectedPersonForProfession, setSelectedPersonForProfession] =
     useState<FNode | null>(null);
   const [selectedProfession, setSelectedProfession] =
@@ -558,6 +602,26 @@ export const BusinessPage: React.FC = () => {
     // Refresh businesses list by dispatching Redux action
     if (selectedLocation) {
       dispatch(fetchBusinessesByLocation(selectedLocation));
+    }
+  };
+
+  const handleDeleteBusiness = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      await ApiService.deleteBusiness(deleteTarget.id);
+      setDeleteTarget(null);
+      if (selectedLocation) {
+        dispatch(fetchBusinessesByLocation(selectedLocation));
+      }
+    } catch (error) {
+      alert(
+        `Failed to delete business: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -885,16 +949,28 @@ export const BusinessPage: React.FC = () => {
                             )}
                           </Box>
                           {canEditThisBusiness && (
-                            <Tooltip title="Edit business">
-                              <IconButton
-                                size="small"
-                                aria-label="Edit business"
-                                onClick={() => handleOpenDialog(business)}
-                                sx={{ color: businessBlue }}
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
+                            <Stack direction="row" spacing={0.5}>
+                              <Tooltip title="Edit business">
+                                <IconButton
+                                  size="small"
+                                  aria-label="Edit business"
+                                  onClick={() => handleOpenDialog(business)}
+                                  sx={{ color: businessBlue }}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete business">
+                                <IconButton
+                                  size="small"
+                                  aria-label="Delete business"
+                                  onClick={() => setDeleteTarget(business)}
+                                  sx={{ color: "error.main" }}
+                                >
+                                  <DeleteOutlineIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
                           )}
                         </Box>
 
@@ -1473,6 +1549,35 @@ export const BusinessPage: React.FC = () => {
         locationId={selectedLocation}
         onSaved={handleBusinessSaved}
       />
+
+      {/* Delete business confirmation */}
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onClose={() => !deleting && setDeleteTarget(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete business</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete{" "}
+            <strong>{deleteTarget?.name}</strong>? This can't be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => void handleDeleteBusiness()}
+            disabled={deleting}
+          >
+            {deleting ? "Deleting..." : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Professions Dialog */}
       <Dialog
