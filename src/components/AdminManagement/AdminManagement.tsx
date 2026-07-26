@@ -34,7 +34,6 @@ import {
   Delete,
   Add,
   CheckCircle,
-  LocationOn,
   Close,
   Search,
   Block,
@@ -49,8 +48,6 @@ import {
   blockAdminUser,
   deleteAdminUser,
   fetchAdminUsers,
-  fetchPendingLocationAccessRequests,
-  reviewLocationAccessRequest,
   unblockAdminUser,
   updateAdminUser,
   verifyAdminUser,
@@ -130,16 +127,13 @@ export const AdminManagement: React.FC = () => {
   const [userSearch, setUserSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [editUser, setEditUser] = useState<AppUser | null>(null);
-  const [editMode, setEditMode] = useState<"full" | "locations">("full");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("admin");
-  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   // Block/unblock confirmation dialog state.
   const [blockTarget, setBlockTarget] = useState<AppUser | null>(null);
   const [blockReason, setBlockReason] = useState("");
   const [blockBusy, setBlockBusy] = useState(false);
   const [error, setError] = useState<string>("");
-  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
   const [feedbackList, setFeedbackList] = useState<any[]>([]);
   const [openingLinkedUserId, setOpeningLinkedUserId] = useState<string | null>(
     null,
@@ -153,23 +147,6 @@ export const AdminManagement: React.FC = () => {
   const [newName, setNewName] = useState("");
   const [selectedParentId, setSelectedParentId] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-
-  const loadPendingRequests = React.useCallback(async () => {
-    try {
-      const userId = userProfile?.id;
-      if (!userId) {
-        setPendingRequests([]);
-        return;
-      }
-      const data = await dispatch(
-        fetchPendingLocationAccessRequests(userId),
-      ).unwrap();
-      setPendingRequests(data || []);
-    } catch (err) {
-      console.error("Error loading pending requests:", err);
-      setPendingRequests([]);
-    }
-  }, [dispatch, userProfile?.id]);
 
   const loadHierarchyData = React.useCallback(async () => {
     try {
@@ -250,7 +227,6 @@ export const AdminManagement: React.FC = () => {
 
       // Load hierarchy data
       await loadHierarchyData();
-      await loadPendingRequests();
 
       // Feedback is superadmin-only (the GET endpoint 403s otherwise).
       if (isSuperAdmin()) {
@@ -269,7 +245,7 @@ export const AdminManagement: React.FC = () => {
       setError("Failed to load data");
       setLoading(false);
     }
-  }, [dispatch, loadHierarchyData, loadPendingRequests]);
+  }, [dispatch, loadHierarchyData, isSuperAdmin]);
 
   useEffect(() => {
     const checkAccessAndLoad = async () => {
@@ -418,18 +394,7 @@ export const AdminManagement: React.FC = () => {
   const handleEditClick = (user: AppUser) => {
     if (!isSuperAdmin()) return;
     setEditUser(user);
-    setEditMode("full");
     setSelectedRole(user.role);
-    setSelectedLocations(user.locations || []);
-    setEditDialogOpen(true);
-  };
-
-  const handleEditLocationsClick = (user: AppUser) => {
-    if (!isSuperAdmin()) return;
-    setEditUser(user);
-    setEditMode("locations");
-    setSelectedRole("admin");
-    setSelectedLocations(user.locations || []);
     setEditDialogOpen(true);
   };
 
@@ -440,9 +405,10 @@ export const AdminManagement: React.FC = () => {
     try {
       await dispatch(
         updateAdminUser({
+          // Role-only change: preserve the user's existing locations unchanged.
           userId: editUser.id,
           role: selectedRole,
-          locations: selectedRole === "superadmin" ? [] : selectedLocations,
+          locations: editUser.locations || [],
           modifiedBy: userProfile?.id || null,
         }),
       ).unwrap();
@@ -499,44 +465,6 @@ export const AdminManagement: React.FC = () => {
       setError(err?.message || "Failed to update block status");
     } finally {
       setBlockBusy(false);
-    }
-  };
-
-  const handleLocationToggle = (locationId: string) => {
-    setSelectedLocations((prev) =>
-      prev.includes(locationId)
-        ? prev.filter((v) => v !== locationId)
-        : [...prev, locationId],
-    );
-  };
-
-  const handleReviewRequest = async (
-    requestId: string,
-    action: "approved" | "rejected",
-  ) => {
-    try {
-      const userId = userProfile?.id;
-      if (!userId) {
-        throw new Error("User profile not loaded");
-      }
-      const data = await dispatch(
-        reviewLocationAccessRequest({
-          userId,
-          requestId,
-          action,
-          reviewNote: null,
-        }),
-      ).unwrap();
-      if (data && !data.success) throw new Error(data.error);
-
-      setSuccessMessage(
-        `Request ${action === "approved" ? "approved" : "rejected"} successfully`,
-      );
-      await loadData();
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (err: any) {
-      console.error("Error reviewing request:", err);
-      setError(err.message || "Failed to review request");
     }
   };
 
@@ -789,6 +717,17 @@ export const AdminManagement: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Box sx={{textAlign: "right" }}>
+                      {isSuperAdmin() && (
+                        <Tooltip title="Edit user (role & access)">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleEditClick(user)}
+                          >
+                            <Edit />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       {isSuperAdmin() && !user.isVerified && (
                         <Tooltip title="Approve User">
                           <IconButton
@@ -1186,65 +1125,17 @@ export const AdminManagement: React.FC = () => {
               Email: {editUser?.email}
             </Typography>
 
-            {editMode === "full" && (
-              <FormControl fullWidth sx={{ mb: 3 }}>
-                <InputLabel>Role</InputLabel>
-                <Select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as UserRole)}
-                  label="Role"
-                >
-                  <MenuItem value="admin">Admin</MenuItem>
-                  <MenuItem value="superadmin">Super Admin</MenuItem>
-                </Select>
-              </FormControl>
-            )}
-
-            {(selectedRole === "admin" || editMode === "locations") && (
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Assign Locations:
-                </Typography>
-                {locationsList.length === 0 ? (
-                  <Typography variant="caption" color="text.secondary">
-                    No locations available
-                  </Typography>
-                ) : (
-                  <Box
-                    sx={{ display: "flex", flexDirection: "column", gap: 1 }}
-                  >
-                    {locationsList.map((location) => (
-                      <Box
-                        key={location.id}
-                        sx={{
-                          display: "flex",
-                          alignItems: "center",
-                          p: 1,
-                          border: 1,
-                          borderColor: selectedLocations.includes(location.id)
-                            ? "primary.main"
-                            : "divider",
-                          borderRadius: 1,
-                          cursor: "pointer",
-                          bgcolor: selectedLocations.includes(location.id)
-                            ? "action.selected"
-                            : "transparent",
-                        }}
-                        onClick={() => handleLocationToggle(location.id)}
-                      >
-                        <Typography>{location.name}</Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            )}
-
-            {selectedRole === "superadmin" && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                Super admins have access to all locations automatically.
-              </Alert>
-            )}
+            <FormControl fullWidth>
+              <InputLabel>Role</InputLabel>
+              <Select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                label="Role"
+              >
+                <MenuItem value="admin">Admin</MenuItem>
+                <MenuItem value="superadmin">Super Admin</MenuItem>
+              </Select>
+            </FormControl>
           </Box>
         </DialogContent>
         <DialogActions>

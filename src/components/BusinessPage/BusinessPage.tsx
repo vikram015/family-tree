@@ -40,8 +40,6 @@ import ApartmentIcon from "@mui/icons-material/Apartment";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import CategoryIcon from "@mui/icons-material/Category";
-import NotesIcon from "@mui/icons-material/Notes";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
 import SearchIcon from "@mui/icons-material/Search";
@@ -105,18 +103,6 @@ interface Profession {
   category?: string;
 }
 
-interface PersonSearchResult {
-  id: string;
-  name: string;
-  gender?: string;
-  dob?: string;
-  treeId: string;
-  hierarchy: any[];
-  locationName?: string;
-  casteName?: string;
-  subCasteName?: string;
-}
-
 const buildFamilyPagePath = (treeId?: string, personId?: string): string => {
   const params = new URLSearchParams();
   if (treeId) params.set("tree", treeId);
@@ -153,25 +139,6 @@ const cardSx = {
     transform: "translateY(-4px)",
     borderColor: "rgba(13,110,253,0.28)",
     boxShadow: "0 16px 36px rgba(15,23,42,0.1)",
-  },
-};
-
-const dialogFieldSx = {
-  "& .MuiInputAdornment-root": {
-    color: mutedText,
-  },
-  "& .MuiOutlinedInput-root": {
-    borderRadius: 2,
-    bgcolor: brand.surface,
-    "& fieldset": {
-      borderColor: "rgba(15,23,42,0.14)",
-    },
-    "&:hover fieldset": {
-      borderColor: "rgba(13,110,253,0.45)",
-    },
-    "&.Mui-focused fieldset": {
-      borderColor: businessBlue,
-    },
   },
 };
 
@@ -308,7 +275,6 @@ export const BusinessPage: React.FC = () => {
 
   // Local component state
   const [categories, setCategories] = useState<BusinessCategory[]>([]);
-  const [people, setPeople] = useState<PersonSearchResult[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
@@ -320,15 +286,6 @@ export const BusinessPage: React.FC = () => {
     useState<Profession | null>(null);
   const [newProfessionName, setNewProfessionName] = useState("");
   const [professionSearchInput, setProfessionSearchInput] = useState("");
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "",
-    description: "",
-    owner: "",
-    ownerId: "",
-    contact: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const defaultLocationAppliedForUserRef = useRef<string | null>(null);

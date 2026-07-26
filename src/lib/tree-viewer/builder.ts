@@ -66,9 +66,6 @@ class TreeBuilder {
   create() {
     let opts = this.opts;
     let nodeSize = this.nodeSize;
-    let duration = opts.duration ?? 750;
-    let siblingDelay = duration > 0 ? 200 : 0;
-
     let width = opts.width + opts.margin.left + opts.margin.right;
     let height = opts.height + opts.margin.top + opts.margin.bottom;
 
