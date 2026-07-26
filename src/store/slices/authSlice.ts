@@ -26,6 +26,8 @@ type BackendUserProfile = {
   peopleId?: string | null;
   name?: string | null;
   phone?: string | null;
+  gender?: string | null;
+  dob?: string | null;
   isVerified?: boolean | null;
   isBlocked?: boolean | null;
   blockedReason?: string | null;
@@ -44,6 +46,8 @@ function mapBackendUserToAppUser(row: BackendUserProfile): AppUser {
     displayName: row.name || undefined,
     name: row.name || undefined,
     phone: row.phone || undefined,
+    gender: row.gender || undefined,
+    dob: row.dob || undefined,
     isVerified: row.isVerified ?? undefined,
     isBlocked: row.isBlocked ?? undefined,
     blockedReason: row.blockedReason ?? null,
@@ -102,11 +106,15 @@ export const updateUserProfile = createAsyncThunk(
       phone,
       email,
       privacyPolicyAccepted,
+      gender,
+      dob,
     }: {
       name: string;
       phone: string;
       email?: string;
       privacyPolicyAccepted?: boolean;
+      gender?: string;
+      dob?: string;
     },
     { rejectWithValue },
   ) => {
@@ -116,6 +124,8 @@ export const updateUserProfile = createAsyncThunk(
         phone,
         email,
         privacyPolicyAccepted,
+        gender,
+        dob,
       });
       return mapBackendUserToAppUser(row);
     } catch (error: any) {

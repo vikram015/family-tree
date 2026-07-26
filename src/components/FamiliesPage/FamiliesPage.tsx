@@ -475,11 +475,20 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         } else if (relation === "parent" && targetId) {
           // Adding a parent to target: target → parent → new_person
           // We store it as: new_person is the related_person, but mark it as reverse
+          const targetNode = nodes.find((n) => n.id === targetId);
+          // A person can have at most two parents; block a third (the backend
+          // also rejects this — this is a friendlier client-side guard).
+          if ((targetNode?.parents?.length ?? 0) >= 2) {
+            showSnackbar(
+              `${targetNode?.name || "This person"} already has two parents.`,
+              "warning",
+            );
+            return;
+          }
           relationType = "parent";
           relatedPersonId = targetId;
           // If the child already has another parent, pass it so the backend
           // can maintain spouse linkage between parents.
-          const targetNode = nodes.find((n) => n.id === targetId);
           if (targetNode?.parents && targetNode.parents.length > 0) {
             const preferredParent = targetNode.parents.find((p) => {
               const parentNode = nodes.find((n) => n.id === p.id);

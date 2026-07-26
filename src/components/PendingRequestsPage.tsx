@@ -11,8 +11,10 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
   Paper,
   Stack,
+  Tooltip,
   Table,
   TableBody,
   TableCell,
@@ -22,6 +24,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useNavigate } from "react-router-dom";
 import { ApiService, LinkRequest } from "../services/apiService";
 
@@ -143,13 +146,38 @@ export const PendingRequestsPage: React.FC = () => {
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, md: 4 } }}>
       <Stack spacing={2.5}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Pending Requests
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Review requests that need your approval.
-          </Typography>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 1,
+          }}
+        >
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 800 }}>
+              Pending Requests
+            </Typography>
+            <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+              Review requests that need your approval.
+            </Typography>
+          </Box>
+          <Tooltip title="Refresh" arrow>
+            <span>
+              <IconButton
+                onClick={() => void loadRequests()}
+                disabled={loading}
+                aria-label="Refresh requests"
+                sx={{ mt: 0.5 }}
+              >
+                {loading ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  <RefreshIcon />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
         </Box>
 
         {error && <Alert severity="error">{error}</Alert>}

@@ -17,6 +17,7 @@ import { brand } from "../../theme/brand";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import EmailIcon from "@mui/icons-material/Email";
 import LinkedInIcon from "@mui/icons-material/LinkedIn";
+import InstagramIcon from "@mui/icons-material/Instagram";
 import PhoneIcon from "@mui/icons-material/Phone";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import FamilyRestroomIcon from "@mui/icons-material/FamilyRestroom";
@@ -243,6 +244,25 @@ export const ContactPage: React.FC = () => {
                       </Stack>
                       <Link href={linkedInUrl} target="_blank" rel="noreferrer" underline="hover">
                         {data.linkedin}
+                      </Link>
+                    </CardContent>
+                  </Card>
+
+                  <Card variant="outlined" sx={{ borderRadius: 2.5 }}>
+                    <CardContent>
+                      <Stack direction="row" spacing={1.2} alignItems="center" sx={{ mb: 0.5 }}>
+                        <InstagramIcon sx={{ color: "#e1306c" }} />
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Instagram
+                        </Typography>
+                      </Stack>
+                      <Link
+                        href="https://www.instagram.com/kinvia_in?igsh=MWVpeGg1YTJoOHp1eA%3D%3D&utm_source=qr"
+                        target="_blank"
+                        rel="noreferrer"
+                        underline="hover"
+                      >
+                        @kinvia_in
                       </Link>
                     </CardContent>
                   </Card>

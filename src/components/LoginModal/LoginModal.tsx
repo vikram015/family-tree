@@ -51,6 +51,47 @@ function formatCooldown(seconds: number) {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
+// Map raw Firebase auth error codes to friendly, user-facing copy. We never show
+// the raw Firebase code/message to the user — technical details are logged to the
+// console for debugging instead.
+const GENERIC_SEND_ERROR =
+  "We couldn't send the OTP right now. Please try again in a moment.";
+const GENERIC_VERIFY_ERROR =
+  "We couldn't verify that code. Please try again.";
+
+function getFriendlySendOtpError(code: string): string {
+  switch (code) {
+    case "auth/invalid-phone-number":
+    case "auth/missing-phone-number":
+      return "Please enter a valid 10-digit mobile number.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Please wait a while before trying again.";
+    case "auth/quota-exceeded":
+      return "We're unable to send OTPs at the moment. Please try again later.";
+    case "auth/captcha-check-failed":
+      return "Verification failed. Please reload the page and try again.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your connection and try again.";
+    default:
+      return GENERIC_SEND_ERROR;
+  }
+}
+
+function getFriendlyVerifyOtpError(code: string): string {
+  switch (code) {
+    case "auth/invalid-verification-code":
+      return "The code you entered is incorrect. Please try again.";
+    case "auth/code-expired":
+      return "This code has expired. Please request a new OTP.";
+    case "auth/missing-verification-code":
+      return "Please enter the code we sent you.";
+    case "auth/network-request-failed":
+      return "Network error. Please check your connection and try again.";
+    default:
+      return GENERIC_VERIFY_ERROR;
+  }
+}
+
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
@@ -202,22 +243,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         message,
         fullPhoneNumber,
       });
-      if (
-        code === "auth/invalid-app-credential" ||
-        message.includes("INVALID_APP_CREDENTIAL")
-      ) {
-        setError(
-          "Firebase rejected app credentials (auth/invalid-app-credential). Check Authorized Domains, Phone provider is enabled, and API key restrictions allow Identity Toolkit.",
-        );
-      } else if (code === "auth/captcha-check-failed") {
-        setError("reCAPTCHA verification failed. Reload and try again.");
-      } else if (code === "auth/unauthorized-domain") {
-        setError(
-          "Current domain is not authorized for Firebase Auth. Add it in Firebase Console > Authentication > Settings > Authorized domains.",
-        );
-      } else {
-        setError(code ? `${code}: ${message}` : message);
-      }
+      setError(getFriendlySendOtpError(code));
       return false;
     } finally {
       setLoading(false);
@@ -263,7 +289,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       resetOtpFlow();
       onSuccess?.();
     } catch (err: any) {
-      setError(err?.message || "Invalid OTP");
+      const code = err?.code || "";
+      // Log technical details for debugging; show friendly copy to the user.
+      // eslint-disable-next-line no-console
+      console.error("Phone auth verify OTP failed", {
+        err,
+        code,
+        message: err?.message,
+      });
+      setError(getFriendlyVerifyOtpError(code));
     } finally {
       setLoading(false);
     }
@@ -396,15 +430,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <Stack direction="row" spacing={1.25} alignItems="center">
             <Box
               component="img"
-              src="/favicon2.png"
+              src="/favic_no_background.png"
               alt="Kinvia"
               sx={{
                 width: 34,
                 height: 34,
-                borderRadius: 1.5,
                 display: "block",
-                boxShadow: "0 6px 16px rgba(15,23,42,0.16)",
-                bgcolor: brand.surface,
               }}
             />
             <Typography

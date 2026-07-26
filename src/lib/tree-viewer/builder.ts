@@ -104,22 +104,22 @@ class TreeBuilder {
     // Windows Touch Fix removed: D3 v7 handles touch events natively.
     // Preserving comment for history: Was previously needed for D3v4.
 
-    // Add grid pattern definitions
+    // Add dotted pattern definitions
     const defs = svg.append('defs');
     const gridSize = 30; // Distance between dots
-    
-    // Grid line pattern
+
+    // Dotted pattern (a single dot per tile)
     const pattern = defs.append('pattern')
         .attr('id', 'grid-line-pattern')
         .attr('width', gridSize)
         .attr('height', gridSize)
         .attr('patternUnits', 'userSpaceOnUse');
-        
-    pattern.append('path')
-        .attr('d', `M ${gridSize} 0 L 0 0 0 ${gridSize}`)
-        .attr('fill', 'none')
-        .attr('stroke', '#e0e0e0')
-        .attr('stroke-width', 1);
+
+    pattern.append('circle')
+        .attr('cx', gridSize / 2)
+        .attr('cy', gridSize / 2)
+        .attr('r', 1.5)
+        .attr('fill', '#d0d0d0');
 
     // Add a rectangle with the grid pattern as background
     // Restored large dimensions to cover "gutters" (outside viewBox) when overflow is visible

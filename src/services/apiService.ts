@@ -122,7 +122,8 @@ export interface LocationCombinationOption {
 export type LinkRequestType =
   | "user_to_tree_node"
   | "branch_access_request"
-  | "spouse_link_request";
+  | "spouse_link_request"
+  | "user_add_to_tree";
 export type LinkRequestStatus = "pending" | "approved" | "rejected";
 
 export interface FamilyBirthday {
@@ -886,6 +887,7 @@ export const ApiService = {
       category: business.category || null,
       description: business.description || null,
       contact: business.contact || null,
+      email: business.email || null,
       peopleId: business.peopleId || null,
     });
   },
@@ -900,6 +902,7 @@ export const ApiService = {
       description: updates.description,
       peopleId: updates.peopleId,
       contact: updates.contact,
+      email: updates.email,
       isDeleted: updates.isDeleted,
     });
   },
@@ -986,6 +989,25 @@ export const ApiService = {
    */
   async createProfession(profession: { name: string; description?: string; category?: string }): Promise<any> {
     return backendApi.post<any>('/api/profession', profession);
+  },
+
+  /**
+   * Submit user feedback (bug / suggestion / other).
+   */
+  async submitFeedback(payload: {
+    message: string;
+    category?: string;
+    rating?: number | null;
+    context?: string | null;
+  }): Promise<any> {
+    return backendApi.post<any>('/api/feedback', payload);
+  },
+
+  /**
+   * Superadmin: list all feedback submitted by all users.
+   */
+  async getAllFeedback(): Promise<any[]> {
+    return backendApi.get<any[]>('/api/feedback');
   },
 
   /**
@@ -1081,6 +1103,14 @@ export const ApiService = {
     requestMessage?: string | null;
   }): Promise<LinkRequest> {
     return backendApi.post<LinkRequest>("/api/link-requests/branch-access", payload);
+  },
+
+  async createAddToTreeRequest(payload: {
+    targetTreeId: string;
+    relativePersonId?: string | null;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/add-to-tree", payload);
   },
 
   async createSpouseLinkRequest(payload: {

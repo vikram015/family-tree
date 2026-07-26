@@ -20,6 +20,8 @@ import {
   InputAdornment,
   ListItemButton,
   ListItemText,
+  Snackbar,
+  Alert,
   TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
@@ -29,7 +31,14 @@ import LocationOnIcon from "@mui/icons-material/LocationOn";
 import LogoutIcon from "@mui/icons-material/Logout";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import FeedbackOutlinedIcon from "@mui/icons-material/FeedbackOutlined";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
+import { FeedbackDialog } from "../Feedback/FeedbackDialog";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
@@ -55,6 +64,8 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [actionableRequestCount, setActionableRequestCount] = useState(0);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackSnackbarOpen, setFeedbackSnackbarOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
@@ -159,6 +170,18 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
     setAvatarMenuAnchorEl(null);
   };
 
+  // Feedback is visible to everyone, but only authenticated users can submit.
+  // Guests are routed to login first.
+  const handleFeedbackClick = () => {
+    handleCloseAvatarMenu();
+    setDrawerOpen(false);
+    if (currentUser) {
+      setFeedbackOpen(true);
+    } else {
+      navigate("/login");
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -169,18 +192,21 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   };
 
   const navLinks = [
-    { label: "Home", path: "/" },
-    { label: "Business", path: "/business" },
+    { label: "Home", path: "/", icon: <HomeOutlinedIcon fontSize="small" /> },
+    { label: "Business", path: "/business", icon: <BusinessOutlinedIcon fontSize="small" /> },
     // { label: "Heritage", path: "/heritage" },
-    { label: "Families", path: "/families" },
-    { label: "About", path: "/about" },
+    { label: "Families", path: "/families", icon: <GroupsOutlinedIcon fontSize="small" /> },
+    { label: "About", path: "/about", icon: <InfoOutlinedIcon fontSize="small" /> },
     // Contact page hidden for now (kept in code, just not linked).
     // { label: "Contact", path: "/contact" },
   ];
 
   // Add admin link for superadmin
   const allNavLinks = isSuperAdmin()
-    ? [...navLinks, { label: "Admin", path: "/admin" }]
+    ? [
+        ...navLinks,
+        { label: "Admin", path: "/admin", icon: <AdminPanelSettingsOutlinedIcon fontSize="small" /> },
+      ]
     : navLinks;
 
   const isActive = (path: string) => {
@@ -246,6 +272,8 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             <Button
               fullWidth
               variant={isActive(link.path) ? "contained" : "outlined"}
+              startIcon={link.icon}
+              sx={{ justifyContent: "flex-start" }}
               onClick={() => {
                 setDrawerOpen(false);
                 void handleNavLinkClick(link.path);
@@ -334,6 +362,11 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                   <ListItemText primary="Profile" />
                 </ListItemButton>
               </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton onClick={handleFeedbackClick}>
+                  <ListItemText primary="Feedback" />
+                </ListItemButton>
+              </ListItem>
             </List>
             <Button
               fullWidth
@@ -350,26 +383,43 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             </Button>
           </>
         ) : (
-          <Button
-            fullWidth
-            variant="contained"
-            disableElevation
-            startIcon={<LoginIcon />}
-            component={Link}
-            to="/login"
-            onClick={() => setDrawerOpen(false)}
-            sx={{
-              textTransform: "none",
-              fontWeight: 700,
-              borderRadius: 2,
-              py: 1,
-              color: "#fff",
-              background: brandGradient,
-              "&:hover": { background: brandGradient },
-            }}
-          >
-            Login
-          </Button>
+          <>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<FeedbackOutlinedIcon />}
+              onClick={handleFeedbackClick}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderRadius: 2,
+                py: 1,
+                mb: 1.5,
+              }}
+            >
+              Feedback
+            </Button>
+            <Button
+              fullWidth
+              variant="contained"
+              disableElevation
+              startIcon={<LoginIcon />}
+              component={Link}
+              to="/login"
+              onClick={() => setDrawerOpen(false)}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderRadius: 2,
+                py: 1,
+                color: "#fff",
+                background: brandGradient,
+                "&:hover": { background: brandGradient },
+              }}
+            >
+              Login
+            </Button>
+          </>
         )}
       </Box>
     </Box>
@@ -405,7 +455,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               }}
             >
               <img
-                src="/favicon.png"
+                src="/favic_no_background.png"
                 alt="Kinvia"
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
@@ -466,7 +516,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               }}
             >
               <img
-                src="/favicon.png"
+                src="/favic_no_background.png"
                 alt="Kinvia"
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
@@ -498,6 +548,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                   <Button
                     key={link.path}
                     color="inherit"
+                    startIcon={link.icon}
                     onClick={() => {
                       void handleNavLinkClick(link.path);
                     }}
@@ -627,6 +678,10 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                       <PersonOutlineIcon fontSize="small" sx={{ mr: 1.25 }} />
                       Profile
                     </MenuItem>
+                    <MenuItem onClick={handleFeedbackClick}>
+                      <FeedbackOutlinedIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Feedback
+                    </MenuItem>
                     <MenuItem
                       onClick={() => {
                         handleCloseAvatarMenu();
@@ -640,31 +695,51 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                   </Menu>
                 </Box>
               ) : (
-                <Button
-                  startIcon={<LoginIcon />}
-                  component={Link}
-                  to="/login"
-                  variant="contained"
-                  disableElevation
-                  sx={{
-                    textTransform: "none",
-                    fontWeight: 700,
-                    borderRadius: 999,
-                    px: 2.25,
-                    py: 0.75,
-                    color: "#fff",
-                    background: brandGradient,
-                    boxShadow: "0 4px 14px rgba(15,118,110,0.28)",
-                    transition: "transform 160ms ease, box-shadow 160ms ease",
-                    "&:hover": {
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Button
+                    color="inherit"
+                    startIcon={<FeedbackOutlinedIcon />}
+                    onClick={handleFeedbackClick}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 600,
+                      borderRadius: 999,
+                      px: 1.5,
+                      color: brand.slate,
+                      "&:hover": {
+                        color: brand.primary,
+                        bgcolor: brand.primarySoft,
+                      },
+                    }}
+                  >
+                    Feedback
+                  </Button>
+                  <Button
+                    startIcon={<LoginIcon />}
+                    component={Link}
+                    to="/login"
+                    variant="contained"
+                    disableElevation
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      px: 2.25,
+                      py: 0.75,
+                      color: "#fff",
                       background: brandGradient,
-                      boxShadow: "0 6px 18px rgba(15,118,110,0.38)",
-                      transform: "translateY(-1px)",
-                    },
-                  }}
-                >
-                  Login
-                </Button>
+                      boxShadow: "0 4px 14px rgba(15,118,110,0.28)",
+                      transition: "transform 160ms ease, box-shadow 160ms ease",
+                      "&:hover": {
+                        background: brandGradient,
+                        boxShadow: "0 6px 18px rgba(15,118,110,0.38)",
+                        transform: "translateY(-1px)",
+                      },
+                    }}
+                  >
+                    Login
+                  </Button>
+                </Box>
               )}
             </Box>
           )}
@@ -815,6 +890,28 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
           />
         </Box>
       </Dialog>
+
+      <FeedbackDialog
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmitted={() => setFeedbackSnackbarOpen(true)}
+      />
+
+      <Snackbar
+        open={feedbackSnackbarOpen}
+        autoHideDuration={5000}
+        onClose={() => setFeedbackSnackbarOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setFeedbackSnackbarOpen(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          Thanks for your feedback!
+        </Alert>
+      </Snackbar>
     </>
   );
 };

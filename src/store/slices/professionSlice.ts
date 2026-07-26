@@ -77,6 +77,11 @@ export const fetchProfessionsData = createAsyncThunk(
                 gender: person.gender,
                 dob: person.personDob || '',
                 treeId: person.treeId,
+                // Carry identity context so the profession card can show the
+                // same hierarchy/caste tooltip as the business card.
+                casteName: person.casteName,
+                subCasteName: person.subCasteName,
+                parentHierarchy: person.parentHierarchy,
                 parents: [] as any,
                 children: [] as any,
                 siblings: [] as any,

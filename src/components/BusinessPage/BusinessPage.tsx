@@ -66,7 +66,7 @@ import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "./PersonSearchField";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { FNode } from "../model/FNode";
-import { brand } from "../../theme/brand";
+import { brand, pageGradient } from "../../theme/brand";
 
 interface Business {
   id: string;
@@ -738,7 +738,7 @@ export const BusinessPage: React.FC = () => {
       {/* Hero Section */}
       <Box
         sx={{
-          bgcolor: brand.surface,
+          background: pageGradient,
           color: slateText,
           py: { xs: 4, md: 6 },
           borderBottom: "1px solid rgba(15,23,42,0.08)",
@@ -1200,7 +1200,7 @@ export const BusinessPage: React.FC = () => {
                     variant="contained"
                     size="small"
                     startIcon={<AddIcon />}
-                    sx={primaryButtonSx}
+                    sx={{ ...primaryButtonSx, whiteSpace: "nowrap", flexShrink: 0 }}
                     onClick={() => {
                       // Open profession dialog for selecting a person
                       setSelectedPersonForProfession(null);
@@ -1244,23 +1244,60 @@ export const BusinessPage: React.FC = () => {
                     >
                       <Stack spacing={2}>
                         <Box>
-                          <Typography
-                            variant="h6"
-                            component="span"
-                            onClick={() =>
-                              navigate(`/profile/person/${item.person.id}`)
+                          <Tooltip
+                            title={
+                              <Box sx={{ p: 1 }}>
+                                <Typography
+                                  variant="body2"
+                                  sx={{ fontWeight: 600 }}
+                                >
+                                  {item.person.name}
+                                </Typography>
+                                {(item.person as any).casteName && (
+                                  <Typography variant="caption" display="block">
+                                    Caste: {(item.person as any).casteName}
+                                  </Typography>
+                                )}
+                                {(item.person as any).subCasteName && (
+                                  <Typography variant="caption" display="block">
+                                    Sub-Caste: {(item.person as any).subCasteName}
+                                  </Typography>
+                                )}
+                                <Typography
+                                  variant="caption"
+                                  display="block"
+                                  sx={{ mt: 1 }}
+                                >
+                                  🧬{" "}
+                                  {(item.person as any).parentHierarchy &&
+                                  (item.person as any).parentHierarchy.length > 0
+                                    ? (item.person as any).parentHierarchy
+                                        .slice(-5)
+                                        .map((a: any) => a.name)
+                                        .join(" → ")
+                                    : "No ancestry data"}
+                                </Typography>
+                              </Box>
                             }
-                            sx={{
-                              fontWeight: 700,
-                              color: businessBlue,
-                              cursor: "pointer",
-                              textDecoration: "underline",
-                              "&:hover": { color: brand.primaryDark },
-                              transition: "all 0.2s",
-                            }}
                           >
-                            {item.person.name}
-                          </Typography>
+                            <Typography
+                              variant="h6"
+                              component="span"
+                              onClick={() =>
+                                navigate(`/profile/person/${item.person.id}`)
+                              }
+                              sx={{
+                                fontWeight: 700,
+                                color: businessBlue,
+                                cursor: "pointer",
+                                textDecoration: "underline",
+                                "&:hover": { color: brand.primaryDark },
+                                transition: "all 0.2s",
+                              }}
+                            >
+                              {item.person.name}
+                            </Typography>
+                          </Tooltip>
                         </Box>
 
                         <Box>
@@ -1314,6 +1351,7 @@ export const BusinessPage: React.FC = () => {
                               handleOpenProfessionDialog(item.person)
                             }
                             startIcon={<AddIcon />}
+                            sx={{ whiteSpace: "nowrap", alignSelf: "flex-start" }}
                           >
                             Add Profession
                           </Button>

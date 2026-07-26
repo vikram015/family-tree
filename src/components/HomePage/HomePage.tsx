@@ -51,7 +51,7 @@ import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
 import { AnimatedCounter } from "../common/AnimatedCounter";
-import { brand } from "../../theme/brand";
+import { brand, pageGradient } from "../../theme/brand";
 
 interface SearchResult {
   id: string;
@@ -570,7 +570,7 @@ export const HomePage: React.FC = () => {
 
       <Box
         sx={{
-          background: `linear-gradient(120deg, ${brand.warmSoft} 0%, ${brand.warm} 55%, ${brand.warmSoft} 100%)`,
+          background: pageGradient,
           borderBottom: "1px solid",
           borderColor: "divider",
         }}

@@ -13,7 +13,7 @@ import {
   Divider,
   Link,
 } from "@mui/material";
-import { brand } from "../../theme/brand";
+import { brand, pageGradient } from "../../theme/brand";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
@@ -23,6 +23,7 @@ import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import HistoryEduOutlinedIcon from "@mui/icons-material/HistoryEduOutlined";
 import PhoneIphoneOutlinedIcon from "@mui/icons-material/PhoneIphoneOutlined";
 import LinkedInIcon from "@mui/icons-material/LinkedIn";
+import InstagramIcon from "@mui/icons-material/Instagram";
 
 const features = [
   {
@@ -72,8 +73,7 @@ export const AboutPage: React.FC = () => {
 
       <Box
         sx={{
-          background:
-            `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
+          background: `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
           minHeight: "100%",
           py: { xs: 4, md: 6 },
         }}
@@ -92,8 +92,7 @@ export const AboutPage: React.FC = () => {
             <Box
               sx={{
                 p: { xs: 3, md: 5 },
-                background:
-                  "linear-gradient(135deg, rgba(180,83,9,0.12), rgba(15,118,110,0.12))",
+                background: pageGradient,
               }}
             >
               <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1.15 }}>
@@ -201,6 +200,20 @@ export const AboutPage: React.FC = () => {
                       underline="hover"
                     >
                       LinkedIn
+                    </Link>
+                  </Typography>
+                </Stack>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                  <InstagramIcon sx={{ color: "#e1306c" }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Follow us on{" "}
+                    <Link
+                      href="https://www.instagram.com/kinvia_in?igsh=MWVpeGg1YTJoOHp1eA%3D%3D&utm_source=qr"
+                      target="_blank"
+                      rel="noreferrer"
+                      underline="hover"
+                    >
+                      Instagram
                     </Link>
                   </Typography>
                 </Stack>

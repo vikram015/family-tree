@@ -20,12 +20,14 @@ import BusinessIcon from "@mui/icons-material/Business";
 import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
 import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
+import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import { ApiService } from "../../services/apiService";
 import {
   BUSINESS_CATEGORY_OPTIONS,
   isPresetCategory,
 } from "./businessCategories";
+import { phoneFromCustomFields } from "./businessContact";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 
 const CUSTOM_CATEGORY = "__custom__";
@@ -36,6 +38,7 @@ export interface BusinessFormValue {
   category?: string | null;
   description?: string | null;
   contact?: string | null;
+  email?: string | null;
   owner?: string | null;
   ownerId?: string | null;
 }
@@ -76,6 +79,7 @@ export function BusinessFormDialog({
   const [customCategory, setCustomCategory] = useState("");
   const [description, setDescription] = useState("");
   const [contact, setContact] = useState("");
+  const [email, setEmail] = useState("");
   const [owner, setOwner] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -87,6 +91,7 @@ export function BusinessFormDialog({
     setName(b.name || "");
     setDescription(b.description || "");
     setContact(b.id ? b.contact || "" : b.contact || defaultContact || "");
+    setEmail(b.email || "");
     setOwner(b.owner || "");
     setOwnerId(b.ownerId || "");
 
@@ -116,9 +121,17 @@ export function BusinessFormDialog({
       setError("Business name is required.");
       return;
     }
+    if (!resolvedCategory) {
+      setError("Category is required.");
+      return;
+    }
     const resolvedPersonId = enableOwnerSelect ? ownerId || null : personId || null;
     if (enableOwnerSelect && !resolvedPersonId) {
       setError("Please select an owner for this business.");
+      return;
+    }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -130,6 +143,7 @@ export function BusinessFormDialog({
         category: resolvedCategory,
         description: description.trim() || null,
         contact: contact.trim() || null,
+        email: email.trim() || null,
         peopleId: resolvedPersonId,
       };
       const result = business?.id
@@ -173,16 +187,18 @@ export function BusinessFormDialog({
             InputProps={{ startAdornment: adornment(<BusinessIcon fontSize="small" />) }}
           />
 
-          <FormControl fullWidth>
-            <InputLabel shrink>Category (optional)</InputLabel>
+          <FormControl fullWidth required>
+            <InputLabel shrink>Category</InputLabel>
             <Select
               value={categorySelect}
               onChange={(e) => setCategorySelect(e.target.value)}
-              label="Category (optional)"
+              label="Category"
               displayEmpty
               startAdornment={adornment(<CategoryOutlinedIcon fontSize="small" />)}
             >
-              <MenuItem value="">No category</MenuItem>
+              <MenuItem value="" disabled>
+                Select a category
+              </MenuItem>
               {BUSINESS_CATEGORY_OPTIONS.map((category) => (
                 <MenuItem key={category.id} value={category.id}>
                   {category.displayName}
@@ -222,9 +238,17 @@ export function BusinessFormDialog({
               placeholder="Enter owner name and search"
               searchValue={owner}
               onSearchValueChange={(value) => setOwner(value)}
-              onPersonSelect={(person) => {
+              onPersonSelect={async (person) => {
                 setOwner(person?.name || "");
                 setOwnerId(person?.id || "");
+                if (person?.id && !contact.trim()) {
+                  try {
+                    const map = await ApiService.getPersonCustomFields(person.id);
+                    setContact(phoneFromCustomFields(map) || "");
+                  } catch {
+                    // ignore failures silently
+                  }
+                }
               }}
               selectedPerson={ownerId ? { id: ownerId, name: owner } : null}
               locationId={locationId}
@@ -242,6 +266,16 @@ export function BusinessFormDialog({
             InputProps={{ startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />) }}
           />
 
+          <TextField
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            fullWidth
+            placeholder="Email (optional)"
+            InputProps={{ startAdornment: adornment(<EmailOutlinedIcon fontSize="small" />) }}
+          />
+
           {error && <FormHelperText error>{error}</FormHelperText>}
         </Stack>
       </DialogContent>
@@ -249,7 +283,11 @@ export function BusinessFormDialog({
         <Button onClick={onClose} disabled={saving} color="inherit">
           Cancel
         </Button>
-        <Button onClick={handleSave} variant="contained" disabled={saving || !name.trim()}>
+        <Button
+          onClick={handleSave}
+          variant="contained"
+          disabled={saving || !name.trim() || !resolvedCategory}
+        >
           {saving ? "Saving…" : isEdit ? "Update Business" : "Add Business"}
         </Button>
       </DialogActions>

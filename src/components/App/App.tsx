@@ -27,6 +27,8 @@ import { BusinessPage } from "../BusinessPage/BusinessPage";
 import { FamousPage } from "../FamousPage/FamousPage";
 import { ContactPage } from "../Contact/ContactPage";
 import { AboutPage } from "../AboutPage/AboutPage";
+import { FAQPage } from "../FAQ/FAQPage";
+import { Footer } from "../Footer/Footer";
 import { DebugPage } from "../DebugPage/DebugPage";
 import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
@@ -56,6 +58,14 @@ function AppContent() {
   const navigate = useNavigate();
   const { currentUser, userProfile, loading } = useAuth();
   const treeId = searchParams.get("tree") || "";
+
+  // The footer is shown on standard content pages. It's hidden on full-screen
+  // / self-managed-height routes: the tree view (/families), onboarding, and
+  // the login screen, where a scrolling footer would get in the way.
+  const footerHiddenRoutes = ["/families", "/onboarding", "/login"];
+  const showFooter = !footerHiddenRoutes.some(
+    (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+  );
 
   const setTreeId = useCallback(
     (value: string, options?: { personId?: string | null }) => {
@@ -161,8 +171,26 @@ function AppContent() {
             overflowX: "hidden",
           }}
         >
-          <ErrorBoundary>
-            <Routes>
+          <Box
+            sx={
+              showFooter
+                ? {
+                    // Content pages: column layout so the footer can sit at the
+                    // bottom (grows past the viewport when content is tall).
+                    display: "flex",
+                    flexDirection: "column",
+                    minHeight: "100%",
+                  }
+                : {
+                    // Full-height pages (e.g. FamiliesPage) manage their own
+                    // height — give a definite 100% so height:100% resolves and
+                    // the page isn't shrunk to content height.
+                    height: "100%",
+                  }
+            }
+          >
+            <ErrorBoundary>
+              <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/onboarding" element={<UserOnboardingPage />} />
@@ -207,6 +235,7 @@ function AppContent() {
                   ContactPage import kept so restoring is a one-line uncomment. */}
               {/* <Route path="/contact" element={<ContactPage />} /> */}
               <Route path="/about" element={<AboutPage />} />
+              <Route path="/faq" element={<FAQPage />} />
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />
@@ -214,7 +243,9 @@ function AppContent() {
               <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             </Routes>
-          </ErrorBoundary>
+            </ErrorBoundary>
+            {showFooter && <Footer />}
+          </Box>
         </Box>
       </Box>
     </Box>

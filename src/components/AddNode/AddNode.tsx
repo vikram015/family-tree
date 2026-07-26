@@ -254,6 +254,20 @@ export default function AddNode({
     return nodes.find((n) => n.id === effectiveTargetId);
   }, [effectiveTargetId, nodes]);
 
+  // A person can have at most two parents (the tree only renders two). When the
+  // target already has both, adding another "parent" would create an invisible,
+  // search-only orphan — so the parent option is disabled.
+  const hasBothParents = useMemo(
+    () => (targetNode?.parents?.length ?? 0) >= 2,
+    [targetNode],
+  );
+
+  useEffect(() => {
+    if (hasBothParents && relation === "parent") {
+      setRelation("child");
+    }
+  }, [hasBothParents, relation]);
+
   // other-parent selection for child relation
   const spouseOptions = useMemo(() => {
     if (!nodes || !effectiveTargetId) return [];
@@ -962,7 +976,11 @@ export default function AddNode({
                 fullWidth
               >
                 {RELATION_OPTIONS.map((option) => (
-                  <ToggleButton key={option.value} value={option.value}>
+                  <ToggleButton
+                    key={option.value}
+                    value={option.value}
+                    disabled={option.value === "parent" && hasBothParents}
+                  >
                     <Stack direction="row" spacing={0.75} alignItems="center">
                       {option.icon}
                       <Box component="span">{option.label}</Box>
@@ -970,6 +988,16 @@ export default function AddNode({
                   </ToggleButton>
                 ))}
               </ToggleButtonGroup>
+              {hasBothParents && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block", mt: 1 }}
+                >
+                  {targetNode?.name || "This person"} already has two parents, so a
+                  new parent can't be added.
+                </Typography>
+              )}
             </Paper>
           )}
 
@@ -1501,7 +1529,7 @@ export default function AddNode({
                 </Stack>
               </Paper>
 
-              <Accordion variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+              <Accordion defaultExpanded variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                     Additional details

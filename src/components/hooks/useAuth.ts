@@ -34,6 +34,8 @@ export function useAuth() {
       phone: string,
       email?: string,
       privacyPolicyAccepted?: boolean,
+      gender?: string,
+      dob?: string,
     ) =>
       dispatch(
         updateUserProfileAction({
@@ -41,6 +43,8 @@ export function useAuth() {
           phone,
           email,
           privacyPolicyAccepted,
+          gender,
+          dob,
         }),
       ).unwrap(),
     [dispatch],

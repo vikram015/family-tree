@@ -140,6 +140,7 @@ export const AdminManagement: React.FC = () => {
   const [blockBusy, setBlockBusy] = useState(false);
   const [error, setError] = useState<string>("");
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [feedbackList, setFeedbackList] = useState<any[]>([]);
   const [openingLinkedUserId, setOpeningLinkedUserId] = useState<string | null>(
     null,
   );
@@ -250,6 +251,17 @@ export const AdminManagement: React.FC = () => {
       // Load hierarchy data
       await loadHierarchyData();
       await loadPendingRequests();
+
+      // Feedback is superadmin-only (the GET endpoint 403s otherwise).
+      if (isSuperAdmin()) {
+        try {
+          const feedback = await ApiService.getAllFeedback();
+          setFeedbackList(feedback || []);
+        } catch (feedbackErr) {
+          console.error("Error loading feedback:", feedbackErr);
+          setFeedbackList([]);
+        }
+      }
 
       setLoading(false);
     } catch (err) {
@@ -615,6 +627,13 @@ export const AdminManagement: React.FC = () => {
               label="Sub-Castes"
               id="admin-tab-6"
               aria-controls="admin-tabpanel-6"
+            />
+          )}
+          {isSuperAdmin() && (
+            <Tab
+              label="Feedback"
+              id="admin-tab-feedback"
+              aria-controls="admin-tabpanel-feedback"
             />
           )}
         </Tabs>
@@ -1024,6 +1043,49 @@ export const AdminManagement: React.FC = () => {
                 </Table>
               </TableContainer>
             </>
+          )}
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={6}>
+          {!isSuperAdmin() ? (
+            <Alert severity="info">Only superadmin can view feedback.</Alert>
+          ) : feedbackList.length === 0 ? (
+            <Alert severity="info">No feedback submitted yet.</Alert>
+          ) : (
+            <TableContainer sx={{ overflowX: "auto" }}>
+              <Table size="small" sx={{ minWidth: 720 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell>User</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Rating</TableCell>
+                    <TableCell>Message</TableCell>
+                    <TableCell>Page</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {feedbackList.map((fb) => (
+                    <TableRow key={fb.id}>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {formatDateTime(fb.createdAt)}
+                      </TableCell>
+                      <TableCell>{fb.userName || fb.email || "Anonymous"}</TableCell>
+                      <TableCell sx={{ textTransform: "capitalize" }}>
+                        {fb.category || "-"}
+                      </TableCell>
+                      <TableCell>{fb.rating ? `${fb.rating}/5` : "-"}</TableCell>
+                      <TableCell sx={{ maxWidth: 360, whiteSpace: "pre-wrap" }}>
+                        {fb.message}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {fb.context || "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </TabPanel>
       </Paper>

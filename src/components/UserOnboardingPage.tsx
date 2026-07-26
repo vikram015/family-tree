@@ -17,6 +17,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -34,6 +35,8 @@ import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
+import WcOutlinedIcon from "@mui/icons-material/WcOutlined";
+import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -89,6 +92,13 @@ const ONBOARDING_STEPS = [
   { key: "profile", label: "Your Info" },
   { key: "location", label: "Community" },
   { key: "match", label: "Find Family Tree" },
+] as const;
+// Values MUST match the tree Gender values used on person nodes (see GENDER_OPTIONS
+// in AddNode.tsx) so a user's stored gender is directly comparable to a node's gender.
+const PROFILE_GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other" },
 ] as const;
 const onboardingBlue = brand.primary;
 const onboardingGreen = brand.accent;
@@ -224,6 +234,8 @@ export const UserOnboardingPage: React.FC = () => {
 
   const [profileName, setProfileName] = useState("");
   const [profileEmail, setProfileEmail] = useState("");
+  const [profileGender, setProfileGender] = useState("");
+  const [profileDob, setProfileDob] = useState("");
   const [selectedLocationId, setSelectedLocationId] = useState("");
   const [selectedStateId, setSelectedStateId] = useState("");
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
@@ -772,6 +784,8 @@ export const UserOnboardingPage: React.FC = () => {
     hydratedSnapshotRef.current = snapshot;
     setProfileName(onboarding.profile.name || userProfile?.name || "");
     setProfileEmail(onboarding.profile.email || userProfile?.email || "");
+    setProfileGender(userProfile?.gender || "");
+    setProfileDob(userProfile?.dob || "");
     setMatchSearchName(
       onboarding.match.searchName ||
         onboarding.profile.name ||
@@ -985,6 +999,13 @@ export const UserOnboardingPage: React.FC = () => {
       return;
     }
 
+    if (!profileGender) {
+      setLocalError("Please select your gender.");
+      return;
+    }
+
+    const trimmedDob = profileDob.trim();
+
     setLocalError("");
     setStepOverride("location");
 
@@ -993,6 +1014,9 @@ export const UserOnboardingPage: React.FC = () => {
         trimmedName,
         userProfile?.phone || "",
         trimmedEmail,
+        undefined,
+        profileGender,
+        trimmedDob || undefined,
       );
       await dispatch(
         updateUserOnboarding({
@@ -1798,6 +1822,44 @@ export const UserOnboardingPage: React.FC = () => {
                           startAdornment: (
                             <InputAdornment position="start">
                               <EmailOutlinedIcon />
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <TextField
+                        select
+                        required
+                        label="Gender"
+                        value={profileGender}
+                        onChange={(event) => setProfileGender(event.target.value)}
+                        fullWidth
+                        sx={inputCardSx}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <WcOutlinedIcon />
+                            </InputAdornment>
+                          ),
+                        }}
+                      >
+                        {PROFILE_GENDER_OPTIONS.map((option) => (
+                          <MenuItem key={option.value} value={option.value}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        label="Date of Birth"
+                        type="date"
+                        value={profileDob}
+                        onChange={(event) => setProfileDob(event.target.value)}
+                        fullWidth
+                        sx={inputCardSx}
+                        InputLabelProps={{ shrink: true }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <CakeOutlinedIcon />
                             </InputAdornment>
                           ),
                         }}

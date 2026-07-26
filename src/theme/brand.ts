@@ -34,4 +34,14 @@ export const brand = {
 /** Primary call-to-action gradient (blue). */
 export const brandGradient = `linear-gradient(135deg, ${brand.primary} 0%, ${brand.primaryDark} 100%)`;
 
+/**
+ * Soft page-header gradient shared by content pages (Home, Business, About).
+ * Uses the app theme's blue, green, and neutral surfaces for a subtle branded wash.
+ */
+export const pageGradient = [
+  `radial-gradient(circle at 12% 18%, rgba(13, 110, 253, 0.16) 0%, rgba(13, 110, 253, 0) 34%)`,
+  `radial-gradient(circle at 88% 12%, rgba(22, 163, 74, 0.06) 0%, rgba(22, 163, 74, 0) 30%)`,
+  `linear-gradient(135deg, ${brand.surface} 0%, ${brand.primarySoft} 48%, ${brand.canvas} 76%, ${brand.surface} 100%)`,
+].join(", ");
+
 export default brand;

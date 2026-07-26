@@ -15,6 +15,7 @@ import { alpha } from "@mui/material/styles";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import { TreePersonSearch } from "./TreePersonSearch";
 import type { FNode } from "../model/FNode";
+import { pageGradient } from "../../theme/brand";
 
 export type TreeStatus = {
   label: string;
@@ -73,8 +74,7 @@ export function FamiliesPageHeader({
         pb: { xs: 0.75, sm: 1.5 },
         borderBottom: "1px solid",
         borderColor: "divider",
-        background: (theme) =>
-          `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`,
+        background: pageGradient,
       }}
     >
       <Stack spacing={{ xs: 0.875, sm: 1.25 }}>

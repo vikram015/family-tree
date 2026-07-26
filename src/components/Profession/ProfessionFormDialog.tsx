@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
   TextField,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { ApiService } from "../../services/apiService";
 
@@ -41,6 +40,9 @@ export function ProfessionFormDialog({
   const [newContact, setNewContact] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   useEffect(() => {
     if (!open) return;
@@ -89,7 +91,13 @@ export function ProfessionFormDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      fullWidth
+      maxWidth="xs"
+      fullScreen={isMobile}
+    >
       <DialogTitle>Add profession</DialogTitle>
       <DialogContent>
         <Box sx={{ pt: 1 }}>
@@ -98,24 +106,27 @@ export function ProfessionFormDialog({
               {error}
             </Alert>
           )}
-          <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel id="node-prof-select-label">Select profession</InputLabel>
-            <Select
-              labelId="node-prof-select-label"
-              value={selectedProfessionId}
-              label="Select profession"
-              onChange={(e) => setSelectedProfessionId(e.target.value)}
-            >
-              <MenuItem value="">
-                <em>None (create new)</em>
-              </MenuItem>
-              {allProfessions.map((p) => (
-                <MenuItem key={p.id} value={p.id}>
-                  {p.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          <Autocomplete
+            fullWidth
+            sx={{ mb: 2 }}
+            options={allProfessions}
+            autoHighlight
+            openOnFocus
+            value={
+              allProfessions.find((p) => p.id === selectedProfessionId) || null
+            }
+            getOptionLabel={(option) => option?.name || ""}
+            isOptionEqualToValue={(option, val) => option.id === val.id}
+            onChange={(_e, value) => setSelectedProfessionId(value?.id ?? "")}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Select profession"
+                placeholder="Search professions…"
+                helperText="Pick an existing profession, or leave empty to add a new one"
+              />
+            )}
+          />
 
           {!selectedProfessionId && (
             <Stack spacing={2}>

@@ -12,6 +12,8 @@ export interface AppUser {
   displayName?: string;
   name?: string; // Aligning with DB column
   phone?: string;
+  gender?: string; // Matches the tree Gender values on person nodes (e.g. "male" | "female" | "other")
+  dob?: string; // Date of birth, serialized YYYY-MM-DD
   privacyPolicyAccepted?: boolean;
   createdAt: string;
   updatedAt: string;

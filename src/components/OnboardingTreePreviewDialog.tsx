@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogContentText,
   DialogActions,
@@ -17,8 +16,10 @@ import {
   Alert,
   Tooltip,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import CloseIcon from "@mui/icons-material/Close";
 import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import { TransitionProps } from "@mui/material/transitions";
 import { DTreeComponent } from "./DTree/DTreeComponent";
 import { TreePersonSearch } from "./FamiliesPage/TreePersonSearch";
@@ -26,6 +27,7 @@ import { ApiService, LinkRequest, TreeWriteScope } from "../services/apiService"
 import { FNode } from "./model/FNode";
 import { namesLooselyMatch } from "../utils/nameMatch";
 import { Gender, RelType } from "relatives-tree/lib/types";
+import { useAuth } from "./hooks/useAuth";
 
 const Transition = React.forwardRef(function Transition(
   props: TransitionProps & {
@@ -67,6 +69,11 @@ export const OnboardingTreePreviewDialog: React.FC<
   myLinkRequests = [],
   onRequestCompleted,
 }) => {
+  const { userProfile } = useAuth();
+  // The logged-in user's gender (added to AppUser). Stores the exact same string
+  // value as the tree `Gender` enum, so we can compare case-insensitively.
+  const userGender = userProfile?.gender;
+
   const [nodes, setNodes] = useState<FNode[]>([]);
   const [rootId, setRootId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -295,6 +302,17 @@ export const OnboardingTreePreviewDialog: React.FC<
     }
   };
 
+  // Whether the logged-in user's gender matches the selected node's gender.
+  // If the user's gender is unknown/empty we do NOT gate (fall back to showing
+  // the "Link my profile" button) so pre-existing users aren't broken.
+  const genderMatchesSelectedNode = React.useMemo(() => {
+    if (!selectedNode) return false;
+    const ug = (userGender ?? "").toString().trim().toLowerCase();
+    if (!ug) return true; // unknown gender -> don't gate
+    const ng = (selectedNode.gender ?? "").toString().trim().toLowerCase();
+    return ug === ng;
+  }, [selectedNode, userGender]);
+
   const isLinkRequested = React.useMemo(() => {
     return myLinkRequests.some(
       (req) =>
@@ -391,7 +409,8 @@ export const OnboardingTreePreviewDialog: React.FC<
               {name}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-              Link your profile to this person, or request edit access to their branch.
+              Link your profile to this person, or request edit access to their
+              branch.
             </Typography>
           </Box>
           <IconButton onClick={dismiss} disabled={actionLoading} size="small" sx={{ mt: -0.5, mr: -0.5 }}>
@@ -416,58 +435,62 @@ export const OnboardingTreePreviewDialog: React.FC<
         )}
 
         {!actionSuccess && (
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-            <Tooltip
-              title={isLinkRequested ? "You already have a pending link request" : ""}
-              placement="top"
-              arrow
-            >
-              <span style={{ display: "block", width: "100%" }}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  size="large"
-                  sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
-                  onClick={() => setLinkConfirmOpen(true)}
-                  disabled={actionLoading || isLinkRequested}
+          <Stack spacing={1.5}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+              {genderMatchesSelectedNode && (
+                <Tooltip
+                  title={isLinkRequested ? "You already have a pending link request" : ""}
+                  placement="top"
+                  arrow
                 >
-                  {actionLoading ? "Sending..." : isLinkRequested ? "Link Requested" : "Link my profile"}
-                </Button>
-              </span>
-            </Tooltip>
+                  <span style={{ display: "block", width: "100%" }}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      size="large"
+                      sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
+                      onClick={() => setLinkConfirmOpen(true)}
+                      disabled={actionLoading || isLinkRequested}
+                    >
+                      {actionLoading ? "Sending..." : isLinkRequested ? "Link Requested" : "Link my profile"}
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
 
-            <Tooltip
-              title={
-                hasSelectedBranchAccess
-                  ? branchAccessStatusMessage
-                  : isBranchAccessRequested
-                    ? "You have already requested edit access for this branch"
-                    : ""
-              }
-              placement="top"
-              arrow
-            >
-              <span style={{ display: "block", width: "100%" }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  size="large"
-                  disableElevation
-                  sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
-                  onClick={handleCreateBranchAccessRequest}
-                  disabled={actionLoading || isBranchAccessRequested || hasSelectedBranchAccess}
-                >
-                  {actionLoading
-                    ? "Sending..."
-                    : hasSelectedBranchAccess
-                      ? "Already have access"
-                      : isBranchAccessRequested
-                        ? "Access Requested"
-                        : "Request branch access"}
-                </Button>
-              </span>
-            </Tooltip>
+              <Tooltip
+                title={
+                  hasSelectedBranchAccess
+                    ? branchAccessStatusMessage
+                    : isBranchAccessRequested
+                      ? "You have already requested edit access for this branch"
+                      : ""
+                }
+                placement="top"
+                arrow
+              >
+                <span style={{ display: "block", width: "100%" }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    size="large"
+                    disableElevation
+                    sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
+                    onClick={handleCreateBranchAccessRequest}
+                    disabled={actionLoading || isBranchAccessRequested || hasSelectedBranchAccess}
+                  >
+                    {actionLoading
+                      ? "Sending..."
+                      : hasSelectedBranchAccess
+                        ? "Already have access"
+                        : isBranchAccessRequested
+                          ? "Access Requested"
+                          : "Request branch access"}
+                  </Button>
+                </span>
+              </Tooltip>
+            </Stack>
           </Stack>
         )}
       </Box>
@@ -573,41 +596,114 @@ export const OnboardingTreePreviewDialog: React.FC<
         maxWidth="xs"
         fullWidth
         sx={{ zIndex: 1400 }}
+        PaperProps={{
+          sx: { borderRadius: 3, overflow: "hidden" },
+        }}
       >
-        <DialogTitle
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            color: linkNameMismatch ? "warning.main" : undefined,
-          }}
-        >
-          {linkNameMismatch && <WarningAmberRoundedIcon fontSize="small" />}
-          {linkNameMismatch ? "Name doesn't match" : "Confirm profile link"}
-        </DialogTitle>
-        <DialogContent>
+        {/* Themed header: soft-tinted icon chip + bold title, matching the app's
+            rounded / brand-token styling instead of a stock MUI dialog. */}
+        <Box sx={{ px: 3, pt: 3 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              sx={{
+                width: 46,
+                height: 46,
+                flexShrink: 0,
+                borderRadius: 2,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: linkNameMismatch ? "warning.main" : "primary.main",
+                bgcolor: (t) =>
+                  alpha(
+                    linkNameMismatch
+                      ? t.palette.warning.main
+                      : t.palette.primary.main,
+                    0.12,
+                  ),
+              }}
+            >
+              {linkNameMismatch ? (
+                <WarningAmberRoundedIcon />
+              ) : (
+                <PersonRoundedIcon />
+              )}
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1.2 }}>
+                {linkNameMismatch ? "Name doesn't match" : "Confirm profile link"}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {linkNameMismatch
+                  ? "Please double-check this is really you."
+                  : "We'll ask the tree owner to approve."}
+              </Typography>
+            </Box>
+          </Stack>
+        </Box>
+
+        <DialogContent sx={{ px: 3, pt: 2.5, pb: 1 }}>
           {linkNameMismatch && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              <strong>{selectedNode?.name}</strong> doesn't match the name you
-              searched
-              {searchName ? (
-                <>
-                  {" "}
-                  (<strong>{searchName}</strong>)
-                </>
-              ) : null}
-              .
-            </Alert>
+            <Box
+              sx={{
+                p: 1.5,
+                mb: 2,
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: (t) => alpha(t.palette.warning.main, 0.3),
+                bgcolor: (t) => alpha(t.palette.warning.main, 0.08),
+              }}
+            >
+              <Typography variant="body2" sx={{ color: "text.primary" }}>
+                <strong>{selectedNode?.name}</strong> doesn't match the name you
+                searched
+                {searchName ? (
+                  <>
+                    {" "}
+                    (<strong>{searchName}</strong>)
+                  </>
+                ) : null}
+                .
+              </Typography>
+            </Box>
           )}
-          <DialogContentText>
+          <DialogContentText sx={{ color: "text.secondary" }}>
             Are you sure <strong>{selectedNode?.name}</strong> is you? We'll send a
             link request to the tree owner for approval.
           </DialogContentText>
+          {linkNameMismatch && (
+            <Box sx={{ mt: 2 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1, fontWeight: 600 }}
+              >
+                Not you?
+              </Typography>
+              <Button
+                variant="outlined"
+                fullWidth
+                sx={{ fontWeight: 700, borderRadius: 2, py: 1 }}
+                onClick={() => {
+                  setLinkConfirmOpen(false);
+                  handleCreateBranchAccessRequest();
+                }}
+                disabled={
+                  actionLoading ||
+                  isBranchAccessRequested ||
+                  hasSelectedBranchAccess
+                }
+              >
+                Request branch access
+              </Button>
+            </Box>
+          )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1 }}>
           <Button
             onClick={() => setLinkConfirmOpen(false)}
             disabled={actionLoading}
+            sx={{ fontWeight: 700, borderRadius: 2, color: "text.secondary" }}
           >
             Cancel
           </Button>
@@ -615,7 +711,9 @@ export const OnboardingTreePreviewDialog: React.FC<
             onClick={handleCreateLinkRequest}
             variant="contained"
             color={linkNameMismatch ? "warning" : "primary"}
+            disableElevation
             disabled={actionLoading}
+            sx={{ fontWeight: 700, borderRadius: 2, py: 1, px: 2.5 }}
           >
             {linkNameMismatch ? "Yes, link anyway" : "Yes, this is me"}
           </Button>
