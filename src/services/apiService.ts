@@ -163,6 +163,19 @@ export interface FamilyEvents {
   anniversaries: FamilyAnniversary[];
 }
 
+export type WishEventType = 'birthday' | 'anniversary' | 'remembrance';
+
+export interface Wish {
+  id: string;
+  peopleId: string;
+  eventType: WishEventType;
+  eventYear: number;
+  message: string;
+  authorUserId: string | null;
+  authorName: string | null;
+  createdAt: string;
+}
+
 export interface LinkRequest {
   id: string;
   requestType: LinkRequestType;
@@ -1293,6 +1306,45 @@ export const ApiService = {
    */
   async getTodaysFamilyEvents(): Promise<FamilyEvents> {
     return backendApi.get<FamilyEvents>('/api/family-events/today');
+  },
+
+  // =====================================================
+  // EVENT WISHES (birthday / anniversary / remembrance wall)
+  // =====================================================
+
+  /**
+   * List non-deleted wishes for a person, optionally scoped to a single
+   * (eventType, eventYear) thread. Newest-first. Public read.
+   */
+  async getWishes(params: {
+    peopleId: string;
+    eventType?: WishEventType;
+    eventYear?: number;
+  }): Promise<Wish[]> {
+    return backendApi.get<Wish[]>('/api/wishes', {
+      peopleId: params.peopleId,
+      eventType: params.eventType,
+      eventYear: params.eventYear,
+    });
+  },
+
+  /**
+   * Post a wish to a person's event thread. Author is resolved server-side.
+   */
+  async postWish(payload: {
+    peopleId: string;
+    eventType: WishEventType;
+    eventYear: number;
+    message: string;
+  }): Promise<Wish> {
+    return backendApi.post<Wish>('/api/wishes', payload);
+  },
+
+  /**
+   * Soft-delete a wish (author or superadmin only, enforced server-side).
+   */
+  async deleteWish(id: string): Promise<void> {
+    await backendApi.delete(`/api/wishes/${id}`);
   },
 
   // =====================================================

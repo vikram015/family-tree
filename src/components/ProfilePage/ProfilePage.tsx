@@ -31,8 +31,10 @@ import {
   Link,
   Card,
   CardContent,
+  Tabs,
+  Tab,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useLocations } from "../hooks/useLocations";
@@ -54,7 +56,12 @@ import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import WcOutlinedIcon from "@mui/icons-material/WcOutlined";
-import { ApiService, LinkRequest } from "../../services/apiService";
+import {
+  ApiService,
+  LinkRequest,
+  Wish,
+  WishEventType,
+} from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
 import { formatDisplayDate } from "../../utils/dateFormatter";
@@ -84,6 +91,7 @@ const formatBusinessCategory = (category?: string) => {
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { personId: routePersonId } = useParams<{ personId?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const { userProfile, currentUser, updateUserProfile } = useAuth();
   const { openLoginModal } = useLoginModal();
@@ -162,6 +170,157 @@ export const ProfilePage: React.FC = () => {
     userProfile?.displayName ||
     userProfile?.name ||
     "Profile";
+
+  // --- Wall (event-specific wishes) ---
+  const WISH_EVENT_TYPES: WishEventType[] = [
+    "birthday",
+    "anniversary",
+    "remembrance",
+  ];
+  const WISH_EVENT_LABELS: Record<WishEventType, string> = {
+    birthday: "Birthday",
+    anniversary: "Anniversary",
+    remembrance: "Remembrance",
+  };
+  const currentYear = new Date().getFullYear();
+  const rawEventParam = (searchParams.get("event") || "").toLowerCase();
+  const requestedEventType: WishEventType = (
+    WISH_EVENT_TYPES.includes(rawEventParam as WishEventType)
+      ? rawEventParam
+      : "birthday"
+  ) as WishEventType;
+  const parsedYear = parseInt(searchParams.get("year") || "", 10);
+  const wishEventYear = Number.isFinite(parsedYear) ? parsedYear : currentYear;
+
+  const [wishes, setWishes] = useState<Wish[]>([]);
+  const [wishesLoading, setWishesLoading] = useState(false);
+  const [wishMessage, setWishMessage] = useState("");
+  const [postingWish, setPostingWish] = useState(false);
+  const [wishError, setWishError] = useState("");
+  // Whether this person has a spouse — anniversary only applies if married.
+  const [hasSpouse, setHasSpouse] = useState(false);
+
+  // Which occasions make sense for THIS person:
+  //  - birthday: only for a living person
+  //  - anniversary: only if they have a spouse
+  //  - remembrance: only for a deceased person
+  const personIsAlive = linkedPersonDetails
+    ? linkedPersonDetails.isAlive !== false
+    : true;
+  const availableEventTypes: WishEventType[] = WISH_EVENT_TYPES.filter((type) => {
+    if (type === "birthday") return personIsAlive;
+    if (type === "anniversary") return hasSpouse;
+    return !personIsAlive; // remembrance
+  });
+  const effectiveEventTypes: WishEventType[] =
+    availableEventTypes.length > 0 ? availableEventTypes : ["birthday"];
+  // Clamp the active thread to an occasion that's actually available.
+  const wishEventType: WishEventType = effectiveEventTypes.includes(
+    requestedEventType,
+  )
+    ? requestedEventType
+    : effectiveEventTypes[0];
+
+  const isSuperadmin = userProfile?.role === "superadmin";
+
+  const loadWishes = useCallback(async () => {
+    if (!effectivePersonId) {
+      setWishes([]);
+      return;
+    }
+    setWishesLoading(true);
+    setWishError("");
+    try {
+      const data = await ApiService.getWishes({
+        peopleId: effectivePersonId,
+        eventType: wishEventType,
+        eventYear: wishEventYear,
+      });
+      setWishes(data || []);
+    } catch (err) {
+      console.error("Error loading wishes:", err);
+      setWishError("Failed to load wishes.");
+    } finally {
+      setWishesLoading(false);
+    }
+  }, [effectivePersonId, wishEventType, wishEventYear]);
+
+  useEffect(() => {
+    void loadWishes();
+  }, [loadWishes]);
+
+  // Determine whether the person has a spouse (gates the Anniversary occasion).
+  useEffect(() => {
+    let active = true;
+    if (!effectivePersonId) {
+      setHasSpouse(false);
+      return;
+    }
+    ApiService.getPersonSpouses(effectivePersonId)
+      .then((rows) => {
+        if (active) setHasSpouse(Array.isArray(rows) && rows.length > 0);
+      })
+      .catch(() => {
+        if (active) setHasSpouse(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [effectivePersonId]);
+
+  const handleSelectWishThread = (eventType: WishEventType) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("event", eventType);
+    next.set("year", String(wishEventYear));
+    setSearchParams(next, { replace: true });
+  };
+
+  const handlePostWish = async () => {
+    if (!effectivePersonId || !currentUser || !wishMessage.trim()) return;
+    setPostingWish(true);
+    setWishError("");
+    try {
+      await ApiService.postWish({
+        peopleId: effectivePersonId,
+        eventType: wishEventType,
+        eventYear: wishEventYear,
+        message: wishMessage.trim(),
+      });
+      setWishMessage("");
+      await loadWishes();
+    } catch (err: any) {
+      console.error("Error posting wish:", err);
+      setWishError(err?.message || "Failed to post wish.");
+    } finally {
+      setPostingWish(false);
+    }
+  };
+
+  const handleDeleteWish = async (id: string) => {
+    setWishError("");
+    try {
+      await ApiService.deleteWish(id);
+      await loadWishes();
+    } catch (err: any) {
+      console.error("Error deleting wish:", err);
+      setWishError(err?.message || "Failed to delete wish.");
+    }
+  };
+
+  const formatWishTime = (value: string): string => {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "";
+    const diffMs = Date.now() - d.getTime();
+    const diffSec = Math.round(diffMs / 1000);
+    const diffMin = Math.round(diffSec / 60);
+    const diffHr = Math.round(diffMin / 60);
+    const diffDay = Math.round(diffHr / 24);
+    if (diffSec < 60) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    if (diffDay < 7) return `${diffDay}d ago`;
+    return d.toLocaleDateString();
+  };
 
   const refreshPersonDetails = useCallback(async (personId: string) => {
     const person = await ApiService.getPersonById(personId);
@@ -1201,6 +1360,190 @@ export const ProfilePage: React.FC = () => {
                   )}
                 </Grid>
               </Grid>
+              )}
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Wall — event-specific wishes for this person. */}
+        {effectivePersonId && (
+          <Grid size={{ xs: 12 }}>
+            <Paper elevation={2} sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Wall
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {`${WISH_EVENT_LABELS[wishEventType]} wishes for ${
+                  linkedPersonDetails?.name || "this person"
+                } · ${wishEventYear}`}
+              </Typography>
+
+              <Tabs
+                value={wishEventType}
+                onChange={(_e, value) =>
+                  handleSelectWishThread(value as WishEventType)
+                }
+                variant="scrollable"
+                scrollButtons="auto"
+                sx={{ mt: 1, mb: 2 }}
+              >
+                {effectiveEventTypes.map((type) => (
+                  <Tab
+                    key={type}
+                    value={type}
+                    label={WISH_EVENT_LABELS[type]}
+                  />
+                ))}
+              </Tabs>
+
+              <Divider sx={{ mb: 2 }} />
+
+              {wishError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {wishError}
+                </Alert>
+              )}
+
+              {/* Composer / guest gate */}
+              {currentUser ? (
+                <Box sx={{ mb: 3 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    label="Write a wish"
+                    placeholder={`Share a ${WISH_EVENT_LABELS[
+                      wishEventType
+                    ].toLowerCase()} wish...`}
+                    value={wishMessage}
+                    onChange={(e) => setWishMessage(e.target.value)}
+                    disabled={postingWish}
+                  />
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      mt: 1,
+                    }}
+                  >
+                    <Button
+                      variant="contained"
+                      onClick={handlePostWish}
+                      disabled={!wishMessage.trim() || postingWish}
+                      startIcon={
+                        postingWish ? (
+                          <CircularProgress size={16} />
+                        ) : undefined
+                      }
+                    >
+                      {postingWish ? "Posting..." : "Post wish"}
+                    </Button>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ textAlign: "center", py: 2, mb: 1 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ mb: 1 }}
+                  >
+                    Log in to post a wish.
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => openLoginModal(() => void loadWishes())}
+                  >
+                    Log in to post a wish
+                  </Button>
+                </Box>
+              )}
+
+              {/* Wishes list (newest-first from the API) */}
+              {wishesLoading ? (
+                <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              ) : wishes.length === 0 ? (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ fontStyle: "italic", py: 1 }}
+                >
+                  No wishes yet — be the first to wish!
+                </Typography>
+              ) : (
+                <Stack spacing={1.5}>
+                  {wishes.map((wish) => {
+                    const canDelete =
+                      isSuperadmin ||
+                      (Boolean(wish.authorUserId) &&
+                        wish.authorUserId === userProfile?.id);
+                    return (
+                      <Paper
+                        key={wish.id}
+                        variant="outlined"
+                        sx={{ p: 1.5, borderRadius: 2 }}
+                      >
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          alignItems="flex-start"
+                        >
+                          <Avatar
+                            sx={{
+                              width: 36,
+                              height: 36,
+                              bgcolor: "primary.main",
+                              fontSize: 16,
+                            }}
+                          >
+                            {(wish.authorName || "Someone")
+                              .charAt(0)
+                              .toUpperCase()}
+                          </Avatar>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="subtitle2"
+                                fontWeight={700}
+                              >
+                                {wish.authorName || "Someone"}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {formatWishTime(wish.createdAt)}
+                              </Typography>
+                            </Box>
+                            <Typography
+                              variant="body2"
+                              sx={{ mt: 0.5, whiteSpace: "pre-wrap" }}
+                            >
+                              {wish.message}
+                            </Typography>
+                          </Box>
+                          {canDelete && (
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteWish(wish.id)}
+                              aria-label="Delete wish"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </Stack>
+                      </Paper>
+                    );
+                  })}
+                </Stack>
               )}
             </Paper>
           </Grid>

@@ -52,6 +52,7 @@ import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavig
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
 import { AnimatedCounter } from "../common/AnimatedCounter";
 import { brand, pageGradient } from "../../theme/brand";
+import EventCard from "../Events/EventCard";
 
 interface SearchResult {
   id: string;
@@ -1056,62 +1057,56 @@ export const HomePage: React.FC = () => {
                     No birthdays, anniversaries or remembrances in your family today.
                   </Typography>
                 ) : (
-                  <Stack spacing={1.4}>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 1.4,
+                      gridTemplateColumns: {
+                        xs: "1fr",
+                        sm: "repeat(2, minmax(0, 1fr))",
+                      },
+                    }}
+                  >
                     {familyEvents.birthdays.map((person) => (
-                      <Box
+                      <EventCard
                         key={`bday-${person.id}`}
-                        onClick={() => navigate(`/profile/person/${person.id}`)}
-                        sx={{ display: "flex", gap: 1.2, alignItems: "flex-start", cursor: "pointer" }}
-                      >
-                        <CakeOutlinedIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
-                        <Typography variant="body2" color="text.secondary">
-                          <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
-                            {person.name}
-                          </Box>{" "}
-                          {person.age > 0
-                            ? `turns ${person.age} today 🎂`
-                            : "has a birthday today 🎂"}
-                        </Typography>
-                      </Box>
+                        eventType="birthday"
+                        personId={person.id}
+                        name={person.name}
+                        photoUrl={person.photoUrl}
+                        subtitle={
+                          person.age > 0
+                            ? `Turns ${person.age} today 🎂`
+                            : "Has a birthday today 🎂"
+                        }
+                        year={new Date().getFullYear()}
+                      />
                     ))}
 
                     {familyEvents.anniversaries.map((a) => (
-                      <Box
+                      <EventCard
                         key={`anniv-${a.person1Id}-${a.person2Id}`}
-                        onClick={() => navigate(`/profile/person/${a.person1Id}`)}
-                        sx={{ display: "flex", gap: 1.2, alignItems: "flex-start", cursor: "pointer" }}
-                      >
-                        <FavoriteIcon sx={{ color: brand.accent, fontSize: 19, mt: 0.2 }} />
-                        <Typography variant="body2" color="text.secondary">
-                          <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
-                            {a.person1Name} & {a.person2Name}
-                          </Box>{" "}
-                          {a.years > 0
-                            ? `celebrate ${a.years} year${a.years === 1 ? "" : "s"} together 💍`
-                            : "celebrate their anniversary today 💍"}
-                        </Typography>
-                      </Box>
+                        eventType="anniversary"
+                        personId={a.person1Id}
+                        name={`${a.person1Name} & ${a.person2Name}`}
+                        photoUrl={a.person1PhotoUrl}
+                        subtitle={`${a.years} years together 💍`}
+                        year={new Date().getFullYear()}
+                      />
                     ))}
 
                     {familyEvents.deceased.map((person) => (
-                      <Box
+                      <EventCard
                         key={`dec-${person.id}`}
-                        onClick={() => navigate(`/profile/person/${person.id}`)}
-                        sx={{ display: "flex", gap: 1.2, alignItems: "flex-start", cursor: "pointer" }}
-                      >
-                        <LocalFloristOutlinedIcon sx={{ color: brand.slate, fontSize: 19, mt: 0.2 }} />
-                        <Typography variant="body2" color="text.secondary">
-                          Remembering{" "}
-                          <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
-                            {person.name}
-                          </Box>
-                          {person.yearsAgo > 0
-                            ? ` — ${person.yearsAgo} year${person.yearsAgo === 1 ? "" : "s"} ago`
-                            : ""}
-                        </Typography>
-                      </Box>
+                        eventType="remembrance"
+                        personId={person.id}
+                        name={person.name}
+                        photoUrl={person.photoUrl}
+                        subtitle={`Remembered — ${person.yearsAgo} years ago 🕊️`}
+                        year={new Date().getFullYear()}
+                      />
                     ))}
-                  </Stack>
+                  </Box>
                 )
               ) : (
                 <Stack spacing={1.2}>
