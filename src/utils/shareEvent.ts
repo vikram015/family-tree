@@ -1,33 +1,48 @@
 import type { WishEventType } from '../services/apiService';
 
+function browserOrigin(): string {
+  return typeof window !== 'undefined' && window.location
+    ? window.location.origin
+    : '';
+}
+
 /**
  * Base host that serves the server-rendered `/share/person/:id` route with
- * Open Graph meta (the Cloud Run API host). Shared links point here so
- * WhatsApp/Facebook can render a rich preview before redirecting to the SPA.
+ * Open Graph meta.
+ *
+ * Defaults to the SITE'S OWN ORIGIN: Firebase Hosting rewrites `/share/**` to
+ * the Cloud Run service (see firebase.json), so shared links stay on kinvia.in
+ * instead of exposing the *.run.app host. Serving the share page from the same
+ * origin as the app is also what keeps `og:url` self-referential, which is what
+ * makes Facebook use THIS page's preview image instead of re-scraping the SPA
+ * and falling back to the generic site card.
+ *
+ * `REACT_APP_SHARE_BASE_URL` overrides it for local dev, where there is no
+ * Hosting rewrite in front of the API.
  */
-export const SHARE_BASE =
-  process.env.REACT_APP_API_BASE_URL ||
-  process.env.REACT_APP_BACKEND_URL ||
-  '';
+export const SHARE_BASE = (
+  process.env.REACT_APP_SHARE_BASE_URL || browserOrigin()
+).replace(/\/+$/, '');
 
 /**
  * Build the shareable URL for a person's event thread.
- * e.g. `${SHARE_BASE}/share/person/<id>?event=birthday&year=2026&origin=<frontend origin>`
+ * e.g. `https://kinvia.in/share/person/<id>?event=birthday&year=2026`
  *
- * We pass the current browser origin so the /share route redirects back to the
- * exact environment the user shared from (localhost, staging, prod) instead of
- * relying on a backend-configured URL. The backend validates this origin
- * against its allowlist before using it (open-redirect safe).
+ * When the share host is NOT the current origin (local dev hitting the API
+ * directly), we pass `origin` so the /share route redirects back to the exact
+ * environment the user shared from. The backend validates it against its
+ * allowlist before using it (open-redirect safe).
  */
 export function buildEventShareUrl(
   personId: string,
   eventType: WishEventType,
   year: number,
 ): string {
-  const base = SHARE_BASE.replace(/\/+$/, '');
+  const base = SHARE_BASE;
+  const current = browserOrigin();
   const origin =
-    typeof window !== 'undefined' && window.location
-      ? `&origin=${encodeURIComponent(window.location.origin)}`
+    current && current !== base
+      ? `&origin=${encodeURIComponent(current)}`
       : '';
   return `${base}/share/person/${personId}?event=${eventType}&year=${year}${origin}`;
 }

@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "hotelmanager-c833b"
+    "default": "kinvia-fe353",
+    "prod": "kinvia-fe353",
+    "dev": "kinvia-dev-9368f"
   }
 }

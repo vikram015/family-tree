@@ -3,6 +3,7 @@
     "public": "build",
     "ignore": [
       "firebase.json",
+      "firebase.dev.json",
       "**/.*",
       "**/node_modules/**"
     ],
@@ -39,8 +40,5 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "firestore": {
-    "rules": "firestore.rules"
   }
 }

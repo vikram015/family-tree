@@ -43,6 +43,8 @@ import { RequireAuth } from "../RequireAuth/RequireAuth";
 import { BlockedScreen } from "../BlockedScreen/BlockedScreen";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
+import { ComingSoonPage } from "../ComingSoon/ComingSoonPage";
+import { shouldShowComingSoon } from "../../utils/comingSoon";
 
 // Lazy load FamiliesPage
 const FamiliesPage = React.lazy(() =>
@@ -254,6 +256,18 @@ function AppContent() {
 
 export default React.memo(function App() {
   console.log("App component: Starting to render");
+
+  // Pre-launch gate: render ONLY the launching-soon page — no router, no auth,
+  // no data fetching. Flip REACT_APP_COMING_SOON to false at launch.
+  if (shouldShowComingSoon()) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <ComingSoonPage />
+      </ThemeProvider>
+    );
+  }
+
   try {
     return (
       <HelmetProvider>
