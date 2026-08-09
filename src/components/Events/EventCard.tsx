@@ -110,8 +110,8 @@ const EventCard: React.FC<EventCardProps> = ({
   const { Icon } = style;
 
   const shareUrl = useMemo(
-    () => buildEventShareUrl(personId, eventType, year),
-    [personId, eventType, year],
+    () => buildEventShareUrl(personId, eventType, year, photoUrl),
+    [personId, eventType, year, photoUrl],
   );
   const { title, text } = useMemo(
     () => buildShareMessage(eventType, name),

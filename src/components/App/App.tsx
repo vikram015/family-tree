@@ -44,6 +44,7 @@ import { BlockedScreen } from "../BlockedScreen/BlockedScreen";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { ComingSoonPage } from "../ComingSoon/ComingSoonPage";
+import { PhotosPage } from "../PhotosPage/PhotosPage";
 import { shouldShowComingSoon } from "../../utils/comingSoon";
 
 // Lazy load FamiliesPage
@@ -62,9 +63,10 @@ function AppContent() {
   const treeId = searchParams.get("tree") || "";
 
   // The footer is shown on standard content pages. It's hidden on full-screen
-  // / self-managed-height routes: the tree view (/families), onboarding, and
-  // the login screen, where a scrolling footer would get in the way.
-  const footerHiddenRoutes = ["/families", "/onboarding", "/login"];
+  // / self-managed-height routes: the tree view (/families), the photos page
+  // (/photos — also has its own fixed FAB, same reason), onboarding, and the
+  // login screen, where a scrolling footer would get in the way.
+  const footerHiddenRoutes = ["/families", "/photos", "/onboarding", "/login"];
   const showFooter = !footerHiddenRoutes.some(
     (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
   );
@@ -233,6 +235,14 @@ function AppContent() {
                 }
               />
               <Route path="/famous" element={<FamousPage />} />
+              <Route
+                path="/photos"
+                element={
+                  <RequireAuth>
+                    <PhotosPage />
+                  </RequireAuth>
+                }
+              />
               {/* Contact page hidden for now — route disabled so it's unreachable.
                   ContactPage import kept so restoring is a one-line uncomment. */}
               {/* <Route path="/contact" element={<ContactPage />} /> */}

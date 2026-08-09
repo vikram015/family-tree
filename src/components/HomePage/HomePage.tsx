@@ -288,14 +288,15 @@ export const HomePage: React.FC = () => {
 
       // Load all of the user's pending requests once, so we can reflect both a
       // pending profile link and any pending branch-access requests.
-      let pendingRequests: any[] = [];
+      let allRequests: any[] = [];
       try {
-        const requests = await ApiService.getMyLinkRequests();
-        pendingRequests = (requests || []).filter((r) => r.status === "pending");
+        allRequests = await ApiService.getMyLinkRequests();
       } catch (err) {
         console.error("Failed to load link requests:", err);
       }
       if (cancelled) return;
+
+      const pendingRequests = allRequests.filter((r) => r.status === "pending");
 
       const pendingBranchAccess = pendingRequests
         .filter((r) => r.requestType === "branch_access_request")
@@ -312,6 +313,9 @@ export const HomePage: React.FC = () => {
         const pendingLink = pendingRequests.find(
           (r) => r.requestType === "user_to_tree_node",
         );
+        const hasApprovedBranchAccess = allRequests.some(
+          (r) => r.requestType === "branch_access_request" && r.status === "approved",
+        );
 
         setProfileInsight({
           completeness: 0,
@@ -325,11 +329,25 @@ export const HomePage: React.FC = () => {
                 to: "/profile",
                 cta: "View request",
               }
+            : hasApprovedBranchAccess
+            ? {
+                // Branch access was already granted — onboarding would just
+                // send them through the branch-access request again. Linking
+                // themselves to a person node happens on the Profile page.
+                title: "Link your profile",
+                description: "Find yourself in your family tree to finish linking your account.",
+                to: "/profile",
+                cta: "Link my profile",
+              }
             : {
+                // Onboarding only requests branch access now — linking a
+                // profile to a specific person happens later (e.g. from that
+                // person's node in the tree), so this copy shouldn't promise
+                // "link your account" the way it used to.
                 title: "Finish setting up your profile",
-                description: "Find yourself in the family tree and link your account.",
+                description: "Find your family tree and request access to your branch.",
                 to: "/onboarding",
-                cta: "Finish setting up",
+                cta: "Find my tree",
               },
         });
         return;

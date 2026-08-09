@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import dayjs from "dayjs";
 import {
   Accordion,
   AccordionDetails,
@@ -81,6 +82,10 @@ import { OnboardingTreePreviewDialog } from "./OnboardingTreePreviewDialog";
 import { FullScreenMobileAutocomplete } from "./FullScreenMobilePicker";
 import { CreateLocationDialog } from "./LocationPicker/CreateLocationDialog";
 import { brand } from "../theme/brand";
+
+const DatePicker = React.lazy(() =>
+  import("@mui/x-date-pickers/DatePicker").then((m) => ({ default: m.DatePicker })),
+);
 
 const STEP_INDEX: Record<string, number> = {
   profile: 0,
@@ -255,16 +260,12 @@ export const UserOnboardingPage: React.FC = () => {
   const [createLocationOpen, setCreateLocationOpen] = useState(false);
   const [createLocationName, setCreateLocationName] = useState("");
   const [localError, setLocalError] = useState("");
-  const [linkRequestSuccess, setLinkRequestSuccess] = useState("");
+  // Still fetched: OnboardingTreePreviewDialog needs it to tell whether the
+  // user already has a pending branch-access request for a given person, and
+  // the pending-link banner below reflects a link request made elsewhere
+  // (e.g. NodeDetails' standalone self-link feature) — onboarding itself no
+  // longer creates user_to_tree_node requests.
   const [myLinkRequests, setMyLinkRequests] = useState<LinkRequest[]>([]);
-  const [linkRequestLoading, setLinkRequestLoading] = useState(false);
-  const [linkRequestSubmittingPersonId, setLinkRequestSubmittingPersonId] =
-    useState<string | null>(null);
-  // Confirmation shown right after a link request is sent (pending approval).
-  const [linkRequestSent, setLinkRequestSent] = useState<{
-    personName: string;
-    treeName: string;
-  } | null>(null);
   const [createTreeOpen, setCreateTreeOpen] = useState(false);
   const previewTreeId = searchParams.get("previewTreeId");
   const previewTreeName = searchParams.get("previewTreeName");
@@ -277,7 +278,13 @@ export const UserOnboardingPage: React.FC = () => {
   const lastSearchKeyRef = useRef("");
   const locationRequestIdRef = useRef(0);
   const previousSelectedCasteRef = useRef("");
-  const displayStep = stepOverride || onboarding.currentStep;
+  // "complete" has no render branch of its own (completion navigates the user
+  // away immediately) — but a user can return to /onboarding later via the
+  // "finish setting up your profile" dashboard nudge while onboarding is still
+  // persisted as "complete" from an earlier branch-access request. Falling
+  // back to "match" avoids a blank page in that case.
+  const displayStep =
+    stepOverride || (onboarding.currentStep === "complete" ? "match" : onboarding.currentStep);
   const searchDisplayName = useMemo(
     () =>
       (
@@ -687,7 +694,6 @@ export const UserOnboardingPage: React.FC = () => {
     }
 
     let active = true;
-    setLinkRequestLoading(true);
 
     ApiService.getMyLinkRequests()
       .then((rows) => {
@@ -701,11 +707,6 @@ export const UserOnboardingPage: React.FC = () => {
           return;
         }
         console.error("Failed to load link requests:", error);
-      })
-      .finally(() => {
-        if (active) {
-          setLinkRequestLoading(false);
-        }
       });
 
     return () => {
@@ -1238,73 +1239,16 @@ export const UserOnboardingPage: React.FC = () => {
     }
   };
 
-  // Records a just-sent profile-link request as PENDING approval (the user is
-  // NOT linked yet) and surfaces the confirmation screen. Onboarding is marked
-  // "skipped" so the user isn't force-redirected while they wait; approval
-  // flips it to "completed" server-side.
-  const markLinkRequestPending = async (input: {
-    treeId: string;
-    personId: string;
-    personName?: string;
-    treeName?: string;
-  }) => {
-    await dispatch(
-      updateUserOnboarding({
-        status: "skipped",
-        match: {
-          ...onboarding.match,
-          selectedTreeId: input.treeId,
-          selectedPersonId: input.personId,
-          action: "link",
-        },
-      }),
-    ).unwrap();
-    await dispatch(fetchUserOnboarding()).unwrap();
-    setLinkRequestSent({
-      personName: input.personName || "the selected profile",
-      treeName: input.treeName || "the selected tree",
-    });
-  };
-
-  const handleCreateLinkRequest = async (
-    personId: string,
-    treeId: string,
-    personName?: string,
-    treeName?: string,
-  ) => {
-    setLocalError("");
-    setLinkRequestSuccess("");
-    setLinkRequestSubmittingPersonId(personId);
-
-    try {
-      const created = await ApiService.createUserNodeLinkRequest({
-        targetPersonId: personId,
-      });
-      setMyLinkRequests((prev) => [...prev, created]);
-      await markLinkRequestPending({ treeId, personId, personName, treeName });
-    } catch (error: any) {
-      setLocalError(error?.message || "Failed to create link request.");
-    } finally {
-      setLinkRequestSubmittingPersonId(null);
-    }
-  };
-
+  // Onboarding only ever produces a branch-access request now — linking a
+  // profile to a specific person happens later, elsewhere (e.g. NodeDetails'
+  // standalone self-link feature), once the user has actually seen the tree.
   const handleOnboardingRequestCompleted = async (input: {
-    requestType: "user_to_tree_node" | "branch_access_request";
+    requestType: "branch_access_request";
     treeId: string;
     personId: string;
     personName?: string;
     treeName?: string;
   }) => {
-    // A profile-link request is only PENDING approval — show the confirmation
-    // screen rather than falsely reporting the user as linked.
-    if (input.requestType === "user_to_tree_node") {
-      closePreview();
-      await markLinkRequestPending(input);
-      return;
-    }
-
-    // Branch-access request — existing behavior: record and return to the tree.
     const targetUrl = input.treeId
       ? `/families?tree=${encodeURIComponent(input.treeId)}&personId=${encodeURIComponent(
           input.personId,
@@ -1319,11 +1263,11 @@ export const UserOnboardingPage: React.FC = () => {
           ...onboarding.match,
           selectedTreeId: input.treeId,
           selectedPersonId: input.personId,
-          action: "link",
+          action: "branch_access",
         },
         completion: {
           completedAt: nowIso(),
-          result: "linked",
+          result: "branch_access_requested",
         },
       }),
     ).unwrap();
@@ -1530,13 +1474,6 @@ export const UserOnboardingPage: React.FC = () => {
         {tree.matchedPeople.length > 0 ? (
           <Stack spacing={2}>
             {tree.matchedPeople.map((person) => {
-              const isPendingForThisPerson =
-                pendingUserNodeLinkRequest?.targetPersonId === person.personId;
-              const isBlockedByAnotherPendingRequest = Boolean(
-                pendingUserNodeLinkRequest &&
-                  pendingUserNodeLinkRequest.targetPersonId !== person.personId,
-              );
-
               return (
                 <Box
                   key={person.personId}
@@ -1654,55 +1591,6 @@ export const UserOnboardingPage: React.FC = () => {
                   </Box>
                 )}
 
-                {!userProfile?.peopleId && (
-                  <Stack
-                    direction={{ xs: "column", sm: "row" }}
-                    spacing={1}
-                    alignItems={{ xs: "stretch", sm: "center" }}
-                    justifyContent="space-between"
-                    sx={{ mt: 2 }}
-                  >
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        Is this you?
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Send a request to the tree’s owner to link this profile as
-                        your own account.
-                      </Typography>
-                    </Box>
-                    <Button
-                      variant={isPendingForThisPerson ? "outlined" : "contained"}
-                      disabled={
-                        linkRequestLoading ||
-                        Boolean(linkRequestSubmittingPersonId) ||
-                        isPendingForThisPerson ||
-                        isBlockedByAnotherPendingRequest
-                      }
-                      onClick={() =>
-                        void handleCreateLinkRequest(
-                          person.personId,
-                          tree.treeId,
-                          person.name,
-                          tree.treeName,
-                        )
-                      }
-                      sx={{
-                        width: { xs: "100%", sm: "auto" },
-                        minWidth: { sm: 150 },
-                        bgcolor: isPendingForThisPerson ? undefined : onboardingBlue,
-                      }}
-                    >
-                      {linkRequestSubmittingPersonId === person.personId
-                        ? "Sending..."
-                        : isPendingForThisPerson
-                          ? "Request pending"
-                          : isBlockedByAnotherPendingRequest
-                            ? "Another request pending"
-                            : "This is me"}
-                    </Button>
-                  </Stack>
-                )}
               </Box>
               );
             })}
@@ -1848,22 +1736,29 @@ export const UserOnboardingPage: React.FC = () => {
                           </MenuItem>
                         ))}
                       </TextField>
-                      <TextField
-                        label="Date of Birth"
-                        type="date"
-                        value={profileDob}
-                        onChange={(event) => setProfileDob(event.target.value)}
-                        fullWidth
-                        sx={inputCardSx}
-                        InputLabelProps={{ shrink: true }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <CakeOutlinedIcon />
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
+                      <Suspense fallback={<TextField label="Date of Birth" fullWidth sx={inputCardSx} />}>
+                        <DatePicker
+                          label="Date of Birth"
+                          value={profileDob ? dayjs(profileDob) : null}
+                          onChange={(value) =>
+                            setProfileDob(value && value.isValid() ? value.format("YYYY-MM-DD") : "")
+                          }
+                          format="DD/MM/YYYY"
+                          slotProps={{
+                            textField: {
+                              fullWidth: true,
+                              sx: inputCardSx,
+                              InputProps: {
+                                startAdornment: (
+                                  <InputAdornment position="start">
+                                    <CakeOutlinedIcon />
+                                  </InputAdornment>
+                                ),
+                              },
+                            },
+                          }}
+                        />
+                      </Suspense>
                       <TextField
                         label="Phone Number"
                         value={profilePhone || "Not provided"}
@@ -2144,74 +2039,7 @@ export const UserOnboardingPage: React.FC = () => {
                     </Stack>
                   )}
 
-                  {displayStep === "match" && linkRequestSent && (
-                    <Stack
-                      spacing={3}
-                      alignItems="center"
-                      sx={{ textAlign: "center", py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 0 } }}
-                    >
-                      <CheckCircleIcon
-                        sx={{ fontSize: { xs: 56, sm: 72 }, color: onboardingGreen }}
-                      />
-                      <Box sx={{ maxWidth: 620 }}>
-                        <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 900, mb: 1 }}>
-                          Request sent!
-                        </Typography>
-                        <Typography variant="body1" color="text.secondary">
-                          Your request to link with{" "}
-                          <strong>{linkRequestSent.personName}</strong> in{" "}
-                          <strong>{linkRequestSent.treeName}</strong> has been sent to
-                          the tree’s owner for approval.
-                        </Typography>
-                      </Box>
-
-                      <Paper
-                        variant="outlined"
-                        sx={{ p: 2, borderRadius: 3, bgcolor: brand.primarySoft, maxWidth: 460 }}
-                      >
-                        <Typography variant="body2" color="text.secondary">
-                          <strong>What happens next?</strong> Once the owner approves,
-                          your account is linked and you can manage your profile. You can
-                          explore the app in the meantime — we’ll keep the request pending.
-                        </Typography>
-                      </Paper>
-
-                      <Stack
-                        direction={{ xs: "column", sm: "row" }}
-                        spacing={1.5}
-                        justifyContent="center"
-                        sx={{ width: { xs: "100%", sm: "auto" } }}
-                      >
-                        <Button
-                          variant="contained"
-                          onClick={() =>
-                            navigate(consumePostLoginRedirect() || "/", { replace: true })
-                          }
-                          sx={{
-                            bgcolor: onboardingBlue,
-                            fontWeight: 700,
-                            width: { xs: "100%", sm: "auto" },
-                            minWidth: { sm: 170 },
-                          }}
-                        >
-                          Explore the app
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          onClick={() => navigate("/requests")}
-                          sx={{
-                            ...secondaryOnboardingButtonSx,
-                            width: { xs: "100%", sm: "auto" },
-                            minWidth: { sm: 170 },
-                          }}
-                        >
-                          View my requests
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  )}
-
-                  {displayStep === "match" && !linkRequestSent && (
+                  {displayStep === "match" && (
                     <Stack spacing={2.25}>
                       <Box sx={{ textAlign: "center", mx: "auto" }}>
                         <Typography
@@ -2368,10 +2196,6 @@ export const UserOnboardingPage: React.FC = () => {
                               </strong>{" "}
                               is pending review.
                             </Alert>
-                          )}
-
-                          {linkRequestSuccess && (
-                            <Alert severity="success">{linkRequestSuccess}</Alert>
                           )}
 
                           {matchResults.length === 0 && (
@@ -2589,7 +2413,7 @@ export const UserOnboardingPage: React.FC = () => {
                 backgroundColor: "transparent",
               }}
             >
-              {displayStep === "match" && !linkRequestSent && (
+              {displayStep === "match" && (
                 <Button
                   variant="outlined"
                   onClick={handleBackToLocation}
@@ -2668,7 +2492,6 @@ export const UserOnboardingPage: React.FC = () => {
         treeId={previewTreeId!}
         treeName={previewTreeName}
         personId={previewPersonId}
-        searchName={searchDisplayName}
         myLinkRequests={myLinkRequests}
         onRequestCompleted={handleOnboardingRequestCompleted}
         onClose={closePreview}

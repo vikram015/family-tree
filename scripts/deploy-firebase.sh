@@ -21,16 +21,26 @@ fi
 
 rm -rf .firebase
 
-# `react-scripts build` always runs with NODE_ENV=production, so it only ever
-# reads .env.production — .env.development is never consulted here, no matter
-# which Firebase project we're deploying to. To make the dev deploy skip the
-# launch gate, override it as a real shell env var: CRA's dotenv loader never
-# overwrites a variable that's already set in process.env, so this wins over
-# whatever .env.production has.
+# `react-scripts build` always runs with NODE_ENV=production, so on its own it
+# only ever reads .env.production. `build:dev` / `build:prod` use env-cmd to
+# force-load .env.dev / .env.production first, so each target gets its own
+# real config file (dev backend + launch gate off, or prod) instead of
+# overriding vars as shell env.
+#
+# Note CRA's react-scripts ALSO auto-loads .env.local into every build (dev or
+# prod) on top of whatever env-cmd set — dotenv only skips keys already present
+# in process.env, so any REACT_APP_* var that .env.local defines but
+# .env.dev/.env.production don't will leak through. See the comments in those
+# two files (e.g. REACT_APP_SHARE_BASE_URL) for how that's guarded against.
+#
+# The dev Cloud Run URL in .env.dev is hardcoded (not derived from
+# firebase.dev.json) because firebase.dev.json only rewrites /share/** to
+# Cloud Run, not /api/** — so the frontend has to call the Cloud Run URL
+# directly rather than a same-origin path.
 if [[ "${IS_DEV}" == "true" ]]; then
-  REACT_APP_COMING_SOON=false npm run build
+  npm run build:dev
 else
-  npm run build
+  npm run build:prod
 fi
 
 # firebase.dev.json also excludes itself from the hosting upload (unlike

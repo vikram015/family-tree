@@ -25,6 +25,24 @@ export const SHARE_BASE = (
 ).replace(/\/+$/, '');
 
 /**
+ * Person photo URLs carry a `?t=<upload timestamp>` cache-buster (see
+ * peopleService.uploadPersonPhoto), which already changes whenever the photo
+ * changes. Reuse that as the share link's cache-buster too: WhatsApp/Facebook
+ * cache link previews by the exact URL a person pastes, so if that URL never
+ * changes, a stale preview (e.g. scraped before a photo existed) sticks around
+ * forever even after the photo is fixed. Folding the same token into the share
+ * URL means a share sent after a photo update is a "new" URL to those crawlers.
+ */
+function photoVersionToken(photoUrl?: string | null): string {
+  if (!photoUrl) return '';
+  try {
+    return new URL(photoUrl).searchParams.get('t') || '';
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Build the shareable URL for a person's event thread.
  * e.g. `https://kinvia.in/share/person/<id>?event=birthday&year=2026`
  *
@@ -37,6 +55,7 @@ export function buildEventShareUrl(
   personId: string,
   eventType: WishEventType,
   year: number,
+  photoUrl?: string | null,
 ): string {
   const base = SHARE_BASE;
   const current = browserOrigin();
@@ -44,7 +63,9 @@ export function buildEventShareUrl(
     current && current !== base
       ? `&origin=${encodeURIComponent(current)}`
       : '';
-  return `${base}/share/person/${personId}?event=${eventType}&year=${year}${origin}`;
+  const version = photoVersionToken(photoUrl);
+  const v = version ? `&v=${encodeURIComponent(version)}` : '';
+  return `${base}/share/person/${personId}?event=${eventType}&year=${year}${v}${origin}`;
 }
 
 export interface NativeShareInput {

@@ -70,8 +70,12 @@ import {
   fetchMyLocationAccessRequests,
   submitLocationAccessRequest,
 } from "../../store/thunks/apiThunks";
+import dayjs from "dayjs";
 
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
+const DatePicker = React.lazy(() =>
+  import("@mui/x-date-pickers/DatePicker").then((m) => ({ default: m.DatePicker })),
+);
 
 const BUSINESS_CATEGORY_LABELS: Record<string, string> = {
   retail: "Retail & Shops",
@@ -1838,19 +1842,20 @@ export const ProfilePage: React.FC = () => {
             />
             {canManagePerson ? (
               <>
-                <TextField
-                  fullWidth
-                  label="Date of Birth"
-                  type="date"
-                  value={editProfileData.dob}
-                  onChange={(e) =>
-                    setEditProfileData({
-                      ...editProfileData,
-                      dob: e.target.value,
-                    })
-                  }
-                  InputLabelProps={{ shrink: true }}
-                />
+                <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
+                  <DatePicker
+                    label="Date of Birth"
+                    value={editProfileData.dob ? dayjs(editProfileData.dob) : null}
+                    onChange={(value) =>
+                      setEditProfileData({
+                        ...editProfileData,
+                        dob: value && value.isValid() ? value.format("YYYY-MM-DD") : "",
+                      })
+                    }
+                    format="DD/MM/YYYY"
+                    slotProps={{ textField: { fullWidth: true } }}
+                  />
+                </Suspense>
                 <FormControl fullWidth>
                   <InputLabel id="profile-gender-label">Gender</InputLabel>
                   <Select

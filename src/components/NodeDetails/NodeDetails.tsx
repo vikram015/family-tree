@@ -1668,7 +1668,7 @@ export const NodeDetails = memo(function NodeDetails({
                               }
                             }}
                             uploading={photoUploading}
-                            previewSize={112}
+                            previewSize={isMobile ? 112 : 160}
                           />
                         </Suspense>
                         <Box>

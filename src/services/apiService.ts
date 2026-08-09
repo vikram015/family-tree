@@ -8,6 +8,33 @@ import { backendApi } from './backendApi';
 
 type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 
+// "public" (visible to any signed-in user, not just this tree's collaborators)
+// was removed for now — only two tiers exist today.
+export type PhotoVisibility = 'private' | 'family';
+
+export interface FamilyPhoto {
+  id: string;
+  personId: string;
+  treeId: string;
+  contentType: string;
+  fileSizeBytes: number;
+  visibility: PhotoVisibility;
+  createdBy: string;
+  createdAt: string;
+  /** Short-lived signed URL — refetch the list rather than caching this long-term. */
+  photoUrl: string;
+  thumbUrl: string;
+}
+
+export interface StorageQuotaStatus {
+  usedBytes: number;
+  limitBytes: number;
+  maxBytes: number;
+  baseBytes: number;
+  bonusPerActionBytes: number;
+  maxFileSizeBytes: number;
+}
+
 export interface UserPreference {
   showFullTree: boolean;
   showSpouse: boolean;
@@ -52,11 +79,11 @@ export interface UserOnboardingData {
     searchedAt: string | null;
     selectedTreeId: string | null;
     selectedPersonId: string | null;
-    action: "link" | "create_tree" | null;
+    action: "link" | "create_tree" | "branch_access" | null;
   };
   completion: {
     completedAt: string | null;
-    result: "linked" | "created_tree" | null;
+    result: "linked" | "created_tree" | "branch_access_requested" | null;
   };
 }
 
@@ -1367,5 +1394,49 @@ export const ApiService = {
    */
   async removePersonPhoto(personId: string): Promise<void> {
     await backendApi.delete(`/api/people/${personId}/photo`);
+  },
+
+  // =====================================================
+  // FAMILY PHOTOS (Cloudflare R2) — separate from the single profile photo above
+  // =====================================================
+
+  /** Upload a family photo for a person, with an explicit visibility scope. */
+  async uploadFamilyPhoto(
+    personId: string,
+    file: File,
+    visibility: PhotoVisibility,
+  ): Promise<FamilyPhoto> {
+    const formData = new FormData();
+    formData.append('photo', file);
+    formData.append('visibility', visibility);
+    return backendApi.upload<FamilyPhoto>(`/api/photos/people/${personId}`, formData);
+  },
+
+  /** The current user's own uploads, newest first. */
+  async getMyFamilyPhotos(): Promise<FamilyPhoto[]> {
+    return backendApi.get<FamilyPhoto[]>('/api/photos/mine');
+  },
+
+  /** Photos uploaded by others, visible to the current user (public, or family-scoped within a shared tree). */
+  async getSharedFamilyPhotos(): Promise<FamilyPhoto[]> {
+    return backendApi.get<FamilyPhoto[]>('/api/photos/shared');
+  },
+
+  /** All photos of one person the current user is allowed to see. */
+  async getPersonFamilyPhotos(personId: string): Promise<FamilyPhoto[]> {
+    return backendApi.get<FamilyPhoto[]>(`/api/photos/people/${personId}`);
+  },
+
+  async updateFamilyPhotoVisibility(photoId: string, visibility: PhotoVisibility): Promise<void> {
+    await backendApi.patch(`/api/photos/${photoId}/visibility`, { visibility });
+  },
+
+  async deleteFamilyPhoto(photoId: string): Promise<void> {
+    await backendApi.delete(`/api/photos/${photoId}`);
+  },
+
+  /** Storage quota: how much of the earned allowance the user has used. */
+  async getStorageStatus(): Promise<StorageQuotaStatus> {
+    return backendApi.get<StorageQuotaStatus>('/api/storage/status');
   },
 };
