@@ -38,6 +38,17 @@ function registerValidSW(swUrl: string, config?: Config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
+      // A worker can already be sitting in "waiting" by the time this tab
+      // registers (e.g. the install finished in an earlier tab, or between
+      // page loads) — onupdatefound below only fires for installs that start
+      // DURING this registration call, so that case would otherwise never
+      // notify the user at all.
+      if (registration.waiting) {
+        if (config && config.onUpdate) {
+          config.onUpdate(registration);
+        }
+      }
+
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker == null) {
