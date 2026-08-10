@@ -1090,6 +1090,17 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       addMenuNodeIdRef.current === personId;
     const shouldWrapWithParentPlaceholders =
       showPlaceholders && (!person.parents || person.parents.length === 0);
+    // A node with exactly one known parent gets its missing parent offered as
+    // a synthetic spouse placeholder next to that EXISTING parent (see
+    // addMissingParentForChild below, handled one level up in that parent's
+    // own conversion) — not as a second, separate placeholder mixed into this
+    // node's own child/sibling list. Without this, buildParentPlaceholders(personId)
+    // below would render the same "Add Mother"/"Add Father" a second time.
+    const parentPlaceholderOwnedByExistingParent =
+      showPlaceholders &&
+      !!person.parents &&
+      person.parents.length === 1 &&
+      !isMobileRef.current;
     const addMenuChildId = addMenuNodeIdRef.current;
     const addMenuChild = addMenuChildId
       ? nodes.find((n) => n.id === addMenuChildId)
@@ -1180,7 +1191,8 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
           // Parent placeholders are relevant to the primary node add flow.
           const parentPlaceholders = showSpousePlaceholders
             ? []
-            : showPlaceholders && shouldWrapWithParentPlaceholders
+            : showPlaceholders &&
+                (shouldWrapWithParentPlaceholders || parentPlaceholderOwnedByExistingParent)
               ? []
               : buildParentPlaceholders(placeholderTarget);
           const childPlaceholders: DTreeNode[] = [
@@ -1289,7 +1301,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
 
       // Inject child placeholders
       if (showPlaceholders) {
-        const parentPlaceholders = shouldWrapWithParentPlaceholders
+        const parentPlaceholders = shouldWrapWithParentPlaceholders || parentPlaceholderOwnedByExistingParent
           ? []
           : buildParentPlaceholders(personId);
         const childPlaceholders: DTreeNode[] = [
@@ -1371,7 +1383,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     // from having both treeNode.marriages and treeNode.children simultaneously)
     else if (showPlaceholders && showSpouses) {
       const spouseClass = person.gender === "female" ? "man" : "woman";
-      const parentPlaceholders = shouldWrapWithParentPlaceholders
+      const parentPlaceholders = shouldWrapWithParentPlaceholders || parentPlaceholderOwnedByExistingParent
         ? []
         : buildParentPlaceholders(personId);
       const childPlaceholders: DTreeNode[] = [
@@ -1413,7 +1425,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       ];
     }
     else if (showPlaceholders) {
-      const parentPlaceholders = shouldWrapWithParentPlaceholders
+      const parentPlaceholders = shouldWrapWithParentPlaceholders || parentPlaceholderOwnedByExistingParent
         ? []
         : buildParentPlaceholders(personId);
       const childPlaceholders: DTreeNode[] = [
