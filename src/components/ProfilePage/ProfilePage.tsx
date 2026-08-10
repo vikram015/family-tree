@@ -1,4 +1,4 @@
-import React, { Suspense, useState, useEffect, useCallback, useMemo } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
@@ -33,6 +33,8 @@ import {
   CardContent,
   Tabs,
   Tab,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -93,6 +95,8 @@ const formatBusinessCategory = (category?: string) => {
 };
 
 export const ProfilePage: React.FC = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const navigate = useNavigate();
   const { personId: routePersonId } = useParams<{ personId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -127,6 +131,30 @@ export const ProfilePage: React.FC = () => {
   const [businessToDelete, setBusinessToDelete] = useState<any | null>(null);
   const [deletingBusiness, setDeletingBusiness] = useState(false);
   const [openEditProfileDialog, setOpenEditProfileDialog] = useState(false);
+
+  // The dialog is fullScreen on mobile, so it should feel like a screen the
+  // hardware/gesture back button can dismiss instead of navigating the whole
+  // app away while it stays open underneath. Push a history entry while open
+  // and treat popstate as "close"; if it's closed some other way (Cancel/Save),
+  // consume that entry so back doesn't then require a second press.
+  const closedByBackRef = useRef(false);
+  useEffect(() => {
+    if (!openEditProfileDialog) return;
+    closedByBackRef.current = false;
+    window.history.pushState({ dialog: "edit-profile" }, "");
+    const onPopState = () => {
+      closedByBackRef.current = true;
+      setOpenEditProfileDialog(false);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      if (!closedByBackRef.current) {
+        window.history.back();
+      }
+    };
+  }, [openEditProfileDialog]);
+
   const [personLoading, setPersonLoading] = useState(false);
   const [personNotFound, setPersonNotFound] = useState(false);
 
@@ -1780,6 +1808,7 @@ export const ProfilePage: React.FC = () => {
       <Dialog
         open={openEditProfileDialog}
         onClose={() => setOpenEditProfileDialog(false)}
+        fullScreen={isMobile}
       >
         <DialogTitle>Edit Profile</DialogTitle>
         <DialogContent>
