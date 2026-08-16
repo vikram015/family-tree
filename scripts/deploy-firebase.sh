@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-kinvia-fe353}"
+PROJECT_ID="${1:-${PROJECT_ID:-kinvia-fe353}}"
+
+echo "Deploying to Firebase project: ${PROJECT_ID}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"

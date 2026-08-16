@@ -55,7 +55,7 @@ export const PrivacyPolicyPage: React.FC = () => {
                 review workflows, and user support.
               </Typography>
               <Typography variant="body1">
-                Access to village-level management actions is permission-based
+                Access to location-level management actions is permission-based
                 and reviewed by authorized administrators, while read-only
                 access is available as configured by the platform.
               </Typography>

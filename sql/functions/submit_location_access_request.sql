@@ -1,16 +1,16 @@
 -- =====================================================
--- FUNCTION: submit_village_access_request
--- Admin users can raise a village assignment request.
+-- FUNCTION: submit_location_access_request
+-- Admin users can raise a location assignment request.
 -- =====================================================
-CREATE OR REPLACE FUNCTION submit_village_access_request(
-  p_village_id UUID,
+CREATE OR REPLACE FUNCTION submit_location_access_request(
+  p_location_id UUID,
   p_request_message TEXT DEFAULT NULL
 )
 RETURNS JSON AS $$
 DECLARE
   v_user_id UUID;
   v_user_role VARCHAR;
-  v_user_villages TEXT[];
+  v_user_locations TEXT[];
   v_exists BOOLEAN;
 BEGIN
   v_user_id := auth.uid();
@@ -18,8 +18,8 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Not authenticated');
   END IF;
 
-  SELECT role, villages
-  INTO v_user_role, v_user_villages
+  SELECT role, locations
+  INTO v_user_role, v_user_locations
   FROM users
   WHERE id = v_user_id
     AND is_deleted = false;
@@ -32,24 +32,24 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'Only admins can raise requests');
   END IF;
 
-  IF array_length(COALESCE(v_user_villages, ARRAY[]::TEXT[]), 1) > 0 THEN
-    RETURN json_build_object('success', false, 'error', 'Village already assigned. Contact support@kinvia.in for changes.');
+  IF array_length(COALESCE(v_user_locations, ARRAY[]::TEXT[]), 1) > 0 THEN
+    RETURN json_build_object('success', false, 'error', 'Location already assigned. Contact support@kinvia.in for changes.');
   END IF;
 
   IF EXISTS (
     SELECT 1
     FROM users
     WHERE id = v_user_id
-      AND p_village_id::TEXT = ANY(COALESCE(villages, ARRAY[]::TEXT[]))
+      AND p_location_id::TEXT = ANY(COALESCE(locations, ARRAY[]::TEXT[]))
   ) THEN
-    RETURN json_build_object('success', false, 'error', 'Village already assigned');
+    RETURN json_build_object('success', false, 'error', 'Location already assigned');
   END IF;
 
   SELECT EXISTS(
     SELECT 1
-    FROM village_access_requests
+    FROM location_access_requests
     WHERE requester_user_id = v_user_id
-      AND village_id = p_village_id
+      AND location_id = p_location_id
       AND status = 'pending'
       AND is_deleted = false
   ) INTO v_exists;
@@ -58,16 +58,16 @@ BEGIN
     RETURN json_build_object('success', false, 'error', 'A pending request already exists');
   END IF;
 
-  INSERT INTO village_access_requests (
+  INSERT INTO location_access_requests (
     requester_user_id,
-    village_id,
+    location_id,
     status,
     request_message,
     created_at,
     modified_at
   ) VALUES (
     v_user_id,
-    p_village_id,
+    p_location_id,
     'pending',
     p_request_message,
     now(),

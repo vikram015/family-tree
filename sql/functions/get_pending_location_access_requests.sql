@@ -1,31 +1,31 @@
 -- =====================================================
--- FUNCTION: get_pending_village_access_requests
+-- FUNCTION: get_pending_location_access_requests
 -- Superadmin sees all pending requests.
--- Admin sees pending requests only for villages they manage.
+-- Admin sees pending requests only for locations they manage.
 -- =====================================================
-CREATE OR REPLACE FUNCTION get_pending_village_access_requests()
+CREATE OR REPLACE FUNCTION get_pending_location_access_requests()
 RETURNS TABLE (
   id UUID,
   requester_user_id UUID,
   requester_email TEXT,
   requester_name TEXT,
-  village_id UUID,
-  village_name TEXT,
+  location_id UUID,
+  location_name TEXT,
   request_message TEXT,
   created_at TIMESTAMP
 ) AS $$
 DECLARE
   v_user_id UUID;
   v_role VARCHAR;
-  v_villages TEXT[];
+  v_locations TEXT[];
 BEGIN
   v_user_id := auth.uid();
   IF v_user_id IS NULL THEN
     RETURN;
   END IF;
 
-  SELECT role, villages
-  INTO v_role, v_villages
+  SELECT role, locations
+  INTO v_role, v_locations
   FROM users
   WHERE users.id = v_user_id
     AND users.is_deleted = false;
@@ -41,13 +41,13 @@ BEGIN
       r.requester_user_id,
       u.email::TEXT AS requester_email,
       u.name::TEXT AS requester_name,
-      r.village_id,
-      v.name::TEXT AS village_name,
+      r.location_id,
+      v.name::TEXT AS location_name,
       r.request_message,
       r.created_at
-    FROM village_access_requests r
+    FROM location_access_requests r
     JOIN users u ON u.id = r.requester_user_id
-    JOIN village v ON v.id = r.village_id
+    JOIN location v ON v.id = r.location_id
     WHERE r.status = 'pending'
       AND r.is_deleted = false
     ORDER BY r.created_at ASC;
@@ -61,16 +61,16 @@ BEGIN
       r.requester_user_id,
       u.email::TEXT AS requester_email,
       u.name::TEXT AS requester_name,
-      r.village_id,
-      v.name::TEXT AS village_name,
+      r.location_id,
+      v.name::TEXT AS location_name,
       r.request_message,
       r.created_at
-    FROM village_access_requests r
+    FROM location_access_requests r
     JOIN users u ON u.id = r.requester_user_id
-    JOIN village v ON v.id = r.village_id
+    JOIN location v ON v.id = r.location_id
     WHERE r.status = 'pending'
       AND r.is_deleted = false
-      AND r.village_id::TEXT = ANY(COALESCE(v_villages, ARRAY[]::TEXT[]))
+      AND r.location_id::TEXT = ANY(COALESCE(v_locations, ARRAY[]::TEXT[]))
     ORDER BY r.created_at ASC;
   END IF;
 END;

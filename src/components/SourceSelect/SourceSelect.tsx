@@ -18,7 +18,7 @@ import {
   TextField,
 } from "@mui/material";
 import { useSearchParams } from "react-router-dom";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAppSelector } from "../../store/hooks";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 
@@ -27,7 +27,7 @@ interface TreeItem {
   id: string;
   caste?: string;
   subCaste?: string;
-  villageName?: string;
+  locationName?: string;
 }
 
 interface SourceSelectProps {
@@ -45,8 +45,9 @@ export const SourceSelect = memo(function SourceSelect({
   const [trees, setTrees] = React.useState<any[]>([]);
   const [searchText, setSearchText] = useState<string>("");
   const [value, setValue] = React.useState<string>(urlTreeId);
+  const [selectedTreePreview, setSelectedTreePreview] = useState<TreeItem | null>(null);
   const valueRef = useRef(value);
-  const { selectedVillage, setSelectedVillage } = useVillage();
+  const { selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const casteMap = useMemo(
@@ -60,6 +61,8 @@ export const SourceSelect = memo(function SourceSelect({
   const initNotifiedTreeRef = useRef<string | null>(null);
   const sharedTreeResolvedRef = useRef<string | null>(null);
   const resolveSharedTreeOnInitRef = useRef(true);
+  const previousUrlTreeIdRef = useRef<string>(urlTreeId);
+  const loadRequestIdRef = useRef(0);
   const onChangeRef = useRef(onChange);
 
   useEffect(() => {
@@ -67,6 +70,13 @@ export const SourceSelect = memo(function SourceSelect({
   }, [onChange]);
 
   useEffect(() => {
+    if (previousUrlTreeIdRef.current !== urlTreeId) {
+      previousUrlTreeIdRef.current = urlTreeId;
+      sharedTreeResolvedRef.current = null;
+      resolveSharedTreeOnInitRef.current = Boolean(urlTreeId);
+      setSelectedTreePreview(null);
+    }
+
     if (urlTreeId !== value) {
       setValue(urlTreeId);
     }
@@ -83,7 +93,7 @@ export const SourceSelect = memo(function SourceSelect({
         id: tree.id,
         caste: casteMap.get(tree.caste) || tree.caste,
         subCaste: subCasteMap.get(tree.subCaste) || tree.subCaste,
-        villageName: tree.village?.name || tree.villageName,
+        locationName: tree.location?.name || tree.locationName,
       })),
     [trees, casteMap, subCasteMap],
   );
@@ -97,16 +107,17 @@ export const SourceSelect = memo(function SourceSelect({
         item.name.toLowerCase().includes(lowerSearch) ||
         item.caste?.toLowerCase().includes(lowerSearch) ||
         item.subCaste?.toLowerCase().includes(lowerSearch) ||
-        item.villageName?.toLowerCase().includes(lowerSearch),
+        item.locationName?.toLowerCase().includes(lowerSearch),
     );
   }, [items, searchText]);
 
   useEffect(() => {
     const loadTrees = async () => {
+      const requestId = ++loadRequestIdRef.current;
       try {
-        // If a shared tree link points to a tree in a different village,
-        // switch village first so that tree appears in the filtered tree list.
-        // Do this only once per URL tree value to avoid blocking manual village changes.
+        // If a shared tree link points to a tree in a different location,
+        // switch location first so that tree appears in the filtered tree list.
+        // Do this only once per URL tree value to avoid blocking manual location changes.
         if (
           resolveSharedTreeOnInitRef.current &&
           urlTreeId &&
@@ -114,19 +125,35 @@ export const SourceSelect = memo(function SourceSelect({
         ) {
           try {
             const targetTree = await ApiService.getTreeWithDetails(urlTreeId);
+            if (loadRequestIdRef.current !== requestId) {
+              return;
+            }
+            if (targetTree?.id) {
+              setSelectedTreePreview({
+                id: targetTree.id,
+                name: targetTree.name || "Selected tree",
+                caste: casteMap.get(targetTree.caste) || targetTree.caste,
+                subCaste:
+                  subCasteMap.get(targetTree.subCaste) || targetTree.subCaste,
+                locationName: targetTree.location?.name,
+              });
+            }
             if (
-              targetTree?.villageId &&
-              targetTree.villageId !== selectedVillage
+              targetTree?.locationId &&
+              targetTree.locationId !== selectedLocation
             ) {
               sharedTreeResolvedRef.current = urlTreeId;
               resolveSharedTreeOnInitRef.current = false;
-              setSelectedVillage(targetTree.villageId);
+              setSelectedLocation(targetTree.locationId);
               return;
             }
             sharedTreeResolvedRef.current = urlTreeId;
             resolveSharedTreeOnInitRef.current = false;
           } catch (err) {
-            console.warn("Could not resolve shared tree village:", err);
+            if (loadRequestIdRef.current !== requestId) {
+              return;
+            }
+            console.warn("Could not resolve shared tree location:", err);
             sharedTreeResolvedRef.current = urlTreeId;
             resolveSharedTreeOnInitRef.current = false;
           }
@@ -136,18 +163,24 @@ export const SourceSelect = memo(function SourceSelect({
           resolveSharedTreeOnInitRef.current = false;
         }
 
-        const sourceTrees = await ApiService.getTrees(selectedVillage);
+        const sourceTrees = await ApiService.getTrees(selectedLocation);
+        if (loadRequestIdRef.current !== requestId) {
+          return;
+        }
         setTrees(sourceTrees);
+        if (valueRef.current && sourceTrees.some((s) => s.id === valueRef.current)) {
+          setSelectedTreePreview(null);
+        }
 
         let nextValue = valueRef.current;
         let notifyValue: string | null = null;
 
-        // Keep URL tree only when it exists in the currently loaded village tree list.
-        // If not present (e.g. user switched village), fall back to a valid local tree.
+        // Keep URL tree only when it exists in the currently loaded location tree list.
+        // If not present (e.g. user switched location), fall back to a valid local tree.
         if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
           nextValue = urlTreeId;
         }
-        // Otherwise auto-select first only once and notify parent
+        // Otherwise auto-select first only once and notify parent.
         else if (sourceTrees.length > 0) {
           const first = sourceTrees[0];
           const currentExists = Boolean(
@@ -179,19 +212,30 @@ export const SourceSelect = memo(function SourceSelect({
           onChangeRef.current(notifyValue, []);
         }
       } catch (error) {
+        if (loadRequestIdRef.current !== requestId) {
+          return;
+        }
         console.error("Failed to load trees:", error);
         setTrees([]);
       }
     };
 
     loadTrees();
-  }, [autoNotifyOnInit, selectedVillage, setSelectedVillage, urlTreeId]);
+  }, [
+    autoNotifyOnInit,
+    casteMap,
+    selectedLocation,
+    setSelectedLocation,
+    subCasteMap,
+    urlTreeId,
+  ]);
 
   const changeHandler = useCallback(
     (event: any) => {
       const id = event.target.value;
       if (id === value) return;
       setValue(id);
+      setSelectedTreePreview(null);
       // pass the selected id; second param (nodes) is not available here so pass an empty array
       onChangeRef.current(id, []);
     },
@@ -213,9 +257,9 @@ export const SourceSelect = memo(function SourceSelect({
       >
         {item.name}
       </Typography>
-      {(item.caste || item.subCaste || item.villageName) && (
+      {(item.caste || item.subCaste || item.locationName) && (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {[item.caste, item.subCaste, item.villageName]
+          {[item.caste, item.subCaste, item.locationName]
             .filter(Boolean)
             .join(" • ")}
         </Typography>
@@ -224,6 +268,7 @@ export const SourceSelect = memo(function SourceSelect({
   );
 
   const selectedItem = getSelectedItem();
+  const renderItem = selectedItem || selectedTreePreview;
 
   return (
     <FormControl
@@ -250,8 +295,14 @@ export const SourceSelect = memo(function SourceSelect({
               </Typography>
             );
           }
-          const item = selectedItem;
-          if (!item) return selected;
+          const item = renderItem;
+          if (!item) {
+            return (
+              <Typography sx={{ color: "text.secondary" }}>
+                Loading selected tree...
+              </Typography>
+            );
+          }
           return (
             <Box>
               <Typography
@@ -264,7 +315,7 @@ export const SourceSelect = memo(function SourceSelect({
                 {item.name}
               </Typography>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {[item.caste, item.subCaste, item.villageName]
+                {[item.caste, item.subCaste, item.locationName]
                   .filter(Boolean)
                   .join(" • ")}
               </Typography>

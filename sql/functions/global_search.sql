@@ -2,7 +2,7 @@
 -- FUNCTION: global_search
 -- =====================================================
 -- Description: Global search across people, businesses, and professions.
--- Returns enriched rows with village/tree context and parent hierarchy.
+-- Returns enriched rows with location/tree context and parent hierarchy.
 --
 -- Parameters:
 --   p_search_term: case-insensitive partial term
@@ -16,8 +16,8 @@
 --   person_name: linked person display name
 --   tree_id: linked tree id
 --   tree_name: linked tree name
---   village_id: linked village id
---   village_name: linked village name
+--   location_id: linked location id
+--   location_name: linked location name
 --   caste_name: caste name
 --   sub_caste_name: sub-caste name
 --   parent_hierarchy: ancestor chain up to 5 generations
@@ -35,8 +35,8 @@ RETURNS TABLE (
   person_name TEXT,
   tree_id UUID,
   tree_name TEXT,
-  village_id UUID,
-  village_name TEXT,
+  location_id UUID,
+  location_name TEXT,
   caste_name TEXT,
   sub_caste_name TEXT,
   parent_hierarchy JSONB
@@ -54,13 +54,13 @@ BEGIN
       p.gender,
       p.tree_id,
       t.name AS tree_name,
-      v.id AS village_id,
-      v.name AS village_name,
+      v.id AS location_id,
+      v.name AS location_name,
       c.name AS caste_name,
       sc.name AS sub_caste_name
     FROM people p
     JOIN tree t ON t.id = p.tree_id AND t.is_deleted = FALSE
-    LEFT JOIN village v ON v.id = t.village_id
+    LEFT JOIN location v ON v.id = t.location_id
     LEFT JOIN caste c ON c.id = t.caste
     LEFT JOIN sub_caste sc ON sc.id = t.sub_caste
     WHERE p.is_deleted = FALSE
@@ -101,8 +101,8 @@ BEGIN
       pc.person_name,
       pc.tree_id,
       pc.tree_name,
-      pc.village_id,
-      pc.village_name,
+      pc.location_id,
+      pc.location_name,
       pc.caste_name,
       pc.sub_caste_name,
       COALESCE(
@@ -124,8 +124,8 @@ BEGIN
       pc.person_name,
       pc.tree_id,
       pc.tree_name,
-      pc.village_id,
-      pc.village_name,
+      pc.location_id,
+      pc.location_name,
       pc.caste_name,
       pc.sub_caste_name
   ),
@@ -134,13 +134,13 @@ BEGIN
       'person'::TEXT AS entity_type,
       pwh.person_id AS entity_id,
       pwh.person_name::TEXT AS title,
-      ('Village: ' || COALESCE(pwh.village_name, 'N/A'))::TEXT AS subtitle,
+      ('Location: ' || COALESCE(pwh.location_name, 'N/A'))::TEXT AS subtitle,
       pwh.person_id,
       pwh.person_name::TEXT,
       pwh.tree_id,
       pwh.tree_name::TEXT,
-      pwh.village_id,
-      pwh.village_name::TEXT,
+      pwh.location_id,
+      pwh.location_name::TEXT,
       pwh.caste_name::TEXT,
       pwh.sub_caste_name::TEXT,
       pwh.parent_hierarchy
@@ -164,8 +164,8 @@ BEGIN
       pwh.person_name::TEXT,
       pwh.tree_id,
       pwh.tree_name::TEXT,
-      pwh.village_id,
-      pwh.village_name::TEXT,
+      pwh.location_id,
+      pwh.location_name::TEXT,
       pwh.caste_name::TEXT,
       pwh.sub_caste_name::TEXT,
       COALESCE(pwh.parent_hierarchy, '[]'::JSONB) AS parent_hierarchy
@@ -194,8 +194,8 @@ BEGIN
       pwh.person_name::TEXT,
       pwh.tree_id,
       pwh.tree_name::TEXT,
-      pwh.village_id,
-      pwh.village_name::TEXT,
+      pwh.location_id,
+      pwh.location_name::TEXT,
       pwh.caste_name::TEXT,
       pwh.sub_caste_name::TEXT,
       COALESCE(pwh.parent_hierarchy, '[]'::JSONB) AS parent_hierarchy

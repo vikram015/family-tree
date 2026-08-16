@@ -13,10 +13,6 @@ import {
   Button,
   CircularProgress,
   FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Select,
   MenuItem,
   InputLabel,
@@ -26,11 +22,31 @@ import {
   ToggleButtonGroup,
   Switch,
   Chip,
+  Autocomplete,
+  Avatar,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  InputAdornment,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
 import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
 import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
+import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
+import ChildCareOutlinedIcon from "@mui/icons-material/ChildCareOutlined";
+import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
+import BusinessIcon from "@mui/icons-material/Business";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
+import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
+import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
+import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
 import dayjs, { Dayjs } from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
@@ -39,12 +55,31 @@ import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { phoneFromCustomFields } from "../Business/businessContact";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
     default: m.DatePicker,
   })),
 );
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
+
+const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const GENDER_OPTIONS = [
+  { value: "male", label: "Male", icon: <MaleOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: "female", label: "Female", icon: <FemaleOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: "other", label: "Other", icon: <PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} /> },
+] as const;
+const RELATION_OPTIONS = [
+  { value: "child", label: "Child", icon: <ChildCareOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: "spouse", label: "Spouse", icon: <FavoriteBorderOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: "parent", label: "Parent", icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} /> },
+] as const;
+
+function titleCaseRelationType(value: string) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
 
 interface AddNodeProps {
   targetId?: string; // id of node in relation to which we add (e.g. parent/child/spouse)
@@ -54,6 +89,16 @@ interface AddNodeProps {
     targetId?: string,
     type?: RelType,
     otherParentId?: string, // second parent for children or second spouse
+    childOptions?: {
+      // How to resolve the other parent when adding a child.
+      otherParentMode?: "existing" | "new" | "unknown";
+      newSpouse?: {
+        name?: string;
+        nameHindi?: string;
+        gender?: string;
+        dob?: string;
+      };
+    },
   ) => Promise<string | undefined> | Promise<void> | void;
   onCancel?: () => void;
   /** Called when the full add flow is complete (after Step 2 save or skip).
@@ -107,8 +152,8 @@ export default function AddNode({
 
   // Mode state: 'create' or 'link' (only relevant for spouse currently)
   const [mode, setMode] = useState<"create" | "link">("create");
-  const [villages, setVillages] = useState<any[]>([]);
-  const [searchVillageId, setSearchVillageId] = useState("");
+  const [locations, setLocations] = useState<any[]>([]);
+  const [searchLocationId, setSearchLocationId] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   const [personSearchValue, setPersonSearchValue] = useState("");
 
@@ -120,11 +165,10 @@ export default function AddNode({
     "business" | "job" | "other"
   >("business");
 
-  // Business Fields
-  const [businessName, setBusinessName] = useState("");
-  const [businessCategory, setBusinessCategory] = useState("");
-  const [businessAddress, setBusinessAddress] = useState("");
-  const [businessContact, setBusinessContact] = useState("");
+  // Business is captured via the shared BusinessFormDialog (same modal used on the
+  // Business page, Profile page, and node details).
+  const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
+  const [businessAdded, setBusinessAdded] = useState(false);
 
   // Profession Fields
   const [jobTitle, setJobTitle] = useState("");
@@ -163,6 +207,18 @@ export default function AddNode({
     backdropFilter: "blur(6px)",
   } as const;
 
+  const inputIconSx = { color: "text.secondary" } as const;
+  const inputWithIconSx = {
+    "& .MuiInputAdornment-root": inputIconSx,
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 2,
+    },
+  } as const;
+
+  const adornment = (icon: React.ReactNode) => (
+    <InputAdornment position="start">{icon}</InputAdornment>
+  );
+
   useEffect(() => {
     setFlowTargetId(targetId);
   }, [targetId]);
@@ -174,10 +230,10 @@ export default function AddNode({
     return value.format("YYYY-MM-DD");
   }, []);
 
-  // Load villages for the search dropdown
+  // Load locations for the search dropdown
   useEffect(() => {
-    ApiService.getVillages().then((data) => {
-      setVillages(data || []);
+    ApiService.getLocations().then((data) => {
+      setLocations(data || []);
     });
     ApiService.getAllProfessions().then((data) => {
       setAllProfessions(data || []);
@@ -207,14 +263,39 @@ export default function AddNode({
       .filter(Boolean) as FNode[];
   }, [effectiveTargetId, nodes]);
 
+  const selectedSearchLocation = useMemo(
+    () => locations.find((v) => v.id === searchLocationId) || null,
+    [searchLocationId, locations],
+  );
+
   const [selectedOtherParentId, setSelectedOtherParentId] = useState<string>(
     () => "",
   );
+  // How the user wants to set the child's other parent (spouse of the target).
+  const [otherParentMode, setOtherParentMode] = useState<
+    "existing" | "new" | "unknown"
+  >("unknown");
+  // Details for the "create new spouse" option.
+  const [newSpouseName, setNewSpouseName] = useState("");
+  const [newSpouseNameHindi, setNewSpouseNameHindi] = useState("");
+  const [newSpouseGender, setNewSpouseGender] = useState<
+    "male" | "female" | "other" | ""
+  >("");
+  const [newSpouseDob, setNewSpouseDob] = useState<Dayjs | null>(null);
+
   useEffect(() => {
-    // default to first spouse if available
-    if (spouseOptions.length > 0) {
+    // Choose a sensible default for the other parent:
+    // - exactly one existing spouse -> preselect it
+    // - multiple existing spouses -> default to "existing" but make the user pick which one
+    // - no existing spouse -> default to "unknown" (user can switch to "create new")
+    if (spouseOptions.length === 1) {
+      setOtherParentMode("existing");
       setSelectedOtherParentId(spouseOptions[0].id);
+    } else if (spouseOptions.length > 1) {
+      setOtherParentMode("existing");
+      setSelectedOtherParentId("");
     } else {
+      setOtherParentMode("unknown");
       setSelectedOtherParentId("");
     }
   }, [spouseOptions]);
@@ -270,8 +351,14 @@ export default function AddNode({
     setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
+    setOtherParentMode("unknown");
+    setSelectedOtherParentId("");
+    setNewSpouseName("");
+    setNewSpouseNameHindi("");
+    setNewSpouseGender("");
+    setNewSpouseDob(null);
     setSelectedPerson(null);
-    setSearchVillageId("");
+    setSearchLocationId("");
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
@@ -282,10 +369,8 @@ export default function AddNode({
     // Reset Step 2
     setStep(1);
     setSavedNodeId(null);
-    setBusinessName("");
-    setBusinessCategory("");
-    setBusinessAddress("");
-    setBusinessContact("");
+    setBusinessAdded(false);
+    setBusinessDialogOpen(false);
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
@@ -304,8 +389,14 @@ export default function AddNode({
     setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
+    setOtherParentMode("unknown");
+    setSelectedOtherParentId("");
+    setNewSpouseName("");
+    setNewSpouseNameHindi("");
+    setNewSpouseGender("");
+    setNewSpouseDob(null);
     setSelectedPerson(null);
-    setSearchVillageId("");
+    setSearchLocationId("");
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
@@ -317,10 +408,8 @@ export default function AddNode({
     setStep(1);
     setSavedNodeId(null);
     setFlowTargetId(targetId);
-    setBusinessName("");
-    setBusinessCategory("");
-    setBusinessAddress("");
-    setBusinessContact("");
+    setBusinessAdded(false);
+    setBusinessDialogOpen(false);
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
@@ -344,8 +433,14 @@ export default function AddNode({
     setSelectedRelType(RelType.blood);
     setCustomFields({});
     setMode("create");
+    setOtherParentMode("unknown");
+    setSelectedOtherParentId("");
+    setNewSpouseName("");
+    setNewSpouseNameHindi("");
+    setNewSpouseGender("");
+    setNewSpouseDob(null);
     setSelectedPerson(null);
-    setSearchVillageId("");
+    setSearchLocationId("");
     setPersonSearchValue("");
     setBloodGroup("");
     setIsAlive(true);
@@ -356,10 +451,8 @@ export default function AddNode({
     setStep(1);
     setSavedNodeId(null);
     setFlowTargetId(targetId);
-    setBusinessName("");
-    setBusinessCategory("");
-    setBusinessAddress("");
-    setBusinessContact("");
+    setBusinessAdded(false);
+    setBusinessDialogOpen(false);
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
@@ -375,18 +468,7 @@ export default function AddNode({
     }
 
     try {
-      if (occupationType === "business") {
-        if (businessName) {
-          await ApiService.createBusiness({
-            name: businessName,
-            category: businessCategory,
-            address: businessAddress,
-            description: businessAddress,
-            contact: businessContact || null,
-            peopleId: savedNodeId,
-          });
-        }
-      } else if (occupationType === "job") {
+      if (occupationType === "job") {
         if (jobTitle) {
           const existing = allProfessions.find(
             (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
@@ -421,10 +503,6 @@ export default function AddNode({
     handleFlowComplete();
   }, [
     allProfessions,
-    businessAddress,
-    businessCategory,
-    businessContact,
-    businessName,
     handleContinueWithSon,
     handleFlowComplete,
     isSavingDetails,
@@ -486,6 +564,34 @@ export default function AddNode({
       return;
     }
 
+    // Validate the other-parent choice when adding a child.
+    if (relation === "child" && !isFirstNode) {
+      if (otherParentMode === "existing" && !selectedOtherParentId) {
+        alert("Please select the other parent for this child.");
+        return;
+      }
+      if (otherParentMode === "new" && !newSpouseName.trim()) {
+        alert("Please enter a name for the new spouse, or choose another option.");
+        return;
+      }
+    }
+
+    const childOptions =
+      relation === "child"
+        ? {
+            otherParentMode,
+            newSpouse:
+              otherParentMode === "new"
+                ? {
+                    name: newSpouseName.trim(),
+                    nameHindi: newSpouseNameHindi.trim() || undefined,
+                    gender: newSpouseGender || undefined,
+                    dob: formatPickerDate(newSpouseDob),
+                  }
+                : undefined,
+          }
+        : undefined;
+
     const processAdd = async () => {
       setIsSaving(true);
       // prepare parents array: include targetId (if adding child) and optional other parent
@@ -528,6 +634,7 @@ export default function AddNode({
           effectiveTargetId,
           selectedRelType,
           selectedOtherParentId,
+          childOptions,
         );
 
         if (resultId && typeof resultId === "string") {
@@ -583,6 +690,12 @@ export default function AddNode({
     onAdd,
     handleCancel,
     selectedOtherParentId,
+    otherParentMode,
+    newSpouseName,
+    newSpouseNameHindi,
+    newSpouseGender,
+    newSpouseDob,
+    isFirstNode,
     selectedRelType,
     mode,
     selectedPerson,
@@ -600,7 +713,6 @@ export default function AddNode({
         onClick: handleSaveDetails,
         disabled:
           isSavingDetails ||
-          (occupationType === "business" && !businessName) ||
           (occupationType === "job" && !jobTitle),
         saving: isSavingDetails,
       });
@@ -615,7 +727,6 @@ export default function AddNode({
 
     return () => onMobileSaveActionChange(null);
   }, [
-    businessName,
     handleSave,
     handleSaveDetails,
     isSaving,
@@ -691,12 +802,13 @@ export default function AddNode({
 
           <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
             <Stack spacing={2.25}>
-              <FormControl fullWidth>
+              <FormControl fullWidth sx={inputWithIconSx}>
                 <InputLabel>Occupation Type</InputLabel>
                 <Select
                   value={occupationType}
                   onChange={(e) => setOccupationType(e.target.value as any)}
                   label="Occupation Type"
+                  startAdornment={adornment(<WorkOutlineOutlinedIcon fontSize="small" />)}
                 >
                   <MenuItem value="business">Business Owner</MenuItem>
                   <MenuItem value="job">Salaried / Professional</MenuItem>
@@ -706,56 +818,61 @@ export default function AddNode({
 
           {occupationType === "business" && (
             <>
-              <TextField
-                label="Business Name"
-                fullWidth
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                placeholder="Shop or Company Name"
-              />
-              <TextField
-                label="Category"
-                fullWidth
-                value={businessCategory}
-                onChange={(e) => setBusinessCategory(e.target.value)}
-                placeholder="e.g. Retail, Agriculture, Tech"
-              />
-              <TextField
-                label="Location / Village"
-                fullWidth
-                value={businessAddress}
-                onChange={(e) => setBusinessAddress(e.target.value)}
-                placeholder="Where is it located?"
-              />
-              <TextField
-                label="Contact Number"
-                fullWidth
-                value={businessContact}
-                onChange={(e) => setBusinessContact(e.target.value)}
-                placeholder="Phone number (optional)"
-              />
+              {businessAdded ? (
+                <Paper
+                  variant="outlined"
+                  sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <CheckCircleOutlineIcon color="success" fontSize="small" />
+                  <Typography variant="body2">Business details saved.</Typography>
+                  <Button
+                    size="small"
+                    onClick={() => setBusinessDialogOpen(true)}
+                    sx={{ ml: "auto" }}
+                  >
+                    Add another
+                  </Button>
+                </Paper>
+              ) : (
+                <Button
+                  variant="outlined"
+                  startIcon={<BusinessIcon fontSize="small" />}
+                  onClick={() => setBusinessDialogOpen(true)}
+                  disabled={!savedNodeId}
+                >
+                  Add Business Details
+                </Button>
+              )}
             </>
           )}
 
           {occupationType === "job" && (
             <>
-              <TextField
-                label="Job Title / Profession"
-                fullWidth
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-                placeholder="e.g. Software Engineer, Doctor, Teacher"
-              />
+	              <TextField
+	                label="Job Title / Profession"
+	                fullWidth
+	                value={jobTitle}
+	                onChange={(e) => setJobTitle(e.target.value)}
+	                placeholder="e.g. Software Engineer, Doctor, Teacher"
+	                sx={inputWithIconSx}
+	                InputProps={{
+	                  startAdornment: adornment(<BadgeOutlinedIcon fontSize="small" />),
+	                }}
+	              />
               <Typography variant="caption" color="text.secondary">
                 We will link this to the unified list of professions.
               </Typography>
-              <TextField
-                label="Contact Number"
-                fullWidth
-                value={jobContact}
-                onChange={(e) => setJobContact(e.target.value)}
-                placeholder="Phone number (optional)"
-              />
+	              <TextField
+	                label="Contact Number"
+	                fullWidth
+	                value={jobContact}
+	                onChange={(e) => setJobContact(e.target.value)}
+	                placeholder="Phone number (optional)"
+	                sx={inputWithIconSx}
+	                InputProps={{
+	                  startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />),
+	                }}
+	              />
             </>
           )}
             </Stack>
@@ -790,7 +907,6 @@ export default function AddNode({
               }
               disabled={
                 isSavingDetails ||
-                (occupationType === "business" && !businessName) ||
                 (occupationType === "job" && !jobTitle)
               }
             >
@@ -841,58 +957,52 @@ export default function AddNode({
 
           {!isFirstNode && (
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-              <FormControl component="fieldset">
-                <FormLabel component="legend">Relation</FormLabel>
-                <RadioGroup
-                  row
-                  value={relation}
-                  onChange={(e) => setRelation(e.target.value as any)}
-                >
-                  <FormControlLabel
-                    value="child"
-                    control={<Radio />}
-                    label="Child"
-                  />
-                  <FormControlLabel
-                    value="spouse"
-                    control={<Radio />}
-                    label="Spouse"
-                  />
-                  <FormControlLabel
-                    value="parent"
-                    control={<Radio />}
-                    label="Parent"
-                  />
-                </RadioGroup>
-              </FormControl>
+              <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 700 }}>
+                Relation
+              </Typography>
+              <ToggleButtonGroup
+                color="primary"
+                value={relation}
+                exclusive
+                onChange={(_event, value) => value && setRelation(value)}
+                size="small"
+                fullWidth
+              >
+                {RELATION_OPTIONS.map((option) => (
+                  <ToggleButton key={option.value} value={option.value}>
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      {option.icon}
+                      <Box component="span">{option.label}</Box>
+                    </Stack>
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
             </Paper>
           )}
 
           {!isFirstNode && (
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-              <FormControl component="fieldset">
-                <FormLabel component="legend">Relation Type</FormLabel>
-                <RadioGroup
-                  row
-                  value={selectedRelType}
-                  onChange={(e) => {
-                    const nextType = e.target.value as RelType;
-                    setSelectedRelType(nextType);
-                    if (nextType !== RelType.divorced) {
-                      setRelationEndDate(null);
-                    }
-                  }}
-                >
-                  {relTypes.map((type) => (
-                    <FormControlLabel
-                      key={type}
-                      value={type}
-                      control={<Radio />}
-                      label={type}
-                    />
-                  ))}
-                </RadioGroup>
-              </FormControl>
+              <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 700 }}>
+                Relation Type
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {relTypes.map((type) => (
+                  <Chip
+                    key={type}
+                    label={titleCaseRelationType(type)}
+                    clickable
+                    color={selectedRelType === type ? "primary" : "default"}
+                    variant={selectedRelType === type ? "filled" : "outlined"}
+                    onClick={() => {
+                      const nextType = type;
+                      setSelectedRelType(nextType);
+                      if (nextType !== RelType.divorced) {
+                        setRelationEndDate(null);
+                      }
+                    }}
+                  />
+                ))}
+              </Stack>
             </Paper>
           )}
 
@@ -903,37 +1013,95 @@ export default function AddNode({
                   <Typography variant="subtitle2" gutterBottom>
                     Action
                   </Typography>
-                  <ToggleButtonGroup
-                    color="primary"
-                    value={mode}
-                    exclusive
-                    onChange={(_, newMode) => newMode && setMode(newMode)}
-                    size="small"
-                    fullWidth
-                  >
-                    <ToggleButton value="create">Create New Profile</ToggleButton>
-                    <ToggleButton value="link">Link Existing Profile</ToggleButton>
-                  </ToggleButtonGroup>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25}>
+                    {[
+                      {
+                        value: "create" as const,
+                        label: "Create New Profile",
+                        icon: <PersonAddAlt1OutlinedIcon sx={{ fontSize: 20 }} />,
+                      },
+                      {
+                        value: "link" as const,
+                        label: "Link Existing Profile",
+                        icon: <LinkOutlinedIcon sx={{ fontSize: 20 }} />,
+                      },
+                    ].map((option) => {
+                      const selected = mode === option.value;
+                      return (
+                        <Paper
+                          key={option.value}
+                          role="button"
+                          tabIndex={0}
+                          variant="outlined"
+                          onClick={() => setMode(option.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setMode(option.value);
+                            }
+                          }}
+                          sx={{
+                            flex: 1,
+                            p: 1.5,
+                            borderRadius: 2,
+                            cursor: "pointer",
+                            borderColor: selected ? "primary.main" : "divider",
+                            bgcolor: (muiTheme) =>
+                              selected
+                                ? alpha(muiTheme.palette.primary.main, 0.08)
+                                : muiTheme.palette.background.paper,
+                          }}
+                        >
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            {option.icon}
+                            <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                              {option.label}
+                            </Typography>
+                          </Stack>
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
                 </Box>
 
                 <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
-                  <DatePicker
-                    label="Marriage Start Date (optional)"
-                    value={relationStartDate}
-                    onChange={(value) => setRelationStartDate(value)}
-                    slotProps={{ textField: { fullWidth: true } }}
-                    format="DD/MM/YYYY"
-                  />
+	                    <DatePicker
+	                      label="Marriage Start Date (optional)"
+	                      value={relationStartDate}
+	                      onChange={(value) => setRelationStartDate(value)}
+	                      slotProps={{
+	                        textField: {
+	                          fullWidth: true,
+	                          sx: inputWithIconSx,
+	                          InputProps: {
+	                            startAdornment: adornment(
+	                              <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                            ),
+	                          },
+	                        },
+	                      }}
+	                      format="DD/MM/YYYY"
+	                    />
                 </Suspense>
                 {selectedRelType === RelType.divorced && (
                   <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
                     <DatePicker
-                      label="Marriage End Date (optional)"
-                      value={relationEndDate}
-                      onChange={(value) => setRelationEndDate(value)}
-                      slotProps={{ textField: { fullWidth: true } }}
-                      format="DD/MM/YYYY"
-                    />
+	                      label="Marriage End Date (optional)"
+	                      value={relationEndDate}
+	                      onChange={(value) => setRelationEndDate(value)}
+	                      slotProps={{
+	                        textField: {
+	                          fullWidth: true,
+	                          sx: inputWithIconSx,
+	                          InputProps: {
+	                            startAdornment: adornment(
+	                              <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                            ),
+	                          },
+	                        },
+	                      }}
+	                      format="DD/MM/YYYY"
+	                    />
                   </Suspense>
                 )}
               </Stack>
@@ -943,43 +1111,56 @@ export default function AddNode({
           {mode === "link" && relation === "spouse" ? (
             <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
               <Stack spacing={2.25}>
-              <FormControl fullWidth>
-                <InputLabel>Select Village (Required)</InputLabel>
-                <Select
-                  value={searchVillageId}
-                  onChange={(e) => {
-                    setSearchVillageId(e.target.value);
+              <Autocomplete
+                options={locations}
+                value={selectedSearchLocation}
+                onChange={(_event, value) => {
+                    setSearchLocationId(value?.id || "");
                     setPersonSearchValue("");
                     setSelectedPerson(null);
                   }}
-                  label="Select Village (Required)"
-                >
-                  <MenuItem value="">-- Select Village --</MenuItem>
-                  {villages.map((v) => (
-                    <MenuItem key={v.id} value={v.id}>
-                      {v.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                getOptionLabel={(option) => option?.name || ""}
+                isOptionEqualToValue={(option, value) => option.id === value.id}
+                noOptionsText={
+                  locations.length === 0 ? "Loading locations..." : "No locations found"
+                }
+                renderInput={(params) => (
+	                  <TextField
+	                    {...params}
+	                    label="Select Location (Required)"
+	                    placeholder="Search location"
+	                    sx={inputWithIconSx}
+	                    InputProps={{
+	                      ...params.InputProps,
+	                      startAdornment: (
+	                        <>
+	                          {adornment(<LocationOnOutlinedIcon fontSize="small" />)}
+	                          {params.InputProps.startAdornment}
+	                        </>
+	                      ),
+	                    }}
+	                  />
+                )}
+              />
 
-              {searchVillageId ? (
+              {searchLocationId ? (
                 <PersonSearchField
-                  villageId={searchVillageId}
+                  locationId={searchLocationId}
                   searchValue={personSearchValue}
                   onSearchValueChange={setPersonSearchValue}
                   onPersonSelect={setSelectedPerson}
-                  selectedPerson={selectedPerson}
-                  label="Search Person"
-                  placeholder="Type name to search..."
-                />
+	                  selectedPerson={selectedPerson}
+	                  label="Search Person"
+	                  placeholder="Type name to search..."
+	                  startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
+	                />
               ) : (
                 <Typography
                   variant="caption"
                   color="text.secondary"
                   sx={{ fontStyle: "italic", display: "block", mt: -0.5 }}
                 >
-                  Please select a village first to search for people.
+                  Please select a location first to search for people.
                 </Typography>
               )}
 
@@ -993,7 +1174,7 @@ export default function AddNode({
                     {selectedPerson.name}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {[selectedPerson.villageName, selectedPerson.casteName]
+                    {[selectedPerson.locationName, selectedPerson.casteName]
                       .filter(Boolean)
                       .join(" • ")}
                   </Typography>
@@ -1009,24 +1190,150 @@ export default function AddNode({
                 </Typography>
                 <Stack spacing={2}>
                   {!isFirstNode && relation === "child" && (
-                    <FormControl fullWidth>
-                      <InputLabel>Other parent</InputLabel>
-                      <Select
-                        value={selectedOtherParentId}
-                        onChange={(e) => setSelectedOtherParentId(e.target.value)}
-                        label="Other parent"
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                        Other parent
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ display: "block", mb: 1.25 }}
                       >
-                        <MenuItem value="">None</MenuItem>
-                        {spouseOptions.map((s) => (
-                          <MenuItem key={s.id} value={s.id}>
-                            {s.name ||
-                              (targetNode?.name
-                                ? `${targetNode.name}'s Spouse`
-                                : s.id)}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                        Who is the child's other parent (spouse of {targetNode?.name || "this person"})?
+                      </Typography>
+                      <ToggleButtonGroup
+                        color="primary"
+                        value={otherParentMode}
+                        exclusive
+                        onChange={(_event, value) => value && setOtherParentMode(value)}
+                        size="small"
+                        fullWidth
+                        sx={{ mb: 1.5 }}
+                      >
+                        <ToggleButton
+                          value="existing"
+                          disabled={spouseOptions.length === 0}
+                        >
+                          Existing
+                        </ToggleButton>
+                        <ToggleButton value="new">Create new</ToggleButton>
+                        <ToggleButton value="unknown">Unknown</ToggleButton>
+                      </ToggleButtonGroup>
+
+                      {otherParentMode === "existing" && (
+                        <FormControl fullWidth sx={inputWithIconSx}>
+                          <InputLabel>Select existing spouse</InputLabel>
+                          <Select
+                            value={selectedOtherParentId}
+                            onChange={(e) => setSelectedOtherParentId(e.target.value)}
+                            label="Select existing spouse"
+                            startAdornment={adornment(<PersonOutlineOutlinedIcon fontSize="small" />)}
+                          >
+                            {spouseOptions.map((s) => (
+                              <MenuItem key={s.id} value={s.id}>
+                                <Stack direction="row" spacing={1.25} alignItems="center">
+                                  <Avatar
+                                    src={s.photo || undefined}
+                                    sx={{ width: 28, height: 28, fontSize: 12 }}
+                                  >
+                                    {(s.name || "?").charAt(0).toUpperCase()}
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="body2">
+                                      {s.name ||
+                                        (targetNode?.name
+                                          ? `${targetNode.name}'s Spouse`
+                                          : s.id)}
+                                    </Typography>
+                                    {s.gender && (
+                                      <Typography variant="caption" color="text.secondary">
+                                        {s.gender}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                </Stack>
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+
+                      {otherParentMode === "new" && (
+                        <Stack spacing={2}>
+                          <TextField
+                            label="Spouse name"
+                            value={newSpouseName}
+                            onChange={(e) => setNewSpouseName(e.target.value)}
+                            fullWidth
+                            required
+                            sx={inputWithIconSx}
+                            InputProps={{
+                              startAdornment: adornment(
+                                <PersonOutlineOutlinedIcon fontSize="small" />,
+                              ),
+                            }}
+                          />
+                          <HindiNameInput
+                            sourceText={newSpouseName}
+                            value={newSpouseNameHindi}
+                            onChange={setNewSpouseNameHindi}
+                          />
+                          <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
+                            <DatePicker
+                              label="Spouse date of birth (optional)"
+                              value={newSpouseDob}
+                              onChange={(value) => setNewSpouseDob(value)}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  sx: inputWithIconSx,
+                                  InputProps: {
+                                    startAdornment: adornment(
+                                      <CakeOutlinedIcon fontSize="small" />,
+                                    ),
+                                  },
+                                },
+                              }}
+                              format="DD/MM/YYYY"
+                            />
+                          </Suspense>
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                              Spouse gender
+                            </Typography>
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                              {GENDER_OPTIONS.map((option) => (
+                                <Chip
+                                  key={option.value}
+                                  icon={option.icon}
+                                  label={option.label}
+                                  clickable
+                                  color={
+                                    newSpouseGender === option.value ? "primary" : "default"
+                                  }
+                                  variant={
+                                    newSpouseGender === option.value ? "filled" : "outlined"
+                                  }
+                                  onClick={() => setNewSpouseGender(option.value)}
+                                  sx={{ height: 36, px: 0.75 }}
+                                />
+                              ))}
+                            </Stack>
+                          </Box>
+                        </Stack>
+                      )}
+
+                      {otherParentMode === "unknown" && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontStyle: "italic", display: "block" }}
+                        >
+                          The child will be added with only {targetNode?.name || "this person"} as a
+                          known parent. You can add the other parent later.
+                        </Typography>
+                      )}
+                    </Box>
                   )}
 
                   <Box
@@ -1066,58 +1373,62 @@ export default function AddNode({
                     </Stack>
                   </Box>
 
-                  <TextField
-                    label="Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    fullWidth
-                    required
-                    autoFocus
-                  />
-                  <HindiNameInput
-                    sourceText={name}
-                    value={nameHindi}
-                    onChange={setNameHindi}
-                    disabled={mode === "link"}
-                  />
+	                  <TextField
+	                    label="Name"
+	                    value={name}
+	                    onChange={(e) => setName(e.target.value)}
+	                    fullWidth
+	                    required
+	                    autoFocus
+	                    sx={inputWithIconSx}
+	                    InputProps={{
+	                      startAdornment: adornment(<PersonOutlineOutlinedIcon fontSize="small" />),
+	                    }}
+	                  />
+	                  <HindiNameInput
+	                    sourceText={name}
+	                    value={nameHindi}
+	                    onChange={setNameHindi}
+	                    disabled={mode === "link"}
+	                  />
 
-                  <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
-                    <DatePicker
-                      label="Date of birth (optional)"
-                      value={dob}
-                      onChange={(value) => setDob(value)}
-                      slotProps={{ textField: { fullWidth: true } }}
-                      format="DD/MM/YYYY"
-                    />
-                  </Suspense>
+	                  <Suspense fallback={<TextField fullWidth label="Date of birth" />}>
+	                    <DatePicker
+	                      label="Date of birth (optional)"
+	                      value={dob}
+	                      onChange={(value) => setDob(value)}
+	                      slotProps={{
+	                        textField: {
+	                          fullWidth: true,
+	                          sx: inputWithIconSx,
+	                          InputProps: {
+	                            startAdornment: adornment(<CakeOutlinedIcon fontSize="small" />),
+	                          },
+	                        },
+	                      }}
+	                      format="DD/MM/YYYY"
+	                    />
+	                  </Suspense>
 
-                  <FormControl sx={{ m: 0 }}>
-                    <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
-                    <RadioGroup
-                      row
-                      sx={{ gap: 1.5 }}
-                      value={gender}
-                      onChange={(e) =>
-                        setGender(e.target.value as "male" | "female" | "other")
-                      }
-                    >
-                      <FormControlLabel
-                        value="male"
-                        control={<Radio />}
-                        label="Male"
-                      />
-                      <FormControlLabel
-                        value="female"
-                        control={<Radio />}
-                        label="Female"
-                      />
-                      <FormControlLabel
-                        value="other"
-                        control={<Radio />}
-                        label="Other"
-                      />
-                    </RadioGroup>
-                  </FormControl>
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                      Gender
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {GENDER_OPTIONS.map((option) => (
+                        <Chip
+                          key={option.value}
+                          icon={option.icon}
+                          label={option.label}
+                          clickable
+                          color={gender === option.value ? "primary" : "default"}
+                          variant={gender === option.value ? "filled" : "outlined"}
+                          onClick={() => setGender(option.value)}
+                          sx={{ height: 36, px: 0.75 }}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
                 </Stack>
               </Paper>
 
@@ -1126,64 +1437,92 @@ export default function AddNode({
                   Life details
                 </Typography>
                 <Stack spacing={2}>
-                  <FormControl fullWidth>
-                    <InputLabel>Blood Group</InputLabel>
-                    <Select
-                      value={bloodGroup}
-                      onChange={(e) => setBloodGroup(e.target.value)}
-                      label="Blood Group"
-                    >
-                      <MenuItem value="">Unknown</MenuItem>
-                      <MenuItem value="A+">A+</MenuItem>
-                      <MenuItem value="A-">A−</MenuItem>
-                      <MenuItem value="B+">B+</MenuItem>
-                      <MenuItem value="B-">B−</MenuItem>
-                      <MenuItem value="AB+">AB+</MenuItem>
-                      <MenuItem value="AB-">AB−</MenuItem>
-                      <MenuItem value="O+">O+</MenuItem>
-                      <MenuItem value="O-">O−</MenuItem>
-                    </Select>
-                  </FormControl>
-
-                  <FormControlLabel
-                    sx={{ m: 0 }}
-                    control={
-                      <Switch
-                        checked={isAlive}
-                        onChange={(e) => {
-                          setIsAlive(e.target.checked);
-                          if (e.target.checked) setDeceasedDate(null);
-                        }}
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                      Blood Group
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Chip
+                        label="Unknown"
+                        clickable
+                        color={!bloodGroup ? "primary" : "default"}
+                        variant={!bloodGroup ? "filled" : "outlined"}
+                        onClick={() => setBloodGroup("")}
                       />
-                    }
-                    label="Is Alive"
-                  />
+                      {BLOOD_GROUP_OPTIONS.map((option) => (
+                        <Chip
+                          key={option}
+                          label={option}
+                          clickable
+                          color={bloodGroup === option ? "primary" : "default"}
+                          variant={bloodGroup === option ? "filled" : "outlined"}
+                          onClick={() => setBloodGroup(option)}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Typography
+                      variant="body2"
+                      color={isAlive ? "text.secondary" : "text.primary"}
+                      sx={{ fontWeight: isAlive ? 500 : 800 }}
+                    >
+                      Dead
+                    </Typography>
+                    <Switch
+                      checked={isAlive}
+                      onChange={(e) => {
+                        setIsAlive(e.target.checked);
+                        if (e.target.checked) setDeceasedDate(null);
+                      }}
+                    />
+                    <Typography
+                      variant="body2"
+                      color={isAlive ? "text.primary" : "text.secondary"}
+                      sx={{ fontWeight: isAlive ? 800 : 500 }}
+                    >
+                      Alive
+                    </Typography>
+                  </Stack>
 
                   {!isAlive && (
                     <Suspense fallback={<TextField fullWidth label="Deceased Date" />}>
-                      <DatePicker
-                        label="Deceased Date"
-                        value={deceasedDate}
-                        onChange={(value) => setDeceasedDate(value)}
-                        slotProps={{ textField: { fullWidth: true } }}
-                        format="DD/MM/YYYY"
-                      />
+	                      <DatePicker
+	                        label="Deceased Date"
+	                        value={deceasedDate}
+	                        onChange={(value) => setDeceasedDate(value)}
+	                        slotProps={{
+	                          textField: {
+	                            fullWidth: true,
+	                            sx: inputWithIconSx,
+	                            InputProps: {
+	                              startAdornment: adornment(<CakeOutlinedIcon fontSize="small" />),
+	                            },
+	                          },
+	                        }}
+	                        format="DD/MM/YYYY"
+	                      />
                     </Suspense>
                   )}
                 </Stack>
               </Paper>
 
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
-                  Additional details
-                </Typography>
-                <AdditionalDetails
-                  value={customFields}
-                  onChange={setCustomFields}
-                  showUpfrontFields={false}
-                  showAdditionalSection
-                />
-              </Paper>
+              <Accordion variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Additional details
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <AdditionalDetails
+                    value={customFields}
+                    onChange={setCustomFields}
+                    showUpfrontFields={false}
+                    showAdditionalSection
+                  />
+                </AccordionDetails>
+              </Accordion>
             </Stack>
           )}
 
@@ -1211,6 +1550,14 @@ export default function AddNode({
           </Box>
         </Stack>
       )}
+
+      <BusinessFormDialog
+        open={businessDialogOpen}
+        onClose={() => setBusinessDialogOpen(false)}
+        personId={savedNodeId}
+        defaultContact={phoneFromCustomFields(customFields)}
+        onSaved={() => setBusinessAdded(true)}
+      />
     </Box>
   );
 }

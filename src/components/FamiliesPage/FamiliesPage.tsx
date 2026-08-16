@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Helmet } from "react-helmet-async";
 import {
+  Alert,
   Box,
   Button,
   Typography,
@@ -14,6 +15,7 @@ import {
   Stack,
   Tooltip,
   IconButton,
+  Snackbar,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
@@ -31,12 +33,12 @@ import { NodeDetails } from "../NodeDetails/NodeDetails";
 import AddNode from "../AddNode/AddNode";
 import { getNodeHierarchy } from "../const";
 import { ApiService } from "../../services/apiService";
-import type { TreeWriteScope } from "../../services/apiService";
+import type { LinkRequest, TreeWriteScope } from "../../services/apiService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../hooks/useAuth";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
@@ -61,14 +63,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, userProfile, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
     useAuth();
-  const { setSelectedVillage } = useVillage();
+  const { setSelectedLocation } = useLocations();
   const { openLoginModal } = useLoginModal();
   const highlightedPersonId = searchParams.get("personId");
   const inviteToken = searchParams.get("inviteToken");
+  const shouldCreateRootFromQuery = searchParams.get("createRoot") === "1";
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
-  const [villageId, setVillageId] = useState<string | undefined>(undefined);
+  const [locationId, setLocationId] = useState<string | undefined>(undefined);
   const [selectId, setSelectId] = useState<string>();
   const [autoExpandNodeId, setAutoExpandNodeId] = useState<string | null>(null);
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
@@ -109,18 +112,42 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [invitePersonId, setInvitePersonId] = useState("");
   const [invitePersonSearch, setInvitePersonSearch] = useState("");
   const [inviteSelectedPersonName, setInviteSelectedPersonName] = useState("");
+  // When opened from a node, the branch person is fixed (shown as selected, not searchable).
+  const [inviteBranchPersonLocked, setInviteBranchPersonLocked] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteAccepting, setInviteAccepting] = useState(false);
+  // Transient feedback for invite actions (replaces native alert()).
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error" | "info" | "warning";
+  }>({ open: false, message: "", severity: "info" });
+  const showSnackbar = useCallback(
+    (message: string, severity: "success" | "error" | "info" | "warning" = "info") => {
+      setSnackbar({ open: true, message, severity });
+    },
+    [],
+  );
+  // Bumped to force a tree-data reload (e.g. after accepting an invite grants access).
+  const [treeReloadKey, setTreeReloadKey] = useState(0);
+  const [pendingLinkRequests, setPendingLinkRequests] = useState<LinkRequest[]>([]);
+  const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
+  const [linkRequestsLoading, setLinkRequestsLoading] = useState(false);
+  const [reviewingLinkRequestId, setReviewingLinkRequestId] = useState<string | null>(
+    null,
+  );
+  const [linkRequestReviewError, setLinkRequestReviewError] = useState("");
+  const [linkRequestReviewSuccess, setLinkRequestReviewSuccess] = useState("");
   const loadRequestIdRef = useRef(0);
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
   const isSuperAdminUser = isSuperAdmin();
-  const hasVillageAdminAccess = hasPermission("admin", villageId);
+  const hasLocationAdminAccess = hasPermission("admin", locationId);
   const hasBranchWriteScope = Boolean(
     treeWriteScope?.canWriteAll || treeWriteScope?.rootPersonIds.length,
   );
   const canWriteCurrentTree = Boolean(
-    currentUser && (isSuperAdminUser || hasVillageAdminAccess || hasBranchWriteScope),
+    currentUser && (isSuperAdminUser || hasLocationAdminAccess || hasBranchWriteScope),
   );
   const canWriteAnyBranch =
     canWriteCurrentTree &&
@@ -151,6 +178,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (!currentId || editable.has(currentId)) continue;
       editable.add(currentId);
       const current = nodeMap.get(currentId);
+      (current?.spouses || []).forEach((spouse) => {
+        if (spouse?.id) {
+          editable.add(spouse.id);
+        }
+      });
       (current?.children || []).forEach((child) => {
         if (child?.id && !editable.has(child.id)) {
           queue.push(child.id);
@@ -170,6 +202,37 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     },
     [canWriteCurrentTree, isSuperAdminUser, treeWriteScope, editableNodeIds],
   );
+
+  const loadPendingLinkRequests = useCallback(async () => {
+    if (!currentUser || !treeId) {
+      setPendingLinkRequests([]);
+      return;
+    }
+
+    try {
+      setLinkRequestsLoading(true);
+      setLinkRequestReviewError("");
+      const rows = await ApiService.getPendingTreeLinkRequests(treeId);
+      setPendingLinkRequests(
+        (rows || []).filter((request) => request.requesterUserId !== currentUser?.uid),
+      );
+    } catch (error: any) {
+      console.error("Failed to load pending link requests:", error);
+      setPendingLinkRequests([]);
+      if (
+        error?.message &&
+        String(error.message).toLowerCase().includes("permission denied")
+      ) {
+        setLinkRequestReviewError("");
+      } else {
+        setLinkRequestReviewError(
+          error?.message || "Failed to load pending profile link requests.",
+        );
+      }
+    } finally {
+      setLinkRequestsLoading(false);
+    }
+  }, [currentUser, treeId]);
 
   useEffect(() => {
     let active = true;
@@ -198,6 +261,38 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   }, [treeId, currentUser]);
 
   useEffect(() => {
+    void loadPendingLinkRequests();
+  }, [loadPendingLinkRequests]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!currentUser) {
+      setMyPendingRequests([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    ApiService.getMyLinkRequests()
+      .then((rows) => {
+        if (!active) return;
+        setMyPendingRequests(
+          (rows || []).filter((request) => request.status === "pending"),
+        );
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.warn("Failed to load my pending link requests:", error);
+        setMyPendingRequests([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
     if (!inviteToken || loading) {
       return;
     }
@@ -216,16 +311,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setInviteAccepting(true);
     ApiService.acceptTreeInvite(inviteToken)
       .then((result) => {
-        if (result?.treeId && result.treeId !== treeId) {
-          setTreeId(result.treeId);
-        }
+        const acceptedTreeId = result?.treeId || treeId;
+        // Always move the user to the tree they were invited to, and drop the
+        // one-time invite token from the URL.
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
+          if (acceptedTreeId) {
+            next.set("tree", acceptedTreeId);
+          }
           next.delete("inviteToken");
           return next;
         });
-        alert("Invite accepted. You now have access to this tree.");
-        return ApiService.getTreeWriteScope(result.treeId || treeId);
+        // Re-fetch the tree now that access has been granted (the treeId may be
+        // unchanged from the link, so a plain treeId change wouldn't reload it).
+        setTreeReloadKey((key) => key + 1);
+        showSnackbar("Invite accepted. You now have access to this tree.", "success");
+        return ApiService.getTreeWriteScope(acceptedTreeId);
       })
       .then((scope) => {
         if (scope) {
@@ -235,7 +336,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       })
       .catch((error) => {
         console.error("Failed to accept invite:", error);
-        alert(`Failed to accept invite: ${error instanceof Error ? error.message : String(error)}`);
+        showSnackbar(`Failed to accept invite: ${error instanceof Error ? error.message : String(error)}`, "error");
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete("inviteToken");
@@ -257,6 +358,30 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     openLoginModal,
   ]);
 
+  useEffect(() => {
+    if (!shouldCreateRootFromQuery || isLoading) {
+      return;
+    }
+
+    if (!treeId || nodes.length > 0 || !canCreateRootNode) {
+      return;
+    }
+
+    setShowAddStartingNode(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("createRoot");
+      return next;
+    });
+  }, [
+    canCreateRootNode,
+    isLoading,
+    nodes.length,
+    setSearchParams,
+    shouldCreateRootFromQuery,
+    treeId,
+  ]);
+
   const loadTreeData = useCallback(
     async (keepRoot = false) => {
       const requestId = ++loadRequestIdRef.current;
@@ -275,7 +400,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         // Fetch complete tree from Supabase using the PostgreSQL function
         const treeData = await ApiService.getCompleteTreeById(treeId);
         if (requestId !== loadRequestIdRef.current) return;
-        setVillageId(treeData.tree?.village?.id);
+        setLocationId(treeData.tree?.location?.id);
 
         // Convert tree data to FNode format
         const items: Readonly<FNode>[] = (treeData.members || []).map(
@@ -311,6 +436,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 })) || [],
               treeId: person.treeId || treeId,
               photo: person.photoUrl || undefined,
+              createdAt: person.createdAt || undefined,
+              createdBy: person.createdBy || undefined,
+              createdByName: person.createdByName || undefined,
               bloodGroup: person.bloodGroup || undefined,
               isAlive: person.isAlive !== false,
               deceasedDate: person.deceasedDate || undefined,
@@ -451,7 +579,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setIsLoading(false);
       }
     },
-    [treeId],
+    [treeId, treeReloadKey],
   );
 
   useEffect(() => {
@@ -461,6 +589,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setSelectId(undefined);
     loadTreeData();
   }, [loadTreeData]);
+
+  useEffect(() => {
+    // Prevent stale tree content/icons while switching between trees.
+    console.log("Invite Person ID changed:", invitePersonId);
+  }, [invitePersonId]);
 
   /**
    * Merges affected nodes from add_person_to_tree into the current state.
@@ -506,6 +639,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               })) || [],
             treeId: raw.treeId || treeId,
             photo: raw.photoUrl || undefined,
+            createdAt: raw.createdAt || undefined,
+            createdBy: raw.createdBy || undefined,
+            createdByName: raw.createdByName || undefined,
             bloodGroup: raw.bloodGroup || undefined,
             isAlive: raw.isAlive !== false,
             deceasedDate: raw.deceasedDate || undefined,
@@ -563,7 +699,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const onUpdate = useCallback(
     async (nodeId: string, updates: Partial<FNode>) => {
       if (!canEditNode(nodeId)) {
-        alert("You don't have permission to edit this person.");
+        showSnackbar("You don't have permission to edit this person.", "warning");
         return;
       }
 
@@ -576,20 +712,61 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setSelectId(undefined);
       } catch (err) {
         console.error("Failed to update node:", err);
-        alert(
+        showSnackbar(
           `Failed to update node: ${
             err instanceof Error ? err.message : String(err)
           }`,
+          "error",
         );
       }
     },
-    [canEditNode, loadTreeData],
+    [canEditNode, loadTreeData, showSnackbar],
+  );
+
+  const onChangeOtherParent = useCallback(
+    async (
+      personId: string,
+      anchorParentId: string,
+      otherParentMode: "existing" | "new" | "unknown",
+      otherParentId?: string,
+      newSpouse?: {
+        name?: string;
+        nameHindi?: string;
+        gender?: string;
+        dob?: string;
+      },
+    ) => {
+      if (!canEditNode(personId)) {
+        showSnackbar("You don't have permission to edit this person.", "warning");
+        return;
+      }
+
+      const result = await ApiService.changeOtherParent(
+        personId,
+        anchorParentId,
+        otherParentMode,
+        otherParentId,
+        newSpouse,
+      );
+
+      if (result && (result as any).success === false) {
+        throw new Error(
+          (result as any).error || "Failed to change the other parent",
+        );
+      }
+
+      const affectedNodes = result?.affectedNodes || [];
+      if (affectedNodes.length > 0) {
+        mergeAffectedNodes(affectedNodes);
+      }
+    },
+    [canEditNode, mergeAffectedNodes],
   );
 
   const onDelete = useCallback(
     async (nodeId: string, force: boolean = false) => {
       if (!canEditNode(nodeId)) {
-        alert("You don't have permission to delete this person.");
+        showSnackbar("You don't have permission to delete this person.", "warning");
         return;
       }
 
@@ -615,14 +792,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setDeleteConfirmation((prev) => ({ ...prev, open: false }));
       } catch (err) {
         console.error("Failed to delete node:", err);
-        alert(
+        showSnackbar(
           `Failed to delete node: ${
             err instanceof Error ? err.message : String(err)
           }`,
+          "error",
         );
       }
     },
-    [canEditNode, loadTreeData, nodes],
+    [canEditNode, loadTreeData, nodes, showSnackbar],
   );
 
   const onAdd = useCallback(
@@ -632,14 +810,23 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       targetId?: string,
       type?: RelType,
       otherParentId?: string,
+      childOptions?: {
+        otherParentMode?: "existing" | "new" | "unknown";
+        newSpouse?: {
+          name?: string;
+          nameHindi?: string;
+          gender?: string;
+          dob?: string;
+        };
+      },
     ): Promise<string | undefined> => {
       if (targetId && !canEditNode(targetId)) {
-        alert("You don't have permission to add relatives in this branch.");
+        showSnackbar("You don't have permission to add relatives in this branch.", "warning");
         return undefined;
       }
 
       if (!targetId && !canCreateRootNode) {
-        alert("You don't have permission to create a new root node in this tree.");
+        showSnackbar("You don't have permission to create a new root node in this tree.", "warning");
         return undefined;
       }
 
@@ -647,24 +834,43 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       if (node.id && relation === "spouse" && targetId) {
         try {
           setIsLoading(true);
-          await ApiService.addSpouse(
-            targetId,
-            node.id,
-            node.relationSubtype,
-            node.relationStartDate,
-            node.relationEndDate,
-          );
-          await loadTreeData(true);
+          if (isSuperAdminUser) {
+            await ApiService.addSpouse(
+              targetId,
+              node.id,
+              node.relationSubtype,
+              node.relationStartDate,
+              node.relationEndDate,
+            );
+            await loadTreeData(true);
+          } else {
+            await ApiService.createSpouseLinkRequest({
+              personId1: targetId,
+              personId2: node.id,
+              relationSubtype: node.relationSubtype || null,
+              relationStartDate: node.relationStartDate || null,
+              relationEndDate: node.relationEndDate || null,
+              requestMessage: `Request to link ${node.name || "selected profile"} as spouse.`,
+            });
+            window.dispatchEvent(new Event("link-requests-updated"));
+            showSnackbar(
+              "Spouse link request raised. The other tree owner or a superadmin can approve it.",
+              "success",
+            );
+          }
           return node.id; // Return the linked person ID
         } catch (err) {
           console.error("Failed to link spouse:", err);
-          alert(
+          showSnackbar(
             `Failed to link spouse: ${
               err instanceof Error ? err.message : String(err)
             }`,
+            "error",
           );
           setIsLoading(false);
           return undefined;
+        } finally {
+          setIsLoading(false);
         }
       }
 
@@ -682,10 +888,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
         if (relation === "child" && targetId) {
           // Adding a child to target: new_person → parent → target
-          // Use the second parent from AddNode component if provided
+          // The other parent is now an explicit choice made in AddNode:
+          //   - "existing": link to the selected spouse (otherParentId)
+          //   - "new": backend creates the spouse from childOptions.newSpouse
+          //   - "unknown": no other parent is linked
           relationType = "parent";
           relatedPersonId = targetId;
-          relatedPersonId2 = otherParentId; // From AddNode selection
+          relatedPersonId2 =
+            childOptions?.otherParentMode === "existing" ? otherParentId : undefined;
           isReverseRelation = false;
         } else if (relation === "spouse" && targetId) {
           // Adding a spouse: only pass one target
@@ -734,6 +944,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           undefined,
           coreNode.relationStartDate,
           coreNode.relationEndDate,
+          relation === "child" ? childOptions?.otherParentMode : undefined,
+          relation === "child" ? childOptions?.newSpouse : undefined,
         );
 
         // Efficiently merge affected nodes into existing state instead of full reload
@@ -752,15 +964,25 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }
       } catch (err) {
         console.error("Failed to add node:", err);
-        alert(
+        showSnackbar(
           `Failed to add node: ${
             err instanceof Error ? err.message : String(err)
           }`,
+          "error",
         );
       }
       return undefined;
     },
-    [canEditNode, canCreateRootNode, treeId, loadTreeData, nodes, mergeAffectedNodes],
+    [
+      canEditNode,
+      canCreateRootNode,
+      treeId,
+      loadTreeData,
+      nodes,
+      mergeAffectedNodes,
+      isSuperAdminUser,
+      showSnackbar,
+    ],
   );
 
   const handleShareTree = useCallback(async () => {
@@ -789,19 +1011,25 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         });
         return;
       }
-      alert("Native share is not supported on this device/browser.");
+      showSnackbar("Native share is not supported on this device/browser.", "warning");
     } catch (err) {
       console.warn("Share cancelled or failed:", err);
     }
-  }, [treeId]);
+  }, [treeId, showSnackbar]);
 
   const handleOpenInviteDialog = useCallback(() => {
+    // Start from a clean form each time so a previously entered number/role/scope
+    // is not retained from the last invite.
+    setInvitePhone("");
+    setInviteRole("write");
+    setInviteScope("full");
+    setInviteBranchPersonLocked(false);
     if (!currentUser) {
       openLoginModal(() => setInviteDialogOpen(true));
       return;
     }
     if (!canManageInvites) {
-      alert("You need full-tree access to invite collaborators.");
+      showSnackbar("You need full-tree access to invite collaborators.", "warning");
       return;
     }
     const defaultPersonId = selectId || rootId || "";
@@ -810,19 +1038,46 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setInviteSelectedPersonName(defaultPerson?.name || "");
     setInvitePersonSearch(defaultPerson?.name || "");
     setInviteDialogOpen(true);
-  }, [currentUser, openLoginModal, canManageInvites, selectId, rootId, nodes]);
+  }, [currentUser, openLoginModal, canManageInvites, selectId, rootId, nodes, showSnackbar]);
+
+  // Open the invite dialog scoped to a specific person's branch (from node details).
+  const handleInviteForNode = useCallback(
+    (personId: string) => {
+      const openForNode = () => {
+        if (!canEditNode(personId)) {
+          showSnackbar("You don't have access to invite collaborators for this branch.", "warning");
+          return;
+        }
+        setInvitePhone("");
+        setInviteRole("write");
+        setInviteScope("branch");
+        setInvitePersonId(personId);
+        const person = nodes.find((n) => n.id === personId);
+        setInviteSelectedPersonName(person?.name || "");
+        setInvitePersonSearch(person?.name || "");
+        setInviteBranchPersonLocked(true);
+        setInviteDialogOpen(true);
+      };
+      if (!currentUser) {
+        openLoginModal(openForNode);
+        return;
+      }
+      openForNode();
+    },
+    [currentUser, openLoginModal, canEditNode, nodes, showSnackbar],
+  );
 
   const handleCreateInvite = useCallback(async () => {
     if (!treeId) return;
     if (!canManageInvites) {
-      alert("You need full-tree access to invite collaborators.");
+      showSnackbar("You need full-tree access to invite collaborators.", "warning");
       return;
     }
 
     const selectedBranchId = invitePersonId || null;
     const personId = inviteScope === "branch" ? selectedBranchId : null;
     if (inviteScope === "branch" && !personId) {
-      alert("Select a person in the tree to invite for branch access.");
+      showSnackbar("Select a person in the tree to invite for branch access.", "warning");
       return;
     }
 
@@ -836,6 +1091,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         personId,
         invitedPhone: normalizedInvitePhone,
       });
+
+      // If the invitee already had an account, the backend grants access immediately
+      // (no link to share).
+      if (invite.granted) {
+        const grantedName = invite.user?.name || "The user";
+        showSnackbar(`${grantedName} already has an account and now has access to this tree.`, "success");
+        setInviteDialogOpen(false);
+        setInvitePhone("");
+        setInviteRole("write");
+        setInviteScope("full");
+        setInvitePersonId("");
+        setInvitePersonSearch("");
+        setInviteSelectedPersonName("");
+        return;
+      }
+
       const shareLink = invite.inviteLink || `${window.location.origin}/families?tree=${treeId}&inviteToken=${invite.inviteToken || ""}`;
       const targetScope = personId ? `branch from ${nodes.find((n) => n.id === personId)?.name || "selected person"}` : "full tree";
       const targetPhone = normalizedInvitePhone ? `Phone: ${normalizedInvitePhone}\n` : "";
@@ -849,7 +1120,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         });
       } else {
         await navigator.clipboard.writeText(shareText);
-        alert("Invite link copied to clipboard. Share it via SMS/WhatsApp.");
+        showSnackbar("Invite link copied to clipboard. Share it via SMS/WhatsApp.", "success");
       }
 
       setInviteDialogOpen(false);
@@ -861,11 +1132,44 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setInviteSelectedPersonName("");
     } catch (error) {
       console.error("Failed to create invite:", error);
-      alert(`Failed to create invite: ${error instanceof Error ? error.message : String(error)}`);
+      showSnackbar(`Failed to create invite: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
       setInviteBusy(false);
     }
-  }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes]);
+  }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes, showSnackbar]);
+
+  const handleReviewLinkRequest = useCallback(
+    async (requestId: string, action: "approved" | "rejected") => {
+      setLinkRequestReviewError("");
+      setLinkRequestReviewSuccess("");
+      setReviewingLinkRequestId(requestId);
+
+      try {
+        const reviewNote =
+          action === "rejected"
+            ? window.prompt("Reason for rejecting this request")?.trim()
+            : null;
+        if (action === "rejected" && !reviewNote) {
+          setReviewingLinkRequestId(null);
+          return;
+        }
+        await ApiService.reviewLinkRequest(requestId, { action, reviewNote });
+        setLinkRequestReviewSuccess(
+          `Link request ${action === "approved" ? "approved" : "rejected"} successfully.`,
+        );
+        await loadPendingLinkRequests();
+        window.dispatchEvent(new Event("link-requests-updated"));
+      } catch (error: any) {
+        console.error("Failed to review link request:", error);
+        setLinkRequestReviewError(
+          error?.message || "Failed to review profile link request.",
+        );
+      } finally {
+        setReviewingLinkRequestId(null);
+      }
+    },
+    [loadPendingLinkRequests],
+  );
 
   // Handler for "View Details" — opens NodeDetails in details view
   const handleViewDetails = useCallback((nodeId: string) => {
@@ -878,7 +1182,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const handleEditNode = useCallback(
     (nodeId: string) => {
       if (!canEditNode(nodeId)) {
-        alert("You don't have permission to edit this person.");
+        showSnackbar("You don't have permission to edit this person.", "warning");
         return;
       }
       if (!currentUser) {
@@ -893,7 +1197,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodeDetailsAddInfo(undefined);
       setSelectId(nodeId);
     },
-    [canEditNode, currentUser, openLoginModal],
+    [canEditNode, currentUser, openLoginModal, showSnackbar],
   );
 
   // Handler for placeholder "add relative" nodes in the tree
@@ -903,7 +1207,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       relType: "father" | "mother" | "spouse" | "son" | "daughter",
     ) => {
       if (!canEditNode(nodeId)) {
-        alert("You don't have permission to add relatives in this branch.");
+        showSnackbar("You don't have permission to add relatives in this branch.", "warning");
         return;
       }
       // Map family-chart relTypes to onAdd's relation + gender
@@ -946,7 +1250,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       setNodeDetailsAddInfo({ relation, gender });
       setSelectId(nodeId);
     },
-    [canEditNode, currentUser, openLoginModal],
+    [canEditNode, currentUser, openLoginModal, showSnackbar],
   );
 
   // Calculate tree statistics
@@ -1011,6 +1315,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const statusAlerts = useMemo<StatusAlert[]>(
     () =>
       [
+        ...myPendingRequests.map((request) => ({
+          key: `my-pending-request-${request.id}`,
+          severity: "info" as const,
+          text:
+            request.requestType === "branch_access_request"
+              ? `Your branch access request for ${request.targetPersonName || "the selected branch"} in ${request.targetTreeName || "this tree"} is pending review.`
+              : request.requestType === "spouse_link_request"
+                ? `Your spouse link request for ${request.targetPersonName || "the selected profile"} in ${request.targetTreeName || "the other tree"} is pending review.`
+              : `Your profile link request for ${request.targetPersonName || "the selected profile"} in ${request.targetTreeName || "this tree"} is pending review.`,
+        })),
         isAdmin() && !isApproved
           ? {
               key: "pending-approval",
@@ -1026,7 +1340,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             }
           : null,
       ].filter(Boolean) as StatusAlert[],
-    [isAdmin, isApproved, inviteAccepting],
+    [isAdmin, isApproved, inviteAccepting, myPendingRequests],
   );
 
   const statCards = useMemo(
@@ -1133,6 +1447,97 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           py: { xs: 0.5, sm: 1.5 },
         }}
       >
+        {currentUser && treeId && (
+          <Stack spacing={1.5} sx={{ mb: pendingLinkRequests.length > 0 || linkRequestReviewError || linkRequestReviewSuccess ? 1.5 : 0 }}>
+            {linkRequestReviewError && (
+              <Alert severity="error">{linkRequestReviewError}</Alert>
+            )}
+            {linkRequestReviewSuccess && (
+              <Alert severity="success">{linkRequestReviewSuccess}</Alert>
+            )}
+            {linkRequestsLoading && (
+              <Alert severity="info">Loading pending profile link requests...</Alert>
+            )}
+            {!linkRequestsLoading && pendingLinkRequests.length > 0 && (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 1.5, sm: 2 },
+                  borderRadius: { xs: 3, md: 4 },
+                  border: "1px solid",
+                  borderColor: "warning.light",
+                  backgroundColor: alpha(theme.palette.warning.light, 0.08),
+                }}
+              >
+                <Stack spacing={1.5}>
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      Pending link requests
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      Review profile, branch access, and spouse link requests for this tree.
+                    </Typography>
+                  </Box>
+                  {pendingLinkRequests.map((request) => (
+                    <Paper
+                      key={request.id}
+                      variant="outlined"
+                      sx={{
+                        p: { xs: 1.25, sm: 1.5 },
+                        borderRadius: 3,
+                      }}
+                    >
+                      <Stack
+                        direction={{ xs: "column", md: "row" }}
+                        spacing={1.5}
+                        justifyContent="space-between"
+                        alignItems={{ xs: "stretch", md: "center" }}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                            {request.requesterName || request.requesterEmail || "Unknown requester"}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                            {request.requestType === "spouse_link_request"
+                              ? `Wants to link spouse ${request.payload?.sourcePersonName || "from another branch"} to ${request.targetPersonName || "selected profile"}`
+                              : request.requestType === "branch_access_request"
+                                ? `Wants branch access for ${request.targetPersonName || "selected profile"}`
+                                : `Wants to link to ${request.targetPersonName || "selected profile"}`}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5 }}>
+                            Requested {new Date(request.createdAt).toLocaleString()}
+                          </Typography>
+                        </Box>
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          spacing={1}
+                          sx={{ flexShrink: 0 }}
+                        >
+                          <Button
+                            variant="contained"
+                            color="success"
+                            disabled={reviewingLinkRequestId === request.id}
+                            onClick={() => void handleReviewLinkRequest(request.id, "approved")}
+                          >
+                            {reviewingLinkRequestId === request.id ? "Saving..." : "Approve"}
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            disabled={reviewingLinkRequestId === request.id}
+                            onClick={() => void handleReviewLinkRequest(request.id, "rejected")}
+                          >
+                            Reject
+                          </Button>
+                        </Stack>
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            )}
+          </Stack>
+        )}
         {isLoading ? (
           <Paper
             elevation={0}
@@ -1249,11 +1654,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                     canEditNode={canEditNode}
                     autoExpandNodeId={autoExpandNodeId}
                     onAutoExpandHandled={() => setAutoExpandNodeId(null)}
-                    onNodeClick={(id) => {
-                      setNodeDetailsInitialView(undefined);
-                      setNodeDetailsAddInfo(undefined);
-                      setSelectId(id);
-                    }}
+                    onNodeClick={() => {}}
                     onEditNode={handleEditNode}
                     onDelete={onDelete}
                     onAddRelative={handleAddRelative}
@@ -1461,11 +1862,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               if (tid) {
                 try {
                   const tree = await ApiService.getTreeWithDetails(tid);
-                  if (tree?.villageId) {
-                    setSelectedVillage(tree.villageId);
+                  if (tree?.locationId) {
+                    setSelectedLocation(tree.locationId);
                   }
                 } catch (e) {
-                  console.warn("Could not fetch target tree village:", e);
+                  console.warn("Could not fetch target tree location:", e);
                 }
                 setTreeId(tid, { personId: pid || undefined });
               }
@@ -1486,6 +1887,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         invitePersonSearch={invitePersonSearch}
         treeId={treeId}
         selectedBranchPersonName={inviteSelectedPersonName || nodes.find((n) => n.id === invitePersonId)?.name || undefined}
+        lockBranchPerson={inviteBranchPersonLocked}
         onClose={() => setInviteDialogOpen(false)}
         onInvitePhoneChange={(value) => {
           const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -1510,6 +1912,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         }}
         onInvitePersonSearchChange={setInvitePersonSearch}
         onInvitePersonSelect={(person) => {
+          console.log("Selected person:", person);
           setInvitePersonId(person?.id || "");
           setInviteSelectedPersonName(person?.name || "");
           setInvitePersonSearch(person?.name || "");
@@ -1528,13 +1931,31 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }}
           onAdd={onAdd}
           onUpdate={onUpdate}
+          onChangeOtherParent={onChangeOtherParent}
           onDelete={onDelete}
           canEditNode={canEditNode}
           treeId={treeId}
+          onInviteCollaborator={handleInviteForNode}
           initialView={nodeDetailsInitialView}
           initialAddInfo={nodeDetailsAddInfo}
         />
       )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

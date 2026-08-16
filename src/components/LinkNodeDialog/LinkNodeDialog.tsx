@@ -22,10 +22,12 @@ import {
 } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch } from "../../store/hooks";
-import { submitVillageAccessRequest } from "../../store/thunks/apiThunks";
+import { submitLocationAccessRequest } from "../../store/thunks/apiThunks";
 
 interface SelectedPerson {
   id: string;
@@ -38,7 +40,7 @@ interface SelectedPerson {
  * One-time onboarding dialog for admin users.
  * Steps are optional:
  * 1) Link account to a profile node
- * 2) Request village access
+ * 2) Request location access
  * Shown once per user (persisted in localStorage).
  */
 export const LinkNodeDialog: React.FC = () => {
@@ -47,7 +49,7 @@ export const LinkNodeDialog: React.FC = () => {
     useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { selectedVillage, setSelectedVillage, villages } = useVillage();
+  const { selectedLocation, setSelectedLocation, locations } = useLocations();
   const [searchValue, setSearchValue] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<SelectedPerson | null>(
     null,
@@ -63,7 +65,7 @@ export const LinkNodeDialog: React.FC = () => {
   const [profileEmail, setProfileEmail] = useState("");
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const hasAssignedVillage = (userProfile?.villages || []).length > 0;
+  const hasAssignedLocation = (userProfile?.locations || []).length > 0;
   const needsProfileCompletion = useMemo(
     () =>
       !userProfile?.name?.trim() ||
@@ -72,14 +74,39 @@ export const LinkNodeDialog: React.FC = () => {
     [userProfile?.name, userProfile?.email, userProfile?.privacyPolicyAccepted],
   );
   const needsLink = !userProfile?.peopleId;
-  const needsVillageRequest = !hasAssignedVillage;
+  const needsLocationRequest = !hasAssignedLocation;
 
-  // Auto-select first village if none selected
+  // Auto-select first location if none selected
   useEffect(() => {
-    if (!selectedVillage && villages.length > 0) {
-      setSelectedVillage(villages[0].id);
+    if (!selectedLocation && locations.length > 0) {
+      setSelectedLocation(locations[0].id);
     }
-  }, [selectedVillage, villages, setSelectedVillage]);
+  }, [selectedLocation, locations, setSelectedLocation]);
+
+  // Full hierarchy option for the selected location, for the LocationPicker.
+  const [locationOption, setLocationOption] =
+    useState<LocationCombinationOption | null>(null);
+  useEffect(() => {
+    if (!selectedLocation) {
+      setLocationOption(null);
+      return;
+    }
+    if (locationOption?.locationId === selectedLocation) return;
+    let active = true;
+    ApiService.searchLocationCombinations({ locationId: selectedLocation, limit: 1 })
+      .then((rows) => {
+        if (active) setLocationOption(rows[0] || null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [selectedLocation, locationOption?.locationId]);
+
+  const handleLocationChange = (option: LocationCombinationOption | null) => {
+    setLocationOption(option);
+    setSelectedLocation(option?.locationId || "");
+  };
 
   useEffect(() => {
     setProfileName(userProfile?.name || "");
@@ -109,7 +136,7 @@ export const LinkNodeDialog: React.FC = () => {
       return;
     }
 
-    if (needsVillageRequest) {
+    if (needsLocationRequest) {
       setOpen(true);
       setStep("request");
       return;
@@ -121,7 +148,7 @@ export const LinkNodeDialog: React.FC = () => {
     userProfile?.role,
     needsProfileCompletion,
     needsLink,
-    needsVillageRequest,
+    needsLocationRequest,
   ]);
 
   const handleCloseDialog = () => {
@@ -163,7 +190,7 @@ export const LinkNodeDialog: React.FC = () => {
       setSuccess("Profile updated successfully.");
       if (needsLink) {
         setStep("link");
-      } else if (needsVillageRequest) {
+      } else if (needsLocationRequest) {
         setStep("request");
       } else {
         handleCloseDialog();
@@ -182,7 +209,7 @@ export const LinkNodeDialog: React.FC = () => {
     try {
       await linkUserToNode(selectedPerson.id, selectedPerson.treeId);
       setSuccess("Profile linked successfully.");
-      if (needsVillageRequest) {
+      if (needsLocationRequest) {
         setStep("request");
       } else {
         handleCloseDialog();
@@ -194,8 +221,8 @@ export const LinkNodeDialog: React.FC = () => {
     }
   };
 
-  const handleRequestVillageAccess = async () => {
-    if (!selectedVillage) return;
+  const handleRequestLocationAccess = async () => {
+    if (!selectedLocation) return;
     setRequesting(true);
     setError("");
     try {
@@ -204,15 +231,15 @@ export const LinkNodeDialog: React.FC = () => {
         throw new Error("User profile not loaded");
       }
       const data = await dispatch(
-        submitVillageAccessRequest({
+        submitLocationAccessRequest({
           userId,
-          villageId: selectedVillage,
+          locationId: selectedLocation,
           requestMessage: requestMessage || null,
         }),
       ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
-      setSuccess("Village access request submitted.");
+      setSuccess("Location access request submitted.");
       handleCloseDialog();
     } catch (e: any) {
       setError(e.message || "Failed to submit request.");
@@ -293,25 +320,17 @@ export const LinkNodeDialog: React.FC = () => {
               profile-related actions are tied to that person record.
             </Alert>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Search your name in your village and select the correct person. If
+              Search your name in your location and select the correct person. If
               you are not sure, you can skip this step and do it later from the
               Profile page.
             </Typography>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel id="village-select-label">Select Village</InputLabel>
-              <Select
-                labelId="village-select-label"
-                value={selectedVillage || ""}
-                label="Select Village"
-                onChange={(e) => setSelectedVillage(e.target.value)}
-              >
-                {villages.map((village) => (
-                  <MenuItem key={village.id} value={village.id}>
-                    {village.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Box sx={{ mb: 2 }}>
+              <LocationPicker
+                label="Select Location"
+                value={locationOption}
+                onChange={handleLocationChange}
+              />
+            </Box>
 
             <PersonSearchField
               label="Search Your Name"
@@ -326,8 +345,8 @@ export const LinkNodeDialog: React.FC = () => {
                 setSearchValue(person.name);
               }}
               selectedPerson={selectedPerson}
-              villageId={selectedVillage}
-              disabled={!selectedVillage}
+              locationId={selectedLocation}
+              disabled={!selectedLocation}
             />
 
             {selectedPerson && (
@@ -340,10 +359,10 @@ export const LinkNodeDialog: React.FC = () => {
 
         {step === "request" && (
           <Box>
-            {hasAssignedVillage ? (
+            {hasAssignedLocation ? (
               <Box>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Village assignment is already approved.
+                  Location assignment is already approved.
                 </Alert>
                 <Typography variant="body2" color="text.secondary">
                   For any assignment changes, contact superadmin at{" "}
@@ -356,38 +375,28 @@ export const LinkNodeDialog: React.FC = () => {
             ) : (
               <>
                 <Typography variant="body1" sx={{ mb: 2 }}>
-                  Request village access now? (optional)
+                  Request location access now? (optional)
                 </Typography>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  <strong>What this means:</strong> Village access lets an admin
-                  manage data for a specific village (for example people,
-                  businesses, and related records for that village).
+                  <strong>What this means:</strong> Location access lets an admin
+                  manage data for a specific location (for example people,
+                  businesses, and related records for that location).
                 </Alert>
                 <Typography
                   variant="body2"
                   color="text.secondary"
                   sx={{ mb: 2 }}
                 >
-                  Choose the village you want access to. A superadmin will
+                  Choose the location you want access to. A superadmin will
                   review and approve or reject your request.
                 </Typography>
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel id="request-village-select-label">
-                    Select Village
-                  </InputLabel>
-                  <Select
-                    labelId="request-village-select-label"
-                    value={selectedVillage || ""}
-                    label="Select Village"
-                    onChange={(e) => setSelectedVillage(e.target.value)}
-                  >
-                    {villages.map((village) => (
-                      <MenuItem key={village.id} value={village.id}>
-                        {village.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Box sx={{ mb: 2 }}>
+                  <LocationPicker
+                    label="Select Location"
+                    value={locationOption}
+                    onChange={handleLocationChange}
+                  />
+                </Box>
                 <TextField
                   fullWidth
                   multiline
@@ -437,7 +446,7 @@ export const LinkNodeDialog: React.FC = () => {
           <>
             <Button
               onClick={() => {
-                if (needsVillageRequest) {
+                if (needsLocationRequest) {
                   setStep("request");
                 } else {
                   handleCloseDialog();
@@ -469,19 +478,19 @@ export const LinkNodeDialog: React.FC = () => {
             <Button
               variant="contained"
               onClick={
-                hasAssignedVillage
+                hasAssignedLocation
                   ? handleCloseDialog
-                  : handleRequestVillageAccess
+                  : handleRequestLocationAccess
               }
               disabled={
-                hasAssignedVillage ? false : !selectedVillage || requesting
+                hasAssignedLocation ? false : !selectedLocation || requesting
               }
               startIcon={
                 requesting ? <CircularProgress size={16} /> : undefined
               }
               sx={{ background: "linear-gradient(135deg, #0066cc, #00cc99)" }}
             >
-              {hasAssignedVillage
+              {hasAssignedLocation
                 ? "Done"
                 : requesting
                   ? "Submitting..."

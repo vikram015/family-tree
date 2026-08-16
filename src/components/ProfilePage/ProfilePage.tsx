@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -28,14 +28,15 @@ import {
   Stack,
   Tooltip,
   Link,
+  Card,
+  CardContent,
 } from "@mui/material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import LinkIcon from "@mui/icons-material/Link";
-import PersonIcon from "@mui/icons-material/Person";
 import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
@@ -45,19 +46,44 @@ import WorkIcon from "@mui/icons-material/Work";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import CategoryOutlinedIcon from "@mui/icons-material/CategoryOutlined";
+import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import { ApiService } from "../../services/apiService";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { phoneFromCustomFields } from "../Business/businessContact";
+import { formatDisplayDate } from "../../utils/dateFormatter";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 import {
-  fetchMyVillageAccessRequests,
-  submitVillageAccessRequest,
+  fetchMyLocationAccessRequests,
+  submitLocationAccessRequest,
 } from "../../store/thunks/apiThunks";
+
+const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
+
+const BUSINESS_CATEGORY_LABELS: Record<string, string> = {
+  retail: "Retail & Shops",
+  agriculture: "Agriculture & Farming",
+  it: "IT & Technology",
+  education: "Education",
+  healthcare: "Healthcare",
+  engineering: "Engineering & Construction",
+  properties: "Properties & Real Estate",
+};
+
+const formatBusinessCategory = (category?: string) => {
+  if (!category) return null;
+  return BUSINESS_CATEGORY_LABELS[category] || category;
+};
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
+  const { personId: routePersonId } = useParams<{ personId?: string }>();
   const dispatch = useAppDispatch();
   const { userProfile, linkUserToNode, currentUser, updateUserProfile } =
     useAuth();
-  const { villages, selectedVillage, setSelectedVillage } = useVillage();
+  const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const [isLinking, setIsLinking] = useState(false);
@@ -70,13 +96,19 @@ export const ProfilePage: React.FC = () => {
   // New state for Business and Profession
   const [professions, setProfessions] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
+  const [personCustomFields, setPersonCustomFields] = useState<
+    Record<string, string>
+  >({});
   const [allProfessions, setAllProfessions] = useState<any[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-
   // Dialog State
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [openBusinessDialog, setOpenBusinessDialog] = useState(false);
+  const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
+  const [businessToDelete, setBusinessToDelete] = useState<any | null>(null);
+  const [deletingBusiness, setDeletingBusiness] = useState(false);
   const [openEditProfileDialog, setOpenEditProfileDialog] = useState(false);
+  const [personLoading, setPersonLoading] = useState(false);
+  const [personNotFound, setPersonNotFound] = useState(false);
 
   // Form State
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>("");
@@ -85,21 +117,18 @@ export const ProfilePage: React.FC = () => {
   const [editProfileData, setEditProfileData] = useState({
     name: "",
     phone: "",
+    email: "",
   });
-  const [newBusinessData, setNewBusinessData] = useState({
-    name: "",
-    category: "",
-    description: "",
-    contact: "",
-  });
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>();
+  const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
   const [linkedPersonDetails, setLinkedPersonDetails] = useState<any | null>(
     null,
   );
-  const [requestVillageId, setRequestVillageId] = useState("");
+  const [requestLocationId, setRequestLocationId] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
-  const [myVillageRequests, setMyVillageRequests] = useState<any[]>([]);
+  const [myLocationRequests, setMyLocationRequests] = useState<any[]>([]);
   const [requestSubmitting, setRequestSubmitting] = useState(false);
-  const hasAssignedVillage = (userProfile?.villages || []).length > 0;
+  const hasAssignedLocation = (userProfile?.locations || []).length > 0;
   const casteMap = new Map(castes.map((c: any) => [c.id, c.name]));
   const subCasteMap = new Map(subCastes.map((s: any) => [s.id, s.name]));
   const linkedTreeCaste =
@@ -109,76 +138,136 @@ export const ProfilePage: React.FC = () => {
     subCasteMap.get(linkedPersonDetails?.tree?.subCaste) ||
     linkedPersonDetails?.tree?.subCaste;
 
+  const isPublicPersonView = Boolean(routePersonId);
+  const effectivePersonId = routePersonId || userProfile?.peopleId || null;
+  const canManagePerson = Boolean(
+    currentUser &&
+      effectivePersonId &&
+      userProfile?.peopleId === effectivePersonId,
+  );
+  const isOwnAccountView = !isPublicPersonView;
+  const displayPersonName =
+    linkedPersonDetails?.name ||
+    userProfile?.displayName ||
+    userProfile?.name ||
+    "Profile";
+
+  const refreshPersonDetails = useCallback(async (personId: string) => {
+    const person = await ApiService.getPersonById(personId);
+    if (!person) {
+      return null;
+    }
+
+    let treeDetails = null;
+    if ((person as any).treeId) {
+      treeDetails = await ApiService.getTreeWithDetails((person as any).treeId);
+    }
+
+    return { ...person, tree: treeDetails };
+  }, []);
+
+  const refreshBusinesses = useCallback(async (personId: string) => {
+    const updatedBiz = await ApiService.getBusinessesByPerson(personId);
+    setBusinesses(updatedBiz || []);
+  }, []);
+
+  const refreshProfessions = useCallback(async (personId: string) => {
+    const updatedProfs = await ApiService.getProfessionsByPerson(personId);
+    setProfessions(updatedProfs || []);
+  }, []);
+
   useEffect(() => {
     if (userProfile) {
       setEditProfileData({
         name: userProfile.displayName || userProfile.name || "",
         phone: userProfile.phone || "",
+        email: userProfile.email || "",
       });
     }
   }, [userProfile]);
 
   useEffect(() => {
     const fetchDetails = async () => {
-      if (userProfile?.peopleId) {
-        setLoadingDetails(true);
-        try {
-          const person = await ApiService.getPersonById(
-            userProfile.peopleId,
-          );
-          let treeDetails = null;
-          if (person && (person as any).treeId) {
-            treeDetails = await ApiService.getTreeWithDetails(
-              (person as any).treeId,
-            );
-          }
-          setLinkedPersonDetails({ ...person, tree: treeDetails });
+      if (!effectivePersonId) {
+        setLinkedPersonDetails(null);
+        setProfessions([]);
+        setBusinesses([]);
+        setPersonNotFound(false);
+        setProfilePhotoUrl(undefined);
+        return;
+      }
 
-          const [profs, biz, allProfs] = await Promise.all([
-            ApiService.getProfessionsByPerson(userProfile.peopleId),
-            ApiService.getBusinessesByPerson(userProfile.peopleId),
-            ApiService.getAllProfessions(),
-          ]);
-          setProfessions(profs || []);
-          setBusinesses(biz || []);
-          setAllProfessions(allProfs || []);
-        } catch (err) {
-          console.error("Error fetching details:", err);
-        } finally {
-          setLoadingDetails(false);
+      setPersonLoading(true);
+      setPersonNotFound(false);
+      setError("");
+
+      try {
+        const personWithTree = await refreshPersonDetails(effectivePersonId);
+        if (!personWithTree) {
+          setLinkedPersonDetails(null);
+          setProfessions([]);
+          setBusinesses([]);
+          setPersonNotFound(true);
+          return;
         }
+
+        setLinkedPersonDetails(personWithTree);
+        setProfilePhotoUrl((personWithTree as any)?.photoUrl || undefined);
+
+        const [profs, biz, allProfs, customFields] = await Promise.all([
+          ApiService.getProfessionsByPerson(effectivePersonId),
+          ApiService.getBusinessesByPerson(effectivePersonId),
+          canManagePerson ? ApiService.getAllProfessions() : Promise.resolve([]),
+          ApiService.getPersonCustomFields(effectivePersonId).catch(() => ({})),
+        ]);
+        setProfessions(profs || []);
+        setBusinesses(biz || []);
+        setPersonCustomFields(customFields || {});
+        if (canManagePerson) {
+          setAllProfessions(allProfs || []);
+        }
+      } catch (err) {
+        console.error("Error fetching details:", err);
+        setError("Failed to load profile details.");
+      } finally {
+        setPersonLoading(false);
       }
     };
-    fetchDetails();
-  }, [userProfile?.peopleId]);
 
-  const loadMyVillageRequests = useCallback(async () => {
+    void fetchDetails();
+  }, [effectivePersonId, canManagePerson, refreshPersonDetails]);
+
+  const loadMyLocationRequests = useCallback(async () => {
     try {
       const userId = userProfile?.id;
       if (!userId) {
-        setMyVillageRequests([]);
+        setMyLocationRequests([]);
         return;
       }
       const data = await dispatch(
-        fetchMyVillageAccessRequests(userId),
+        fetchMyLocationAccessRequests(userId),
       ).unwrap();
-      setMyVillageRequests(data || []);
+      setMyLocationRequests(data || []);
     } catch (err) {
-      console.error("Error loading village requests:", err);
-      setMyVillageRequests([]);
+      console.error("Error loading location requests:", err);
+      setMyLocationRequests([]);
     }
   }, [dispatch, userProfile?.id]);
 
   useEffect(() => {
     if (currentUser && userProfile?.role === "admin") {
-      loadMyVillageRequests();
+      loadMyLocationRequests();
     }
-  }, [currentUser, userProfile?.role, loadMyVillageRequests]);
+  }, [currentUser, userProfile?.role, loadMyLocationRequests]);
 
   const handleUpdateProfile = async () => {
     try {
       if (updateUserProfile) {
-        await updateUserProfile(editProfileData.name, editProfileData.phone);
+        await updateUserProfile(
+          editProfileData.name,
+          userProfile?.phone || "",
+          editProfileData.email,
+        );
         setOpenEditProfileDialog(false);
       }
     } catch (err) {
@@ -186,8 +275,51 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const handleProfilePhotoUpload = async (blob: Blob) => {
+    if (!userProfile?.peopleId) {
+      setError("Link your profile to a family tree person before adding a photo.");
+      return;
+    }
+
+    setProfilePhotoUploading(true);
+    setError("");
+    try {
+      const url = await ApiService.uploadPersonPhoto(userProfile.peopleId, blob);
+      setProfilePhotoUrl(url);
+      setLinkedPersonDetails((prev: any) =>
+        prev ? { ...prev, photoUrl: url } : prev,
+      );
+      setSuccess("Profile image updated successfully.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to update profile image.");
+    } finally {
+      setProfilePhotoUploading(false);
+    }
+  };
+
+  const handleProfilePhotoRemove = async () => {
+    if (!userProfile?.peopleId) {
+      return;
+    }
+
+    setProfilePhotoUploading(true);
+    setError("");
+    try {
+      await ApiService.removePersonPhoto(userProfile.peopleId);
+      setProfilePhotoUrl(undefined);
+      setLinkedPersonDetails((prev: any) =>
+        prev ? { ...prev, photoUrl: null } : prev,
+      );
+      setSuccess("Profile image removed successfully.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to remove profile image.");
+    } finally {
+      setProfilePhotoUploading(false);
+    }
+  };
+
   const handleAddProfession = async () => {
-    if (!userProfile?.peopleId) return;
+    if (!effectivePersonId || !canManagePerson) return;
 
     try {
       let profId = selectedProfessionId;
@@ -208,15 +340,8 @@ export const ProfilePage: React.FC = () => {
       }
 
       if (profId) {
-        await ApiService.addProfessionToPerson(
-          userProfile.peopleId,
-          profId,
-        );
-        // Refresh user professions
-        const updatedProfs = await ApiService.getProfessionsByPerson(
-          userProfile.peopleId,
-        );
-        setProfessions(updatedProfs);
+        await ApiService.addProfessionToPerson(effectivePersonId, profId);
+        await refreshProfessions(effectivePersonId);
         setOpenProfessionDialog(false);
         setSelectedProfessionId("");
         setNewProfessionName("");
@@ -228,55 +353,43 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleAddBusiness = async () => {
-    if (!userProfile?.peopleId) return;
-
-    try {
-      await ApiService.createBusiness({
-        ...newBusinessData,
-        peopleId: userProfile.peopleId,
-      });
-
-      // Refresh businesses
-      const updatedBiz = await ApiService.getBusinessesByPerson(
-        userProfile.peopleId,
-      );
-      setBusinesses(updatedBiz);
-      setOpenBusinessDialog(false);
-      setNewBusinessData({
-        name: "",
-        category: "",
-        description: "",
-        contact: "",
-      });
-    } catch (err) {
-      console.error("Error adding business:", err);
-    }
+  const handleOpenBusinessDialog = (business?: any) => {
+    setEditingBusiness(business || null);
+    setOpenBusinessDialog(true);
   };
 
-  const handleDeleteBusiness = async (id: string) => {
+  const handleCloseBusinessDialog = () => {
+    setOpenBusinessDialog(false);
+    setEditingBusiness(null);
+  };
+
+  const handleDeleteBusiness = (business: any) => {
+    if (!effectivePersonId || !canManagePerson) return;
+    setBusinessToDelete(business);
+  };
+
+  const handleConfirmDeleteBusiness = async () => {
+    if (!effectivePersonId || !canManagePerson || !businessToDelete) return;
+
+    setDeletingBusiness(true);
     try {
-      await ApiService.deleteBusiness(id);
-      const updatedBiz = await ApiService.getBusinessesByPerson(
-        userProfile!.peopleId!,
-      );
-      setBusinesses(updatedBiz);
-    } catch (err) {
+      await ApiService.deleteBusiness(businessToDelete.id);
+      await refreshBusinesses(effectivePersonId);
+      setSuccess("Business deleted successfully.");
+      setBusinessToDelete(null);
+    } catch (err: any) {
       console.error("Error deleting business:", err);
+      setError(err?.message || "Failed to delete business.");
+    } finally {
+      setDeletingBusiness(false);
     }
   };
 
   const handleRemoveProfession = async (profId: string) => {
-    if (!userProfile?.peopleId) return;
+    if (!effectivePersonId || !canManagePerson) return;
     try {
-      await ApiService.removeProfessionFromPerson(
-        userProfile.peopleId,
-        profId,
-      );
-      const updatedProfs = await ApiService.getProfessionsByPerson(
-        userProfile.peopleId,
-      );
-      setProfessions(updatedProfs);
+      await ApiService.removeProfessionFromPerson(effectivePersonId, profId);
+      await refreshProfessions(effectivePersonId);
     } catch (err) {
       console.error("Error removing profession:", err);
     }
@@ -301,7 +414,7 @@ export const ProfilePage: React.FC = () => {
   };
 
   const handleOpenLinkedProfileInTree = useCallback(() => {
-    const personId = userProfile?.peopleId;
+    const personId = effectivePersonId;
     const treeId =
       linkedPersonDetails?.treeId || linkedPersonDetails?.tree?.id || "";
     if (!personId || !treeId) return;
@@ -309,10 +422,10 @@ export const ProfilePage: React.FC = () => {
     params.set("tree", treeId);
     params.set("personId", personId);
     navigate(`/families?${params.toString()}`);
-  }, [navigate, userProfile?.peopleId, linkedPersonDetails]);
+  }, [navigate, effectivePersonId, linkedPersonDetails]);
 
-  const handleSubmitVillageRequest = async () => {
-    if (!requestVillageId) return;
+  const handleSubmitLocationRequest = async () => {
+    if (!requestLocationId) return;
     setRequestSubmitting(true);
     setError("");
     setSuccess("");
@@ -322,18 +435,18 @@ export const ProfilePage: React.FC = () => {
         throw new Error("User profile not loaded");
       }
       const data = await dispatch(
-        submitVillageAccessRequest({
+        submitLocationAccessRequest({
           userId,
-          villageId: requestVillageId,
+          locationId: requestLocationId,
           requestMessage: requestMessage || null,
         }),
       ).unwrap();
       if (data && !data.success) throw new Error(data.error);
 
-      setSuccess("Village access request submitted successfully.");
-      setRequestVillageId("");
+      setSuccess("Location access request submitted successfully.");
+      setRequestLocationId("");
       setRequestMessage("");
-      await loadMyVillageRequests();
+      await loadMyLocationRequests();
     } catch (err: any) {
       setError(err.message || "Failed to submit request");
     } finally {
@@ -341,23 +454,73 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  if (!currentUser) {
+  const pageTitle = useMemo(() => {
+    if (isPublicPersonView) {
+      return displayPersonName;
+    }
+    return "My Profile";
+  }, [displayPersonName, isPublicPersonView]);
+
+  if (isOwnAccountView && !currentUser) {
     return (
       <Container maxWidth="md" sx={{ mt: 4 }}>
-        <Alert severity="warning">Please log in to view your profile.</Alert>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Please log in to view and manage your account profile.
+        </Alert>
+        <Button variant="contained" onClick={() => navigate("/login")}>
+          Log in
+        </Button>
+      </Container>
+    );
+  }
+
+  if (personNotFound) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="error">Profile not found.</Alert>
+        <Button sx={{ mt: 2 }} onClick={() => navigate(-1)}>
+          Go back
+        </Button>
       </Container>
     );
   }
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: "bold" }}>
-        My Profile
-      </Typography>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 3 }}
+      >
+        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
+          {pageTitle}
+        </Typography>
+        {isPublicPersonView && (
+          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>
+            Back
+          </Button>
+        )}
+      </Stack>
 
+      {(error || success) && (
+        <Stack spacing={1} sx={{ mb: 2 }}>
+          {error && <Alert severity="error">{error}</Alert>}
+          {success && <Alert severity="success">{success}</Alert>}
+        </Stack>
+      )}
+
+      {personLoading && (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
+      {!personLoading && (
       <Grid container spacing={3}>
-        {/* User Info Card */}
-        <Grid size={{ xs: 12, md: 4 }}>
+        {/* Account info — logged-in user only */}
+        {isOwnAccountView && currentUser && (
+        <Grid size={{ xs: 12, md: isPublicPersonView ? 12 : 4 }}>
           <Paper
             elevation={2}
             sx={{
@@ -378,7 +541,7 @@ export const ProfilePage: React.FC = () => {
             </Tooltip>
 
             <Avatar
-              src={linkedPersonDetails?.photoUrl || undefined}
+              src={profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined}
               sx={{
                 width: 100,
                 height: 100,
@@ -388,8 +551,9 @@ export const ProfilePage: React.FC = () => {
                 mb: 2,
               }}
             >
-              {userProfile?.displayName?.charAt(0) ||
-                currentUser.email?.charAt(0)}
+              {(linkedPersonDetails?.name || userProfile?.displayName || currentUser.email || "U")
+                .charAt(0)
+                .toUpperCase()}
             </Avatar>
             <Typography variant="h6" gutterBottom>
               {userProfile?.displayName || "User"}
@@ -405,7 +569,9 @@ export const ProfilePage: React.FC = () => {
               }}
             >
               <EmailIcon fontSize="small" />
-              <Typography variant="body2">{currentUser.email}</Typography>
+              <Typography variant="body2">
+                {userProfile?.email || currentUser.email}
+              </Typography>
             </Box>
             {userProfile?.phone && (
               <Box
@@ -458,8 +624,82 @@ export const ProfilePage: React.FC = () => {
             </Box>
           </Paper>
         </Grid>
+        )}
+
+        {/* Family tree person summary */}
+        {effectivePersonId && linkedPersonDetails && (
+          <Grid size={{ xs: 12, md: isOwnAccountView && currentUser ? 8 : 12 }}>
+            <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
+              <Stack direction="row" spacing={2} alignItems="flex-start">
+                {!(isOwnAccountView && currentUser) && (
+                  <Avatar
+                    src={
+                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
+                    }
+                    sx={{
+                      width: 88,
+                      height: 88,
+                      bgcolor: "primary.main",
+                      fontSize: 32,
+                    }}
+                  >
+                    {(linkedPersonDetails?.name || "?").charAt(0).toUpperCase()}
+                  </Avatar>
+                )}
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    <Link
+                      component="button"
+                      type="button"
+                      underline="hover"
+                      onClick={handleOpenLinkedProfileInTree}
+                      sx={{ fontWeight: 700 }}
+                    >
+                      {linkedPersonDetails.name}
+                    </Link>
+                  </Typography>
+                  {linkedPersonDetails.nameHindi && (
+                    <Typography variant="body2" color="text.secondary">
+                      {linkedPersonDetails.nameHindi}
+                    </Typography>
+                  )}
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                    {linkedPersonDetails.gender && (
+                      <Chip size="small" label={linkedPersonDetails.gender} />
+                    )}
+                    {linkedPersonDetails.dob && (
+                      <Chip
+                        size="small"
+                        label={`DOB: ${formatDisplayDate(linkedPersonDetails.dob)}`}
+                      />
+                    )}
+                  </Stack>
+                  {linkedPersonDetails.tree && (
+                    <Stack spacing={0.5} sx={{ mt: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Tree:</strong>{" "}
+                        {linkedPersonDetails.tree.name || "Family tree"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Caste:</strong> {linkedTreeCaste || "N/A"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Sub-caste:</strong> {linkedTreeSubCaste || "N/A"}
+                      </Typography>
+                      <Typography variant="body2">
+                        <strong>Location:</strong>{" "}
+                        {linkedPersonDetails.tree.location?.name || "N/A"}
+                      </Typography>
+                    </Stack>
+                  )}
+                </Box>
+              </Stack>
+            </Paper>
+          </Grid>
+        )}
 
         {/* Tree Linking Section */}
+        {false && (
         <Grid size={{ xs: 12, md: 8 }}>
           <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
             <Box
@@ -505,8 +745,8 @@ export const ProfilePage: React.FC = () => {
                           {linkedTreeSubCaste || "N/A"}
                         </Typography>
                         <Typography variant="body1">
-                          <strong>Village:</strong>{" "}
-                          {linkedPersonDetails.tree.village?.name || "N/A"}
+                          <strong>Location:</strong>{" "}
+                          {linkedPersonDetails.tree.location?.name || "N/A"}
                         </Typography>
                       </>
                     )}
@@ -560,18 +800,18 @@ export const ProfilePage: React.FC = () => {
                     </Typography>
 
                     <FormControl fullWidth sx={{ mb: 3 }}>
-                      <InputLabel id="village-select-label">
-                        Select Village
+                      <InputLabel id="location-select-label">
+                        Select Location
                       </InputLabel>
                       <Select
-                        labelId="village-select-label"
-                        value={selectedVillage || ""}
-                        label="Select Village"
-                        onChange={(e) => setSelectedVillage(e.target.value)}
+                        labelId="location-select-label"
+                        value={selectedLocation || ""}
+                        label="Select Location"
+                        onChange={(e) => setSelectedLocation(e.target.value)}
                       >
-                        {villages.map((village) => (
-                          <MenuItem key={village.id} value={village.id}>
-                            {village.name}
+                        {locations.map((location) => (
+                          <MenuItem key={location.id} value={location.id}>
+                            {location.name}
                           </MenuItem>
                         ))}
                       </Select>
@@ -590,15 +830,15 @@ export const ProfilePage: React.FC = () => {
                         setSearchValue(person.name);
                       }}
                       selectedPerson={selectedPerson}
-                      villageId={selectedVillage}
-                      disabled={!selectedVillage}
+                      locationId={selectedLocation}
+                      disabled={!selectedLocation}
                     />
 
                     {selectedPerson && (
                       <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
                         Selected: <strong>{selectedPerson.name}</strong>
-                        {selectedPerson.villageName &&
-                          ` from ${selectedPerson.villageName}`}
+                        {selectedPerson.locationName &&
+                          ` from ${selectedPerson.locationName}`}
                       </Alert>
                     )}
 
@@ -649,9 +889,10 @@ export const ProfilePage: React.FC = () => {
             )}
           </Paper>
         </Grid>
+        )}
 
         {/* Business & Professional Details Section */}
-        {userProfile?.peopleId && (
+        {effectivePersonId && (
           <Grid size={{ xs: 12 }}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
@@ -676,13 +917,15 @@ export const ProfilePage: React.FC = () => {
                         Professions
                       </Typography>
                     </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => setOpenProfessionDialog(true)}
-                      color="primary"
-                    >
-                      <AddIcon />
-                    </IconButton>
+                    {canManagePerson && (
+                      <IconButton
+                        size="small"
+                        onClick={() => setOpenProfessionDialog(true)}
+                        color="primary"
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    )}
                   </Box>
 
                   {professions.length === 0 ? (
@@ -694,32 +937,48 @@ export const ProfilePage: React.FC = () => {
                       No professions added yet.
                     </Typography>
                   ) : (
-                    <List dense>
+                    <Stack spacing={1}>
                       {professions.map((prof: any) => (
-                        <ListItem
+                        <Paper
                           key={prof.id}
-                          sx={{
-                            border: "1px solid #eee",
-                            borderRadius: 1,
-                            mb: 1,
-                          }}
+                          variant="outlined"
+                          sx={{ p: 1.5, borderRadius: 2 }}
                         >
-                          <ListItemText
-                            primary={prof.name}
-                            secondary={prof.category}
-                          />
-                          <ListItemSecondaryAction>
-                            <IconButton
-                              edge="end"
-                              size="small"
-                              onClick={() => handleRemoveProfession(prof.id)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </ListItemSecondaryAction>
-                        </ListItem>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "flex-start",
+                              gap: 1,
+                            }}
+                          >
+                            <Box>
+                              <Typography variant="subtitle2" fontWeight={700}>
+                                {prof.name}
+                              </Typography>
+                              {prof.category && (
+                                <Typography variant="body2" color="text.secondary">
+                                  {prof.category}
+                                </Typography>
+                              )}
+                              {prof.description && (
+                                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                  {prof.description}
+                                </Typography>
+                              )}
+                            </Box>
+                            {canManagePerson && (
+                              <IconButton
+                                size="small"
+                                onClick={() => handleRemoveProfession(prof.id)}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Box>
+                        </Paper>
                       ))}
-                    </List>
+                    </Stack>
                   )}
                 </Grid>
 
@@ -739,13 +998,15 @@ export const ProfilePage: React.FC = () => {
                         Businesses
                       </Typography>
                     </Box>
-                    <IconButton
-                      size="small"
-                      onClick={() => setOpenBusinessDialog(true)}
-                      color="primary"
-                    >
-                      <AddIcon />
-                    </IconButton>
+                    {canManagePerson && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenBusinessDialog()}
+                        color="primary"
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    )}
                   </Box>
 
                   {businesses.length === 0 ? (
@@ -757,44 +1018,90 @@ export const ProfilePage: React.FC = () => {
                       No businesses added yet.
                     </Typography>
                   ) : (
-                    <List dense>
+                    <Stack spacing={1.5}>
                       {businesses.map((biz: any) => (
-                        <ListItem
-                          key={biz.id}
-                          sx={{
-                            border: "1px solid #eee",
-                            borderRadius: 1,
-                            mb: 1,
-                          }}
-                        >
-                          <ListItemText
-                            primary={biz.name}
-                            secondary={
-                              <React.Fragment>
-                                <Typography
-                                  component="span"
-                                  variant="body2"
-                                  color="text.primary"
-                                >
-                                  {biz.category}
-                                </Typography>
-                                {biz.description && ` — ${biz.description}`}
-                                {biz.contact && ` — ${biz.contact}`}
-                              </React.Fragment>
-                            }
-                          />
-                          <ListItemSecondaryAction>
-                            <IconButton
-                              edge="end"
-                              size="small"
-                              onClick={() => handleDeleteBusiness(biz.id)}
+                        <Card key={biz.id} variant="outlined" sx={{ borderRadius: 2 }}>
+                          <CardContent sx={{ pb: "16px !important" }}>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "flex-start",
+                                gap: 1,
+                                mb: 1,
+                              }}
                             >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </ListItemSecondaryAction>
-                        </ListItem>
+                              <Typography variant="subtitle1" fontWeight={800}>
+                                {biz.name}
+                              </Typography>
+                              {canManagePerson && (
+                                <Stack direction="row" spacing={0.5}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleOpenBusinessDialog(biz)}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleDeleteBusiness(biz)}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Stack>
+                              )}
+                            </Box>
+
+                            {formatBusinessCategory(biz.category) && (
+                              <Chip
+                                size="small"
+                                icon={<CategoryOutlinedIcon />}
+                                label={formatBusinessCategory(biz.category) || ""}
+                                sx={{ mb: 1 }}
+                              />
+                            )}
+
+                            <Stack spacing={1}>
+                              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                                <NotesOutlinedIcon
+                                  fontSize="small"
+                                  color="action"
+                                  sx={{ mt: 0.25 }}
+                                />
+                                <Typography variant="body2" color="text.secondary">
+                                  {biz.description || "No description provided."}
+                                </Typography>
+                              </Box>
+                              {biz.contact && (
+                                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                  <PhoneIcon fontSize="small" color="action" />
+                                  <Typography
+                                    variant="body2"
+                                    component="a"
+                                    href={`tel:${biz.contact}`}
+                                    sx={{ color: "primary.main", textDecoration: "none" }}
+                                  >
+                                    {biz.contact}
+                                  </Typography>
+                                </Box>
+                              )}
+                              {linkedPersonDetails?.name && (
+                                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                                  <PersonOutlineOutlinedIcon
+                                    fontSize="small"
+                                    color="action"
+                                  />
+                                  <Typography variant="body2">
+                                    Owner: {linkedPersonDetails.name}
+                                  </Typography>
+                                </Box>
+                              )}
+                            </Stack>
+                          </CardContent>
+                        </Card>
                       ))}
-                    </List>
+                    </Stack>
                   )}
                 </Grid>
               </Grid>
@@ -802,28 +1109,28 @@ export const ProfilePage: React.FC = () => {
           </Grid>
         )}
 
-        {userProfile?.role === "admin" && (
+        {false && userProfile?.role === "admin" && (
           <Grid size={{ xs: 12 }}>
             <Paper elevation={2} sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Village Assignment Requests
+                Location Assignment Requests
               </Typography>
               <Divider sx={{ mb: 2 }} />
 
-              {hasAssignedVillage ? (
+              {hasAssignedLocation ? (
                 <Box sx={{ mb: 3 }}>
                   <Alert severity="info" sx={{ mb: 2 }}>
-                    Your village assignment is already approved.
+                    Your location assignment is already approved.
                   </Alert>
                   <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                    Assigned Village
+                    Assigned Location
                   </Typography>
                   <Box
                     sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 1 }}
                   >
-                    {(userProfile?.villages || []).map((vId) => {
+                    {(userProfile?.locations || []).map((vId) => {
                       const vName =
-                        villages.find((v) => v.id === vId)?.name || vId;
+                        locations.find((v) => v.id === vId)?.name || vId;
                       return (
                         <Chip
                           key={vId}
@@ -835,7 +1142,7 @@ export const ProfilePage: React.FC = () => {
                     })}
                   </Box>
                   <Typography variant="body2" color="text.secondary">
-                    To change village assignment, contact superadmin at{" "}
+                    To change location assignment, contact superadmin at{" "}
                     <Link href="mailto:support@kinvia.in" underline="hover">
                       support@kinvia.in
                     </Link>
@@ -845,18 +1152,18 @@ export const ProfilePage: React.FC = () => {
               ) : (
                 <Stack spacing={2} sx={{ mb: 3 }}>
                   <FormControl fullWidth>
-                    <InputLabel id="request-village-label">
-                      Select Village
+                    <InputLabel id="request-location-label">
+                      Select Location
                     </InputLabel>
                     <Select
-                      labelId="request-village-label"
-                      value={requestVillageId}
-                      label="Select Village"
-                      onChange={(e) => setRequestVillageId(e.target.value)}
+                      labelId="request-location-label"
+                      value={requestLocationId}
+                      label="Select Location"
+                      onChange={(e) => setRequestLocationId(e.target.value)}
                     >
-                      {villages.map((village) => (
-                        <MenuItem key={village.id} value={village.id}>
-                          {village.name}
+                      {locations.map((location) => (
+                        <MenuItem key={location.id} value={location.id}>
+                          {location.name}
                         </MenuItem>
                       ))}
                     </Select>
@@ -871,8 +1178,8 @@ export const ProfilePage: React.FC = () => {
                   <Box>
                     <Button
                       variant="contained"
-                      disabled={!requestVillageId || requestSubmitting}
-                      onClick={handleSubmitVillageRequest}
+                      disabled={!requestLocationId || requestSubmitting}
+                      onClick={handleSubmitLocationRequest}
                     >
                       {requestSubmitting ? "Submitting..." : "Raise Request"}
                     </Button>
@@ -883,19 +1190,19 @@ export const ProfilePage: React.FC = () => {
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
                 My Requests
               </Typography>
-              {myVillageRequests.length === 0 ? (
+              {myLocationRequests.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
                   No requests submitted yet.
                 </Typography>
               ) : (
                 <List dense>
-                  {myVillageRequests.map((req) => (
+                  {myLocationRequests.map((req) => (
                     <ListItem
                       key={req.id}
                       sx={{ border: "1px solid #eee", borderRadius: 1, mb: 1 }}
                     >
                       <ListItemText
-                        primary={req.villageName || req.villageId}
+                        primary={req.locationName || req.locationId}
                         secondary={req.requestMessage || "No note"}
                       />
                       <Chip
@@ -917,6 +1224,7 @@ export const ProfilePage: React.FC = () => {
           </Grid>
         )}
       </Grid>
+      )}
 
       {/* Dialogs */}
       <Dialog
@@ -977,75 +1285,50 @@ export const ProfilePage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog
+      <BusinessFormDialog
         open={openBusinessDialog}
-        onClose={() => setOpenBusinessDialog(false)}
+        onClose={handleCloseBusinessDialog}
+        business={editingBusiness}
+        personId={effectivePersonId}
+        defaultContact={phoneFromCustomFields(personCustomFields)}
+        onSaved={() => {
+          setSuccess(
+            editingBusiness ? "Business updated successfully." : "Business added successfully.",
+          );
+          if (effectivePersonId) {
+            void refreshBusinesses(effectivePersonId);
+          }
+        }}
+      />
+
+      <Dialog
+        open={Boolean(businessToDelete)}
+        onClose={() => {
+          if (!deletingBusiness) setBusinessToDelete(null);
+        }}
       >
-        <DialogTitle>Add Business</DialogTitle>
+        <DialogTitle>Delete business</DialogTitle>
         <DialogContent>
-          <Box
-            sx={{
-              pt: 1,
-              minWidth: 300,
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-            }}
-          >
-            <TextField
-              fullWidth
-              label="Business Name"
-              value={newBusinessData.name}
-              onChange={(e) =>
-                setNewBusinessData({ ...newBusinessData, name: e.target.value })
-              }
-            />
-            <TextField
-              fullWidth
-              label="Category"
-              value={newBusinessData.category}
-              onChange={(e) =>
-                setNewBusinessData({
-                  ...newBusinessData,
-                  category: e.target.value,
-                })
-              }
-            />
-            <TextField
-              fullWidth
-              label="Description"
-              multiline
-              rows={3}
-              value={newBusinessData.description}
-              onChange={(e) =>
-                setNewBusinessData({
-                  ...newBusinessData,
-                  description: e.target.value,
-                })
-              }
-            />
-            <TextField
-              fullWidth
-              label="Contact Number"
-              value={newBusinessData.contact}
-              onChange={(e) =>
-                setNewBusinessData({
-                  ...newBusinessData,
-                  contact: e.target.value,
-                })
-              }
-              placeholder="Enter phone number (optional)"
-            />
-          </Box>
+          <Typography>
+            Are you sure you want to delete
+            {businessToDelete?.name ? ` "${businessToDelete.name}"` : " this business"}? This
+            action cannot be undone.
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenBusinessDialog(false)}>Cancel</Button>
           <Button
-            onClick={handleAddBusiness}
-            variant="contained"
-            disabled={!newBusinessData.name}
+            onClick={() => setBusinessToDelete(null)}
+            disabled={deletingBusiness}
           >
-            Add
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDeleteBusiness}
+            color="error"
+            variant="contained"
+            disabled={deletingBusiness}
+          >
+            {deletingBusiness ? "Deleting..." : "Delete"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1075,15 +1358,47 @@ export const ProfilePage: React.FC = () => {
             />
             <TextField
               fullWidth
-              label="Phone Number"
-              value={editProfileData.phone}
+              label="Email"
+              type="email"
+              value={editProfileData.email}
               onChange={(e) =>
                 setEditProfileData({
                   ...editProfileData,
-                  phone: e.target.value,
+                  email: e.target.value,
                 })
               }
             />
+            <TextField
+              fullWidth
+              label="Mobile Number"
+              value={editProfileData.phone}
+              disabled
+              helperText="Mobile number is verified and cannot be edited here."
+            />
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Profile Image
+              </Typography>
+              {userProfile?.peopleId ? (
+                <Suspense fallback={<Box sx={{ height: 112 }} />}>
+                  <ImageCropper
+                    currentPhoto={
+                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
+                    }
+                    previewVariant="rounded"
+                    onCropped={handleProfilePhotoUpload}
+                    onRemove={handleProfilePhotoRemove}
+                    uploading={profilePhotoUploading}
+                    previewSize={112}
+                  />
+                </Suspense>
+              ) : (
+                <Alert severity="info">
+                  Link your account to a family tree profile before adding a
+                  profile image.
+                </Alert>
+              )}
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -1091,16 +1406,7 @@ export const ProfilePage: React.FC = () => {
             Cancel
           </Button>
           <Button
-            onClick={() => {
-              if (updateUserProfile) {
-                updateUserProfile(
-                  editProfileData.name,
-                  editProfileData.phone,
-                ).then(() => {
-                  setOpenEditProfileDialog(false);
-                });
-              }
-            }}
+            onClick={handleUpdateProfile}
             variant="contained"
           >
             Save

@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogContent,
   Box,
+  Stack,
   TextField,
   Button,
   Typography,
@@ -10,16 +11,18 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  CircularProgress,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { Close } from "@mui/icons-material";
+import { Close, LockOutlined, PhoneIphone, VerifiedUserOutlined } from "@mui/icons-material";
 import {
   ConfirmationResult,
   RecaptchaVerifier,
   signInWithPhoneNumber,
 } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
+import { ApiService } from "../../services/apiService";
 
 const OTP_RESEND_BASE_DELAY_SECONDS = 30;
 const OTP_RESEND_MAX_DELAY_SECONDS = 5 * 60;
@@ -234,6 +237,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       await confirmationResult.confirm(otp.trim());
 
+      // Record the login (best-effort — never block sign-in on this).
+      try {
+        await ApiService.recordLoginEvent();
+      } catch (loginEventErr) {
+        console.warn("Failed to record login event:", loginEventErr);
+      }
+
       setPhone("");
       resetOtpFlow();
       onSuccess?.();
@@ -260,25 +270,139 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       maxWidth="sm"
       fullWidth
       fullScreen={isMobile}
+      BackdropProps={{
+        sx: {
+          background:
+            "linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(13, 110, 253, 0.18))",
+          backdropFilter: "blur(10px)",
+        },
+      }}
+      PaperProps={{
+        sx: {
+          borderRadius: isMobile ? 0 : 3,
+          overflow: "hidden",
+          boxShadow: isMobile
+            ? "none"
+            : "0 24px 80px rgba(15, 23, 42, 0.28)",
+          border: isMobile ? 0 : "1px solid rgba(255,255,255,0.7)",
+        },
+      }}
     >
-      <DialogTitle>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Sign In with Phone</Typography>
-          <IconButton onClick={handleClose} size="small">
+      <DialogTitle
+        sx={{
+          p: 0,
+          background:
+            "linear-gradient(135deg, #f8fafc 0%, #eef7f1 46%, #fff7ed 100%)",
+          borderBottom: "1px solid rgba(15,23,42,0.08)",
+        }}
+      >
+        <Box
+          sx={{
+            position: "relative",
+            p: { xs: 2.25, sm: 3 },
+            pr: { xs: 6, sm: 7 },
+          }}
+        >
+          <IconButton
+            aria-label="Close login"
+            onClick={handleClose}
+            size="small"
+            sx={{
+              position: "absolute",
+              top: 14,
+              right: 14,
+              bgcolor: "rgba(255,255,255,0.72)",
+              "&:hover": { bgcolor: "#ffffff" },
+            }}
+          >
             <Close />
           </IconButton>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Box
+              component="img"
+              src="/favicon2.png"
+              alt="Kinvia"
+              sx={{
+                width: 58,
+                height: 58,
+                borderRadius: 2,
+                boxShadow: "0 10px 26px rgba(15,23,42,0.16)",
+                bgcolor: "#fff",
+              }}
+            />
+            <Box>
+              <Typography
+                variant="overline"
+                sx={{
+                  color: "#0f766e",
+                  fontWeight: 800,
+                  letterSpacing: 0.4,
+                  lineHeight: 1,
+                }}
+              >
+                Kinvia
+              </Typography>
+              <Typography
+                variant={isMobile ? "h5" : "h4"}
+                sx={{ fontWeight: 900, letterSpacing: 0, color: "#0f172a" }}
+              >
+                Welcome back
+              </Typography>
+              <Typography variant="body2" sx={{ color: "#475569", mt: 0.5 }}>
+                Sign in securely to continue your family story.
+              </Typography>
+            </Box>
+          </Stack>
         </Box>
       </DialogTitle>
-      <DialogContent>
-        <Box sx={{ mt: 2 }}>
+      <DialogContent
+        sx={{
+          p: { xs: 2.25, sm: 3 },
+          bgcolor: "#ffffff",
+        }}
+      >
+        <Box>
+          <Stack
+            direction="row"
+            spacing={1}
+            useFlexGap
+            flexWrap="wrap"
+            sx={{ mb: 2.5 }}
+          >
+            {[
+              { icon: <VerifiedUserOutlined sx={{ fontSize: 16 }} />, label: "Verified access" },
+              { icon: <LockOutlined sx={{ fontSize: 16 }} />, label: "OTP protected" },
+            ].map((item) => (
+              <Box
+                key={item.label}
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  px: 1.2,
+                  py: 0.65,
+                  borderRadius: 999,
+                  bgcolor: "#f8fafc",
+                  border: "1px solid rgba(15,23,42,0.08)",
+                  color: "#334155",
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                {item.icon}
+                {item.label}
+              </Box>
+            ))}
+          </Stack>
+
           {successMessage && (
-            <Alert severity="success" sx={{ mb: 2 }}>
+            <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
               {successMessage}
             </Alert>
           )}
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
               {error}
             </Alert>
           )}
@@ -296,7 +420,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 setPhone(digitsOnly);
               }}
               placeholder="9876543210"
-              sx={{ mb: 2 }}
+              sx={{
+                mb: 2,
+                "& .MuiOutlinedInput-root": {
+                  minHeight: 58,
+                  borderRadius: 2,
+                  bgcolor: "#fbfdff",
+                },
+              }}
               disabled={loading || !!confirmationResult}
               inputProps={{
                 inputMode: "numeric",
@@ -305,7 +436,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               }}
               InputProps={{
                 startAdornment: (
-                  <InputAdornment position="start">+91</InputAdornment>
+                  <InputAdornment position="start">
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <PhoneIphone sx={{ fontSize: 18, color: "#0f766e" }} />
+                      <Typography sx={{ fontWeight: 800, color: "#0f172a" }}>
+                        +91
+                      </Typography>
+                    </Stack>
+                  </InputAdornment>
                 ),
               }}
             />
@@ -318,8 +456,23 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
                 placeholder="Enter verification code"
-                sx={{ mb: 2 }}
+                sx={{
+                  mb: 2,
+                  "& .MuiOutlinedInput-root": {
+                    minHeight: 58,
+                    borderRadius: 2,
+                    bgcolor: "#fbfdff",
+                  },
+                }}
+                type="password"
                 disabled={loading}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <LockOutlined sx={{ fontSize: 18, color: "#0f766e" }} />
+                    </InputAdornment>
+                  ),
+                }}
               />
             )}
 
@@ -329,13 +482,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               fullWidth
               size="large"
               disabled={loading}
-              sx={{ mb: 1 }}
+              sx={{
+                minHeight: 48,
+                px: 4,
+                mb: 1.25,
+                borderRadius: 2,
+                bgcolor: "#0d6efd",
+                boxShadow: "0 10px 20px rgba(13,110,253,0.22)",
+                fontWeight: 800,
+                textTransform: "none",
+                "&:hover": {
+                  bgcolor: "#0b5ed7",
+                  boxShadow: "0 12px 22px rgba(13,110,253,0.26)",
+                },
+              }}
             >
-              {loading
-                ? "Processing..."
-                : confirmationResult
-                  ? "Verify OTP"
-                  : "Send OTP"}
+              {loading ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : confirmationResult ? (
+                "Verify OTP"
+              ) : (
+                "Send OTP"
+              )}
             </Button>
 
             {confirmationResult && (
@@ -345,6 +513,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   fullWidth
                   onClick={handleResendOtp}
                   disabled={loading || resendCooldownSeconds > 0}
+                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
                 >
                   {resendCooldownSeconds > 0
                     ? `Resend OTP in ${formatCooldown(resendCooldownSeconds)}`
@@ -360,6 +529,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     setError("");
                   }}
                   disabled={loading}
+                  sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
                 >
                   Use different phone number
                 </Button>
@@ -367,6 +537,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             )}
           </form>
 
+          <Typography
+            variant="caption"
+            sx={{
+              display: "block",
+              mt: 2,
+              color: "#64748b",
+              textAlign: "center",
+              lineHeight: 1.5,
+            }}
+          >
+            We use your phone number only to verify your Kinvia account access.
+          </Typography>
           <Box ref={recaptchaContainerRef} sx={{ mt: 1 }} />
         </Box>
       </DialogContent>

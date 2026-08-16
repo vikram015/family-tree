@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   Container,
@@ -21,17 +21,11 @@ import {
   Avatar,
   ClickAwayListener,
   LinearProgress,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
 import SearchIcon from "@mui/icons-material/Search";
-import CloseIcon from "@mui/icons-material/Close";
-import PersonIcon from "@mui/icons-material/Person";
 import StoreIcon from "@mui/icons-material/Store";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
@@ -51,6 +45,8 @@ import {
 } from "../../store/slices/statisticsSlice";
 import { ApiService } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
+import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
 
 interface SearchResult {
   id: string;
@@ -61,7 +57,7 @@ interface SearchResult {
   personPhotoUrl?: string;
   gotra?: string;
   extra?: string;
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
   parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
@@ -123,9 +119,8 @@ export const HomePage: React.FC = () => {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
+  const [continueTreeLoading, setContinueTreeLoading] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const suppressMobileSearchOpenRef = useRef(false);
 
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
@@ -172,7 +167,7 @@ export const HomePage: React.FC = () => {
           treeName: row.treeName || undefined,
           personPhotoUrl: row.personPhotoUrl || undefined,
           gotra: row.gotra || undefined,
-          villageName: row.villageName || undefined,
+          locationName: row.locationName || undefined,
           casteName: row.casteName || undefined,
           subCasteName: row.subCasteName || undefined,
           parentHierarchy: row.parentHierarchy || [],
@@ -196,35 +191,37 @@ export const HomePage: React.FC = () => {
 
   const handleResultClick = (result: SearchResult) => {
     setShowResults(false);
-    setSearchDialogOpen(false);
     setSearchQuery("");
-    if (result.treeId) {
+    if (result.type === "person" && result.id) {
+      navigate(`/profile/person/${result.id}`);
+    } else if (result.treeId) {
       const params = new URLSearchParams();
       params.set("tree", result.treeId);
-      if (result.type === "person" && result.id) {
-        params.set("personId", result.id);
-      }
       navigate(`/families?${params.toString()}`);
     } else if (result.type === "business" || result.type === "profession") {
       navigate("/business");
     }
   };
 
+  const handleContinueToYourTree = useCallback(async () => {
+    if (!currentUser) {
+      navigate("/families");
+      return;
+    }
+
+    setContinueTreeLoading(true);
+    try {
+      navigate(await resolveDefaultFamilyTreePath());
+    } finally {
+      setContinueTreeLoading(false);
+    }
+  }, [currentUser, navigate]);
+
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
 
-  const closeSearchDialog = useCallback(() => {
-    suppressMobileSearchOpenRef.current = true;
-    setSearchDialogOpen(false);
-    setShowResults(false);
-
-    window.setTimeout(() => {
-      suppressMobileSearchOpenRef.current = false;
-    }, 250);
-  }, []);
-
-  const renderSearchResults = () => {
+  const renderSearchResults = (onPick?: () => void) => {
     if (!showResults) return null;
 
     return (
@@ -248,7 +245,10 @@ export const HomePage: React.FC = () => {
               <ListItem
                 key={`${result.type}-${result.id}`}
                 component="div"
-                onClick={() => handleResultClick(result)}
+                onClick={() => {
+                  onPick?.();
+                  handleResultClick(result);
+                }}
                 sx={{
                   cursor: "pointer",
                   "&:hover": { bgcolor: "action.hover" },
@@ -284,9 +284,9 @@ export const HomePage: React.FC = () => {
                         {result.name}
                       </Typography>
                       {result.type === "person" &&
-                        (result.villageName || result.gotra || result.casteName) && (
+                        (result.locationName || result.gotra || result.casteName) && (
                           <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
-                            {renderMetaPill("Village", result.villageName, "teal")}
+                            {renderMetaPill("Location", result.locationName, "teal")}
                             {renderMetaPill("Caste", result.casteName, "slate")}
                             {renderMetaPill("Sub caste", result.gotra, "slate")}
                           </Stack>
@@ -331,7 +331,7 @@ export const HomePage: React.FC = () => {
 
   const totalPeople = statistics?.totalPeople || 0;
   const totalTrees = statistics?.totalTrees || 0;
-  const totalVillages = statistics?.totalVillages || 0;
+  const totalLocations = statistics?.totalLocations || 0;
   const totalBusinesses = statistics?.totalBusinesses || 0;
   const topContributors = Array.isArray(statistics?.topContributors)
     ? (statistics.topContributors as DashboardContributor[])
@@ -341,7 +341,7 @@ export const HomePage: React.FC = () => {
     : 0;
 
   const pulseItems = [
-    `Families across ${totalVillages} villages are preserving lineage records.`,
+    `Families across ${totalLocations} locations are preserving lineage records.`,
     `${totalBusinesses} family businesses are now visible in the network.`,
     `${statistics?.totalProfessionsAssigned || 0} professional links are mapped.`,
   ];
@@ -403,62 +403,98 @@ export const HomePage: React.FC = () => {
                 Every update you make today becomes heritage tomorrow.
               </Typography>
 
-              <ClickAwayListener onClickAway={() => !isMobile && setShowResults(false)}>
-                <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
-                  <TextField
-                    fullWidth
-                    placeholder="Search family members, businesses..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    onClick={() => {
-                      if (isMobile && !suppressMobileSearchOpenRef.current) {
-                        setSearchDialogOpen(true);
-                      }
-                    }}
-                    onFocus={() => {
-                      if (isMobile) {
-                        if (suppressMobileSearchOpenRef.current) {
-                          return;
+              <FullScreenMobilePicker
+                title="Search"
+                closeLabel="Close search"
+                dialogContent={({ closeDialog }) => (
+                  <>
+                    <TextField
+                      fullWidth
+                      autoFocus
+                      placeholder="Search family members, businesses..."
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      onFocus={() => {
+                        if (searchResults.length > 0) setShowResults(true);
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter" && searchQuery.trim()) {
+                          performSearch(searchQuery);
                         }
-                        setSearchDialogOpen(true);
-                        return;
-                      }
-                      if (searchResults.length > 0) setShowResults(true);
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && searchQuery.trim()) {
-                        performSearch(searchQuery);
-                      }
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
-                        </InputAdornment>
-                      ),
-                      endAdornment: isSearching ? (
-                        <InputAdornment position="end">
-                          <CircularProgress size={18} />
-                        </InputAdornment>
-                      ) : null,
-                    }}
-                    sx={{
-                      bgcolor: "white",
-                      borderRadius: 2,
-                    }}
-                    inputProps={{
-                      readOnly: isMobile,
-                    }}
-                  />
-                  {!isMobile && renderSearchResults()}
-                </Box>
-              </ClickAwayListener>
+                      }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                          </InputAdornment>
+                        ),
+                        endAdornment: isSearching ? (
+                          <InputAdornment position="end">
+                            <CircularProgress size={18} />
+                          </InputAdornment>
+                        ) : null,
+                      }}
+                      sx={{
+                        bgcolor: "white",
+                        borderRadius: 2,
+                      }}
+                    />
+                    {renderSearchResults(closeDialog)}
+                  </>
+                )}
+              >
+                {({ isMobile: mobilePicker, openDialog }) => (
+                  <ClickAwayListener onClickAway={() => !mobilePicker && setShowResults(false)}>
+                    <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
+                      <TextField
+                        fullWidth
+                        placeholder="Search family members, businesses..."
+                        value={searchQuery}
+                        onChange={(e) => handleSearchChange(e.target.value)}
+                        onClick={openDialog}
+                        onFocus={() => {
+                          if (mobilePicker) {
+                            openDialog();
+                            return;
+                          }
+                          if (searchResults.length > 0) setShowResults(true);
+                        }}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter" && searchQuery.trim()) {
+                            performSearch(searchQuery);
+                          }
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
+                            </InputAdornment>
+                          ),
+                          endAdornment: isSearching ? (
+                            <InputAdornment position="end">
+                              <CircularProgress size={18} />
+                            </InputAdornment>
+                          ) : null,
+                        }}
+                        sx={{
+                          bgcolor: "white",
+                          borderRadius: 2,
+                        }}
+                        inputProps={{
+                          readOnly: mobilePicker,
+                        }}
+                      />
+                      {!mobilePicker && renderSearchResults()}
+                    </Box>
+                  </ClickAwayListener>
+                )}
+              </FullScreenMobilePicker>
 
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
                 <Button
                   variant="contained"
-                  component={Link}
-                  to="/families"
+                  onClick={() => void handleContinueToYourTree()}
+                  disabled={continueTreeLoading}
                   endIcon={<ArrowForwardIcon />}
                   sx={{
                     fontWeight: 700,
@@ -466,7 +502,7 @@ export const HomePage: React.FC = () => {
                     "&:hover": { bgcolor: "#92400e" },
                   }}
                 >
-                  Continue Your Tree
+                  {continueTreeLoading ? "Opening..." : currentUser ? "Continue Your Tree" : "Explore Family Trees"}
                 </Button>
                 <Button
                   variant="outlined"
@@ -474,7 +510,7 @@ export const HomePage: React.FC = () => {
                   to="/business"
                   sx={{ fontWeight: 700, borderColor: "#0f766e", color: "#0f766e" }}
                 >
-                  Explore Family Network
+                  Explore Family Business
                 </Button>
               </Stack>
             </Paper>
@@ -490,7 +526,7 @@ export const HomePage: React.FC = () => {
               {[
                 { label: "Members", value: totalPeople, icon: <PeopleIcon /> },
                 { label: "Trees", value: totalTrees, icon: <AccountTreeIcon /> },
-                { label: "Villages", value: totalVillages, icon: <LocationCityIcon /> },
+                { label: "Locations", value: totalLocations, icon: <LocationCityIcon /> },
                 { label: "Businesses", value: totalBusinesses, icon: <BusinessIcon /> },
               ].map((item) => (
                 <Card key={item.label} sx={{ borderRadius: 2.5 }}>
@@ -511,71 +547,6 @@ export const HomePage: React.FC = () => {
           </Box>
         </Container>
       </Box>
-
-      <Dialog
-        open={searchDialogOpen}
-        onClose={closeSearchDialog}
-        fullScreen={isMobile}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            pl: 2,
-            pr: 1.5,
-            py: 1.5,
-          }}
-        >
-          Search
-          <IconButton
-            aria-label="Close search"
-            edge="end"
-            onClick={(event) => {
-              event.stopPropagation();
-              closeSearchDialog();
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 1.5 }}>
-          <TextField
-            fullWidth
-            autoFocus
-            placeholder="Search family members, businesses..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            onFocus={() => {
-              if (searchResults.length > 0) setShowResults(true);
-            }}
-            onKeyPress={(e) => {
-              if (e.key === "Enter" && searchQuery.trim()) {
-                performSearch(searchQuery);
-              }
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
-                </InputAdornment>
-              ),
-              endAdornment: isSearching ? (
-                <InputAdornment position="end">
-                  <CircularProgress size={18} />
-                </InputAdornment>
-              ) : null,
-            }}
-            sx={{
-              bgcolor: "white",
-              borderRadius: 2,
-            }}
-          />
-          {renderSearchResults()}
-        </DialogContent>
-      </Dialog>
 
       <Container maxWidth="lg" sx={{ py: 6 }}>
         <Box

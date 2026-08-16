@@ -11,7 +11,7 @@
 
 /**
  * Run hierarchy migration for a specific tree
- * This populates the hierarchy field, name_lowercase, villageId, and villageName for all nodes in the tree
+ * This populates the hierarchy field, name_lowercase, locationId, and locationName for all nodes in the tree
  * 
  * DEPRECATED: Firebase migration is complete. Use Supabase directly.
  */

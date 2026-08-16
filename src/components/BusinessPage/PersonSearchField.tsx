@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, TextField, Button, Paper, Typography, Stack, Avatar } from "@mui/material";
+import {
+  Box,
+  TextField,
+  Button,
+  Paper,
+  Typography,
+  Stack,
+  Avatar,
+  InputAdornment,
+} from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import { ApiService } from "../../services/apiService";
 
@@ -13,7 +22,7 @@ interface PersonSearchResult {
   treeName?: string;
   hierarchy: any[];
   gotra?: string;
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
 }
@@ -58,20 +67,28 @@ function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber"
   );
 }
 
+export type PersonSearchValueChangeSource = "input" | "select";
+
 interface PersonSearchFieldProps {
   label?: string;
   placeholder?: string;
   searchValue: string;
-  onSearchValueChange: (value: string) => void;
+  onSearchValueChange: (
+    value: string,
+    meta?: { source: PersonSearchValueChangeSource },
+  ) => void;
   onPersonSelect: (person: PersonSearchResult) => void;
   selectedPerson?: PersonSearchResult | any | null;
-  villageId?: string;
+  locationId?: string;
   treeId?: string;
+  /** When set, only candidates of this gender are shown in the results. */
+  filterGender?: string;
   disabled?: boolean;
   autoSearch?: boolean;
   minSearchLength?: number;
   hideSearchButton?: boolean;
   noResultsText?: string;
+  startIcon?: React.ReactNode;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -81,13 +98,15 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   onSearchValueChange,
   onPersonSelect,
   selectedPerson,
-  villageId,
+  locationId,
   treeId,
+  filterGender,
   disabled = false,
   autoSearch = false,
   minSearchLength = 1,
   hideSearchButton = false,
   noResultsText = "No results found",
+  startIcon,
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -96,7 +115,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
 
   const handleSearch = useCallback(async () => {
     const trimmedSearch = searchValue.trim();
-    const hasScope = Boolean(treeId || villageId);
+    const hasScope = Boolean(treeId || locationId);
 
     if (!hasScope || trimmedSearch.length < minSearchLength) {
       setSearchResults([]);
@@ -110,15 +129,16 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     try {
       const results = await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
         treeId,
-        villageId,
+        locationId,
       });
 
       if (searchId !== latestSearchRef.current) {
         return;
       }
 
-      const peopleSearchResults: PersonSearchResult[] = results.map(
-        (person: any) => ({
+      const normalizedFilterGender = (filterGender || "").toLowerCase();
+      const peopleSearchResults: PersonSearchResult[] = results
+        .map((person: any) => ({
           id: person.personId,
           name: person.personName,
           gender: person.gender,
@@ -128,11 +148,18 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           treeName: person.treeName,
           hierarchy: person.parentHierarchy || [],
           gotra: person.gotra,
-          villageName: person.villageName,
+          locationName: person.locationName,
           casteName: person.casteName,
           subCasteName: person.subCasteName,
-        }),
-      );
+        }))
+        // When a gender filter is active, only show candidates of that gender
+        // (keep those with unknown gender so incomplete records aren't hidden).
+        .filter(
+          (person) =>
+            !normalizedFilterGender ||
+            !person.gender ||
+            person.gender.toLowerCase() === normalizedFilterGender,
+        );
 
       setSearchResults(peopleSearchResults);
     } catch (error) {
@@ -141,14 +168,14 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         setSearchResults([]);
       }
     }
-  }, [minSearchLength, searchValue, treeId, villageId]);
+  }, [minSearchLength, searchValue, treeId, locationId, filterGender]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
-    onPersonSelect(person);
     setSearchResults([]);
     setShowResults(false);
     skipNextAutoSearchRef.current = true;
-    onSearchValueChange(person.name);
+    onSearchValueChange(person.name, { source: "select" });
+    onPersonSelect(person);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -184,13 +211,26 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         <TextField
           label={label}
           value={searchValue}
-          onChange={(e) => onSearchValueChange(e.target.value)}
+          onChange={(e) =>
+            onSearchValueChange(e.target.value, { source: "input" })
+          }
           onKeyPress={handleKeyPress}
           fullWidth
           placeholder={placeholder}
           size="medium"
           autoComplete="off"
           disabled={disabled}
+          InputProps={
+            startIcon
+              ? {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      {startIcon}
+                    </InputAdornment>
+                  ),
+                }
+              : undefined
+          }
         />
         {!hideSearchButton && (
           <Button
@@ -268,7 +308,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
                     spacing={0.75}
                     sx={{ flexWrap: "wrap", rowGap: 0.75, mb: 0.75 }}
                   >
-                    {renderMetaPill("Village", person.villageName, "teal")}
+                    {renderMetaPill("Location", person.locationName, "teal")}
                     {renderMetaPill("Caste", person.casteName, "slate")}
                     {renderMetaPill("Sub caste", person.gotra || person.subCasteName, "slate")}
                   </Stack>

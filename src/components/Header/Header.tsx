@@ -1,43 +1,86 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   Autocomplete,
   Avatar,
+  Badge,
   Toolbar,
   Typography,
   IconButton,
   Button,
   Box,
+  Menu,
+  MenuItem,
   Drawer,
   List,
   ListItem,
   useTheme,
   useMediaQuery,
   Dialog,
+  InputAdornment,
   ListItemButton,
   ListItemText,
   TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
 import LogoutIcon from "@mui/icons-material/Logout";
+import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useVillage } from "../hooks/useVillage";
+import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 export const Header: React.FC = () => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [villagePickerOpen, setVillagePickerOpen] = useState(false);
-  const [villageSearch, setVillageSearch] = useState("");
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [locationSearch, setLocationSearch] = useState("");
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
+  const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [actionableRequestCount, setActionableRequestCount] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
   const navigate = useNavigate();
-  const { selectedVillage, setSelectedVillage, villages } = useVillage();
+  const { selectedLocation, setSelectedLocation, locations } = useLocations();
   const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
+  // Full hierarchy option for the selected location (village, district, state).
+  const [headerLocationOption, setHeaderLocationOption] =
+    useState<LocationCombinationOption | null>(null);
+
+  const applyLocation = useCallback(
+    (option: LocationCombinationOption | null) => {
+      setHeaderLocationOption(option);
+      setSelectedLocation(option?.locationId || "");
+    },
+    [setSelectedLocation],
+  );
+
+  // Resolve the selected id (e.g. auto-selected default) to its full hierarchy label.
+  useEffect(() => {
+    if (!selectedLocation) {
+      setHeaderLocationOption(null);
+      return;
+    }
+    if (headerLocationOption?.locationId === selectedLocation) return;
+    let active = true;
+    ApiService.searchLocationCombinations({ locationId: selectedLocation, limit: 1 })
+      .then((rows) => {
+        if (active) setHeaderLocationOption(rows[0] || null);
+      })
+      .catch(() => {
+        /* leave label empty on failure */
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedLocation, headerLocationOption?.locationId]);
 
   useEffect(() => {
     let active = true;
@@ -64,6 +107,46 @@ export const Header: React.FC = () => {
       active = false;
     };
   }, [userProfile?.peopleId]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadActionableRequests = async () => {
+      if (!currentUser) {
+        setActionableRequestCount(0);
+        return;
+      }
+
+      try {
+        const rows = await ApiService.getActionableLinkRequests();
+        if (!active) return;
+        setActionableRequestCount((rows || []).length);
+      } catch (error) {
+        if (!active) return;
+        console.warn("Failed to load actionable requests:", error);
+        setActionableRequestCount(0);
+      }
+    };
+
+    void loadActionableRequests();
+    window.addEventListener("link-requests-updated", loadActionableRequests);
+
+    return () => {
+      active = false;
+      window.removeEventListener("link-requests-updated", loadActionableRequests);
+    };
+  }, [currentUser, location.pathname]);
+
+  const hasPendingActionRequests = actionableRequestCount > 0;
+  const isAvatarMenuOpen = Boolean(avatarMenuAnchorEl);
+
+  const handleOpenAvatarMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAvatarMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseAvatarMenu = () => {
+    setAvatarMenuAnchorEl(null);
+  };
 
   const handleLogout = async () => {
     try {
@@ -92,15 +175,27 @@ export const Header: React.FC = () => {
     return location.pathname.startsWith(path);
   };
 
-  const selectedVillageOption =
-    villages.find((village) => village.id === selectedVillage) || null;
-  const filteredVillages = useMemo(() => {
-    const search = villageSearch.trim().toLowerCase();
-    if (!search) return villages;
-    return villages.filter((village) =>
-      village.name.toLowerCase().includes(search),
+  const handleNavLinkClick = useCallback(
+    async (path: string) => {
+      if (path === "/families" && currentUser) {
+        navigate(await resolveDefaultFamilyTreePath());
+        return;
+      }
+
+      navigate(path);
+    },
+    [currentUser, navigate],
+  );
+
+  const selectedLocationOption =
+    locations.find((location) => location.id === selectedLocation) || null;
+  const filteredLocations = useMemo(() => {
+    const search = locationSearch.trim().toLowerCase();
+    if (!search) return locations;
+    return locations.filter((location) =>
+      location.name.toLowerCase().includes(search),
     );
-  }, [villageSearch, villages]);
+  }, [locationSearch, locations]);
 
   const drawerContent = (
     <Box sx={{ width: 300, p: 2 }}>
@@ -110,16 +205,17 @@ export const Header: React.FC = () => {
         </IconButton>
       </Box>
 
-      {/* Village Selector for Mobile */}
+      {/* Location Selector for Mobile */}
       <Box sx={{ mb: 2, px: 2 }}>
         <Button
           fullWidth
           variant="outlined"
-          onClick={() => setVillagePickerOpen(true)}
+          onClick={() => setLocationPickerOpen(true)}
           sx={{ justifyContent: "flex-start", textTransform: "none" }}
         >
-          {selectedVillageOption?.name ||
-            (villages.length === 0 ? "Loading villages..." : "Select Village")}
+          {headerLocationOption?.label ||
+            selectedLocationOption?.name ||
+            (locations.length === 0 ? "Loading locations..." : "Select Location")}
         </Button>
       </Box>
 
@@ -127,11 +223,12 @@ export const Header: React.FC = () => {
         {allNavLinks.map((link) => (
           <ListItem key={link.path}>
             <Button
-              component={Link}
-              to={link.path}
               fullWidth
               variant={isActive(link.path) ? "contained" : "outlined"}
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => {
+                setDrawerOpen(false);
+                void handleNavLinkClick(link.path);
+              }}
             >
               {link.label}
             </Button>
@@ -144,27 +241,25 @@ export const Header: React.FC = () => {
         {currentUser ? (
           <>
             <Box
-              component={Link}
-              to="/profile"
-              onClick={() => setDrawerOpen(false)}
               sx={{
                 display: "flex",
                 alignItems: "center",
                 gap: 1,
                 mb: 2,
-                textDecoration: "none",
-                color: "inherit",
-                "&:hover": {
-                  textDecoration: "underline",
-                },
               }}
             >
-              <Avatar
-                src={linkedPersonPhoto || undefined}
-                sx={{ width: 32, height: 32 }}
+              <Badge
+                color="error"
+                overlap="circular"
+                variant={hasPendingActionRequests ? "dot" : undefined}
               >
-                {userProfile?.displayName?.charAt(0) || "U"}
-              </Avatar>
+                <Avatar
+                  src={linkedPersonPhoto || undefined}
+                  sx={{ width: 32, height: 32 }}
+                >
+                  {userProfile?.displayName?.charAt(0) || "U"}
+                </Avatar>
+              </Badge>
               <Box>
                 <Typography variant="body2" noWrap fontWeight={600}>
                   {userProfile?.displayName || "User"}
@@ -183,6 +278,33 @@ export const Header: React.FC = () => {
                 )}
               </Box>
             </Box>
+            <List disablePadding sx={{ mb: 2 }}>
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/requests"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <ListItemText
+                    primary="Requests"
+                    secondary={
+                      hasPendingActionRequests
+                        ? `${actionableRequestCount} pending request${actionableRequestCount === 1 ? "" : "s"}`
+                        : "No pending requests"
+                    }
+                  />
+                </ListItemButton>
+              </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/profile"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <ListItemText primary="Profile" />
+                </ListItemButton>
+              </ListItem>
+            </List>
             <Button
               fullWidth
               variant="outlined"
@@ -213,15 +335,33 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <AppBar position="static" color="primary">
+      <AppBar
+        position="static"
+        color="default"
+        elevation={0}
+        sx={{
+          bgcolor: "#ffffff",
+          color: "#0f172a",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
         <Toolbar>
           <Box
+            component={Link}
+            to="/"
             sx={{
               flexGrow: 0,
               mr: 2,
               display: "flex",
               alignItems: "center",
               gap: 1.25,
+              textDecoration: "none",
+              color: "inherit",
+              borderRadius: 1,
+              "&:hover": {
+                opacity: 0.85,
+              },
             }}
           >
             <Box
@@ -234,7 +374,7 @@ export const Header: React.FC = () => {
                 p: "5px",
                 borderRadius: 2.5,
                 overflow: "hidden",
-                boxShadow: "0 10px 24px rgba(7, 28, 68, 0.22)",
+                boxShadow: "none",
                 backgroundColor: "#ffffff",
               }}
             >
@@ -267,14 +407,19 @@ export const Header: React.FC = () => {
               {allNavLinks.map((link) => (
                 <Button
                   key={link.path}
-                  component={Link}
-                  to={link.path}
                   color="inherit"
+                  onClick={() => {
+                    void handleNavLinkClick(link.path);
+                  }}
                   sx={{
                     fontWeight: isActive(link.path) ? "bold" : "normal",
                     borderBottom: isActive(link.path)
-                      ? "2px solid white"
+                      ? "2px solid #0d6efd"
                       : "none",
+                    color: isActive(link.path) ? "#0d6efd" : "#334155",
+                    "&:hover": {
+                      bgcolor: "rgba(13,110,253,0.06)",
+                    },
                   }}
                 >
                   {link.label}
@@ -283,51 +428,17 @@ export const Header: React.FC = () => {
             </Box>
           )}
 
-          {/* Village Selector */}
+          {/* Location Selector */}
           {!isMobile && (
-            <Autocomplete
-              options={villages}
-              value={selectedVillageOption}
-              onChange={(_event, value) => setSelectedVillage(value?.id || "")}
-              getOptionLabel={(option) => option.name}
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              noOptionsText={
-                villages.length === 0 ? "Loading villages..." : "No villages found"
-              }
-              sx={{
-                minWidth: 240,
-                ml: 2,
-                "& .MuiOutlinedInput-root": {
-                  color: "white",
-                  "& fieldset": {
-                    borderColor: "rgba(255, 255, 255, 0.5)",
-                  },
-                  "&:hover fieldset": {
-                    borderColor: "rgba(255, 255, 255, 0.8)",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "white",
-                  },
-                },
-                "& .MuiInputLabel-root": {
-                  color: "rgba(255,255,255,0.8)",
-                },
-                "& .MuiSvgIcon-root": {
-                  color: "white",
-                },
-                "& .MuiAutocomplete-input::placeholder": {
-                  color: "rgba(255,255,255,0.8)",
-                  opacity: 1,
-                },
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  placeholder={villages.length === 0 ? "Loading..." : "Search village"}
-                />
-              )}
-            />
+            <Box sx={{ minWidth: 280, ml: 2 }}>
+              <LocationPicker
+                value={headerLocationOption}
+                onChange={applyLocation}
+                label=""
+                placeholder="Search location"
+                size="small"
+              />
+            </Box>
           )}
 
           {/* Auth Buttons */}
@@ -336,9 +447,8 @@ export const Header: React.FC = () => {
               {currentUser ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Button
-                    component={Link}
-                    to="/profile"
                     color="inherit"
+                    onClick={handleOpenAvatarMenu}
                     sx={{
                       textTransform: "none",
                       display: "flex",
@@ -347,39 +457,66 @@ export const Header: React.FC = () => {
                       mr: 1,
                     }}
                   >
-                    <Avatar
-                      src={linkedPersonPhoto || undefined}
-                      sx={{ width: 30, height: 30 }}
+                    <Badge
+                      color="error"
+                      overlap="circular"
+                      badgeContent={hasPendingActionRequests ? actionableRequestCount : 0}
                     >
-                      {userProfile?.displayName?.charAt(0) || "U"}
-                    </Avatar>
-                    <Box sx={{ textAlign: "left" }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {userProfile?.displayName || "User"}
-                      </Typography>
-                      {userProfile?.role && (
-                        <Typography
-                          variant="caption"
-                          color="rgba(255, 255, 255, 0.7)"
-                          display="block"
-                          sx={{ fontWeight: 600, mt: 0.25 }}
-                        >
-                          {userProfile.role === "superadmin"
-                            ? "Super Admin"
-                            : "Admin"}
-                        </Typography>
-                      )}
-                    </Box>
+                      <Avatar
+                        src={linkedPersonPhoto || undefined}
+                        sx={{ width: 30, height: 30 }}
+                      >
+                        {userProfile?.displayName?.charAt(0) || "U"}
+                      </Avatar>
+                    </Badge>
+                    <Typography variant="body2" fontWeight={600} sx={{ textAlign: "left" }}>
+                      {userProfile?.displayName || "User"}
+                    </Typography>
+                    <ArrowDropDownIcon
+                      sx={{
+                        fontSize: 22,
+                        color: "text.secondary",
+                        transition: "transform 0.2s",
+                        transform: isAvatarMenuOpen ? "rotate(180deg)" : "none",
+                      }}
+                    />
                   </Button>
-                  <Button
-                    color="inherit"
-                    startIcon={<LogoutIcon />}
-                    onClick={handleLogout}
-                    variant="outlined"
-                    size="small"
+                  <Menu
+                    anchorEl={avatarMenuAnchorEl}
+                    open={isAvatarMenuOpen}
+                    onClose={handleCloseAvatarMenu}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                    transformOrigin={{ vertical: "top", horizontal: "right" }}
                   >
-                    Logout
-                  </Button>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        navigate("/requests");
+                      }}
+                    >
+                      <NotificationsOutlinedIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Requests
+                      {hasPendingActionRequests ? ` (${actionableRequestCount})` : ""}
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        navigate("/profile");
+                      }}
+                    >
+                      <PersonOutlineIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Profile
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        handleLogout();
+                      }}
+                    >
+                      <LogoutIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Logout
+                    </MenuItem>
+                  </Menu>
                 </Box>
               ) : (
                 <Button
@@ -402,11 +539,12 @@ export const Header: React.FC = () => {
                 <Button
                   color="inherit"
                   variant="outlined"
-                  onClick={() => setVillagePickerOpen(true)}
+                  startIcon={<LocationOnIcon fontSize="small" />}
+                  onClick={() => setLocationPickerOpen(true)}
                   sx={{
                     textTransform: "none",
-                    borderColor: "rgba(255,255,255,0.55)",
-                    color: "white",
+                    borderColor: "rgba(15,23,42,0.2)",
+                    color: "#0f172a",
                     minWidth: 150,
                     maxWidth: 220,
                     justifyContent: "flex-start",
@@ -414,13 +552,15 @@ export const Header: React.FC = () => {
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
                     "&:hover": {
-                      borderColor: "white",
-                      backgroundColor: "rgba(255,255,255,0.08)",
+                      borderColor: "#0d6efd",
+                      backgroundColor: "rgba(13,110,253,0.06)",
                     },
                   }}
                 >
-                  {villages.find((v) => v.id === selectedVillage)?.name ||
-                    (villages.length === 0 ? "Loading..." : "Select Village")}
+                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {locations.find((v) => v.id === selectedLocation)?.name ||
+                      (locations.length === 0 ? "Loading..." : "Select Location")}
+                  </Box>
                 </Button>
               </Box>
               <IconButton
@@ -429,22 +569,28 @@ export const Header: React.FC = () => {
                 onClick={() => setDrawerOpen(!drawerOpen)}
                 sx={{ p: 0.25, ml: 1 }}
               >
-                <Avatar
-                  src={linkedPersonPhoto || undefined}
-                  sx={{
-                    width: 34,
-                    height: 34,
-                    border: "2px solid rgba(255,255,255,0.55)",
-                    bgcolor: "rgba(255,255,255,0.18)",
-                    color: "white",
-                    fontSize: 14,
-                    fontWeight: 700,
-                  }}
+                <Badge
+                  color="error"
+                  overlap="circular"
+                  variant={hasPendingActionRequests ? "dot" : undefined}
                 >
-                  {(userProfile?.displayName || currentUser?.email || "U")
-                    .charAt(0)
-                    .toUpperCase()}
-                </Avatar>
+                  <Avatar
+                    src={linkedPersonPhoto || undefined}
+                    sx={{
+                      width: 34,
+                      height: 34,
+                      border: "1px solid rgba(15,23,42,0.12)",
+                      bgcolor: "#f8fafc",
+                      color: "#0f172a",
+                      fontSize: 14,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {(userProfile?.displayName || currentUser?.email || "U")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Avatar>
+                </Badge>
               </IconButton>
             </>
           )}
@@ -461,22 +607,22 @@ export const Header: React.FC = () => {
 
       <Dialog
         fullScreen
-        open={villagePickerOpen}
+        open={locationPickerOpen}
         onClose={() => {
-          setVillageSearch("");
-          setVillagePickerOpen(false);
+          setLocationSearch("");
+          setLocationPickerOpen(false);
         }}
       >
         <AppBar position="static" color="primary">
           <Toolbar>
             <Typography sx={{ flexGrow: 1 }} variant="h6">
-              Select Village
+              Select Location
             </Typography>
             <IconButton
               color="inherit"
               onClick={() => {
-                setVillageSearch("");
-                setVillagePickerOpen(false);
+                setLocationSearch("");
+                setLocationPickerOpen(false);
               }}
             >
               <CloseIcon />
@@ -484,39 +630,14 @@ export const Header: React.FC = () => {
           </Toolbar>
         </AppBar>
         <Box sx={{ p: 2 }}>
-          <TextField
-            fullWidth
-            placeholder="Search village"
-            value={villageSearch}
-            onChange={(e) => setVillageSearch(e.target.value)}
-            sx={{ mb: 2 }}
+          <LocationPicker
+            value={headerLocationOption}
+            onChange={(option) => {
+              applyLocation(option);
+              if (option) setLocationPickerOpen(false);
+            }}
+            autoFocus
           />
-          <List>
-            {villages.length === 0 && (
-              <ListItem>
-                <ListItemText primary="Loading villages..." />
-              </ListItem>
-            )}
-            {villages.length > 0 && filteredVillages.length === 0 && (
-              <ListItem>
-                <ListItemText primary="No villages found" />
-              </ListItem>
-            )}
-            {filteredVillages.map((village) => (
-              <ListItem key={village.id} disablePadding>
-                <ListItemButton
-                  selected={selectedVillage === village.id}
-                  onClick={() => {
-                    setSelectedVillage(village.id);
-                    setVillageSearch("");
-                    setVillagePickerOpen(false);
-                  }}
-                >
-                  <ListItemText primary={village.name} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
         </Box>
       </Dialog>
     </>

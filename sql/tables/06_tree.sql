@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS tree (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
-  village_id UUID REFERENCES village(id) ON DELETE SET NULL,
+  location_id UUID REFERENCES location(id) ON DELETE SET NULL,
   description TEXT,
   caste VARCHAR(100),
   sub_caste VARCHAR(100),
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS tree (
 -- =====================================================
 -- INDEXES FOR TREE TABLE
 -- =====================================================
-CREATE INDEX IF NOT EXISTS idx_tree_village_id ON tree(village_id) WHERE is_deleted = FALSE;
+CREATE INDEX IF NOT EXISTS idx_tree_location_id ON tree(location_id) WHERE is_deleted = FALSE;
 CREATE INDEX IF NOT EXISTS idx_tree_name_lowercase ON tree(LOWER(name)) WHERE is_deleted = FALSE;
 
 -- =====================================================

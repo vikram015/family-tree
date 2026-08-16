@@ -11,12 +11,14 @@ import {
   Routes,
   Route,
   useSearchParams,
+  useLocation,
+  useNavigate,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { AuthInitializer } from "../AuthInitializer";
-import { VillageInitializer } from "../VillageInitializer";
+import { LocationInitializer } from "../LocationInitializer";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
@@ -28,9 +30,14 @@ import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
-import { LinkNodeDialog } from "../LinkNodeDialog/LinkNodeDialog";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
+import { PendingRequestsPage } from "../PendingRequestsPage";
+import { UserOnboardingPage } from "../UserOnboardingPage";
+import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
+import { BlockedScreen } from "../BlockedScreen/BlockedScreen";
+import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 // Lazy load FamiliesPage
 const FamiliesPage = React.lazy(() =>
@@ -53,6 +60,9 @@ const theme = createTheme({
 function AppContent() {
   console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { currentUser, userProfile, loading } = useAuth();
   const treeId = searchParams.get("tree") || "";
 
   const setTreeId = useCallback(
@@ -94,12 +104,35 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (location.pathname !== "/families" || treeId || !currentUser) {
+      return;
+    }
+
+    let active = true;
+    resolveDefaultFamilyTreePath().then((targetPath) => {
+      if (active && targetPath !== "/families") {
+        navigate(targetPath, { replace: true });
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser, location.pathname, navigate, treeId]);
+
   const onChange = useCallback(
     (value: string) => {
       setTreeId(value);
     },
     [setTreeId],
   );
+
+  // A blocked user stays authenticated (so we can read the flag from /api/auth/me)
+  // but must not see the app — replace everything with a blocked message.
+  if (!loading && currentUser && userProfile?.isBlocked) {
+    return <BlockedScreen reason={userProfile.blockedReason} />;
+  }
 
   console.log("AppContent: About to return JSX");
   return (
@@ -115,7 +148,7 @@ function AppContent() {
         },
       }}
     >
-      <LinkNodeDialog />
+      <UserOnboardingRouteGuard />
       <Header />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box sx={{ flex: 1, minHeight: 0, width: "100%" }}>
@@ -123,6 +156,7 @@ function AppContent() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/onboarding" element={<UserOnboardingPage />} />
               <Route
                 path="/families"
                 element={
@@ -157,6 +191,8 @@ function AppContent() {
               <Route path="/admin" element={<AdminManagement />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/profile/person/:personId" element={<ProfilePage />} />
+              <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             </Routes>
           </ErrorBoundary>
@@ -175,13 +211,13 @@ export default React.memo(function App() {
           <CssBaseline />
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <AuthInitializer>
-              <VillageInitializer>
+              <LocationInitializer>
                 <LoginModalProvider>
                   <BrowserRouter>
                     <AppContent />
                   </BrowserRouter>
                 </LoginModalProvider>
-              </VillageInitializer>
+              </LocationInitializer>
             </AuthInitializer>
           </LocalizationProvider>
         </ThemeProvider>

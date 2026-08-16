@@ -8,6 +8,149 @@ import { backendApi } from './backendApi';
 
 type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 
+export interface UserPreference {
+  showFullTree: boolean;
+  showSpouse: boolean;
+  language: string;
+}
+
+export interface UserPreferenceResponse {
+  id: string;
+  userId: string;
+  preference: UserPreference;
+  createdAt: string;
+  modifiedAt: string;
+  createdBy: string | null;
+  modifiedBy: string | null;
+}
+
+export type OnboardingStatus = "in_progress" | "completed";
+export type OnboardingCurrentStep =
+  | "profile"
+  | "location"
+  | "match"
+  | "complete";
+
+export interface UserOnboardingData {
+  status: OnboardingStatus;
+  currentStep: OnboardingCurrentStep;
+  profile: {
+    name: string;
+    email: string;
+    completedAt: string | null;
+  };
+  location: {
+    stateId: string | null;
+    districtId: string | null;
+    locationId: string | null;
+    casteId: string | null;
+    subCasteId: string | null;
+    completedAt: string | null;
+  };
+  match: {
+    searchName: string;
+    searchedAt: string | null;
+    selectedTreeId: string | null;
+    selectedPersonId: string | null;
+    action: "link" | "create_tree" | null;
+  };
+  completion: {
+    completedAt: string | null;
+    result: "linked" | "created_tree" | null;
+  };
+}
+
+export interface UserOnboardingDataUpdate {
+  status?: OnboardingStatus;
+  currentStep?: OnboardingCurrentStep;
+  profile?: Partial<UserOnboardingData["profile"]>;
+  location?: Partial<UserOnboardingData["location"]>;
+  match?: Partial<UserOnboardingData["match"]>;
+  completion?: Partial<UserOnboardingData["completion"]>;
+}
+
+export interface UserOnboardingResponse {
+  id: string;
+  userId: string;
+  onboardingData: UserOnboardingData | null;
+  effectiveOnboardingData: UserOnboardingData;
+  createdAt: string;
+  modifiedAt: string;
+  createdBy: string | null;
+  modifiedBy: string | null;
+}
+
+export interface UserOnboardingMatchedPerson {
+  personId: string;
+  name: string;
+  nameHindi: string | null;
+  gender: string | null;
+  dob: string | null;
+  photoUrl: string | null;
+  parentHierarchy: Array<{
+    id: string;
+    name: string;
+    generation: number;
+  }>;
+}
+
+export interface UserOnboardingTreeMatch {
+  treeId: string;
+  treeName: string;
+  locationId: string;
+  locationName: string;
+  casteId: string | null;
+  casteName: string | null;
+  subCasteId: string | null;
+  subCasteName: string | null;
+  totalNodes: number;
+  ownerUserId: string | null;
+  ownerName: string;
+  matchedPeople: UserOnboardingMatchedPerson[];
+}
+
+export interface LocationCombinationOption {
+  stateId: string;
+  stateName: string;
+  districtId: string;
+  districtName: string;
+  locationId: string;
+  locationName: string;
+  label: string;
+}
+
+export type LinkRequestType =
+  | "user_to_tree_node"
+  | "branch_access_request"
+  | "spouse_link_request";
+export type LinkRequestStatus = "pending" | "approved" | "rejected";
+
+export interface LinkRequest {
+  id: string;
+  requestType: LinkRequestType;
+  status: LinkRequestStatus;
+  requesterUserId: string;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  sourceUserId: string | null;
+  sourcePersonId: string | null;
+  sourceTreeId: string | null;
+  targetUserId: string | null;
+  targetPersonId: string | null;
+  targetPersonName: string | null;
+  targetTreeId: string | null;
+  targetTreeName: string | null;
+  requestMessage: string | null;
+  requesterPhone: string | null;
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  modifiedAt: string;
+  payload: Record<string, any> | null;
+}
+
 interface PersonWithRelations {
   id: string;
   name: string;
@@ -17,6 +160,8 @@ interface PersonWithRelations {
   treeId: string;
   createdAt?: string;
   modifiedAt?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents?: Array<{ id: string; type: RelationType }>;
   children?: Array<{ id: string; type: RelationType }>;
   spouses?: Array<{ id: string; type: RelationType }>;
@@ -46,6 +191,8 @@ interface CompleteTreeNode {
   gender: string;
   dob?: string;
   createdAt: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents: PersonWithRelations[];
   children: PersonWithRelations[];
   spouses: PersonWithRelations[];
@@ -61,6 +208,8 @@ interface AffectedNode {
   dob?: string;
   treeId: string;
   createdAt?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
   children: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
   spouses: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
@@ -94,7 +243,7 @@ interface CompleteTreeResponse {
     caste?: string;
     subCaste?: string;
     createdAt: string;
-    village?: {
+    location?: {
       id: string;
       name: string;
       district?: {
@@ -138,6 +287,12 @@ export interface TreeWriteScope {
   rootPersonIds: string[];
 }
 
+export interface DefaultUserTreeTarget {
+  treeId: string;
+  personId: string | null;
+  locationId?: string | null;
+}
+
 export interface TreeInvite {
   id: string;
   treeId: string;
@@ -150,6 +305,10 @@ export interface TreeInvite {
   createdAt: string;
   inviteToken?: string;
   inviteLink?: string;
+  /** True when the invitee already had an account and was granted access immediately. */
+  granted?: boolean;
+  /** Present when granted === true: the existing user who received access. */
+  user?: { id: string; name: string | null; phone: string | null };
 }
 
 export const ApiService = {
@@ -157,6 +316,10 @@ export const ApiService = {
     if (value == null) return undefined;
     const trimmed = String(value).trim();
     return trimmed ? trimmed : undefined;
+  },
+  /** Record a login event for the current user (call once on successful sign-in). */
+  async recordLoginEvent(): Promise<void> {
+    await backendApi.post("/api/auth/login-event", {});
   },
   /**
    * Fetch all people for a specific tree with their relationships
@@ -167,10 +330,10 @@ export const ApiService = {
   },
 
   /**
-   * Fetch all people for a specific village across all trees
+   * Fetch all people for a specific location across all trees
    */
-  async getPeopleByVillage(villageId: string): Promise<PersonWithRelations[]> {
-    const trees = await backendApi.get<any[]>("/api/tree", { villageId });
+  async getPeopleByLocation(locationId: string): Promise<PersonWithRelations[]> {
+    const trees = await backendApi.get<any[]>("/api/tree", { locationId });
     const treeIds = (trees || []).map((tree: any) => tree.id).filter(Boolean);
     if (treeIds.length === 0) return [];
 
@@ -230,6 +393,13 @@ export const ApiService = {
    */
   async getPersonCustomFields(personId: string): Promise<Record<string, string>> {
     return backendApi.get<Record<string, string>>(`/api/people/${personId}/custom-fields`);
+  },
+
+  /** Fetch a single person's spouses (both relation directions). */
+  async getPersonSpouses(
+    personId: string,
+  ): Promise<Array<{ id: string; name?: string; nameHindi?: string; gender?: string; dob?: string }>> {
+    return backendApi.get(`/api/people/${personId}/spouses`);
   },
 
   /**
@@ -304,18 +474,31 @@ export const ApiService = {
     relationStartDate?: string,
     relationEndDate?: string,
     placeholderId?: string,
+    confirmExistingSpouse?: boolean,
+    mergeSpouseId?: string,
   ): Promise<void> {
     const normalizedStartDate = this.normalizeDateValue(relationStartDate);
     const normalizedEndDate = this.normalizeDateValue(relationEndDate);
 
-    await backendApi.post(`/api/people/spouse-link`, {
-      personId1: personId,
-      personId2: spouseId,
-      relationSubtype: relationSubtype || undefined,
-      relationStartDate: normalizedStartDate,
-      relationEndDate: normalizedEndDate,
-      replacePersonId: placeholderId || undefined,
-    });
+    const result = await backendApi.post<{ success?: boolean; error?: string } | void>(
+      `/api/people/spouse-link`,
+      {
+        personId1: personId,
+        personId2: spouseId,
+        relationSubtype: relationSubtype || undefined,
+        relationStartDate: normalizedStartDate,
+        relationEndDate: normalizedEndDate,
+        replacePersonId: placeholderId || undefined,
+        confirmExistingSpouse: confirmExistingSpouse || undefined,
+        mergeSpouseId: mergeSpouseId || undefined,
+      },
+    );
+
+    // The direct link path returns { success: false, error } with a 200 status,
+    // so surface backend validation failures (gender/existing-spouse) as errors.
+    if (result && (result as any).success === false) {
+      throw new Error((result as any).error || "Failed to link spouse");
+    }
   },
 
   async updateSpouseRelationDates(
@@ -375,6 +558,13 @@ export const ApiService = {
     photoUrl?: string,
     relationStartDate?: string,
     relationEndDate?: string,
+    otherParentMode?: "existing" | "new" | "unknown",
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
   ): Promise<AddPersonResult> {
     const normalizedDob = this.normalizeDateValue(dob);
     const normalizedDeceasedDate = this.normalizeDateValue(deceasedDate);
@@ -399,6 +589,38 @@ export const ApiService = {
       photoUrl,
       relationStartDate: normalizedRelationStartDate,
       relationEndDate: normalizedRelationEndDate,
+      otherParentMode,
+      newSpouse: newSpouse
+        ? { ...newSpouse, dob: this.normalizeDateValue(newSpouse.dob) }
+        : undefined,
+    });
+  },
+
+  /**
+   * Change a person's "other parent" while keeping the anchor parent fixed.
+   * The other parent can be an existing spouse of the anchor ("existing"), a newly
+   * created spouse ("new"), or removed entirely ("unknown").
+   * Returns affected_nodes for efficient UI merge.
+   */
+  async changeOtherParent(
+    personId: string,
+    anchorParentId: string,
+    otherParentMode: "existing" | "new" | "unknown",
+    otherParentId?: string,
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
+  ): Promise<AddPersonResult> {
+    return backendApi.patch<AddPersonResult>(`/api/people/${personId}/other-parent`, {
+      anchorParentId,
+      otherParentMode,
+      otherParentId,
+      newSpouse: newSpouse
+        ? { ...newSpouse, dob: this.normalizeDateValue(newSpouse.dob) }
+        : undefined,
     });
   },
 
@@ -461,12 +683,12 @@ export const ApiService = {
   /**
    * Get all trees
    */
-  async getTrees(villageId?: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/tree', { villageId });
+  async getTrees(locationId?: string): Promise<any[]> {
+    return backendApi.get<any[]>('/api/tree', { locationId });
   },
 
   /**
-   * Get tree with village details
+   * Get tree with location details
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
     return backendApi.get<any>(`/api/tree/${treeId}`);
@@ -474,6 +696,10 @@ export const ApiService = {
 
   async getTreeWriteScope(treeId: string): Promise<TreeWriteScope> {
     return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
+  },
+
+  async getDefaultUserTree(): Promise<DefaultUserTreeTarget> {
+    return backendApi.get<DefaultUserTreeTarget>("/api/tree/my/default");
   },
 
   async getTreeInvites(treeId: string): Promise<TreeInvite[]> {
@@ -490,6 +716,18 @@ export const ApiService = {
     },
   ): Promise<TreeInvite> {
     return backendApi.post<TreeInvite>(`/api/tree/${treeId}/invites`, payload);
+  },
+
+  /** Checks whether a phone number already belongs to a user in the system. */
+  async lookupTreeInviteUser(
+    treeId: string,
+    phone: string,
+    personId?: string | null,
+  ): Promise<{ exists: boolean; name: string | null }> {
+    return backendApi.post<{ exists: boolean; name: string | null }>(
+      `/api/tree/${treeId}/invites/lookup`,
+      { phone, personId: personId || null },
+    );
   },
 
   async revokeTreeInvite(treeId: string, inviteId: string): Promise<{ success: boolean }> {
@@ -510,17 +748,17 @@ export const ApiService = {
     return backendApi.post<any>('/api/tree', {
       name: tree.name,
       description: tree.description || null,
-      villageId: tree.villageId || null,
+      locationId: tree.locationId || null,
       caste: tree.caste || null,
       subCaste: tree.subCaste || null,
     });
   },
 
   /**
-   * Get all villages with hierarchy
+   * Get all locations with hierarchy
    */
-  async getVillages(): Promise<any[]> {
-    return backendApi.get<any[]>('/api/lookup/villages');
+  async getLocations(): Promise<any[]> {
+    return backendApi.get<any[]>('/api/lookup/locations');
   },
 
   /**
@@ -538,10 +776,25 @@ export const ApiService = {
   },
 
   /**
-   * Get all villages for a district
+   * Get all locations for a district
    */
-  async getVillagesForDistrict(districtId: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/lookup/villages', { districtId });
+  async getLocationsForDistrict(districtId: string): Promise<any[]> {
+    return backendApi.get<any[]>('/api/lookup/locations', { districtId });
+  },
+
+  async searchLocationCombinations(params: {
+    query?: string;
+    locationId?: string;
+    limit?: number;
+  }): Promise<LocationCombinationOption[]> {
+    return backendApi.get<LocationCombinationOption[]>(
+      "/api/lookup/location-combinations",
+      {
+        query: params.query,
+        locationId: params.locationId,
+        limit: params.limit,
+      },
+    );
   },
 
   /**
@@ -572,7 +825,7 @@ export const ApiService = {
 
   /**
    * Global search across people, businesses, and professions.
-   * Returns enriched context including tree/village and ancestor hierarchy.
+   * Returns enriched context including tree/location and ancestor hierarchy.
    */
   async globalSearch(searchTerm: string): Promise<any[]> {
     return backendApi.get<any[]>('/api/search/global', { term: searchTerm });
@@ -627,12 +880,12 @@ export const ApiService = {
   },
 
   /**
-   * Get businesses by village with person hierarchy
+   * Get businesses by location with person hierarchy
    */
-  async getBusinessesByVillageWithHierarchy(
-    villageId: string
+  async getBusinessesByLocationWithHierarchy(
+    locationId: string
   ): Promise<any[]> {
-    return backendApi.get<any[]>('/api/business', { villageId });
+    return backendApi.get<any[]>('/api/business', { locationId });
   },
 
   /**
@@ -666,12 +919,12 @@ export const ApiService = {
   },
 
   /**
-   * Create village
+   * Create location
    */
-  async createVillage(village: { name: string; districtId?: string }): Promise<any> {
-    return backendApi.post<any>('/api/lookup/villages', {
-      name: village.name,
-      districtId: village.districtId,
+  async createLocation(location: { name: string; districtId?: string }): Promise<any> {
+    return backendApi.post<any>('/api/lookup/locations', {
+      name: location.name,
+      districtId: location.districtId,
     });
   },
 
@@ -734,40 +987,135 @@ export const ApiService = {
     });
   },
 
+  async getUserPreference(): Promise<UserPreferenceResponse> {
+    return backendApi.get<UserPreferenceResponse>('/api/user/preference');
+  },
+
+  async updateUserPreference(
+    preference: Partial<UserPreference>,
+  ): Promise<UserPreferenceResponse> {
+    return backendApi.patch<UserPreferenceResponse>('/api/user/preference', {
+      preference,
+    });
+  },
+
+  async getUserOnboarding(): Promise<UserOnboardingResponse> {
+    return backendApi.get<UserOnboardingResponse>("/api/user/onboarding");
+  },
+
+  async updateUserOnboarding(
+    onboardingData: UserOnboardingDataUpdate,
+  ): Promise<UserOnboardingResponse> {
+    return backendApi.patch<UserOnboardingResponse>("/api/user/onboarding", {
+      onboardingData,
+    });
+  },
+
+  async searchUserOnboardingMatches(payload: {
+    searchName?: string | null;
+    locationId: string;
+    casteId?: string | null;
+    subCasteId?: string | null;
+  }): Promise<UserOnboardingTreeMatch[]> {
+    return backendApi.post<UserOnboardingTreeMatch[]>(
+      "/api/user/onboarding/matches/search",
+      payload,
+    );
+  },
+
+  async getMyLinkRequests(requestType?: LinkRequestType): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>("/api/link-requests/my", {
+      requestType,
+    });
+  },
+
+  async createUserNodeLinkRequest(payload: {
+    targetPersonId: string;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/user-node", payload);
+  },
+
+  async createBranchAccessRequest(payload: {
+    targetTreeId: string;
+    targetPersonId?: string | null;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/branch-access", payload);
+  },
+
+  async createSpouseLinkRequest(payload: {
+    personId1: string;
+    personId2: string;
+    relationSubtype?: string | null;
+    relationStartDate?: string | null;
+    relationEndDate?: string | null;
+    replacePersonId?: string | null;
+    requestMessage?: string | null;
+    confirmExistingSpouse?: boolean;
+    mergeSpouseId?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/people/spouse-link", {
+      ...payload,
+      requestOnly: true,
+    });
+  },
+
+  async getPendingTreeLinkRequests(treeId: string): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>(`/api/link-requests/tree/${treeId}/pending`);
+  },
+
+  async getActionableLinkRequests(): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>("/api/link-requests/actionable");
+  },
+
+  async reviewLinkRequest(
+    requestId: string,
+    payload: {
+      action: "approved" | "rejected";
+      reviewNote?: string | null;
+    },
+  ): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>(
+      `/api/link-requests/${requestId}/review`,
+      payload,
+    );
+  },
+
   /**
    * Search people by name with parent hierarchy.
-   * Supports village-scoped and tree-scoped search.
+   * Supports location-scoped and tree-scoped search.
    */
   async searchPeopleWithHierarchy(
     searchTerm: string,
     options: {
-      villageId?: string;
+      locationId?: string;
       treeId?: string;
     },
   ): Promise<any[]> {
-    return backendApi.get<any[]>("/api/people/search/by-village", {
+    return backendApi.get<any[]>("/api/people/search/by-location", {
       searchTerm,
-      villageId: options.villageId,
+      locationId: options.locationId,
       treeId: options.treeId,
     });
   },
 
   /**
-   * Search people by name in a village with parent hierarchy.
+   * Search people by name in a location with parent hierarchy.
    * Kept as a compatibility wrapper for existing callers.
    */
-  async searchPeopleByVillageWithHierarchy(
+  async searchPeopleByLocationWithHierarchy(
     searchTerm: string,
-    villageId: string
+    locationId: string
   ): Promise<any[]> {
-    return this.searchPeopleWithHierarchy(searchTerm, { villageId });
+    return this.searchPeopleWithHierarchy(searchTerm, { locationId });
   },
 
   /**
-   * Get all people with their professions for a village
+   * Get all people with their professions for a location
    */
-  async getPeopleWithProfessionsByVillage(villageId: string): Promise<any[]> {
-    const professions = await this.getProfessionsByVillage(villageId);
+  async getPeopleWithProfessionsByLocation(locationId: string): Promise<any[]> {
+    const professions = await this.getProfessionsByLocation(locationId);
     const peopleMap = new Map<string, any>();
 
     (professions || []).forEach((profession: any) => {
@@ -791,10 +1139,10 @@ export const ApiService = {
   },
 
   /**
-   * Get professions by village with people and hierarchy
+   * Get professions by location with people and hierarchy
    */
-  async getProfessionsByVillage(villageId: string): Promise<any[]> {
-    const data = await backendApi.get<any[]>(`/api/profession/by-village/${villageId}`);
+  async getProfessionsByLocation(locationId: string): Promise<any[]> {
+    const data = await backendApi.get<any[]>(`/api/profession/by-location/${locationId}`);
 
     // Transform the data to group people by profession
     const professionsMap = new Map<string, any>();
@@ -816,8 +1164,8 @@ export const ApiService = {
           personName: row.personName,
           gender: row.personGender,
           personDob: row.personDob,
-          villageId: row.villageId,
-          villageName: row.villageName,
+          locationId: row.locationId,
+          locationName: row.locationName,
           casteName: row.casteName,
           subCasteName: row.subCasteName,
           treeId: row.treeId,
@@ -831,7 +1179,7 @@ export const ApiService = {
   },
 
   /**
-   * Get dashboard statistics (global, all villages)
+   * Get dashboard statistics (global, all locations)
    */
   async getDashboardStatistics(): Promise<any> {
     return backendApi.get<any>('/api/dashboard/statistics');

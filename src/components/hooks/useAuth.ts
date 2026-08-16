@@ -62,14 +62,14 @@ export function useAuth() {
   }, [userProfile]);
 
   const hasPermission = useCallback(
-    (requiredRole?: UserRole, villageId?: string) => {
+    (requiredRole?: UserRole, locationId?: string) => {
       if (!userProfile) return false;
       if (userProfile.role === "superadmin") return true;
       if (!requiredRole) return true;
       if (!userProfile.isVerified) return false;
       if (userProfile.role === requiredRole || userProfile.role === "superadmin") {
-        if (villageId) {
-          return (userProfile.villages || []).includes(villageId);
+        if (locationId) {
+          return (userProfile.locations || []).includes(locationId);
         }
         return true;
       }
@@ -78,12 +78,12 @@ export function useAuth() {
     [userProfile],
   );
 
-  const canManageVillage = useCallback(
-    (villageId: string) => {
+  const canManageLocation = useCallback(
+    (locationId: string) => {
       if (!userProfile) return false;
       if (userProfile.role === "superadmin") return true;
       if (!userProfile.isVerified) return false;
-      return (userProfile.villages || []).includes(villageId);
+      return (userProfile.locations || []).includes(locationId);
     },
     [userProfile],
   );
@@ -100,7 +100,7 @@ export function useAuth() {
       isAdmin,
       isApproved,
       needsNodeLink,
-      canManageVillage,
+      canManageLocation,
       updateUserProfile,
     }),
     [
@@ -114,7 +114,7 @@ export function useAuth() {
       isAdmin,
       isApproved,
       needsNodeLink,
-      canManageVillage,
+      canManageLocation,
       updateUserProfile,
     ],
   );

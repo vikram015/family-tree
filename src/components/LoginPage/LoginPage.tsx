@@ -2,52 +2,42 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { LoginModal } from "../LoginModal/LoginModal";
 import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, userProfile, loading } = useAuth();
+  const { currentUser, loading } = useAuth();
   const from = (location.state as any)?.from?.pathname || "/families";
   const [open, setOpen] = useState(true);
-  const [pendingPostLogin, setPendingPostLogin] = useState(false);
 
   useEffect(() => {
-    if (!pendingPostLogin || loading) {
+    if (loading || !currentUser) {
       return;
     }
 
-    const isAdmin = userProfile?.role === "admin";
-    const needsProfileCompletion =
-      !userProfile?.name?.trim() ||
-      !userProfile?.email?.trim() ||
-      !userProfile?.privacyPolicyAccepted;
-    const needsLink = isAdmin && !userProfile?.peopleId;
-    const needsVillageRequest =
-      isAdmin && (userProfile?.villages || []).length === 0;
+    let active = true;
 
-    if (
-      currentUser &&
-      (needsProfileCompletion || needsLink || needsVillageRequest)
-    ) {
-      navigate("/", { replace: true });
+    if (from === "/families") {
+      resolveDefaultFamilyTreePath().then((targetPath) => {
+        if (active) {
+          navigate(targetPath, { replace: true });
+        }
+      });
     } else {
-      navigate(from, { replace: true });
+      if (active) {
+        navigate(from, { replace: true });
+      }
     }
 
-    setPendingPostLogin(false);
+    return () => {
+      active = false;
+    };
   }, [
-    pendingPostLogin,
     loading,
     currentUser,
-    userProfile?.role,
-    userProfile?.name,
-    userProfile?.email,
-    userProfile?.privacyPolicyAccepted,
-    userProfile?.peopleId,
-    userProfile?.villages,
     from,
     navigate,
-    userProfile,
   ]);
 
   const handleClose = useCallback(() => {
@@ -57,7 +47,6 @@ export const LoginPage: React.FC = () => {
 
   const handleSuccess = useCallback(() => {
     setOpen(false);
-    setPendingPostLogin(true);
   }, []);
 
   return (

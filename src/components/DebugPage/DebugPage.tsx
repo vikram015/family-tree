@@ -12,7 +12,7 @@ import { MigrationService } from "../../services/migrationService";
 import { backendApi } from "../../services/backendApi";
 
 export const DebugPage: React.FC = () => {
-  const [villages, setVillages] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
   const [heritageData, setHeritageData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,21 +23,21 @@ export const DebugPage: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const villagesList = await backendApi.get<any[]>(
-          "/api/lookup/villages",
+        const locationsList = await backendApi.get<any[]>(
+          "/api/lookup/locations",
         );
 
-        console.log("Villages found:", villagesList);
-        setVillages(villagesList || []);
+        console.log("Locations found:", locationsList);
+        setLocations(locationsList || []);
 
         // Get heritage data
-        if ((villagesList || []).length > 0) {
+        if ((locationsList || []).length > 0) {
           const heritageList = (
             await Promise.all(
-              (villagesList || []).map(async (village) => {
+              (locationsList || []).map(async (location) => {
                 try {
                   return await backendApi.get<any>(
-                    `/api/heritage/${village.id}`,
+                    `/api/heritage/${location.id}`,
                   );
                 } catch {
                   return null;
@@ -87,7 +87,7 @@ export const DebugPage: React.FC = () => {
   const handleFirebaseToSupabaseMigration = async () => {
     if (
       !window.confirm(
-        "This will migrate all data from Firebase to Supabase. This includes states, villages, trees, people, relationships, and businesses. This may take a while. Continue?",
+        "This will migrate all data from Firebase to Supabase. This includes states, locations, trees, people, relationships, and businesses. This may take a while. Continue?",
       )
     ) {
       return;
@@ -167,7 +167,7 @@ export const DebugPage: React.FC = () => {
               🚀 Firebase to Supabase Migration
             </Typography>
             <Typography variant="body2" paragraph>
-              Migrate all data from Firebase to Supabase (states, villages,
+              Migrate all data from Firebase to Supabase (states, locations,
               trees, people, relationships, and businesses). Run this only once.
             </Typography>
             <Button
@@ -217,22 +217,22 @@ export const DebugPage: React.FC = () => {
           </Box>
 
           <Typography variant="h5" gutterBottom sx={{ mt: 3 }}>
-            Villages in Database:
+            Locations in Database:
           </Typography>
-          {villages.length === 0 ? (
-            <Alert severity="warning">No villages found in database!</Alert>
+          {locations.length === 0 ? (
+            <Alert severity="warning">No locations found in database!</Alert>
           ) : (
             <Box sx={{ bgcolor: "#f5f5f5", p: 2, borderRadius: 1, mb: 3 }}>
-              {villages.map((village, idx) => (
+              {locations.map((location, idx) => (
                 <Box
                   key={idx}
                   sx={{ mb: 2, p: 1, bgcolor: "white", borderRadius: 0.5 }}
                 >
                   <Typography variant="body2">
-                    <strong>ID:</strong> {village.id}
+                    <strong>ID:</strong> {location.id}
                   </Typography>
                   <Typography variant="body2">
-                    <strong>Data:</strong> {JSON.stringify(village.data)}
+                    <strong>Data:</strong> {JSON.stringify(location.data)}
                   </Typography>
                 </Box>
               ))}

@@ -1,0 +1,58 @@
+.node-name-hover-icon {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.node-name-group:hover .node-name-hover-icon {
+  opacity: 1;
+}
+
+.node-name-group:hover .node-name-click-target {
+  fill: #1976d2;
+  text-decoration: underline;
+}
+
+/* iOS Safari and Chrome fixes for Devanagari text rendering */
+svg text[lang="hi"],
+svg tspan[lang="hi"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "liga" 1,
+    "clig" 1,
+    "calt" 1,
+    "akhn" 1,
+    "blwf" 1,
+    "half" 1,
+    "pstf" 1,
+    "vatu" 1,
+    "cjct" 1;
+}
+
+/* foreignObject Hindi text styling */
+svg foreignObject span[lang="hi"] {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "liga" 1,
+    "clig" 1,
+    "calt" 1,
+    "akhn" 1,
+    "blwf" 1,
+    "half" 1,
+    "pstf" 1,
+    "vatu" 1,
+    "cjct" 1;
+}
+
+/* iOS Safari specific: ensure complex script shaping works */
+@supports (-webkit-touch-callout: none) {
+  svg text[lang="hi"],
+  svg tspan[lang="hi"],
+  svg foreignObject span[lang="hi"] {
+    -webkit-text-size-adjust: 100%;
+    font-variant-ligatures: common-ligatures;
+    -webkit-locale: "hi";
+  }
+}
