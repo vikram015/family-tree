@@ -49,6 +49,18 @@ function registerValidSW(swUrl: string, config?: Config) {
         }
       }
 
+      // Installed PWAs can stay open for days without a navigation, and the
+      // browser only checks for a new worker on navigation — so an open app
+      // would never notice a deploy. Re-check whenever it comes back to the
+      // foreground.
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          registration.update().catch(() => {
+            // Offline or transient failure — the next foreground retries.
+          });
+        }
+      });
+
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker == null) {

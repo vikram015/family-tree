@@ -128,6 +128,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     requestId: string | null;
     note: string;
   }>({ open: false, requestId: null, note: "" });
+  const [pendingRequestsDialogOpen, setPendingRequestsDialogOpen] = useState(false);
   const acceptedInviteTokenRef = useRef<string | null>(null);
   const inviteLoginPromptedRef = useRef<string | null>(null);
 
@@ -750,6 +751,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         },
         { replace: true },
       );
+      setAutoExpandNodeId(personId);
     },
     [setSearchParams],
   );
@@ -1045,6 +1047,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         onViewModeChange={setViewMode}
         nodes={nodes}
         onSearchSelect={handleSearchSelect}
+        pendingRequestsCount={pendingLinkRequests.length}
+        onPendingRequestsClick={() => setPendingRequestsDialogOpen(true)}
       />
       {(isSuperAdmin() || isApproved) && (
         <Box
@@ -1081,108 +1085,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           py: { xs: 0.5, sm: 1.5 },
         }}
       >
-        {currentUser && treeId && (
-          <Stack spacing={1.5} sx={{ mb: pendingLinkRequests.length > 0 || linkRequestReviewError || linkRequestReviewSuccess ? 1.5 : 0 }}>
-            {linkRequestReviewError && (
-              <Alert severity="error">{linkRequestReviewError}</Alert>
-            )}
-            {linkRequestReviewSuccess && (
-              <Alert severity="success">{linkRequestReviewSuccess}</Alert>
-            )}
-            {linkRequestsLoading && (
-              <Alert severity="info">Loading pending profile link requests...</Alert>
-            )}
-            {!linkRequestsLoading && pendingLinkRequests.length > 0 && (
-              <Paper
-                elevation={0}
-                sx={{
-                  p: { xs: 1.5, sm: 2 },
-                  borderRadius: { xs: 3, md: 4 },
-                  border: "1px solid",
-                  borderColor: "warning.light",
-                  backgroundColor: alpha(theme.palette.warning.light, 0.08),
-                }}
-              >
-                <Stack spacing={1.5}>
-                  <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                      Pending link requests
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                      Review profile, branch access, and spouse link requests for this tree.
-                    </Typography>
-                  </Box>
-                  {pendingLinkRequests.map((request) => (
-                    <Paper
-                      key={request.id}
-                      variant="outlined"
-                      sx={{
-                        p: { xs: 1.25, sm: 1.5 },
-                        borderRadius: 3,
-                      }}
-                    >
-                      <Stack
-                        direction={{ xs: "column", md: "row" }}
-                        spacing={1.5}
-                        justifyContent="space-between"
-                        alignItems={{ xs: "stretch", md: "center" }}
-                      >
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                            {request.requesterName || request.requesterEmail || "Unknown requester"}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                            {request.requestType === "spouse_link_request"
-                              ? `Wants to link spouse ${request.payload?.sourcePersonName || "from another branch"} to ${request.targetPersonName || "selected profile"}`
-                              : request.requestType === "branch_access_request"
-                                ? request.targetPersonName
-                                  ? `Wants branch access for ${request.targetPersonName}`
-                                  : "Wants edit access to the whole tree"
-                                : `Wants to link to ${request.targetPersonName || "selected profile"}`}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5 }}>
-                            Requested {new Date(request.createdAt).toLocaleString()}
-                          </Typography>
-                        </Box>
-                        <Stack
-                          direction={{ xs: "column", sm: "row" }}
-                          spacing={1}
-                          sx={{ flexShrink: 0 }}
-                        >
-                          <Button
-                            variant="contained"
-                            color="success"
-                            disabled={reviewingLinkRequestId === request.id}
-                            onClick={() => void handleReviewLinkRequest(request.id, "approved")}
-                          >
-                            {reviewingLinkRequestId === request.id ? "Saving..." : "Approve"}
-                          </Button>
-                          <Button
-                            variant="outlined"
-                            color="error"
-                            disabled={reviewingLinkRequestId === request.id}
-                            onClick={() =>
-                              setRejectDialog({
-                                open: true,
-                                requestId: request.id,
-                                note: "",
-                              })
-                            }
-                          >
-                            Reject
-                          </Button>
-                        </Stack>
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
-              </Paper>
-            )}
-          </Stack>
-        )}
         {treeId &&
           !canWriteAnyBranch &&
           !(isAdmin() && !isApproved) &&
+          !pendingFullTreeAccessRequest &&
           accessBannerDismissedFor !== treeId && (
             <Stack
               direction="row"
@@ -1210,17 +1116,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 size="small"
                 variant="text"
                 color="info"
-                disabled={requestingAccess || Boolean(pendingFullTreeAccessRequest)}
+                disabled={requestingAccess}
                 onClick={() => void handleRequestAccess()}
                 sx={{ flexShrink: 0, whiteSpace: "nowrap", textTransform: "none" }}
               >
                 {!currentUser
                   ? "Sign in to request"
-                  : pendingFullTreeAccessRequest
-                    ? "Request pending"
-                    : requestingAccess
-                      ? "Sending…"
-                      : "Request edit access"}
+                  : requestingAccess
+                    ? "Sending…"
+                    : "Request edit access"}
               </Button>
               <IconButton
                 size="small"
@@ -1485,6 +1389,109 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       </Dialog>
 
       {/* Reject link request — capture a reason before rejecting */}
+      <Dialog
+        open={pendingRequestsDialogOpen}
+        onClose={() => setPendingRequestsDialogOpen(false)}
+        fullScreen={isMobile}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+        >
+          Pending link requests
+          <IconButton
+            size="small"
+            aria-label="Close"
+            onClick={() => setPendingRequestsDialogOpen(false)}
+          >
+            <CloseOutlinedIcon fontSize="small" />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: { xs: 1.5, sm: 2 } }}>
+          <Stack spacing={1.5}>
+            {linkRequestReviewError && (
+              <Alert severity="error">{linkRequestReviewError}</Alert>
+            )}
+            {linkRequestReviewSuccess && (
+              <Alert severity="success">{linkRequestReviewSuccess}</Alert>
+            )}
+            {pendingLinkRequests.length === 0 ? (
+              <Typography
+                variant="body2"
+                sx={{ color: "text.secondary", textAlign: "center", py: 3 }}
+              >
+                No pending requests left to review.
+              </Typography>
+            ) : (
+              pendingLinkRequests.map((request) => (
+                <Paper
+                  key={request.id}
+                  variant="outlined"
+                  sx={{
+                    p: { xs: 1.25, sm: 1.5 },
+                    borderRadius: 3,
+                  }}
+                >
+                  <Stack
+                    direction={{ xs: "column", md: "row" }}
+                    spacing={1.5}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "stretch", md: "center" }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                        {request.requesterName || request.requesterEmail || "Unknown requester"}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                        {request.requestType === "spouse_link_request"
+                          ? `Wants to link spouse ${request.payload?.sourcePersonName || "from another branch"} to ${request.targetPersonName || "selected profile"}`
+                          : request.requestType === "branch_access_request"
+                            ? request.targetPersonName
+                              ? `Wants branch access for ${request.targetPersonName}`
+                              : "Wants edit access to the whole tree"
+                            : `Wants to link to ${request.targetPersonName || "selected profile"}`}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5 }}>
+                        Requested {new Date(request.createdAt).toLocaleString()}
+                      </Typography>
+                    </Box>
+                    <Stack
+                      direction={{ xs: "column", sm: "row" }}
+                      spacing={1}
+                      sx={{ flexShrink: 0 }}
+                    >
+                      <Button
+                        variant="contained"
+                        color="success"
+                        disabled={reviewingLinkRequestId === request.id}
+                        onClick={() => void handleReviewLinkRequest(request.id, "approved")}
+                      >
+                        {reviewingLinkRequestId === request.id ? "Saving..." : "Approve"}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        disabled={reviewingLinkRequestId === request.id}
+                        onClick={() =>
+                          setRejectDialog({
+                            open: true,
+                            requestId: request.id,
+                            note: "",
+                          })
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </Paper>
+              ))
+            )}
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={rejectDialog.open}
         onClose={() => setRejectDialog({ open: false, requestId: null, note: "" })}

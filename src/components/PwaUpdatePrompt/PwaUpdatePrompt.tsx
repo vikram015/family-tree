@@ -52,6 +52,7 @@ export const PwaUpdatePrompt: React.FC = () => {
     <Snackbar
       open={open}
       anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      sx={{ left: { xs: 16 }, right: { xs: 16 } }}
     >
       <Alert
         severity="info"

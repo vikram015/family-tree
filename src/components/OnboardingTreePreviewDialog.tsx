@@ -451,6 +451,11 @@ export const OnboardingTreePreviewDialog: React.FC<
             </Box>
           </Box>
         )}
+        {!loading && !error && nodes.length > 0 && !selectedNode && (
+          <Alert severity="info" sx={{ borderRadius: 0 }}>
+            Tap a person in the tree to request edit access to their branch.
+          </Alert>
+        )}
         <Box sx={{ flex: 1, position: "relative", bgcolor: "background.default", overflow: "hidden" }}>
           {loading && (
             <Box

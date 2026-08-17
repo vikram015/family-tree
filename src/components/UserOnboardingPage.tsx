@@ -958,6 +958,7 @@ export const UserOnboardingPage: React.FC = () => {
       locationId,
       casteId: onboarding.location.casteId || selectedCasteId || null,
       subCasteId: onboarding.location.subCasteId || selectedSubCasteId || null,
+      searchName: searchDisplayName || null,
     });
 
     if (lastSearchKeyRef.current === searchKey) {
@@ -1166,6 +1167,7 @@ export const UserOnboardingPage: React.FC = () => {
         locationId: selectedLocationId,
         casteId: selectedCasteId || null,
         subCasteId: selectedSubCasteId || null,
+        searchName: searchDisplayName || null,
       });
       await dispatch(
         searchUserOnboardingMatches({
@@ -2309,6 +2311,14 @@ export const UserOnboardingPage: React.FC = () => {
                                 </CardContent>
                               </Card>
                             </Stack>
+                          )}
+
+                          {matchResults.length > 0 && (
+                            <Alert severity="info" icon={<VisibilityOutlinedIcon fontSize="inherit" />}>
+                              Click a tree or a matched person below to preview it. From
+                              the preview, you can request edit access to that person's
+                              branch if it looks like your family.
+                            </Alert>
                           )}
 
                           {matchedTrees.length > 0 && (

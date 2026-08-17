@@ -59,6 +59,24 @@ export function TreePersonSearch({
     return parents[0] ? nodeById.get(parents[0].id) : undefined;
   };
 
+  // Bolds the first occurrence of `query` inside `text` — mirrors the
+  // substring match used in filterOptions above.
+  const highlightMatch = (text: string, query: string): React.ReactNode => {
+    const trimmedQuery = query.trim();
+    if (!text || !trimmedQuery) return text;
+    const index = text.toLowerCase().indexOf(trimmedQuery.toLowerCase());
+    if (index === -1) return text;
+    return (
+      <>
+        {text.slice(0, index)}
+        <Box component="strong" sx={{ fontWeight: 800, color: "primary.main" }}>
+          {text.slice(index, index + trimmedQuery.length)}
+        </Box>
+        {text.slice(index + trimmedQuery.length)}
+      </>
+    );
+  };
+
   return (
     <Autocomplete<FNode, false, false, false>
       fullWidth
@@ -76,6 +94,7 @@ export function TreePersonSearch({
         if (reason !== "reset") setInputValue(value);
       }}
       getOptionLabel={(option) => option.name || ""}
+      getOptionKey={(option) => option.id}
       isOptionEqualToValue={(option, val) => option.id === val.id}
       filterOptions={(opts, state) => {
         const query = state.inputValue.trim().toLowerCase();
@@ -97,7 +116,7 @@ export function TreePersonSearch({
       noOptionsText={
         inputValue.trim() ? "No matching person" : "Type a name to search"
       }
-      renderOption={(props, option) => {
+      renderOption={(props, option, state) => {
         const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & {
           key?: React.Key;
         };
@@ -132,8 +151,12 @@ export function TreePersonSearch({
             </Avatar>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                {option.name}
-                {option.nameHindi ? ` (${option.nameHindi})` : ""}
+                {highlightMatch(option.name || "", state.inputValue)}
+                {option.nameHindi ? (
+                  <> ({highlightMatch(option.nameHindi, state.inputValue)})</>
+                ) : (
+                  ""
+                )}
               </Typography>
               {path && (
                 <Typography

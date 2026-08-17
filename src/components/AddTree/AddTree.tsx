@@ -680,7 +680,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
             </Alert>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={closeModal} disabled={loading}>
             Cancel
           </Button>

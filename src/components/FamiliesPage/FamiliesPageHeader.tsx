@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import { alpha } from "@mui/material/styles";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import { TreePersonSearch } from "./TreePersonSearch";
@@ -51,6 +52,8 @@ interface FamiliesPageHeaderProps {
   onViewModeChange: (mode: "tree" | "timeline") => void;
   nodes: FNode[];
   onSearchSelect: (personId: string) => void;
+  pendingRequestsCount?: number;
+  onPendingRequestsClick?: () => void;
 }
 
 export function FamiliesPageHeader({
@@ -65,6 +68,8 @@ export function FamiliesPageHeader({
   onViewModeChange,
   nodes,
   onSearchSelect,
+  pendingRequestsCount = 0,
+  onPendingRequestsClick,
 }: FamiliesPageHeaderProps) {
   return (
     <Box
@@ -103,6 +108,16 @@ export function FamiliesPageHeader({
                 variant={treeStatus.color === "default" ? "outlined" : "filled"}
                 size="small"
               />
+              {pendingRequestsCount > 0 && (
+                <Chip
+                  icon={<PendingActionsOutlinedIcon />}
+                  label={`${pendingRequestsCount} pending`}
+                  color="warning"
+                  size="small"
+                  clickable
+                  onClick={onPendingRequestsClick}
+                />
+              )}
               {/* View toggle — sits next to the chip on desktop; pinned right (icon-only) on mobile. */}
               <ToggleButtonGroup
                 value={viewMode}
