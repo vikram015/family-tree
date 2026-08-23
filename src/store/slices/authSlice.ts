@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { signOut } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
 import { backendApi } from "../../services/backendApi";
+import { pushNotifications } from "../../services/pushNotifications";
 import { AppUser, UserRole } from "../../components/model/User";
 
 interface AuthState {
@@ -79,6 +80,14 @@ export const updateAuthState = createAsyncThunk(
 
 export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValue }) => {
   try {
+    // Drop this device's push token first — the request needs a valid auth
+    // token, which signOut() below invalidates. Otherwise the next person to
+    // sign in on this browser would keep receiving the previous user's pushes.
+    try {
+      await pushNotifications.unregister();
+    } catch {
+      // Best-effort: never block sign-out on push cleanup.
+    }
     await signOut(firebaseAuth);
     return null;
   } catch (error: any) {

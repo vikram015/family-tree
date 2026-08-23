@@ -71,6 +71,7 @@ import { phoneFromCustomFields } from "../Business/businessContact";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
+import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import { ApiService, LocationCombinationOption, LinkRequest } from "../../services/apiService";
 import { namesLooselyMatch } from "../../utils/nameMatch";
 import { LocationPicker } from "../LocationPicker/LocationPicker";
@@ -368,6 +369,7 @@ export const NodeDetails = memo(function NodeDetails({
 
   const { currentUser, userProfile, isSuperAdmin } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
+  const { offerNotifications } = useNotificationPrompt();
 
   // Self-link ("This is me"): a logged-in user not yet linked to any person node
   // can request the tree owner to link their account to this profile.
@@ -469,6 +471,9 @@ export const NodeDetails = memo(function NodeDetails({
         targetPersonId: node.id,
       });
       setMyPendingRequests((prev) => [...prev, created]);
+      offerNotifications(
+        "We'll let you know as soon as your branch access request is reviewed.",
+      );
       showSnackbar(`Branch access request sent for ${node.name || "this"} branch.`, "success");
     } catch (error: any) {
       showSnackbar(error?.message || "Failed to request branch access.", "error");
@@ -518,6 +523,9 @@ export const NodeDetails = memo(function NodeDetails({
       });
       setMyPendingRequests((prev) => [...prev, created]);
       setSelfLinkConfirmOpen(false);
+      offerNotifications(
+        "We'll let you know as soon as your profile link request is reviewed.",
+      );
       showSnackbar(
         "Profile link request sent. It's pending owner approval.",
         "success",
@@ -844,6 +852,9 @@ export const NodeDetails = memo(function NodeDetails({
       });
 
       window.dispatchEvent(new Event("link-requests-updated"));
+      offerNotifications(
+        "We'll let you know as soon as your request is approved or declined.",
+      );
       showSnackbar(
         "Spouse link request raised. The other tree owner or a superadmin can approve it.",
         "success",

@@ -20,6 +20,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { AuthInitializer } from "../AuthInitializer";
 import { LocationInitializer } from "../LocationInitializer";
 import { PwaUpdatePrompt } from "../PwaUpdatePrompt/PwaUpdatePrompt";
+import { PushNotificationToast } from "../PushNotificationToast/PushNotificationToast";
 import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
@@ -34,6 +35,7 @@ import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
+import { NotificationPromptProvider } from "../context/NotificationPromptContext";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
@@ -160,6 +162,7 @@ function AppContent() {
       }}
     >
       <UserOnboardingRouteGuard />
+      <PushNotificationToast />
       <Header />
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box
@@ -287,10 +290,12 @@ export default React.memo(function App() {
             <AuthInitializer>
               <LocationInitializer>
                 <LoginModalProvider>
-                  <BrowserRouter>
-                    <AppContent />
-                  </BrowserRouter>
-                  <PwaUpdatePrompt />
+                  <NotificationPromptProvider>
+                    <BrowserRouter>
+                      <AppContent />
+                    </BrowserRouter>
+                    <PwaUpdatePrompt />
+                  </NotificationPromptProvider>
                 </LoginModalProvider>
               </LocationInitializer>
             </AuthInitializer>

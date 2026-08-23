@@ -46,18 +46,19 @@
     "webpack-bundle-analyzer": "^4.10.2"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "start:local": "react-scripts start",
-    "build": "react-scripts build",
-    "build:prod": "env-cmd -f .env.production -- react-scripts build",
-    "build:dev": "env-cmd -f .env.dev -- react-scripts build",
+    "start": "node scripts/generate-messaging-config.js && react-scripts start",
+    "start:local": "node scripts/generate-messaging-config.js && react-scripts start",
+    "build": "node scripts/generate-messaging-config.js && react-scripts build",
+    "build:prod": "env-cmd -f .env.production -- npm run build",
+    "build:dev": "env-cmd -f .env.dev -- npm run build",
     "analyze": "source-map-explorer build/static/js/*.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "firebase:clean": "rm -rf .firebase",
     "deploy:firebase": "bash ./scripts/deploy-firebase.sh prod",
     "deploy:firebase:prod": "bash ./scripts/deploy-firebase.sh prod",
-    "deploy:firebase:dev": "bash ./scripts/deploy-firebase.sh dev"
+    "deploy:firebase:dev": "bash ./scripts/deploy-firebase.sh dev",
+    "generate:messaging-config": "node scripts/generate-messaging-config.js"
   },
   "eslintConfig": {
     "extends": "react-app"

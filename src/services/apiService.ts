@@ -1124,6 +1124,21 @@ export const ApiService = {
     );
   },
 
+  /** Stores this device's FCM token so the backend can push notifications to it. */
+  async registerDeviceToken(token: string): Promise<{ success: boolean }> {
+    return backendApi.post<{ success: boolean }>("/api/notifications/device-token", {
+      token,
+      platform: "web",
+    });
+  },
+
+  /** Removes this device's FCM token (sign-out, or notifications turned off). */
+  async unregisterDeviceToken(token: string): Promise<{ success: boolean }> {
+    return backendApi.delete<{ success: boolean }>("/api/notifications/device-token", {
+      token,
+    });
+  },
+
   async getMyLinkRequests(requestType?: LinkRequestType): Promise<LinkRequest[]> {
     return backendApi.get<LinkRequest[]>("/api/link-requests/my", {
       requestType,

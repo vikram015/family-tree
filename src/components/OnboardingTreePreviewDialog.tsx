@@ -18,6 +18,7 @@ import { TransitionProps } from "@mui/material/transitions";
 import { DTreeComponent } from "./DTree/DTreeComponent";
 import { TreePersonSearch } from "./FamiliesPage/TreePersonSearch";
 import { ApiService, LinkRequest, TreeWriteScope } from "../services/apiService";
+import { useNotificationPrompt } from "./context/NotificationPromptContext";
 import { FNode } from "./model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 
@@ -57,6 +58,7 @@ export const OnboardingTreePreviewDialog: React.FC<
   myLinkRequests = [],
   onRequestCompleted,
 }) => {
+  const { offerNotifications } = useNotificationPrompt();
   const [nodes, setNodes] = useState<FNode[]>([]);
   const [rootId, setRootId] = useState<string>("");
   const [loading, setLoading] = useState(false);
@@ -244,6 +246,9 @@ export const OnboardingTreePreviewDialog: React.FC<
         personName: selectedNode.name,
         treeName: treeName ?? undefined,
       });
+      offerNotifications(
+        "We'll let you know as soon as your access request is reviewed.",
+      );
       setActionSuccess(
         `Successfully sent branch edit access request for ${selectedNode.name}'s branch.`,
       );

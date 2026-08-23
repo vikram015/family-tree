@@ -47,6 +47,8 @@ import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import { NotificationSettingsCard } from "./NotificationSettingsCard";
+import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import BusinessIcon from "@mui/icons-material/Business";
 import WorkIcon from "@mui/icons-material/Work";
 import AddIcon from "@mui/icons-material/Add";
@@ -103,6 +105,7 @@ export const ProfilePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const { userProfile, currentUser, updateUserProfile } = useAuth();
   const { openLoginModal } = useLoginModal();
+  const { offerNotifications } = useNotificationPrompt();
   const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
@@ -654,6 +657,9 @@ export const ProfilePage: React.FC = () => {
         targetPersonId: selectedPerson.id,
       });
       setPendingLinkRequest(created);
+      offerNotifications(
+        "We'll let you know as soon as your link request is reviewed.",
+      );
       setSuccess(
         "Link request sent. It's pending the tree owner's approval.",
       );
@@ -1394,6 +1400,13 @@ export const ProfilePage: React.FC = () => {
               </Grid>
               )}
             </Paper>
+          </Grid>
+        )}
+
+        {/* Push notification opt-in — only meaningful for your own account. */}
+        {isOwnAccountView && currentUser && (
+          <Grid size={{ xs: 12, md: 8 }}>
+            <NotificationSettingsCard />
           </Grid>
         )}
 

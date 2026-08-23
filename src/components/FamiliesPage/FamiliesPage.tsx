@@ -40,6 +40,7 @@ import AddTree from "../AddTree/AddTree";
 import { useAuth } from "../hooks/useAuth";
 import { useLocations } from "../hooks/useLocations";
 import { useLoginModal } from "../context/LoginModalContext";
+import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import { useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
@@ -69,6 +70,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     useAuth();
   const { setSelectedLocation } = useLocations();
   const { openLoginModal } = useLoginModal();
+  const { offerNotifications } = useNotificationPrompt();
   const highlightedPersonId = searchParams.get("personId");
   const inviteToken = searchParams.get("inviteToken");
   const shouldCreateRootFromQuery = searchParams.get("createRoot") === "1";
@@ -422,6 +424,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               requestMessage: `Request to link ${node.name || "selected profile"} as spouse.`,
             });
             window.dispatchEvent(new Event("link-requests-updated"));
+            offerNotifications(
+              "We'll let you know as soon as your spouse link request is approved or declined.",
+            );
             showSnackbar(
               "Spouse link request raised. The other tree owner or a superadmin can approve it.",
               "success",
@@ -699,6 +704,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           shareLink = fallbackLink;
         }
       }
+      // Only worth offering on the link path: an instant grant has no pending
+      // outcome for the inviter to be told about.
+      offerNotifications(
+        "We'll let you know as soon as your invite is accepted.",
+      );
       const targetScope = personId ? `branch from ${nodes.find((n) => n.id === personId)?.name || "selected person"}` : "full tree";
       const targetPhone = normalizedInvitePhone ? `Phone: ${normalizedInvitePhone}\n` : "";
       const shareText = `You are invited to edit the family tree (${targetScope}).\n${targetPhone}${shareLink}`;
@@ -787,6 +797,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       const rows = await ApiService.getMyLinkRequests();
       setMyPendingRequests((rows || []).filter((request) => request.status === "pending"));
       window.dispatchEvent(new Event("link-requests-updated"));
+      offerNotifications(
+        "We'll let you know as soon as your access request is reviewed.",
+      );
       showSnackbar(
         "Access request sent. A tree admin or super admin can approve it.",
         "success",
