@@ -49,6 +49,8 @@ import { InviteCollaboratorDialog } from "./InviteCollaboratorDialog";
 import { useTreeWriteAccess } from "./hooks/useTreeWriteAccess";
 import { useTreeData } from "./hooks/useTreeData";
 import { useLinkRequests } from "./hooks/useLinkRequests";
+import { useAppDispatch } from "../../store/hooks";
+import { fetchUserOnboarding } from "../../store/slices/userOnboardingSlice";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -65,6 +67,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const dispatch = useAppDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentUser, userProfile, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
     useAuth();
@@ -195,12 +198,24 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     ApiService.acceptTreeInvite(inviteToken)
       .then((result) => {
         const acceptedTreeId = result?.treeId || treeId;
+        // Accepting an invite completes onboarding server-side. Refresh the
+        // status *before* the token leaves the URL: the in-flight fetch holds
+        // the onboarding guard off until the completed status lands, so the
+        // user stays in the tree instead of being bounced to /onboarding.
+        dispatch(fetchUserOnboarding());
         // Always move the user to the tree they were invited to, and drop the
-        // one-time invite token from the URL.
+        // one-time invite token from the URL. A branch-scoped invite also
+        // focuses the branch root they were granted access to — that node is
+        // the whole point of the invite, so opening on it beats dropping them
+        // at the top of a tree they may not recognise. Full-tree invites carry
+        // no person and keep whatever focus the URL already had.
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           if (acceptedTreeId) {
             next.set("tree", acceptedTreeId);
+          }
+          if (result?.personId) {
+            next.set("personId", result.personId);
           }
           next.delete("inviteToken");
           return next;
@@ -239,6 +254,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setTreeId,
     setSearchParams,
     openLoginModal,
+    dispatch,
   ]);
 
   useEffect(() => {

@@ -61,6 +61,14 @@ export const UserOnboardingRouteGuard: React.FC = () => {
       return;
     }
 
+    // An invite link carries a one-time token that only FamiliesPage can
+    // redeem, and redirecting would strip it from the URL for good. Let the
+    // acceptance run — it completes onboarding on the backend, so the user
+    // lands in the tree they were invited to instead of the onboarding flow.
+    if (new URLSearchParams(location.search).get("inviteToken")) {
+      return;
+    }
+
     // Only actively-in-progress users are forced into onboarding. A user who
     // has completed OR explicitly skipped it may roam the app freely.
     const needsOnboarding = onboarding.status === "in_progress";
@@ -79,6 +87,7 @@ export const UserOnboardingRouteGuard: React.FC = () => {
     currentUser,
     loading,
     location.pathname,
+    location.search,
     navigate,
     onboarding.status,
     onboardingLoaded,

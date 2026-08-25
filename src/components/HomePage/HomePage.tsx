@@ -47,6 +47,7 @@ import {
   selectStatisticsLoading,
 } from "../../store/slices/statisticsSlice";
 import { ApiService, FamilyEvents } from "../../services/apiService";
+import { selectEffectiveUserOnboardingData } from "../../store/slices/userOnboardingSlice";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
@@ -148,6 +149,7 @@ export const HomePage: React.FC = () => {
   const [familyEvents, setFamilyEvents] = useState<FamilyEvents | null>(null);
   const [familyEventsLoading, setFamilyEventsLoading] = useState(false);
 
+  const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
 
@@ -316,6 +318,12 @@ export const HomePage: React.FC = () => {
         const hasApprovedBranchAccess = allRequests.some(
           (r) => r.requestType === "branch_access_request" && r.status === "approved",
         );
+        // Users who joined through a collaborator invite already have their
+        // tree — onboarding was completed for them on acceptance. The one step
+        // still open is pointing their account at their own node.
+        const joinedThroughInvite =
+          onboarding?.completion?.result === "invite_accepted";
+        const alreadyInATree = hasApprovedBranchAccess || joinedThroughInvite;
 
         setProfileInsight({
           completeness: 0,
@@ -329,11 +337,12 @@ export const HomePage: React.FC = () => {
                 to: "/profile",
                 cta: "View request",
               }
-            : hasApprovedBranchAccess
+            : alreadyInATree
             ? {
-                // Branch access was already granted — onboarding would just
-                // send them through the branch-access request again. Linking
-                // themselves to a person node happens on the Profile page.
+                // Tree access was already granted (approved branch access, or
+                // an accepted invite) — onboarding would just send them
+                // through the same request again. Linking themselves to a
+                // person node happens on the Profile page.
                 title: "Link your profile",
                 description: "Find yourself in your family tree to finish linking your account.",
                 to: "/profile",
@@ -420,7 +429,10 @@ export const HomePage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [currentUser, userProfile]);
+    // The onboarding result arrives asynchronously (the guard fetches it), so
+    // recompute once it lands — it decides between "find my tree" and
+    // "link my profile" for a user who isn't linked to a node yet.
+  }, [currentUser, userProfile, onboarding?.completion?.result]);
 
   // Load today's family events for the logged-in, tree-linked user.
   useEffect(() => {

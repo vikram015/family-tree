@@ -83,7 +83,12 @@ export interface UserOnboardingData {
   };
   completion: {
     completedAt: string | null;
-    result: "linked" | "created_tree" | "branch_access_requested" | null;
+    result:
+      | "linked"
+      | "created_tree"
+      | "branch_access_requested"
+      | "invite_accepted"
+      | null;
   };
 }
 
