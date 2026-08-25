@@ -216,7 +216,19 @@ export default function AddNode({
     },
   } as const;
 
-  const adornment = (icon: React.ReactNode) => (
+  /** Two fields per row once the drawer is wide enough — mirrors the edit form
+ *  in NodeDetails so both halves of the panel lay out the same way. */
+const fieldGridSx = {
+  display: "grid",
+  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+  columnGap: 2,
+  rowGap: 2,
+  alignItems: "start",
+} as const;
+
+const spanBothColumnsSx = { gridColumn: { md: "1 / -1" } } as const;
+
+const adornment = (icon: React.ReactNode) => (
     <InputAdornment position="start">{icon}</InputAdornment>
   );
 
@@ -1209,9 +1221,11 @@ export default function AddNode({
                 <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
                   Identity
                 </Typography>
-                <Stack spacing={2}>
+                <Box sx={fieldGridSx}>
+                  {/* The other-parent picker carries its own toggle group and
+                      nested form, so it takes the full width. */}
                   {!isFirstNode && relation === "child" && (
-                    <Box>
+                    <Box sx={spanBothColumnsSx}>
                       <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
                         Other parent
                       </Typography>
@@ -1359,6 +1373,7 @@ export default function AddNode({
 
                   <Box
                     sx={{
+                      ...spanBothColumnsSx,
                       p: { xs: 1.5, sm: 2 },
                       borderRadius: 3,
                       textAlign: "center",
@@ -1450,15 +1465,15 @@ export default function AddNode({
                       ))}
                     </Stack>
                   </Box>
-                </Stack>
+                </Box>
               </Paper>
 
               <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
                   Life details
                 </Typography>
-                <Stack spacing={2}>
-                  <Box>
+                <Box sx={fieldGridSx}>
+                  <Box sx={spanBothColumnsSx}>
                     <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
                       Blood Group
                     </Typography>
@@ -1526,7 +1541,7 @@ export default function AddNode({
 	                      />
                     </Suspense>
                   )}
-                </Stack>
+                </Box>
               </Paper>
 
               <Accordion defaultExpanded variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>

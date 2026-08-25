@@ -26,6 +26,8 @@ type BackendUserProfile = {
   locations?: string[] | null;
   peopleId?: string | null;
   name?: string | null;
+  /** Linked person node's name when the profile is linked, else the users row. */
+  displayName?: string | null;
   phone?: string | null;
   gender?: string | null;
   dob?: string | null;
@@ -44,7 +46,9 @@ function mapBackendUserToAppUser(row: BackendUserProfile): AppUser {
     role: (row.role || "admin") as UserRole,
     locations: row.locations || [],
     peopleId: row.peopleId || undefined,
-    displayName: row.name || undefined,
+    // Backend resolves this from the linked person node when there is one;
+    // `name` stays the users-table value the profile editor writes to.
+    displayName: row.displayName || row.name || undefined,
     name: row.name || undefined,
     phone: row.phone || undefined,
     gender: row.gender || undefined,

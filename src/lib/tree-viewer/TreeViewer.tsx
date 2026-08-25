@@ -30,7 +30,7 @@ import {
   renderNodeCardSvg,
   renderMarriageNodeSvg,
   renderPlaceholderCardSvg,
-  CARD_DIM,
+  getCardDim,
 } from "../../components/DTree/NodeCard";
 import type {
   TreeViewerFeatureFlags,
@@ -1553,8 +1553,10 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         debug: true,
         duration: 0,
         margin: margin,
-        nodeWidth: CARD_DIM.w,
-        nodeHeight: CARD_DIM.h,
+        // Must match the card the renderer actually draws — the mobile card is
+        // a different size, not the desktop one with pieces hidden.
+        nodeWidth: getCardDim(isMobileRef.current).w,
+        nodeHeight: getCardDim(isMobileRef.current).h,
         callbacks: {
           nodeClick: (
             name: string,
@@ -1610,6 +1612,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                 extra,
                 id,
                 nodeClass,
+                isMobileRef.current,
               );
             }
             const isMain = mainIdRef.current === extra?.id;

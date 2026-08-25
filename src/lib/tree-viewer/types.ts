@@ -57,6 +57,7 @@ export type TreeViewerRenderers = {
     extra: any,
     id: string,
     nodeClass: string,
+    isMobile?: boolean,
   ) => string;
   renderMarriageNodeSvg?: (
     size: number,

@@ -1110,8 +1110,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           flex: 1,
           minHeight: 0,
           overflow: "hidden",
-          px: { xs: 0.5, sm: 2, md: 3 },
-          py: { xs: 0.5, sm: 1.5 },
+          // No padding: the tree canvas below is full-bleed. Siblings that
+          // shouldn't touch the viewport edge carry their own margins.
+          px: 0,
+          py: 0,
         }}
       >
         {treeId &&
@@ -1124,7 +1126,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               spacing={1}
               alignItems="center"
               sx={{
+                mt: { xs: 1, sm: 1.5 },
                 mb: 1.5,
+                mx: { xs: 1, sm: 2, md: 3 },
                 px: 1.5,
                 py: 0.5,
                 borderRadius: 2,
@@ -1175,9 +1179,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               alignItems: "center",
               flexDirection: "column",
               gap: 2,
-              borderRadius: 4,
-              border: "1px solid",
-              borderColor: "divider",
+              borderRadius: 0,
+              border: "none",
               background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.04)} 0%, ${theme.palette.background.paper} 100%)`,
             }}
           >
@@ -1199,18 +1202,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               display: "flex",
               flexDirection: "column",
               minHeight: 0,
-              borderRadius: { xs: 3, md: 4 },
-              border: "1px solid",
-              borderColor: "divider",
+              // Square and unframed — a rounded, bordered card around an
+              // infinite pannable canvas only ate space and drew a box around
+              // something that has no edges.
+              borderRadius: 0,
+              border: "none",
               backgroundColor: theme.palette.background.paper,
-              // While the action sheet is open it fills the card's bottom edge,
-              // so flatten/hide the bottom border+corners to let it sit flush
-              // (matching the borderless preview sheet).
-              ...(isMobileSheetOpen && {
-                borderBottomWidth: 0,
-                borderBottomLeftRadius: 0,
-                borderBottomRightRadius: 0,
-              }),
             }}
           >
             <Stack

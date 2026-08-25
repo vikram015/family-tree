@@ -4,6 +4,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Drawer,
   Box,
   Divider,
   Typography,
@@ -100,6 +101,24 @@ const inputWithIconSx = {
     borderRadius: 2,
   },
 } as const;
+
+/**
+ * Two fields per row once the drawer is wide enough, one per row on phones.
+ *
+ * The edit form used to be a single column of full-width inputs, which on a
+ * desktop meant scrolling past a lot of empty space to reach the save button.
+ * Fields that need the full width (a photo header, a chip row, a free-text
+ * note) opt out with `spanBothColumnsSx`.
+ */
+const fieldGridSx = {
+  display: "grid",
+  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+  columnGap: 2,
+  rowGap: 2,
+  alignItems: "start",
+} as const;
+
+const spanBothColumnsSx = { gridColumn: { md: "1 / -1" } } as const;
 
 const adornment = (icon: React.ReactNode) => (
   <InputAdornment position="start">{icon}</InputAdornment>
@@ -1053,16 +1072,23 @@ export const NodeDetails = memo(function NodeDetails({
 
   return (
     <>
-      <Dialog
+      {/*
+        A side panel rather than a centred dialog: on desktop the old `maxWidth="sm"`
+        dialog wasted the screen and forced every field into one long scrolling
+        column. A right-anchored drawer uses the width that's actually there, so
+        the edit form can lay out two fields per row and fit on one screen.
+        On phones it takes the full viewport, which is what the dialog's
+        `fullScreen` did before.
+      */}
+      <Drawer
+        anchor="right"
         open={!!node}
         onClose={closeHandler}
-        fullScreen={isMobile}
-        maxWidth="sm"
-        fullWidth
         PaperProps={{
           sx: {
-            height: isMobile ? "100%" : "auto",
-            maxHeight: isMobile ? "100%" : "90vh",
+            width: { xs: "100%", sm: 520, md: 720, lg: 840 },
+            maxWidth: "100vw",
+            height: "100%",
             display: "flex",
             flexDirection: "column",
           },
@@ -1628,9 +1654,10 @@ export const NodeDetails = memo(function NodeDetails({
                   <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
                     Identity
                   </Typography>
-                  <Stack spacing={2}>
+                  <Box sx={fieldGridSx}>
                     <Box
                       sx={{
+                        ...spanBothColumnsSx,
                         p: { xs: 1.5, sm: 2 },
                         borderRadius: 3,
                         textAlign: "center",
@@ -1748,15 +1775,17 @@ export const NodeDetails = memo(function NodeDetails({
                         ))}
                       </Stack>
                     </Box>
-                  </Stack>
+                  </Box>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                   <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
                     Life details
                   </Typography>
-                  <Stack spacing={2}>
-                <Box>
+                  <Box sx={fieldGridSx}>
+                {/* Blood group is a wide chip row, so it takes the full width
+                    and lets the switch and deceased date pair up below it. */}
+                <Box sx={spanBothColumnsSx}>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
                     Blood Group
                   </Typography>
@@ -1825,7 +1854,7 @@ export const NodeDetails = memo(function NodeDetails({
 	                    />
                   </Suspense>
                 )}
-                  </Stack>
+                  </Box>
                 </Paper>
                 {anchorParent && (
                   <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
@@ -1902,7 +1931,7 @@ export const NodeDetails = memo(function NodeDetails({
                       </Stack>
 
                       {editOtherParentMode === "new" && (
-                        <Stack spacing={1.5}>
+                        <Box sx={fieldGridSx}>
                           <TextField
                             fullWidth
                             size="small"
@@ -1972,7 +2001,7 @@ export const NodeDetails = memo(function NodeDetails({
                               format="DD/MM/YYYY"
                             />
                           </Suspense>
-                        </Stack>
+                        </Box>
                       )}
                     </Stack>
                   </Paper>
@@ -2297,7 +2326,7 @@ export const NodeDetails = memo(function NodeDetails({
             </DialogActions>
           </>
         )}
-      </Dialog>
+      </Drawer>
 
       <Dialog
         open={linkExternalConfirmOpen}

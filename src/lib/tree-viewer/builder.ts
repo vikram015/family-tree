@@ -101,32 +101,22 @@ class TreeBuilder {
     // Windows Touch Fix removed: D3 v7 handles touch events natively.
     // Preserving comment for history: Was previously needed for D3v4.
 
-    // Add dotted pattern definitions
-    const defs = svg.append('defs');
-    const gridSize = 30; // Distance between dots
-
-    // Dotted pattern (a single dot per tile)
-    const pattern = defs.append('pattern')
-        .attr('id', 'grid-line-pattern')
-        .attr('width', gridSize)
-        .attr('height', gridSize)
-        .attr('patternUnits', 'userSpaceOnUse');
-
-    pattern.append('circle')
-        .attr('cx', gridSize / 2)
-        .attr('cy', gridSize / 2)
-        .attr('r', 1.5)
-        .attr('fill', '#d0d0d0');
-
-    // Add a rectangle with the grid pattern as background
-    // Restored large dimensions to cover "gutters" (outside viewBox) when overflow is visible
-    // This ensures the grid covers the full screen even if aspect ratio causes letterboxing
+    // Flat canvas instead of the old dot grid.
+    //
+    // Those dots were painted on a rect appended to the <svg>, not to the pan
+    // group, so they stayed bolted to the screen while the tree slid over them
+    // — the background read as a screen door in front of the chart rather than
+    // a surface it sits on. The cards and connector lines carry all the
+    // structure a genealogy chart needs, so the ground is simply quiet.
+    //
+    // Kept oversized to cover the "gutters" outside the viewBox when the
+    // aspect ratio letterboxes, and it is still the pan/zoom hit area.
     svg.append('rect')
        .attr('width', '500%')
        .attr('height', '500%')
        .attr('x', '-200%')
        .attr('y', '-200%')
-       .style('fill', 'url(#grid-line-pattern)')
+       .style('fill', '#f8fafc')
        .style('pointer-events', 'all')
        .style('touch-action', 'none'); // Ensure it captures events
 
