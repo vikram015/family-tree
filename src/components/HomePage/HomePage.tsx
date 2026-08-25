@@ -1,295 +1,169 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import {
-  Container,
-  Typography,
   Box,
   Button,
-  Card,
-  CardContent,
+  Container,
   Stack,
-  Divider,
-  TextField,
-  InputAdornment,
-  CircularProgress,
-  Paper,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Chip,
-  Avatar,
-  ClickAwayListener,
-  LinearProgress,
+  Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
-import SearchIcon from "@mui/icons-material/Search";
-import StoreIcon from "@mui/icons-material/Store";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
-import PeopleIcon from "@mui/icons-material/People";
-import LocationCityIcon from "@mui/icons-material/LocationCity";
-import BusinessIcon from "@mui/icons-material/Business";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import AutoStoriesIcon from "@mui/icons-material/AutoStories";
-import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
-import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
-import TaskAltIcon from "@mui/icons-material/TaskAlt";
-import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
-import FavoriteIcon from "@mui/icons-material/Favorite";
-import LocalFloristOutlinedIcon from "@mui/icons-material/LocalFloristOutlined";
+import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchDashboardStatistics,
   selectStatistics,
   selectStatisticsLoading,
 } from "../../store/slices/statisticsSlice";
-import { ApiService, FamilyEvents } from "../../services/apiService";
+import {
+  ApiService,
+  DashboardInsights,
+  FamilyEvents,
+  UpcomingFamilyEvent,
+} from "../../services/apiService";
 import { selectEffectiveUserOnboardingData } from "../../store/slices/userOnboardingSlice";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
-import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
-import { AnimatedCounter } from "../common/AnimatedCounter";
-import { brand, pageGradient } from "../../theme/brand";
-import EventCard from "../Events/EventCard";
+import { brand } from "../../theme/brand";
+import { GlobalSearch } from "./GlobalSearch";
+import { LandingPage } from "./LandingPage";
+import { TodayStrip } from "./TodayStrip";
+import { PersonalStats } from "./PersonalStats";
+import { TreeGaps } from "./TreeGaps";
+import { FeatureGrid } from "./FeatureGrid";
+import { NetworkStrip } from "./NetworkStrip";
+import { ContributorList, Contributor } from "./ContributorList";
+import { eyebrowSx, heroSurface, panelSx, sectionSpacing } from "./homeTheme";
 
-interface SearchResult {
-  id: string;
-  name: string;
-  type: "person" | "business" | "profession";
-  /** For business/profession results, the associated (owner) person id. */
-  personId?: string;
-  treeId?: string;
-  treeName?: string;
-  personPhotoUrl?: string;
-  gotra?: string;
-  extra?: string;
-  locationName?: string;
-  casteName?: string;
-  subCasteName?: string;
-  parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
-}
+type NextAction = {
+  title: string;
+  description: string;
+  to: string;
+  cta: string;
+};
 
-interface DashboardContributor {
-  personName: string;
-  peopleAdded: number;
-  personId?: string | null;
-  treeId?: string | null;
-}
+const EMPTY_STATS: DashboardInsights["stats"] = {
+  peopleInTree: 0,
+  generations: 0,
+  addedThisMonth: 0,
+  incompleteProfiles: 0,
+};
 
-function getInitials(value?: string): string {
-  if (!value) return "?";
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || "")
-    .join("");
-}
-
-function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber" | "slate") {
-  if (!value) return null;
-
-  const styles =
-    accent === "teal"
-      ? { bg: brand.primarySoft, color: brand.primary }
-      : accent === "amber"
-        ? { bg: brand.accentSoft, color: brand.accent }
-        : { bg: "#f1f5f9", color: "#475569" };
-
-  return (
-    <Box
-      key={`${label}-${value}`}
-      sx={{
-        px: 0.9,
-        py: 0.45,
-        borderRadius: 999,
-        bgcolor: styles.bg,
-        color: styles.color,
-        fontSize: 11,
-        fontWeight: 600,
-        lineHeight: 1.2,
-        whiteSpace: "nowrap",
-      }}
-    >
-      <Box component="span">{value}</Box>
-    </Box>
-  );
-}
-
+/**
+ * The homepage is two different products behind one route.
+ *
+ * Signed out it's an acquisition surface (`LandingPage`) — it used to greet
+ * anonymous visitors with "Welcome back, Family Member" over internal metrics.
+ * Signed in it's a dashboard built around what the user can do next: today's
+ * family dates, their own tree's numbers, and the gaps worth filling.
+ */
 export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const { userProfile, currentUser } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [continueTreeLoading, setContinueTreeLoading] = useState(false);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Personalized profile insight for the logged-in user (completeness + next action).
-  const [profileInsight, setProfileInsight] = useState<{
-    completeness: number;
-    completed: number;
-    total: number;
-    nextAction: { title: string; description: string; to: string; cta: string } | null;
-    // Pending branch-access requests the user has raised (write access to a branch).
-    pendingBranchAccess: Array<{ label: string }>;
-  } | null>(null);
-  const [profileInsightLoading, setProfileInsightLoading] = useState(false);
-
-  // Today's family events (birthdays, remembrances, anniversaries) for the
-  // logged-in user's tree.
-  const [familyEvents, setFamilyEvents] = useState<FamilyEvents | null>(null);
-  const [familyEventsLoading, setFamilyEventsLoading] = useState(false);
-
+  const { currentUser, userProfile } = useAuth();
   const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
 
-  // Signed in but not yet linked to a person node — the hero CTA becomes
-  // "Complete Your Profile" and points at the same destination as the
-  // Suggested Next Action (onboarding, or the pending request view).
-  const needsProfileCompletion = Boolean(
-    currentUser && userProfile && !userProfile.peopleId,
-  );
-  const completeProfileTo = profileInsight?.nextAction?.to || "/onboarding";
-  const displayName = userProfile?.displayName || userProfile?.name || "Family Member";
-  const loggedInLabel =
-    userProfile?.displayName ||
-    userProfile?.name ||
-    currentUser?.email ||
-    "Guest";
+  const [insights, setInsights] = useState<DashboardInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [familyEvents, setFamilyEvents] = useState<FamilyEvents | null>(null);
+  const [upcoming, setUpcoming] = useState<UpcomingFamilyEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [nextAction, setNextAction] = useState<NextAction | null>(null);
+  const [continueTreeLoading, setContinueTreeLoading] = useState(false);
 
-  const performSearch = useCallback(async (query: string) => {
-    if (!query.trim() || query.trim().length < 2) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-    setIsSearching(true);
-    setShowResults(true);
-    try {
-      const rows = await ApiService.globalSearch(query.trim());
+  // Both fields map from the same DB column, so a user who never set a name
+  // (phone signups) has neither. Greet them without a placeholder standing in
+  // for their name.
+  const personName = (userProfile?.displayName || userProfile?.name || "").trim();
 
-      const results: SearchResult[] = [];
-
-      rows.forEach((row: any) => {
-        const lineageText =
-          row.entityType === "person" && Array.isArray(row.parentHierarchy)
-            ? row.parentHierarchy
-                .slice(-5)
-                .map((a: any) => a?.name)
-                .filter(Boolean)
-                .join(" -> ")
-            : "";
-
-        results.push({
-          id: row.entityId,
-          name: row.title || "Unknown",
-          type: row.entityType,
-          personId: row.personId || undefined,
-          treeId: row.treeId,
-          extra:
-            row.entityType === "person"
-              ? lineageText || "Lineage: N/A"
-              : row.subtitle || undefined,
-          treeName: row.treeName || undefined,
-          personPhotoUrl: row.personPhotoUrl || undefined,
-          gotra: row.gotra || undefined,
-          locationName: row.locationName || undefined,
-          casteName: row.casteName || undefined,
-          subCasteName: row.subCasteName || undefined,
-          parentHierarchy: row.parentHierarchy || [],
-        });
-      });
-
-      setSearchResults(results);
-    } catch (err) {
-      console.error("Search error:", err);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
-
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => performSearch(value), 300);
-  };
-
-  const handleResultClick = (result: SearchResult) => {
-    setShowResults(false);
-    setSearchQuery("");
-    if (result.type === "person" && result.id) {
-      navigate(`/profile/person/${result.id}`);
-    } else if (result.type === "business") {
-      // Open the business owner's profile when we know them; else the listing.
-      if (result.personId) {
-        navigate(`/profile/person/${result.personId}`);
-      } else {
-        navigate("/business");
-      }
-    } else if (result.treeId) {
-      const params = new URLSearchParams();
-      params.set("tree", result.treeId);
-      navigate(`/families?${params.toString()}`);
-    } else if (result.type === "profession") {
-      navigate("/business");
-    }
-  };
-
-  const handleContributorClick = useCallback(
-    (contributor: DashboardContributor) => {
-      if (!contributor.personId) return;
-      const params = new URLSearchParams();
-      if (contributor.treeId) params.set("tree", contributor.treeId);
-      params.set("personId", contributor.personId);
-      navigate(`/families?${params.toString()}`);
-    },
-    [navigate],
-  );
-
-  const handleContinueToYourTree = useCallback(async () => {
-    if (!currentUser) {
-      navigate("/families");
-      return;
-    }
-
-    setContinueTreeLoading(true);
-    try {
-      navigate(await resolveDefaultFamilyTreePath());
-    } finally {
-      setContinueTreeLoading(false);
-    }
-  }, [currentUser, navigate]);
+  const totalPeople = Number(statistics?.totalPeople || 0);
+  const totalTrees = Number(statistics?.totalTrees || 0);
+  const totalLocations = Number(statistics?.totalLocations || 0);
+  const totalBusinesses = Number(statistics?.totalBusinesses || 0);
+  const topContributors: Contributor[] = Array.isArray(statistics?.topContributors)
+    ? (statistics.topContributors as Contributor[])
+    : [];
 
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
 
-  // Compute the logged-in user's own profile completeness and the single most
-  // useful next action to fill in. Only personalized when signed in.
+  // Personalized data — one round trip for the tree stats, worklist and badges.
+  useEffect(() => {
+    if (!currentUser) {
+      setInsights(null);
+      return;
+    }
+    let cancelled = false;
+    setInsightsLoading(true);
+    ApiService.getMyDashboardInsights()
+      .then((data) => {
+        if (!cancelled) setInsights(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load dashboard insights:", err);
+        if (!cancelled) setInsights(null);
+      })
+      .finally(() => {
+        if (!cancelled) setInsightsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile?.peopleId]);
+
+  // Today's dates, plus the week ahead so a quiet day still has something.
+  useEffect(() => {
+    if (!currentUser || !userProfile?.peopleId) {
+      setFamilyEvents(null);
+      setUpcoming([]);
+      return;
+    }
+    let cancelled = false;
+    setEventsLoading(true);
+    Promise.all([
+      ApiService.getTodaysFamilyEvents().catch(() => null),
+      ApiService.getUpcomingFamilyEvents(7).catch(() => []),
+    ])
+      .then(([today, ahead]) => {
+        if (cancelled) return;
+        setFamilyEvents(today);
+        setUpcoming(Array.isArray(ahead) ? ahead : []);
+      })
+      .finally(() => {
+        if (!cancelled) setEventsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile?.peopleId]);
+
+  /**
+   * The single most useful thing this user could do next.
+   *
+   * Only computed for users who aren't linked to a person node yet — once
+   * they're linked, the `TreeGaps` worklist is a better prompt than a banner.
+   */
   useEffect(() => {
     let cancelled = false;
 
-    const computeProfileInsight = async () => {
+    const compute = async () => {
       if (!currentUser || !userProfile) {
-        setProfileInsight(null);
+        setNextAction(null);
+        return;
+      }
+      if (userProfile.peopleId) {
+        setNextAction(null);
         return;
       }
 
-      const peopleId = userProfile.peopleId;
-
-      // Load all of the user's pending requests once, so we can reflect both a
-      // pending profile link and any pending branch-access requests.
       let allRequests: any[] = [];
       try {
         allRequests = await ApiService.getMyLinkRequests();
@@ -298,877 +172,232 @@ export const HomePage: React.FC = () => {
       }
       if (cancelled) return;
 
-      const pendingRequests = allRequests.filter((r) => r.status === "pending");
+      const pending = allRequests.filter((r) => r.status === "pending");
+      const pendingLink = pending.find((r) => r.requestType === "user_to_tree_node");
+      const hasApprovedBranchAccess = allRequests.some(
+        (r) => r.requestType === "branch_access_request" && r.status === "approved",
+      );
+      // An accepted invite already put them in a tree, so onboarding would only
+      // ask them to find one again — send them to link their node instead.
+      const joinedThroughInvite =
+        onboarding?.completion?.result === "invite_accepted";
 
-      const pendingBranchAccess = pendingRequests
-        .filter((r) => r.requestType === "branch_access_request")
-        .map((r) => ({
-          label:
-            r.targetPersonName || r.targetTreeName
-              ? `${r.targetPersonName || r.targetTreeName} branch`
-              : "a branch",
-        }));
-
-      // Not yet linked to a person in the tree — the most important step,
-      // unless a link request is already awaiting the owner's approval.
-      if (!peopleId) {
-        const pendingLink = pendingRequests.find(
-          (r) => r.requestType === "user_to_tree_node",
-        );
-        const hasApprovedBranchAccess = allRequests.some(
-          (r) => r.requestType === "branch_access_request" && r.status === "approved",
-        );
-        // Users who joined through a collaborator invite already have their
-        // tree — onboarding was completed for them on acceptance. The one step
-        // still open is pointing their account at their own node.
-        const joinedThroughInvite =
-          onboarding?.completion?.result === "invite_accepted";
-        const alreadyInATree = hasApprovedBranchAccess || joinedThroughInvite;
-
-        setProfileInsight({
-          completeness: 0,
-          completed: 0,
-          total: 1,
-          pendingBranchAccess,
-          nextAction: pendingLink
-            ? {
-                title: "Profile link pending approval",
-                description: `Your request to link with ${pendingLink.targetPersonName || "your family member"} is awaiting the tree owner's approval.`,
-                to: "/profile",
-                cta: "View request",
-              }
-            : alreadyInATree
-            ? {
-                // Tree access was already granted (approved branch access, or
-                // an accepted invite) — onboarding would just send them
-                // through the same request again. Linking themselves to a
-                // person node happens on the Profile page.
-                title: "Link your profile",
-                description: "Find yourself in your family tree to finish linking your account.",
-                to: "/profile",
-                cta: "Link my profile",
-              }
-            : {
-                // Onboarding only requests branch access now — linking a
-                // profile to a specific person happens later (e.g. from that
-                // person's node in the tree), so this copy shouldn't promise
-                // "link your account" the way it used to.
-                title: "Finish setting up your profile",
-                description: "Find your family tree and request access to your branch.",
-                to: "/onboarding",
-                cta: "Find my tree",
-              },
+      if (pendingLink) {
+        setNextAction({
+          title: "Profile link pending approval",
+          description: `Your request to link with ${pendingLink.targetPersonName || "your family member"} is awaiting the tree owner's approval.`,
+          to: "/requests",
+          cta: "View request",
         });
         return;
       }
 
-      setProfileInsightLoading(true);
-      try {
-        const [person, professions] = await Promise.all([
-          ApiService.getPersonById(peopleId),
-          ApiService.getProfessionsByPerson(peopleId).catch(() => []),
-        ]);
-        if (cancelled) return;
-
-        const checklist: Array<{ done: boolean; title: string; description: string }> = [
-          {
-            done: Boolean((person as any)?.photoUrl),
-            title: "Add a profile photo",
-            description: "A photo helps relatives recognize you in the tree.",
-          },
-          {
-            done: Boolean(person?.dob),
-            title: "Add your date of birth",
-            description: "Dates keep the lineage timeline accurate.",
-          },
-          {
-            done: Boolean(person?.gender),
-            title: "Add your gender",
-            description: "Gender helps place you correctly in the family tree.",
-          },
-          {
-            done: Boolean(userProfile.phone),
-            title: "Add a contact number",
-            description: "A phone number helps family reconnect with you.",
-          },
-          {
-            done: Array.isArray(professions) && professions.length > 0,
-            title: "Add your profession",
-            description: "Share what you do to enrich the family network.",
-          },
-        ];
-
-        const total = checklist.length;
-        const completed = checklist.filter((item) => item.done).length;
-        const completeness = Math.round((completed / total) * 100);
-        const firstMissing = checklist.find((item) => !item.done);
-
-        setProfileInsight({
-          completeness,
-          completed,
-          total,
-          pendingBranchAccess,
-          nextAction: firstMissing
-            ? {
-                title: firstMissing.title,
-                description: firstMissing.description,
-                to: "/profile",
-                cta: "Complete now",
-              }
-            : null,
-        });
-      } catch (err) {
-        console.error("Failed to compute profile insight:", err);
-        if (!cancelled) setProfileInsight(null);
-      } finally {
-        if (!cancelled) setProfileInsightLoading(false);
-      }
+      setNextAction(
+        hasApprovedBranchAccess || joinedThroughInvite
+          ? {
+              title: "Link your profile",
+              description:
+                "Find yourself in your family tree to finish linking your account.",
+              to: "/profile",
+              cta: "Link my profile",
+            }
+          : {
+              title: "Finish setting up your profile",
+              description: "Find your family tree and request access to your branch.",
+              to: "/onboarding",
+              cta: "Find my tree",
+            },
+      );
     };
 
-    void computeProfileInsight();
+    void compute();
     return () => {
       cancelled = true;
     };
-    // The onboarding result arrives asynchronously (the guard fetches it), so
-    // recompute once it lands — it decides between "find my tree" and
-    // "link my profile" for a user who isn't linked to a node yet.
   }, [currentUser, userProfile, onboarding?.completion?.result]);
 
-  // Load today's family events for the logged-in, tree-linked user.
-  useEffect(() => {
-    if (!currentUser || !userProfile?.peopleId) {
-      setFamilyEvents(null);
-      return;
+  const handleContinueToYourTree = useCallback(async () => {
+    setContinueTreeLoading(true);
+    try {
+      navigate(await resolveDefaultFamilyTreePath());
+    } finally {
+      setContinueTreeLoading(false);
     }
-    let cancelled = false;
-    setFamilyEventsLoading(true);
-    ApiService.getTodaysFamilyEvents()
-      .then((events) => {
-        if (!cancelled) setFamilyEvents(events);
-      })
-      .catch((err) => {
-        console.error("Failed to load family events:", err);
-        if (!cancelled) setFamilyEvents(null);
-      })
-      .finally(() => {
-        if (!cancelled) setFamilyEventsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUser, userProfile?.peopleId]);
+  }, [navigate]);
 
-  const renderSearchResults = (onPick?: () => void) => {
-    if (!showResults) return null;
-
+  // ---- Signed out: a proper landing page, not an empty dashboard. ----------
+  if (!currentUser) {
     return (
-      <Paper
-        elevation={8}
-        sx={{
-          position: isMobile ? "static" : "absolute",
-          top: isMobile ? "auto" : "100%",
-          left: 0,
-          right: 0,
-          zIndex: 1300,
-          maxHeight: isMobile ? "none" : 420,
-          overflow: "auto",
-          mt: isMobile ? 1.5 : 0.5,
-          borderRadius: 2,
-        }}
-      >
-        {searchResults.length > 0 ? (
-          <List dense disablePadding>
-            {searchResults.map((result) => (
-              <ListItem
-                key={`${result.type}-${result.id}`}
-                component="div"
-                onClick={() => {
-                  onPick?.();
-                  handleResultClick(result);
-                }}
-                sx={{
-                  cursor: "pointer",
-                  "&:hover": { bgcolor: "action.hover" },
-                  borderBottom: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  {result.type === "person" ? (
-                    <Avatar
-                      src={result.personPhotoUrl || undefined}
-                      sx={{
-                        width: 28,
-                        height: 28,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        bgcolor: "#e0f2fe",
-                        color: "#0369a1",
-                      }}
-                    >
-                      {getInitials(result.name)}
-                    </Avatar>
-                  ) : result.type === "profession" ? (
-                    <TimelineIcon color="action" />
-                  ) : (
-                    <StoreIcon color="secondary" />
-                  )}
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    <Stack spacing={0.75}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {result.name}
-                      </Typography>
-                      {result.type === "person" &&
-                        (result.locationName || result.gotra || result.casteName) && (
-                          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
-                            {renderMetaPill("Location", result.locationName, "teal")}
-                            {renderMetaPill("Caste", result.casteName, "slate")}
-                            {renderMetaPill("Sub caste", result.gotra, "slate")}
-                          </Stack>
-                        )}
-                    </Stack>
-                  }
-                  secondary={result.extra || undefined}
-                  primaryTypographyProps={{ fontWeight: 600 }}
-                  secondaryTypographyProps={{ fontSize: "0.75rem" }}
-                />
-                <Chip
-                  label={
-                    result.type === "person"
-                      ? "Person"
-                      : result.type === "profession"
-                        ? "Profession"
-                        : "Business"
-                  }
-                  size="small"
-                  color={
-                    result.type === "person"
-                      ? "primary"
-                      : result.type === "business"
-                        ? "secondary"
-                        : "default"
-                  }
-                  variant="outlined"
-                />
-              </ListItem>
-            ))}
-          </List>
-        ) : !isSearching ? (
-          <Box sx={{ p: 2, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
-              No results found for "{searchQuery}"
-            </Typography>
-          </Box>
-        ) : null}
-      </Paper>
+      <>
+        <Helmet>
+          <title>Kinvia - Preserve Your Family Legacy</title>
+          <meta
+            name="description"
+            content="Kinvia helps families preserve lineage, stories, and relationships for future generations."
+          />
+        </Helmet>
+        <LandingPage
+          searchSlot={<GlobalSearch maxWidth="100%" />}
+          totalPeople={totalPeople}
+          totalTrees={totalTrees}
+          totalLocations={totalLocations}
+          totalBusinesses={totalBusinesses}
+          statsLoading={loadingStats}
+        />
+      </>
     );
-  };
+  }
 
-  const totalPeople = statistics?.totalPeople || 0;
-  const totalTrees = statistics?.totalTrees || 0;
-  const totalLocations = statistics?.totalLocations || 0;
-  const totalBusinesses = statistics?.totalBusinesses || 0;
-  const topContributors = Array.isArray(statistics?.topContributors)
-    ? (statistics.topContributors as DashboardContributor[])
-    : [];
-  const professionCoverage = totalPeople
-    ? Math.round(((statistics?.peopleWithProfessions || 0) / totalPeople) * 100)
-    : 0;
-
-  const pulseItems = [
-    `Families across ${totalLocations} locations are preserving lineage records.`,
-    `${totalBusinesses} family businesses are now visible in the network.`,
-    `${statistics?.totalProfessionsAssigned || 0} professional links are mapped.`,
-  ];
-
-  const historyTodayItems = [
-    "Remember elders by adding stories and photos to their profiles.",
-    "Reconnect branches by linking missing parents and spouses.",
-    "Preserve lineage accuracy by completing unknown dates of birth.",
-  ];
+  // ---- Signed in: the dashboard. ------------------------------------------
+  const stats = insights?.stats || EMPTY_STATS;
+  const counts = insights?.counts || { photos: 0, pendingRequests: 0 };
 
   return (
     <>
       <Helmet>
-        <title>Kinvia - Preserve Your Family Legacy</title>
+        <title>Kinvia - Your Family Dashboard</title>
         <meta
           name="description"
-          content="Kinvia helps families preserve lineage, stories, and relationships for future generations."
+          content="Your family at a glance — today's dates, your tree, and what to add next."
         />
       </Helmet>
 
-      <Box
-        sx={{
-          background: pageGradient,
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Container maxWidth="lg" sx={{ py: { xs: 5, md: 7 } }}>
-          <Box
+      <Box sx={{ background: heroSurface, borderBottom: "1px solid", borderColor: brand.border }}>
+        <Container maxWidth="lg" sx={{ py: { xs: 3.5, md: 5.5 } }}>
+          {personName && (
+            <Typography sx={{ ...eyebrowSx, mb: 0.75 }}>Welcome back</Typography>
+          )}
+          <Typography
+            component="h1"
             sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "1.2fr 0.8fr" },
-              gap: 3,
-              alignItems: "stretch",
+              fontWeight: 800,
+              fontSize: { xs: 27, sm: 34, md: 40 },
+              lineHeight: 1.15,
+              color: brand.ink,
+              mb: 1,
             }}
           >
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2.5, md: 4 },
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "divider",
-                background:
-                  "linear-gradient(140deg, rgba(255,255,255,0.95), rgba(255,255,255,0.75))",
-              }}
-            >
-              <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>
-                Welcome back, {displayName}
-              </Typography>
-              <Typography variant="body2" sx={{ color: "text.secondary", mb: 0.8 }}>
-                Logged in as: <strong>{loggedInLabel}</strong>
-              </Typography>
-              <Typography variant="h6" sx={{ color: "text.secondary", mb: 1.5 }}>
-                Your family story is growing.
-              </Typography>
-              <Typography sx={{ color: "text.secondary", mb: 3 }}>
-                Every update you make today becomes heritage tomorrow.
-              </Typography>
+            {personName || "Welcome back"}
+          </Typography>
+          {/* The tree name lives on the stats block below — repeating it here
+              read as if the greeting were addressing the tree. */}
+          <Typography sx={{ color: brand.slate, mb: 3, maxWidth: 560 }}>
+            Every update you make today becomes heritage tomorrow.
+          </Typography>
 
-              <FullScreenMobilePicker
-                title="Search"
-                closeLabel="Close search"
-                dialogContent={({ closeDialog }) => (
-                  <>
-                    <TextField
-                      fullWidth
-                      autoFocus
-                      placeholder="Search family members, businesses..."
-                      value={searchQuery}
-                      onChange={(e) => handleSearchChange(e.target.value)}
-                      onFocus={() => {
-                        if (searchResults.length > 0) setShowResults(true);
-                      }}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter" && searchQuery.trim()) {
-                          performSearch(searchQuery);
-                        }
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            <SearchIcon sx={{ color: brand.primary, mr: 1 }} />
-                          </InputAdornment>
-                        ),
-                        endAdornment: isSearching ? (
-                          <InputAdornment position="end">
-                            <CircularProgress size={18} />
-                          </InputAdornment>
-                        ) : null,
-                      }}
-                      sx={{
-                        bgcolor: "white",
-                        borderRadius: 2,
-                      }}
-                    />
-                    {renderSearchResults(closeDialog)}
-                  </>
-                )}
-              >
-                {({ isMobile: mobilePicker, openDialog }) => (
-                  <ClickAwayListener onClickAway={() => !mobilePicker && setShowResults(false)}>
-                    <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
-                      <TextField
-                        fullWidth
-                        placeholder="Search family members, businesses..."
-                        value={searchQuery}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                        onClick={openDialog}
-                        onFocus={() => {
-                          if (mobilePicker) {
-                            openDialog();
-                            return;
-                          }
-                          if (searchResults.length > 0) setShowResults(true);
-                        }}
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter" && searchQuery.trim()) {
-                            performSearch(searchQuery);
-                          }
-                        }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <SearchIcon sx={{ color: brand.primary, mr: 1 }} />
-                            </InputAdornment>
-                          ),
-                          endAdornment: isSearching ? (
-                            <InputAdornment position="end">
-                              <CircularProgress size={18} />
-                            </InputAdornment>
-                          ) : null,
-                        }}
-                        sx={{
-                          bgcolor: "white",
-                          borderRadius: 2,
-                        }}
-                        inputProps={{
-                          readOnly: mobilePicker,
-                        }}
-                      />
-                      {!mobilePicker && renderSearchResults()}
-                    </Box>
-                  </ClickAwayListener>
-                )}
-              </FullScreenMobilePicker>
+          <Box sx={{ mb: 3, maxWidth: 640 }}>
+            <GlobalSearch />
+          </Box>
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                {needsProfileCompletion ? (
-                  <Button
-                    variant="contained"
-                    component={Link}
-                    to={completeProfileTo}
-                    endIcon={<ArrowForwardIcon />}
-                    sx={{
-                      fontWeight: 700,
-                      bgcolor: brand.primary,
-                      "&:hover": { bgcolor: brand.primaryDark },
-                    }}
-                  >
-                    Complete Your Profile
-                  </Button>
-                ) : (
-                  <Button
-                    variant="contained"
-                    onClick={() => void handleContinueToYourTree()}
-                    disabled={continueTreeLoading}
-                    endIcon={<ArrowForwardIcon />}
-                    sx={{
-                      fontWeight: 700,
-                      bgcolor: brand.primary,
-                      "&:hover": { bgcolor: brand.primaryDark },
-                    }}
-                  >
-                    {continueTreeLoading ? "Opening..." : currentUser ? "Continue Your Tree" : "Explore Family Trees"}
-                  </Button>
-                )}
-                <Button
-                  variant="outlined"
-                  component={Link}
-                  to="/business"
-                  sx={{ fontWeight: 700, borderColor: brand.primary, color: brand.primary }}
-                >
-                  Explore Family Business
-                </Button>
-              </Stack>
-            </Paper>
-
+          {nextAction && (
             <Box
               sx={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                // Two equal rows that fill the block height so the bottom edge
-                // aligns with the welcome card (block stretches via the outer grid).
-                gridTemplateRows: { xs: "auto auto", md: "1fr 1fr" },
-                gap: 1.5,
+                ...(panelSx as object),
+                p: { xs: 1.75, sm: 2 },
+                mb: 3,
+                display: "flex",
+                flexDirection: { xs: "column", sm: "row" },
+                alignItems: { xs: "flex-start", sm: "center" },
+                gap: { xs: 1.5, sm: 2 },
+                borderColor: brand.primary,
+                bgcolor: brand.primarySoft,
               }}
             >
-              {[
-                { label: "Members", value: totalPeople, icon: <PeopleIcon /> },
-                { label: "Trees", value: totalTrees, icon: <AccountTreeIcon /> },
-                { label: "Locations", value: totalLocations, icon: <LocationCityIcon /> },
-                { label: "Businesses", value: totalBusinesses, icon: <BusinessIcon /> },
-              ].map((item) => (
-                <Card
-                  key={item.label}
-                  sx={{
-                    borderRadius: 2.5,
-                    height: "100%",
-                    display: "flex",
-                  }}
-                >
-                  <CardContent
-                    sx={{
-                      py: 2.5,
-                      width: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "center",
-                      "&:last-child": { pb: 2.5 },
-                    }}
-                  >
-                    <Box sx={{ color: brand.primary, display: "flex", mb: 1.5 }}>
-                      {item.icon}
-                    </Box>
-                    <Typography
-                      sx={{
-                        textTransform: "uppercase",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        letterSpacing: "0.06em",
-                        color: "text.secondary",
-                      }}
-                    >
-                      {item.label}
-                    </Typography>
-                    <Typography sx={{ fontSize: 28, fontWeight: 800, mt: 0.5, color: brand.ink }}>
-                      <AnimatedCounter value={item.value} loading={loadingStats} />
-                    </Typography>
-                  </CardContent>
-                </Card>
-              ))}
+              <AutoAwesomeOutlinedIcon sx={{ color: brand.primary, flexShrink: 0 }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontWeight: 700, color: brand.ink }}>
+                  {nextAction.title}
+                </Typography>
+                <Typography variant="body2" sx={{ color: brand.slate }}>
+                  {nextAction.description}
+                </Typography>
+              </Box>
+              <Button
+                component={Link}
+                to={nextAction.to}
+                variant="contained"
+                endIcon={<ArrowForwardIcon />}
+                fullWidth={isMobile}
+                sx={{
+                  flexShrink: 0,
+                  fontWeight: 700,
+                  minHeight: 44,
+                  bgcolor: brand.primary,
+                  "&:hover": { bgcolor: brand.primaryDark },
+                }}
+              >
+                {nextAction.cta}
+              </Button>
             </Box>
-          </Box>
+          )}
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <Button
+              variant="contained"
+              onClick={() => void handleContinueToYourTree()}
+              disabled={continueTreeLoading}
+              endIcon={<ArrowForwardIcon />}
+              sx={{
+                fontWeight: 700,
+                minHeight: 44,
+                bgcolor: brand.primary,
+                "&:hover": { bgcolor: brand.primaryDark },
+              }}
+            >
+              {continueTreeLoading ? "Opening..." : "Continue your tree"}
+            </Button>
+            <Button
+              variant="outlined"
+              component={Link}
+              to="/photos"
+              sx={{
+                fontWeight: 700,
+                minHeight: 44,
+                borderColor: brand.primary,
+                color: brand.primary,
+              }}
+            >
+              Family photos
+            </Button>
+          </Stack>
         </Container>
       </Box>
 
-      <Container maxWidth="lg" sx={{ py: 6 }}>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: {
-              xs: "1fr",
-              md: currentUser ? "1fr 1fr 1fr" : "1fr",
-            },
-            gap: 2,
-            mb: 5,
-            alignItems: "stretch",
-          }}
-        >
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary">
-                Your Contribution Snapshot
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>
-                Keep your lineage alive
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 1.2, color: "text.secondary" }}>
-                Add one profile this week and strengthen your family memory map.
-              </Typography>
-            </CardContent>
-          </Card>
+      <Container maxWidth="lg" sx={{ py: sectionSpacing }}>
+        <Stack spacing={sectionSpacing}>
+          <TodayStrip events={familyEvents} upcoming={upcoming} loading={eventsLoading} />
 
-          {currentUser && (
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary">
-                Profile Completeness
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5, color: brand.accent }}>
-                <AnimatedCounter
-                  value={profileInsight ? profileInsight.completeness : professionCoverage}
-                  loading={profileInsight ? profileInsightLoading : loadingStats}
-                />%
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={profileInsight ? profileInsight.completeness : professionCoverage}
-                sx={{
-                  mt: 1.3,
-                  height: 8,
-                  borderRadius: 6,
-                  bgcolor: brand.accentSoft,
-                  "& .MuiLinearProgress-bar": { bgcolor: brand.accent },
-                }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
-                {profileInsight
-                  ? `${profileInsight.completed} of ${profileInsight.total} profile details completed`
-                  : "Based on profession mapping across members"}
-              </Typography>
-            </CardContent>
-          </Card>
-          )}
+          <PersonalStats
+            stats={stats}
+            treeName={insights?.tree?.name}
+            treeId={insights?.tree?.id}
+            loading={insightsLoading}
+          />
 
-          {currentUser && (
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary">
-                Suggested Next Action
-              </Typography>
-              {profileInsight && !profileInsight.nextAction ? (
-                <>
-                  <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
-                    Your profile is complete 🎉
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
-                    Help others by completing their family details too.
-                  </Typography>
-                  <Button
-                    onClick={() => void handleContinueToYourTree()}
-                    disabled={continueTreeLoading}
-                    size="small"
-                    sx={{ mt: 1, px: 0, fontWeight: 700, color: brand.primary }}
-                    endIcon={<ArrowForwardIcon />}
-                  >
-                    {continueTreeLoading ? "Opening..." : "Open Your Tree"}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
-                    {profileInsight?.nextAction?.title || "Complete missing family details"}
-                  </Typography>
-                  {profileInsight?.nextAction?.description && (
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
-                      {profileInsight.nextAction.description}
-                    </Typography>
-                  )}
-                  <Button
-                    component={Link}
-                    to={profileInsight?.nextAction?.to || "/families"}
-                    size="small"
-                    sx={{ mt: 1, px: 0, fontWeight: 700, color: brand.primary }}
-                    endIcon={<ArrowForwardIcon />}
-                  >
-                    {profileInsight?.nextAction?.cta || "Complete now"}
-                  </Button>
-                </>
-              )}
+          <TreeGaps
+            gaps={insights?.gaps || []}
+            loading={insightsLoading}
+            treeName={insights?.tree?.name}
+            incompleteCount={stats.incompleteProfiles}
+          />
 
-              {profileInsight && profileInsight.pendingBranchAccess.length > 0 && (
-                <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                    Branch access pending approval
-                  </Typography>
-                  <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75, mt: 0.8 }}>
-                    {profileInsight.pendingBranchAccess.map((item, idx) => (
-                      <Chip
-                        key={`${item.label}-${idx}`}
-                        size="small"
-                        label={item.label}
-                        sx={{ bgcolor: brand.primarySoft, color: brand.primary, fontWeight: 600 }}
-                      />
-                    ))}
-                  </Stack>
-                  <Button
-                    component={Link}
-                    to="/requests"
-                    size="small"
-                    sx={{ mt: 0.8, px: 0, fontWeight: 700, color: brand.primary }}
-                    endIcon={<ArrowForwardIcon />}
-                  >
-                    View requests
-                  </Button>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-          )}
-        </Box>
+          <FeatureGrid counts={counts} loading={insightsLoading} />
 
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
-            gap: 2,
-            alignItems: "stretch",
-          }}
-        >
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <PeopleIcon sx={{ color: brand.primary }} />
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Top Contributors
-                </Typography>
-              </Stack>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                People who have added the most family members.
-              </Typography>
-              <Stack spacing={1.2}>
-                {loadingStats ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Loading contributor statistics...
-                  </Typography>
-                ) : topContributors.length > 0 ? (
-                  topContributors.map((item, index) => (
-                    <Box
-                      key={`${item.personName}-${index}`}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 2,
-                        py: 1,
-                        borderBottom:
-                          index === topContributors.length - 1 ? "none" : "1px solid",
-                        borderColor: "divider",
-                      }}
-                    >
-                      <Stack direction="row" spacing={1.25} alignItems="center">
-                        <Chip
-                          label={`#${index + 1}`}
-                          size="small"
-                          sx={{
-                            bgcolor: brand.primarySoft,
-                            color: brand.primary,
-                            fontWeight: 700,
-                            minWidth: 42,
-                          }}
-                        />
-                        <Typography
-                          variant="body2"
-                          onClick={
-                            item.personId
-                              ? () => handleContributorClick(item)
-                              : undefined
-                          }
-                          sx={{
-                            fontWeight: 600,
-                            ...(item.personId && {
-                              cursor: "pointer",
-                              color: brand.primary,
-                              "&:hover": { textDecoration: "underline" },
-                            }),
-                          }}
-                        >
-                          {item.personName}
-                        </Typography>
-                      </Stack>
-                      <Typography variant="body2" color="text.secondary">
-                        {item.peopleAdded} added
-                      </Typography>
-                    </Box>
-                  ))
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No contributor statistics available yet.
-                  </Typography>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
+          <Box sx={{ ...(panelSx as object), p: { xs: 2.5, md: 3 } }}>
+            <ContributorList contributors={topContributors} loading={loadingStats} />
+          </Box>
 
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <TimelineIcon sx={{ color: brand.primary }} />
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Family Pulse
-                </Typography>
-              </Stack>
-              <Stack spacing={1.2}>
-                {pulseItems.map((item) => (
-                  <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
-                    <TaskAltIcon sx={{ color: brand.accent, fontSize: 19, mt: 0.2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      {item}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ borderRadius: 3, height: "100%" }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <HistoryEduIcon sx={{ color: brand.primary }} />
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  {familyEvents ? "Family Events Today" : "Today in Family History"}
-                </Typography>
-              </Stack>
-
-              {familyEvents ? (
-                familyEventsLoading ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Loading today's events...
-                  </Typography>
-                ) : familyEvents.birthdays.length === 0 &&
-                  familyEvents.anniversaries.length === 0 &&
-                  familyEvents.deceased.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    No birthdays, anniversaries or remembrances in your family today.
-                  </Typography>
-                ) : (
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gap: 1.4,
-                      gridTemplateColumns: {
-                        xs: "1fr",
-                        sm: "repeat(2, minmax(0, 1fr))",
-                      },
-                    }}
-                  >
-                    {familyEvents.birthdays.map((person) => (
-                      <EventCard
-                        key={`bday-${person.id}`}
-                        eventType="birthday"
-                        personId={person.id}
-                        name={person.name}
-                        photoUrl={person.photoUrl}
-                        subtitle={
-                          person.age > 0
-                            ? `Turns ${person.age} today 🎂`
-                            : "Has a birthday today 🎂"
-                        }
-                        year={new Date().getFullYear()}
-                      />
-                    ))}
-
-                    {familyEvents.anniversaries.map((a) => (
-                      <EventCard
-                        key={`anniv-${a.person1Id}-${a.person2Id}`}
-                        eventType="anniversary"
-                        personId={a.person1Id}
-                        name={`${a.person1Name} & ${a.person2Name}`}
-                        photoUrl={a.person1PhotoUrl}
-                        subtitle={`${a.years} years together 💍`}
-                        year={new Date().getFullYear()}
-                      />
-                    ))}
-
-                    {familyEvents.deceased.map((person) => (
-                      <EventCard
-                        key={`dec-${person.id}`}
-                        eventType="remembrance"
-                        personId={person.id}
-                        name={person.name}
-                        photoUrl={person.photoUrl}
-                        subtitle={`Remembered — ${person.yearsAgo} years ago 🕊️`}
-                        year={new Date().getFullYear()}
-                      />
-                    ))}
-                  </Box>
-                )
-              ) : (
-                <Stack spacing={1.2}>
-                  {historyTodayItems.map((item, idx) => (
-                    <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
-                      {idx === 0 ? (
-                        <AutoStoriesIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
-                      ) : (
-                        <FavoriteBorderIcon sx={{ color: brand.primary, fontSize: 19, mt: 0.2 }} />
-                      )}
-                      <Typography variant="body2" color="text.secondary">
-                        {item}
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
-        </Box>
-
-        <Divider sx={{ my: 5 }} />
-
-        <Box sx={{ textAlign: "center", py: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5 }}>
-            Your legacy grows with every update
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Preserve roots, reconnect generations, and keep family memory alive.
-          </Typography>
-        </Box>
+          <NetworkStrip
+            totalPeople={totalPeople}
+            totalTrees={totalTrees}
+            totalLocations={totalLocations}
+            totalBusinesses={totalBusinesses}
+            loading={loadingStats}
+          />
+        </Stack>
       </Container>
     </>
   );
 };
+
+export default HomePage;

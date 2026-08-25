@@ -195,6 +195,52 @@ export interface FamilyEvents {
   anniversaries: FamilyAnniversary[];
 }
 
+/** A celebration in the days just ahead, normalized across birthdays and
+ *  anniversaries so one card renders both. */
+export interface UpcomingFamilyEvent {
+  id: string;
+  type: 'birthday' | 'anniversary';
+  personId: string;
+  name: string;
+  photoUrl: string | null;
+  /** Always >= 1 — today's events come from getTodaysFamilyEvents. */
+  daysAway: number;
+  eventDate: string;
+  /** Age they'll turn / years married on the day. */
+  years: number;
+}
+
+/** A fillable hole in the user's tree — one row of the homepage worklist. */
+export type TreeGapType = 'dob' | 'photo' | 'profession';
+
+export interface TreeGap {
+  personId: string;
+  name: string;
+  nameHindi: string | null;
+  photoUrl: string | null;
+  gender: string | null;
+  treeId: string;
+  gap: TreeGapType;
+  /** Ready-to-render copy, e.g. "No birth date". */
+  label: string;
+}
+
+/** Everything the personalized homepage needs, in one round trip. */
+export interface DashboardInsights {
+  tree: { id: string; name: string } | null;
+  stats: {
+    peopleInTree: number;
+    generations: number;
+    addedThisMonth: number;
+    incompleteProfiles: number;
+  };
+  gaps: TreeGap[];
+  counts: {
+    photos: number;
+    pendingRequests: number;
+  };
+}
+
 export type WishEventType = 'birthday' | 'anniversary' | 'remembrance';
 
 export interface Wish {
@@ -1353,6 +1399,24 @@ export const ApiService = {
    */
   async getTodaysFamilyEvents(): Promise<FamilyEvents> {
     return backendApi.get<FamilyEvents>('/api/family-events/today');
+  },
+
+  /**
+   * Birthdays and anniversaries in the next `days` days (today excluded), so a
+   * quiet day still has something to show.
+   */
+  async getUpcomingFamilyEvents(days = 7): Promise<UpcomingFamilyEvent[]> {
+    return backendApi.get<UpcomingFamilyEvent[]>('/api/family-events/upcoming', {
+      days,
+    });
+  },
+
+  /**
+   * The logged-in user's own tree stats, the gaps worth filling, and nav badge
+   * counts — the data behind the personalized homepage.
+   */
+  async getMyDashboardInsights(): Promise<DashboardInsights> {
+    return backendApi.get<DashboardInsights>('/api/dashboard/my-insights');
   },
 
   // =====================================================
