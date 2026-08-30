@@ -181,7 +181,7 @@ const dTree = {
       };
 
       // hide linages to the hidden root node
-      if (parent == root) {
+      if (parent === root) {
         node.noParent = true;
       }
 
@@ -297,7 +297,7 @@ const dTree = {
   },
 
   _sortPersons: function (persons: any[], opts: any) {
-    if (persons != undefined) {
+    if (persons != null) {
       persons.sort(function (a: any, b: any) {
         return opts.callbacks.nodeSorter.call(this, a.name, a.extra, b.name, b.extra);
       });
@@ -306,7 +306,7 @@ const dTree = {
   },
 
   _sortMarriages: function (marriages: any[], opts: any) {
-    if (marriages != undefined && Array.isArray(marriages)) {
+    if (marriages != null && Array.isArray(marriages)) {
       marriages.sort(function (marriageA: any, marriageB: any) {
         var a = marriageA.spouse;
         var b = marriageB.spouse;

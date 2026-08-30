@@ -9,10 +9,6 @@ import {
   Alert,
   CircularProgress,
   Box,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   TextField,
   Link,
   useMediaQuery,
@@ -175,7 +171,7 @@ export const LinkNodeDialog: React.FC = () => {
       return;
     }
     if (!privacyAccepted) {
-      setError("Please accept the Privacy Policy to continue.");
+      setError("Please accept the Terms of Use and Privacy Policy to continue.");
       return;
     }
 
@@ -293,6 +289,15 @@ export const LinkNodeDialog: React.FC = () => {
               label={
                 <Typography variant="body2">
                   I agree to the{" "}
+                  <Link
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    underline="hover"
+                  >
+                    Terms of Use
+                  </Link>{" "}
+                  and{" "}
                   <Link
                     href="/privacy-policy"
                     target="_blank"

@@ -17,6 +17,12 @@ export interface Contributor {
   personId?: string | null;
   treeId?: string | null;
   photoUrl?: string | null;
+  /**
+   * Whether this viewer can actually open the contributor's tree. Set by the
+   * server, which knows the viewer's permissions; absent for signed-out callers,
+   * who get no contributors at all.
+   */
+  canView?: boolean;
 }
 
 export interface ContributorListProps {
@@ -62,7 +68,7 @@ export const ContributorList: React.FC<ContributorListProps> = ({
             ))
           : contributors.map((item, index) => {
               const tint = avatarTint(item.personName || String(index));
-              const clickable = Boolean(item.personId);
+              const clickable = Boolean(item.personId) && item.canView !== false;
               return (
                 <Stack
                   key={`${item.personName}-${index}`}

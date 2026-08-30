@@ -39,26 +39,39 @@
     "@types/lodash-es": "^4.17.12",
     "@types/react": "18.2.34",
     "@types/react-dom": "18.2.14",
+    "@vitejs/plugin-react": "^4.7.0",
+    "dotenv": "^17.4.2",
     "env-cmd": "^11.0.0",
+    "eslint": "^8.57.1",
+    "eslint-config-react-app": "^7.0.1",
     "gh-pages": "4.0.0",
-    "react-scripts": "5.0.1",
     "source-map-explorer": "^2.5.3",
-    "webpack-bundle-analyzer": "^4.10.2"
+    "vite": "^5.4.21",
+    "vite-plugin-pwa": "^0.20.5",
+    "webpack-bundle-analyzer": "^4.10.2",
+    "workbox-core": "^7.4.1",
+    "workbox-expiration": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1",
+    "workbox-strategies": "^7.4.1"
   },
   "scripts": {
-    "start": "node scripts/generate-messaging-config.js && react-scripts start",
-    "start:local": "node scripts/generate-messaging-config.js && react-scripts start",
-    "build": "node scripts/generate-messaging-config.js && react-scripts build",
+    "start": "node scripts/generate-messaging-config.cjs && vite",
+    "start:local": "node scripts/generate-messaging-config.cjs && vite",
+    "build": "node scripts/generate-messaging-config.cjs && tsc --noEmit && eslint src --ext .ts,.tsx --max-warnings 0 && vite build",
     "build:prod": "env-cmd -f .env.production -- npm run build",
     "build:dev": "env-cmd -f .env.dev -- npm run build",
-    "analyze": "source-map-explorer build/static/js/*.js",
+    "analyze": "source-map-explorer 'build/assets/*.js'",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "firebase:clean": "rm -rf .firebase",
     "deploy:firebase": "bash ./scripts/deploy-firebase.sh prod",
     "deploy:firebase:prod": "bash ./scripts/deploy-firebase.sh prod",
     "deploy:firebase:dev": "bash ./scripts/deploy-firebase.sh dev",
-    "generate:messaging-config": "node scripts/generate-messaging-config.js"
+    "generate:messaging-config": "node scripts/generate-messaging-config.cjs",
+    "dev": "node scripts/generate-messaging-config.cjs && vite",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx"
   },
   "eslintConfig": {
     "extends": "react-app"
@@ -66,5 +79,6 @@
   "browserslist": [
     "Chrome 116",
     "Safari 16"
-  ]
+  ],
+  "type": "module"
 }

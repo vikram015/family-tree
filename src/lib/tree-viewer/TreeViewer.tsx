@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import type { VirtualElement } from "@popperjs/core";
 import { select } from "d3-selection";
 import { zoomIdentity, zoomTransform } from "d3-zoom";
 import "d3-transition";
@@ -11,6 +10,7 @@ import Typography from "@mui/material/Typography";
 import Popper from "@mui/material/Popper";
 import Popover from "@mui/material/Popover";
 import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import InputLabel from "@mui/material/InputLabel";
@@ -21,6 +21,8 @@ import Divider from "@mui/material/Divider";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import FullscreenIcon from "@mui/icons-material/Fullscreen";
+import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
@@ -42,10 +44,6 @@ import type {
 } from "./types";
 
 const TREE_INTERACTION_HINT_KEY = "kinvia-tree-interaction-hint-dismissed";
-
-function createVirtualAnchor(element: Element): any {
-  return element;
-}
 
 interface DTreeNode {
   name: string;
@@ -107,6 +105,8 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   highlightedPersonId,
   onMobileSheetChange,
   initialMainId = null,
+  isFullscreen = false,
+  onToggleFullscreen,
   initialShowFullTree = true,
   initialShowSpouses = true,
   initialLanguage = "hindi",
@@ -600,6 +600,29 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mobileSheetNodeId]);
+
+  // Entering or leaving fullscreen changes the container height by the height
+  // of the app chrome. Like the action sheet above, there is no ResizeObserver
+  // on the container, so re-centre explicitly once the new layout has settled —
+  // otherwise the tree stays anchored to the old, shorter viewport.
+  const fullscreenRecenterInitRef = useRef(false);
+  useEffect(() => {
+    if (!fullscreenRecenterInitRef.current) {
+      fullscreenRecenterInitRef.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (showFullTree) {
+        centerTreeInViewport(220);
+      } else if (mainId) {
+        centerOnNodeRef.current(mainId);
+      } else if (rootId) {
+        centerOnNodeRef.current(rootId);
+      }
+    }, 160);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFullscreen]);
 
   const handleNodeTap = useCallback(
     (nodeId: string) => {
@@ -1492,6 +1515,9 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
 
   useEffect(() => {
     if (!containerRef.current || nodes.length === 0) return;
+    // Captured for the cleanup below: by teardown time the ref may point at a
+    // different node (or null), and we must clear the one we actually rendered into.
+    const container = containerRef.current;
 
     // Check if user has switched to a completely different tree
     const isNewTree = prevTreeIdRef.current !== currentTreeId;
@@ -1724,14 +1750,16 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
 
     // Cleanup function: Capture zoom state BEFORE removing elements
     return () => {
-      if (containerRef.current) {
-        const svgElement = containerRef.current.querySelector("svg");
-        if (svgElement) {
-          prevZoomRef.current = zoomTransform(svgElement);
-        }
-        select(containerRef.current).selectAll("*").remove();
+      const svgElement = container.querySelector("svg");
+      if (svgElement) {
+        prevZoomRef.current = zoomTransform(svgElement);
       }
+      select(container).selectAll("*").remove();
     };
+    // convertToTreeFormat is redefined on every render and resetTreeViewport
+    // depends on it, so listing either would re-run this whole D3 teardown and
+    // re-render on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     nodes,
     rootId,
@@ -1879,6 +1907,26 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
           >
             <MoreVertIcon fontSize="small" />
           </IconButton>
+          )}
+          {onToggleFullscreen && (
+            <Tooltip title={isFullscreen ? "Exit full screen" : "Full screen"}>
+              <IconButton
+                size="small"
+                aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToggleFullscreen();
+                }}
+                sx={{ ml: 0.25 }}
+              >
+                {isFullscreen ? (
+                  <FullscreenExitIcon fontSize="small" />
+                ) : (
+                  <FullscreenIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Tooltip>
           )}
         </Box>
       </label>

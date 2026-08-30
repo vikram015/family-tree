@@ -26,6 +26,8 @@ import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
 import { BusinessPage } from "../BusinessPage/BusinessPage";
 import { FamousPage } from "../FamousPage/FamousPage";
+// Route is disabled but the import is kept so restoring Contact is a one-line change.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { ContactPage } from "../Contact/ContactPage";
 import { AboutPage } from "../AboutPage/AboutPage";
 import { FAQPage } from "../FAQ/FAQPage";
@@ -36,8 +38,13 @@ import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
 import { NotificationPromptProvider } from "../context/NotificationPromptContext";
+import {
+  TreeFullscreenProvider,
+  useTreeFullscreen,
+} from "../context/TreeFullscreenContext";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
+import { TermsPage } from "../TermsPage/TermsPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
 import { UserOnboardingPage } from "../UserOnboardingPage";
 import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
@@ -57,6 +64,7 @@ const FamiliesPage = React.lazy(() =>
 );
 
 function AppContent() {
+  const { isFullscreen: isTreeFullscreen } = useTreeFullscreen();
   console.log("AppContent: Rendering");
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -163,7 +171,7 @@ function AppContent() {
     >
       <UserOnboardingRouteGuard />
       <PushNotificationToast />
-      <Header />
+      {!isTreeFullscreen && <Header />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box
           sx={{
@@ -257,6 +265,7 @@ function AppContent() {
               <Route path="/profile/person/:personId" element={<ProfilePage />} />
               <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
             </Routes>
             </ErrorBoundary>
             {showFooter && <Footer />}
@@ -271,7 +280,7 @@ export default React.memo(function App() {
   console.log("App component: Starting to render");
 
   // Pre-launch gate: render ONLY the launching-soon page — no router, no auth,
-  // no data fetching. Flip REACT_APP_COMING_SOON to false at launch.
+  // no data fetching. Flip VITE_COMING_SOON to false at launch.
   if (shouldShowComingSoon()) {
     return (
       <ThemeProvider theme={theme}>
@@ -291,10 +300,12 @@ export default React.memo(function App() {
               <LocationInitializer>
                 <LoginModalProvider>
                   <NotificationPromptProvider>
-                    <BrowserRouter>
-                      <AppContent />
-                    </BrowserRouter>
-                    <PwaUpdatePrompt />
+                    <TreeFullscreenProvider>
+                      <BrowserRouter>
+                        <AppContent />
+                      </BrowserRouter>
+                      <PwaUpdatePrompt />
+                    </TreeFullscreenProvider>
                   </NotificationPromptProvider>
                 </LoginModalProvider>
               </LocationInitializer>

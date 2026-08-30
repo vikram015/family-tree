@@ -86,7 +86,7 @@ const entrance = (delay: number) => ({
 
 /**
  * Pre-launch landing page. Rendered INSTEAD of the whole app while the
- * `REACT_APP_COMING_SOON` flag is on — see `utils/comingSoon.ts` for the flag
+ * `VITE_COMING_SOON` flag is on — see `utils/comingSoon.ts` for the flag
  * and the team bypass.
  */
 export function ComingSoonPage(): React.ReactElement {

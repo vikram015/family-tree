@@ -23,7 +23,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
   IconButton,
   Chip,
   Stack,
@@ -43,6 +42,7 @@ import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import LinkIcon from "@mui/icons-material/Link";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EmailIcon from "@mui/icons-material/Email";
 import PhoneIcon from "@mui/icons-material/Phone";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
@@ -112,6 +112,10 @@ export const ProfilePage: React.FC = () => {
   const [isLinking, setIsLinking] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
+  // Likely matches for "this is me", fetched from the trees the user can see.
+  const [linkCandidates, setLinkCandidates] = useState<any[]>([]);
+  const [linkCandidatesLoading, setLinkCandidatesLoading] = useState(false);
+  const [showManualSearch, setShowManualSearch] = useState(false);
   const [linking, setLinking] = useState(false);
   // Pending self-link request (account -> tree person) awaiting owner approval.
   const [pendingLinkRequest, setPendingLinkRequest] = useState<LinkRequest | null>(null);
@@ -647,6 +651,47 @@ export const ProfilePage: React.FC = () => {
 
   // Send a self-link request (pending owner approval) instead of linking
   // directly — mirrors the "This is me" flow on the family-tree node details.
+  // Surface the probable matches as soon as the panel opens, so the common case
+  // is one tap rather than "type your own name into an empty box".
+  useEffect(() => {
+    if (!isLinking) return;
+
+    let active = true;
+    setLinkCandidatesLoading(true);
+    ApiService.getProfileLinkCandidates()
+      .then((rows) => {
+        // The search API returns personId/personName; the rest of this page (and
+        // handleLink) expects the id/name shape PersonSearchField produces.
+        if (active)
+          setLinkCandidates(
+            (rows || []).map((row: any) => ({
+              id: row.personId,
+              name: row.personName,
+              nameHindi: row.personNameHindi,
+              gender: row.gender,
+              photoUrl: row.photoUrl,
+              treeId: row.treeId,
+              treeName: row.treeName,
+              locationName: row.locationName,
+              casteName: row.casteName,
+              subCasteName: row.subCasteName,
+              hierarchy: row.parentHierarchy || [],
+              parentHierarchy: row.parentHierarchy || [],
+            })),
+          );
+      })
+      .catch(() => {
+        if (active) setLinkCandidates([]);
+      })
+      .finally(() => {
+        if (active) setLinkCandidatesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isLinking]);
+
   const handleLink = async () => {
     if (!selectedPerson) return;
     setLinking(true);
@@ -1066,6 +1111,93 @@ export const ProfilePage: React.FC = () => {
                       Find your profile in the tree
                     </Typography>
 
+                    {/* The likely matches, drawn from the trees this user can
+                        see. Most people find themselves here and never touch the
+                        search below. */}
+                    {linkCandidatesLoading && (
+                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ py: 2 }}>
+                        <CircularProgress size={18} />
+                        <Typography variant="body2" color="text.secondary">
+                          Looking for you in your family trees...
+                        </Typography>
+                      </Stack>
+                    )}
+
+                    {!linkCandidatesLoading && linkCandidates.length > 0 && (
+                      <Box sx={{ mb: 3 }}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                          Is this you?
+                        </Typography>
+                        <Stack spacing={1}>
+                          {linkCandidates.map((candidate: any) => {
+                            const isChosen = selectedPerson?.id === candidate.id;
+                            const parents = (candidate.parentHierarchy || [])
+                              .map((p: any) => p?.name)
+                              .filter(Boolean)
+                              .join(" • ");
+                            return (
+                              <Paper
+                                key={candidate.id}
+                                variant="outlined"
+                                onClick={() => {
+                                  setSelectedPerson(candidate);
+                                  setSearchValue(candidate.name || "");
+                                }}
+                                sx={{
+                                  p: 1.5,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 1.5,
+                                  cursor: "pointer",
+                                  borderColor: isChosen ? "primary.main" : "divider",
+                                  borderWidth: isChosen ? 2 : 1,
+                                  bgcolor: isChosen ? "action.selected" : "background.paper",
+                                  "&:hover": { borderColor: "primary.main" },
+                                }}
+                              >
+                                <Avatar src={candidate.photoUrl || undefined}>
+                                  {(candidate.name || "?").charAt(0).toUpperCase()}
+                                </Avatar>
+                                <Box sx={{ minWidth: 0, flex: 1 }}>
+                                  <Typography sx={{ fontWeight: 600 }} noWrap>
+                                    {candidate.name}
+                                    {candidate.nameHindi ? ` (${candidate.nameHindi})` : ""}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" noWrap>
+                                    {[candidate.treeName, candidate.locationName, parents]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </Typography>
+                                </Box>
+                                {isChosen && <CheckCircleIcon color="primary" />}
+                              </Paper>
+                            );
+                          })}
+                        </Stack>
+                      </Box>
+                    )}
+
+                    {!linkCandidatesLoading && linkCandidates.length === 0 && (
+                      <Alert severity="info" sx={{ mb: 2 }}>
+                        We couldn't find anyone matching your name in your family
+                        trees. Search by name below, or ask a tree member to invite
+                        you.
+                      </Alert>
+                    )}
+
+                    {!showManualSearch && (
+                      <Button
+                        size="small"
+                        onClick={() => setShowManualSearch(true)}
+                        sx={{ mb: 2 }}
+                      >
+                        {linkCandidates.length > 0
+                          ? "None of these — search more"
+                          : "Search by name"}
+                      </Button>
+                    )}
+
+                    <Box sx={{ display: showManualSearch ? "block" : "none" }}>
                     <Autocomplete
                       fullWidth
                       sx={{ mb: 3 }}
@@ -1109,6 +1241,7 @@ export const ProfilePage: React.FC = () => {
                       locationId={selectedLocation}
                       disabled={!selectedLocation}
                     />
+                    </Box>
 
                     {selectedPerson && (
                       <Alert severity="info" sx={{ mt: 2, mb: 2 }}>

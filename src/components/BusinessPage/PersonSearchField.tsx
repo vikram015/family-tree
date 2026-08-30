@@ -93,6 +93,14 @@ interface PersonSearchFieldProps {
   /** When true, only return people the logged-in user can write to (superadmin
    *  still sees everyone). Used when picking an owner you're allowed to manage. */
   writableOnly?: boolean;
+  /**
+   * Look in OTHER trees for someone to marry into this one. Uses the narrow
+   * marriage-candidate lookup rather than the general people search, so this
+   * keeps working once reads are scoped to the trees a user can see.
+   */
+  marriageCandidates?: boolean;
+  /** With `marriageCandidates`, drops results from the tree being linked from. */
+  excludeTreeId?: string;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -112,6 +120,8 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   noResultsText = "No results found",
   startIcon,
   writableOnly = false,
+  marriageCandidates = false,
+  excludeTreeId,
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -120,7 +130,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
 
   const handleSearch = useCallback(async () => {
     const trimmedSearch = searchValue.trim();
-    const hasScope = Boolean(treeId || locationId);
+    const hasScope = marriageCandidates ? Boolean(locationId) : Boolean(treeId || locationId);
 
     if (!hasScope || trimmedSearch.length < minSearchLength) {
       setSearchResults([]);
@@ -132,15 +142,33 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     const searchId = ++latestSearchRef.current;
 
     try {
-      const results = writableOnly
-        ? await ApiService.searchWritablePeopleWithHierarchy(trimmedSearch, {
-            treeId,
-            locationId,
-          })
-        : await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
-            treeId,
-            locationId,
-          });
+      const results = marriageCandidates
+        ? (
+            await ApiService.getMarriageCandidates({
+              name: trimmedSearch,
+              locationId: locationId || "",
+              excludeTreeId,
+            })
+          ).map((row) => ({
+            // Re-shape to the field names the mapper below expects.
+            personId: row.personId,
+            personName: row.name,
+            personNameHindi: row.nameHindi,
+            gender: row.gender,
+            treeId: row.treeId,
+            treeName: row.treeName,
+            locationName: row.locationName,
+            parentHierarchy: row.parentHierarchy,
+          }))
+        : writableOnly
+          ? await ApiService.searchWritablePeopleWithHierarchy(trimmedSearch, {
+              treeId,
+              locationId,
+            })
+          : await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
+              treeId,
+              locationId,
+            });
 
       if (searchId !== latestSearchRef.current) {
         return;
@@ -178,7 +206,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         setSearchResults([]);
       }
     }
-  }, [minSearchLength, searchValue, treeId, locationId, filterGender, writableOnly]);
+  }, [minSearchLength, searchValue, treeId, locationId, filterGender, writableOnly, marriageCandidates, excludeTreeId]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
     setSearchResults([]);

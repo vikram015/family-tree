@@ -26,6 +26,13 @@ export function useTreeData({
   resetSelection,
 }: UseTreeDataParams) {
   const [nodes, setNodes] = useState<Array<FNode>>([]);
+  /**
+   * True when this tree was loaded through the limited preview because the
+   * viewer has no permission on it — reached, for example, by following a
+   * spouse who married in from another family. Living members come back without
+   * birth dates, photos or blood groups, and nothing here is editable.
+   */
+  const [isPreview, setIsPreview] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
   const [locationId, setLocationId] = useState<string | undefined>(undefined);
@@ -46,9 +53,20 @@ export function useTreeData({
         if (!keepRoot) {
           setIsLoading(true);
         }
-        // Fetch complete tree from Supabase using the PostgreSQL function
-        const treeData = await ApiService.getCompleteTreeById(treeId);
+        // Full read first. A 403 means this is someone else's tree, reached
+        // through a marriage link — fall back to the masked preview so the user
+        // can still see who the family is and ask for access.
+        let previewOnly = false;
+        let treeData: any;
+        try {
+          treeData = await ApiService.getCompleteTreeById(treeId);
+        } catch (err: any) {
+          if (err?.status !== 403) throw err;
+          treeData = await ApiService.getTreePreviewById(treeId);
+          previewOnly = true;
+        }
         if (requestId !== loadRequestIdRef.current) return;
+        setIsPreview(previewOnly);
         setLocationId(treeData.tree?.location?.id);
 
         // Convert tree data to FNode format
@@ -127,7 +145,7 @@ export function useTreeData({
 
         const currentTreeId = treeId;
         const rawMembers = treeData.members || [];
-        const memberMap = new Map(rawMembers.map((m: any) => [m.id, m]));
+        const memberMap = new Map<string, any>(rawMembers.map((m: any) => [m.id, m]));
 
         // Step 1 & 2: Filter by Tree ID and No Parents
         const baseCandidates = rawMembers.filter((m: any) => {
@@ -221,10 +239,15 @@ export function useTreeData({
       } catch (error) {
         if (requestId !== loadRequestIdRef.current) return;
         console.error("FamiliesPage: Failed to load tree data:", error);
+        setIsPreview(false);
         setNodes([]);
         setIsLoading(false);
       }
     },
+    // treeReloadKey is intentionally here despite being unused in the body: it is
+    // the reload trigger. Bumping it rebuilds this callback, which re-runs the
+    // effect below. Removing it silences the lint and breaks tree refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [treeId, treeReloadKey, resetSelection],
   );
 
@@ -234,7 +257,7 @@ export function useTreeData({
     setRootId("");
     resetSelection();
     loadTreeData();
-  }, [loadTreeData]);
+  }, [loadTreeData, resetSelection]);
 
   /**
    * Merges affected nodes from add_person_to_tree into the current state.
@@ -340,5 +363,6 @@ export function useTreeData({
     locationId,
     loadTreeData,
     mergeAffectedNodes,
+    isPreview,
   };
 }

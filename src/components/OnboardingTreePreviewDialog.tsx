@@ -107,7 +107,9 @@ export const OnboardingTreePreviewDialog: React.FC<
     setLoading(true);
     setError("");
 
-    ApiService.getCompleteTreeById(treeId)
+    // This tree is a match candidate the user has no access to yet, so read the
+    // masked preview rather than the full tree.
+    ApiService.getTreePreviewById(treeId)
       .then((treeData) => {
         if (!active) return;
         const rawMembers = treeData.members || [];
@@ -197,6 +199,9 @@ export const OnboardingTreePreviewDialog: React.FC<
     return () => {
       active = false;
     };
+    // personId only chooses which loaded node to highlight. Listing it would
+    // refetch the entire tree whenever the highlight changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, treeId]);
 
   useEffect(() => {

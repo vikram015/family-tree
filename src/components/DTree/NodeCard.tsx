@@ -147,6 +147,32 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/**
+ * iOS WebKit does not run complex text layout for Indic scripts inside SVG
+ * <text>: matras and conjuncts come out as dotted circles (◌) instead of
+ * shaped glyphs. HTML text layout handles them correctly, so Devanagari names
+ * are drawn through a foreignObject on those devices only.
+ *
+ * This is deliberately narrow. foreignObject content is rasterised, so it goes
+ * soft under the tree's zoom transform, and its box-model baseline does not
+ * line up with the SVG baseline Latin names sit on. Those costs are worth
+ * paying only where the alternative is unreadable text — everywhere else
+ * <text> stays, sharp and aligned.
+ *
+ * `-webkit-touch-callout` is the same signal NodeCard.css already uses to
+ * target iOS, keeping the two in step.
+ */
+const NEEDS_FOREIGN_OBJECT_FOR_INDIC = (() => {
+  if (typeof window === "undefined" || typeof CSS === "undefined" || !CSS.supports) {
+    return false;
+  }
+  try {
+    return CSS.supports("-webkit-touch-callout", "none");
+  } catch {
+    return false;
+  }
+})();
+
 const DEVANAGARI_REGEX = /[\u0900-\u097F]/;
 const DEVANAGARI_FONT_STACK =
   "'Noto Sans Devanagari', 'Kohinoor Devanagari', 'Devanagari Sangam MN', 'Nirmala UI', 'Mangal', sans-serif";
@@ -402,9 +428,22 @@ function initialsAvatarSvg(
   const display = isDevanagari ? initials : initials.toUpperCase();
   const fontSize = Math.round(radius * 0.82);
   let out = `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="${bgColor}"/>`;
-  // SVG text for both scripts — see the name rendering note in
-  // renderNodeCardSvg for why foreignObject is no longer used here.
   const family = isDevanagari ? DEVANAGARI_FONT_STACK : DEFAULT_FONT_STACK;
+
+  // Initials can carry a matra (e.g. "पु"), which hits the same iOS shaping gap
+  // as full names — see NEEDS_FOREIGN_OBJECT_FOR_INDIC.
+  if (isDevanagari && NEEDS_FOREIGN_OBJECT_FOR_INDIC) {
+    const box = radius * 2;
+    out += `<foreignObject x="${cx - radius}" y="${cy - radius}" width="${box}" height="${box}">`;
+    out += `<div xmlns="http://www.w3.org/1999/xhtml" lang="hi" style="`;
+    out += `display: flex; align-items: center; justify-content: center;`;
+    out += `width: ${box}px; height: ${box}px;`;
+    out += `font-family: ${family}; font-size: ${fontSize}px; font-weight: 700;`;
+    out += `color: ${textColor}; line-height: 1.4;`;  // room for a matra above the letter
+    out += `">${escapeXml(display)}</div></foreignObject>`;
+    return out;
+  }
+
   const langAttrs = isDevanagari ? ` lang="hi" xml:lang="hi"` : "";
   const content = isDevanagari
     ? escapeXml(display)
@@ -628,33 +667,69 @@ export function renderNodeCardSvg(
 
   // --- Name ---
   svg += `<g class="node-name-group">`;
-  // One rendering path for every script.
+  // <text> for everything, except Devanagari on iOS — see
+  // NEEDS_FOREIGN_OBJECT_FOR_INDIC for why that one case is different.
   //
-  // Devanagari used to go through a foreignObject because older WebKit did not
-  // shape Indic text in SVG <text>. That cost us two visible defects: the
-  // browser rasterizes foreignObject content, so names blurred under the tree's
-  // zoom transform, and its box-model baseline never matched the SVG baseline
-  // Latin names sit on, leaving Hindi cards with a wider name-to-meta gap.
-  // Drawing both as <text> keeps the glyphs vector-sharp at any zoom and makes
-  // the vertical rhythm identical by construction. Devanagari lines carry the
-  // lang attributes that NodeCard.css already hangs its shaping rules on, and
-  // must use raw Unicode (escapeXml) — numeric character references break
-  // matra positioning and conjunct formation.
-  nameLines.forEach((line, index) => {
-    const isLast = index === nameLines.length - 1;
-    svg += `<text class="${isNameClickable ? "node-name-click-target" : ""}" data-node-id="${extra?.id || ""}" `;
-    if (isDevanagariName) svg += `lang="hi" xml:lang="hi" `;
-    svg += `x="${textX}" y="${firstBaseline + index * lineH}" `;
-    svg += `font-family="${nameFontFamily}" font-size="${dim.nameSize}" font-weight="700" fill="${nameColor}" `;
+  // <text> keeps glyphs vector-sharp at any zoom and puts Hindi and Latin names
+  // on the same baseline by construction; foreignObject is rasterised and sits
+  // in its own box model, which is why it is confined to the platform that
+  // cannot render Indic text without it. Devanagari must use raw Unicode
+  // (escapeXml) on both paths — numeric character references break matra
+  // positioning and conjunct formation.
+  if (isDevanagariName && NEEDS_FOREIGN_OBJECT_FOR_INDIC) {
+    // Devanagari needs vertical headroom that Latin does not: the shirorekha and
+    // upper matras (ि ी े ै ो ौ ं) sit well above Latin cap height, and both the
+    // foreignObject bounds and the line box clip anything that overflows them.
+    // Two things follow:
+    //   - the box is grown upward by `foPadTop` and the same amount is added
+    //     back as padding, so glyphs gain room while the first baseline stays
+    //     exactly where the <text> path would put it;
+    //   - the line box is at least 1.5em, because a `lineH` tuned for Latin is
+    //     too short to contain a matra stack.
+    const foLineH = Math.max(lineH, Math.round(dim.nameSize * 1.5));
+    const foPadTop = Math.round(dim.nameSize * 0.5);
+    const foY = firstBaseline - Math.round(dim.nameSize * 0.9) - foPadTop;
+    const foHeight = lineCount * foLineH + foPadTop * 2;
+    svg += `<foreignObject x="${textX}" y="${foY}" width="${nameMaxWidth}" height="${foHeight}" `;
+    svg += `class="${isNameClickable ? "node-name-click-target" : ""}" `;
+    svg += `data-node-id="${extra?.id || ""}" `;
     svg += `cursor="${isNameClickable ? "pointer" : "default"}">`;
-    svg += isDevanagariName
-      ? escapeXml(line)
-      : encodeSvgTextContent(line);
-    if (isNameClickable && isLast) {
-      svg += `<tspan class="node-name-hover-icon" dx="3" opacity="0">↗</tspan>`;
-    }
-    svg += `</text>`;
-  });
+    svg += `<div xmlns="http://www.w3.org/1999/xhtml" lang="hi" style="`;
+    svg += `font-family: ${nameFontFamily};`;
+    svg += `font-size: ${dim.nameSize}px;`;
+    svg += `font-weight: 700;`;
+    svg += `color: ${nameColor};`;
+    svg += `line-height: ${foLineH}px;`;
+    svg += `margin: 0;`;
+    svg += `padding-top: ${foPadTop}px;`;
+    svg += `cursor: ${isNameClickable ? "pointer" : "default"};`;
+    svg += `">`;
+    // Reuse the lines the SVG path measured, so wrapping is identical on both
+    // platforms rather than being re-derived by the HTML layout engine.
+    // wrapText has already ellipsized them, so no overflow/text-overflow here —
+    // `overflow: hidden` clips both axes, and on Devanagari it takes the tops
+    // off the matras.
+    nameLines.forEach((line) => {
+      svg += `<div style="white-space: nowrap;">${escapeXml(line)}</div>`;
+    });
+    svg += `</div></foreignObject>`;
+  } else {
+    nameLines.forEach((line, index) => {
+      const isLast = index === nameLines.length - 1;
+      svg += `<text class="${isNameClickable ? "node-name-click-target" : ""}" data-node-id="${extra?.id || ""}" `;
+      if (isDevanagariName) svg += `lang="hi" xml:lang="hi" `;
+      svg += `x="${textX}" y="${firstBaseline + index * lineH}" `;
+      svg += `font-family="${nameFontFamily}" font-size="${dim.nameSize}" font-weight="700" fill="${nameColor}" `;
+      svg += `cursor="${isNameClickable ? "pointer" : "default"}">`;
+      svg += isDevanagariName
+        ? escapeXml(line)
+        : encodeSvgTextContent(line);
+      if (isNameClickable && isLast) {
+        svg += `<tspan class="node-name-hover-icon" dx="3" opacity="0">↗</tspan>`;
+      }
+      svg += `</text>`;
+    });
+  }
   svg += `</g>`;
 
   // --- Meta ---
@@ -688,9 +763,17 @@ export function renderNodeCardSvg(
 
   // --- External tree link ---
   if (showExternalLink) {
-    const linkX = dim.w - 14;
-    const linkY = 14;
+    // Inset from the corner: at the extreme edge a thumb overlaps the card
+    // boundary and the tap lands on the card instead of the badge.
+    const linkX = dim.w - 18;
+    const linkY = 18;
     svg += `<g class="external-tree-icon" data-tree-id="${extra.treeId}" data-person-id="${extra.id}" cursor="pointer">`;
+    // Invisible hit target. The visible badge is 18px across, well under the 44px
+    // minimum for touch, and it shrinks further as the tree zooms out — so the
+    // tappable area is widened without changing what is drawn. The click handler
+    // matches the whole group, so this circle counts as a hit.
+    svg += `<circle cx="${linkX}" cy="${linkY}" r="22" fill="transparent" stroke="none"/>`;
+    svg += `<title>Open connected family</title>`;
     svg += `<circle cx="${linkX}" cy="${linkY}" r="9" fill="#ffffff" stroke="${SURFACE.borderStrong}" stroke-width="1.2"/>`;
     svg += `<path d="M${linkX - 3.2} ${linkY + 2.2} L${linkX + 2.2} ${linkY - 3.2} M${linkX - 0.6} ${linkY - 3.2} H${linkX + 2.2} V${linkY - 0.4}" stroke="${SURFACE.inkMuted}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
     svg += `</g>`;

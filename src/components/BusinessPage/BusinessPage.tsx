@@ -60,8 +60,9 @@ import {
   selectProfessionsWithCount,
   clearProfessions,
 } from "../../store/slices/professionSlice";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
 import { PersonSearchField } from "./PersonSearchField";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { FNode } from "../model/FNode";
 import { brand, pageGradient } from "../../theme/brand";
@@ -359,6 +360,33 @@ export const BusinessPage: React.FC = () => {
   const locationName =
     locations.find((v) => v.id === selectedLocation)?.name || "Select a location";
 
+  // The location filter lives on this page now (it used to be in the header,
+  // where it did nothing on seven of nine routes). Businesses stay deliberately
+  // location-scoped and open to every signed-in user — unlike trees, which are
+  // scoped by access.
+  const [locationOption, setLocationOption] =
+    useState<LocationCombinationOption | null>(null);
+
+  useEffect(() => {
+    if (!selectedLocation) {
+      setLocationOption(null);
+      return;
+    }
+    if (locationOption?.locationId === selectedLocation) return;
+
+    let active = true;
+    ApiService.searchLocationCombinations({ locationId: selectedLocation, limit: 1 })
+      .then((rows) => {
+        if (active && rows?.[0]) setLocationOption(rows[0]);
+      })
+      .catch(() => {
+        /* Non-fatal: the picker still supports searching by hand. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedLocation, locationOption?.locationId]);
+
   useEffect(() => {
     // Initialize categories on component mount
     initializeCategories();
@@ -584,10 +612,23 @@ export const BusinessPage: React.FC = () => {
 
   if (!selectedLocation) {
     return (
-      <Container maxWidth="lg" sx={{ py: 8 }}>
-        <Alert severity="info">
-          Please select a location from the dropdown above to view businesses.
-        </Alert>
+      <Container maxWidth="sm" sx={{ py: 8 }}>
+        <Typography variant="h5" sx={{ fontWeight: 800, mb: 1 }}>
+          Find local businesses
+        </Typography>
+        <Typography variant="body1" sx={{ color: mutedText, mb: 3 }}>
+          Choose a location to see the family-run businesses registered there.
+        </Typography>
+        <LocationPicker
+          value={locationOption}
+          onChange={(option) => {
+            setLocationOption(option);
+            setSelectedLocation(option?.locationId || "");
+          }}
+          label="Location"
+          placeholder="Search for a village, district, or state"
+          autoFocus
+        />
       </Container>
     );
   }
@@ -783,6 +824,18 @@ export const BusinessPage: React.FC = () => {
                 alignItems={{ xs: "stretch", md: "center" }}
                 sx={{ mb: 3 }}
               >
+                <Box sx={{ bgcolor: brand.surface, width: { xs: "100%", md: 300 } }}>
+                  <LocationPicker
+                    value={locationOption}
+                    onChange={(option) => {
+                      setLocationOption(option);
+                      setSelectedLocation(option?.locationId || "");
+                    }}
+                    label=""
+                    placeholder="Change location"
+                    size="small"
+                  />
+                </Box>
                 <TextField
                   size="small"
                   placeholder="Search by name, owner, category, or phone"

@@ -29,9 +29,9 @@ rm -rf .firebase
 #
 # Note CRA's react-scripts ALSO auto-loads .env.local into every build (dev or
 # prod) on top of whatever env-cmd set — dotenv only skips keys already present
-# in process.env, so any REACT_APP_* var that .env.local defines but
+# in process.env, so any VITE_* var that .env.local defines but
 # .env.dev/.env.production don't will leak through. See the comments in those
-# two files (e.g. REACT_APP_SHARE_BASE_URL) for how that's guarded against.
+# two files (e.g. VITE_SHARE_BASE_URL) for how that's guarded against.
 #
 # The dev Cloud Run URL in .env.dev is hardcoded (not derived from
 # firebase.dev.json) because firebase.dev.json only rewrites /share/** to

@@ -37,10 +37,12 @@ import { ApiService } from "../../services/apiService";
 import { FNode } from "../model/FNode";
 import { Gender, RelType } from "relatives-tree/lib/types";
 import AddTree from "../AddTree/AddTree";
+import TreeSetupWizard from "../TreeSetupWizard/TreeSetupWizard";
 import { useAuth } from "../hooks/useAuth";
 import { useLocations } from "../hooks/useLocations";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useNotificationPrompt } from "../context/NotificationPromptContext";
+import { useTreeFullscreen } from "../context/TreeFullscreenContext";
 import { useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
@@ -74,9 +76,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const { setSelectedLocation } = useLocations();
   const { openLoginModal } = useLoginModal();
   const { offerNotifications } = useNotificationPrompt();
+  const { isFullscreen, toggleFullscreen, exitFullscreen } = useTreeFullscreen();
   const highlightedPersonId = searchParams.get("personId");
   const inviteToken = searchParams.get("inviteToken");
   const shouldCreateRootFromQuery = searchParams.get("createRoot") === "1";
+  const shouldRunSetupFromQuery = searchParams.get("setup") === "1";
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
   const [selectId, setSelectId] = useState<string>();
   const [autoExpandNodeId, setAutoExpandNodeId] = useState<string | null>(null);
   const [showAddStartingNode, setShowAddStartingNode] = useState(false);
@@ -139,6 +144,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 
   const resetSelection = useCallback(() => setSelectId(undefined), []);
 
+  // A fresh tree means a fresh access question.
+  useEffect(() => {
+    setPreviewAccessRequested(false);
+    setConnectedFamilyRootId(null);
+  }, [treeId]);
+
+  // Fullscreen belongs to this page. Unmounting without leaving it would strip
+  // the header off whatever the user navigates to next.
+  useEffect(() => exitFullscreen, [exitFullscreen]);
+
   const {
     nodes,
     rootId,
@@ -147,13 +162,27 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     locationId,
     loadTreeData,
     mergeAffectedNodes,
+    isPreview,
   } = useTreeData({ treeId, treeReloadKey, resetSelection });
+
+  // Set when the viewer follows a marriage into a family they cannot access.
+  const [previewAccessRequested, setPreviewAccessRequested] = useState(false);
+  const [previewAccessBusy, setPreviewAccessBusy] = useState(false);
+  // The spouse we followed to get here. Held separately from the URL's personId,
+  // which drifts as the user clicks around and is absent after a refresh — and a
+  // missing root would silently turn a branch request into a whole-tree one.
+  const [connectedFamilyRootId, setConnectedFamilyRootId] = useState<string | null>(null);
+
+  // True only when we actually followed a marriage into this tree. Everything
+  // else that lands here — a top-contributor card, a search result, a shared
+  // link — is simply a tree the viewer has no access to, and saying "connected
+  // family" there would be wrong.
+  const arrivedViaMarriage = Boolean(connectedFamilyRootId);
 
   const {
     treeWriteScope,
     setTreeWriteScope,
     isSuperAdminUser,
-    canWriteCurrentTree,
     canWriteAnyBranch,
     canCreateRootNode,
     canManageInvites,
@@ -171,7 +200,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     pendingLinkRequests,
     myPendingRequests,
     setMyPendingRequests,
-    linkRequestsLoading,
     reviewingLinkRequestId,
     linkRequestReviewError,
     linkRequestReviewSuccess,
@@ -255,7 +283,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setSearchParams,
     openLoginModal,
     dispatch,
-  ]);
+      setTreeWriteScope,
+    showSnackbar,
+]);
 
   useEffect(() => {
     if (!shouldCreateRootFromQuery || isLoading) {
@@ -278,6 +308,31 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     nodes.length,
     setSearchParams,
     shouldCreateRootFromQuery,
+    treeId,
+  ]);
+
+  // A freshly created tree arrives here with ?setup=1 and opens the guided
+  // questionnaire instead of a single blank "add a person" form.
+  useEffect(() => {
+    if (!shouldRunSetupFromQuery || isLoading) {
+      return;
+    }
+    if (!treeId || nodes.length > 0 || !canCreateRootNode) {
+      return;
+    }
+
+    setShowSetupWizard(true);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("setup");
+      return next;
+    });
+  }, [
+    canCreateRootNode,
+    isLoading,
+    nodes.length,
+    setSearchParams,
+    shouldRunSetupFromQuery,
     treeId,
   ]);
 
@@ -350,7 +405,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         mergeAffectedNodes(affectedNodes);
       }
     },
-    [canEditNode, mergeAffectedNodes],
+    [canEditNode, mergeAffectedNodes, showSnackbar],
   );
 
   const onDelete = useCallback(
@@ -581,7 +636,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       mergeAffectedNodes,
       isSuperAdminUser,
       showSnackbar,
-    ],
+        offerNotifications,
+    setIsLoading,
+],
   );
 
   const handleShareTree = useCallback(async () => {
@@ -753,7 +810,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     } finally {
       setInviteBusy(false);
     }
-  }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes, showSnackbar]);
+  }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes, showSnackbar, offerNotifications]);
 
   const handleConfirmRejectRequest = useCallback(async () => {
     const note = rejectDialog.note.trim();
@@ -795,6 +852,20 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     [myPendingRequests, treeId],
   );
 
+  // Any pending branch-access request against this tree means the ask is already
+  // in flight — branch-rooted or whole-family. Matching on the tree alone is
+  // deliberate: the backend rejects a second request either way, so offering the
+  // button again can only produce an error.
+  const pendingConnectedFamilyRequest = useMemo(
+    () =>
+      myPendingRequests.find(
+        (request) =>
+          request.requestType === "branch_access_request" &&
+          request.targetTreeId === treeId,
+      ),
+    [myPendingRequests, treeId],
+  );
+
   const handleRequestAccess = useCallback(async () => {
     if (!currentUser) {
       openLoginModal();
@@ -828,7 +899,61 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     } finally {
       setRequestingAccess(false);
     }
-  }, [currentUser, treeId, openLoginModal, showSnackbar]);
+  }, [currentUser, treeId, openLoginModal, showSnackbar, offerNotifications, setMyPendingRequests]);
+
+  /**
+   * Ask for access to a family reached through a marriage link. Rooted at the
+   * spouse we followed when we know who that was, so the owner is approving a
+   * branch rather than their whole tree.
+   */
+  const handleRequestPreviewAccess = useCallback(async () => {
+    if (!currentUser) {
+      openLoginModal();
+      return;
+    }
+    if (!treeId) return;
+
+    // Branch root, in order of reliability: the spouse we actually followed,
+    // then whoever the URL is focused on. If neither exists this is unavoidably
+    // a whole-family request, and the button below says so rather than escalating
+    // the scope silently.
+    const branchRootId = connectedFamilyRootId || highlightedPersonId || null;
+
+    try {
+      setPreviewAccessBusy(true);
+      await ApiService.createBranchAccessRequest({
+        targetTreeId: treeId,
+        targetPersonId: branchRootId,
+        requestMessage: branchRootId
+          ? "Requesting access to this branch after following a marriage link."
+          : "Requesting access to this family after following a marriage link.",
+      });
+      setPreviewAccessRequested(true);
+      const rows = await ApiService.getMyLinkRequests();
+      setMyPendingRequests((rows || []).filter((request) => request.status === "pending"));
+      window.dispatchEvent(new Event("link-requests-updated"));
+      offerNotifications(
+        "We'll let you know as soon as your access request is reviewed.",
+      );
+      showSnackbar("Access request sent to this family's admin.", "success");
+    } catch (error) {
+      showSnackbar(
+        `Failed to request access: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    } finally {
+      setPreviewAccessBusy(false);
+    }
+  }, [
+    currentUser,
+    treeId,
+    connectedFamilyRootId,
+    highlightedPersonId,
+    openLoginModal,
+    showSnackbar,
+    offerNotifications,
+    setMyPendingRequests,
+  ]);
 
   // Handler for "View Details" — opens NodeDetails in details view
   const handleViewDetails = useCallback((nodeId: string) => {
@@ -976,7 +1101,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const statusAlerts = useMemo<StatusAlert[]>(
     () =>
       [
-        ...myPendingRequests.map((request) => ({
+        // Only requests about the tree currently on screen.
+        //
+        // This strip sits in a tree's header, so a pending request against some
+        // other family reads as a statement about THIS one — and next to the
+        // no-access banner it looks like a contradiction. Requests elsewhere are
+        // not lost: they live on /requests and drive the avatar's badge.
+        //
+        // The second filter drops the request the connected-family banner is
+        // already reporting, so the two never stack.
+        ...myPendingRequests
+          .filter(
+            (request) =>
+              request.targetTreeId === treeId &&
+              !(isPreview && request.id === pendingConnectedFamilyRequest?.id),
+          )
+          .map((request) => ({
           key: `my-pending-request-${request.id}`,
           severity: "info" as const,
           text:
@@ -1001,7 +1141,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             }
           : null,
       ].filter(Boolean) as StatusAlert[],
-    [isAdmin, isApproved, inviteAccepting, myPendingRequests],
+    [
+      isAdmin,
+      isApproved,
+      inviteAccepting,
+      myPendingRequests,
+      treeId,
+      isPreview,
+      pendingConnectedFamilyRequest?.id,
+    ],
   );
 
   const statCards = useMemo(
@@ -1064,6 +1212,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           content="View and manage your interactive family tree with Kinvia."
         />
       </Helmet>
+      {!isFullscreen && (
       <FamiliesPageHeader
         isMobile={isMobile}
         treeId={treeId}
@@ -1079,6 +1228,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         pendingRequestsCount={pendingLinkRequests.length}
         onPendingRequestsClick={() => setPendingRequestsDialogOpen(true)}
       />
+      )}
       {(isSuperAdmin() || isApproved) && (
         <Box
           sx={{
@@ -1096,6 +1246,9 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             onCreate={(createdTreeId) => {
               // Move to the newly created tree
               setTreeId(createdTreeId);
+              // Every new tree starts empty, so run the same guided setup the
+              // onboarding flow uses rather than dropping the user on a blank canvas.
+              setShowSetupWizard(true);
               // Call parent onCreate callback if provided
               onCreate?.(createdTreeId);
             }}
@@ -1116,7 +1269,60 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           py: 0,
         }}
       >
+        {isPreview && (
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1}
+            sx={{
+              mt: { xs: 1, sm: 1.5 },
+              mb: 1.5,
+              mx: { xs: 1, sm: 2, md: 3 },
+              px: 1.5,
+              py: 0.75,
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "warning.light",
+              backgroundColor: alpha(theme.palette.warning.light, 0.12),
+            }}
+          >
+            <LockOutlinedIcon sx={{ fontSize: 18, color: "warning.main", flexShrink: 0 }} />
+            <Typography
+              variant="body2"
+              sx={{ color: "text.secondary", minWidth: 0, flex: 1 }}
+            >
+              {previewAccessRequested || pendingConnectedFamilyRequest
+                ? `${arrivedViaMarriage ? "You're viewing a connected family." : "You don't have access to this family tree yet."} Your access request is waiting for its admin to review it.`
+                : `${arrivedViaMarriage ? "You're viewing a connected family." : "You don't have access to this family tree."} Names and relationships are shown; personal details are hidden until you're given access.`}
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              disabled={
+                previewAccessBusy ||
+                previewAccessRequested ||
+                Boolean(pendingConnectedFamilyRequest)
+              }
+              onClick={() => void handleRequestPreviewAccess()}
+              sx={{ flexShrink: 0, whiteSpace: "nowrap", textTransform: "none" }}
+            >
+              {!currentUser
+                ? "Sign in to request"
+                : previewAccessRequested || pendingConnectedFamilyRequest
+                  ? "Request pending"
+                  : previewAccessBusy
+                    ? "Sending…"
+                    : connectedFamilyRootId || highlightedPersonId
+                      ? "Request access to this branch"
+                      : "Request access to this family"}
+            </Button>
+          </Stack>
+        )}
+        {/* The connected-family banner above already says this, and says more, so
+            the two must never stack. */}
         {treeId &&
+          !isPreview &&
           !canWriteAnyBranch &&
           !(isAdmin() && !isApproved) &&
           !pendingFullTreeAccessRequest &&
@@ -1302,6 +1508,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                     currentTreeId={treeId}
                     highlightedPersonId={highlightedPersonId || undefined}
                     onMobileSheetChange={setIsMobileSheetOpen}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={toggleFullscreen}
                     initialMainId={isInitialFocusInTree ? initialFocusId : null}
                     initialShowFullTree={!isInitialFocusInTree}
                     onExternalTreeClick={(tid, pid) => {
@@ -1351,14 +1559,15 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 Empty Tree
               </Typography>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 800 }}>
-                Start this family tree with the first person
+                Let's build your family tree together
               </Typography>
               <Typography
                 variant="body1"
                 sx={{ color: "text.secondary", maxWidth: 520, mx: "auto" }}
               >
-                Create the root person first. After that, you can add parents, spouses,
-                children, branch invites, and detailed profile information.
+                We'll ask a few short questions — your parents, your grandparents,
+                your family — and save each answer as you go. It takes a couple of
+                minutes, and you can stop at any point.
               </Typography>
               <Stack
                 direction={{ xs: "column", sm: "row" }}
@@ -1372,10 +1581,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 <Button
                   variant="contained"
                   size="large"
+                  onClick={() => setShowSetupWizard(true)}
+                  disabled={!canCreateRootNode}
+                >
+                  Start guided setup
+                </Button>
+                <Button
+                  variant="text"
+                  size="large"
                   onClick={() => setShowAddStartingNode(true)}
                   disabled={!canCreateRootNode}
                 >
-                  Create First Node
+                  Just add one person
                 </Button>
                 {!canCreateRootNode && (
                   <Typography variant="body2" sx={{ color: "text.secondary" }}>
@@ -1387,6 +1604,22 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           )
         )}
       </Box>
+      <TreeSetupWizard
+        open={showSetupWizard}
+        treeId={treeId || ""}
+        defaultSelfName={
+          (userProfile as any)?.displayName || (userProfile as any)?.name || ""
+        }
+        defaultSelfGender={(userProfile as any)?.gender || ""}
+        onClose={() => setShowSetupWizard(false)}
+        onComplete={(createdAnyone) => {
+          setShowSetupWizard(false);
+          if (createdAnyone) {
+            setTreeReloadKey((key) => key + 1);
+          }
+        }}
+      />
+
       <Dialog
         open={showAddStartingNode}
         onClose={() => setShowAddStartingNode(false)}
@@ -1610,6 +1843,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                 } catch (e) {
                   console.warn("Could not fetch target tree location:", e);
                 }
+                setConnectedFamilyRootId(pid || null);
                 setTreeId(tid, { personId: pid || undefined });
               }
             }}

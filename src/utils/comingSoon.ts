@@ -1,7 +1,7 @@
 /**
  * Pre-launch gate.
  *
- * While `REACT_APP_COMING_SOON` is `true`, the app renders only the
+ * While `VITE_COMING_SOON` is `true`, the app renders only the
  * "launching soon" page — no routes, no auth, no data fetching. To remove the
  * gate at launch, set the flag to `false` (or delete it) in `.env.production`
  * and redeploy; nothing else needs to change.
@@ -15,7 +15,7 @@ const PREVIEW_PARAM = 'preview';
 const PREVIEW_STORAGE_KEY = 'kinvia.previewAccess';
 
 function flagEnabled(): boolean {
-  return process.env.REACT_APP_COMING_SOON === 'true';
+  return import.meta.env.VITE_COMING_SOON === 'true';
 }
 
 /**

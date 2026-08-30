@@ -1,8 +1,8 @@
 import { firebaseAuth } from "../firebase";
 
 const API_BASE_URL =
-  process.env.REACT_APP_API_BASE_URL ||
-  process.env.REACT_APP_BACKEND_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_BACKEND_URL ||
   "http://localhost:3000";
 
 type QueryValue = string | number | boolean | undefined | null;
@@ -32,6 +32,17 @@ function buildUrl(path: string, query?: Record<string, QueryValue>): string {
  * bearer token and the backend rejects them ("missing authorization bearer
  * token"). `authStateReady()` resolves once the initial state is known.
  */
+/** An HTTP failure that keeps its status code, so callers can branch on it. */
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function getAuthToken(): Promise<string | undefined> {
   try {
     await firebaseAuth.authStateReady();
@@ -67,7 +78,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   if (!response.ok) {
     const message = payload?.error || payload?.message || `Request failed with status ${response.status}`;
-    throw new Error(message);
+    // Callers need to distinguish "forbidden" from "broken" — a 403 on a tree
+    // read is a normal, expected outcome that has its own UI, not an error.
+    throw new ApiError(message, response.status);
   }
 
   return payload as T;
@@ -108,7 +121,7 @@ export const backendApi = {
 
     if (!response.ok) {
       const message = payload?.error || payload?.message || `Request failed with status ${response.status}`;
-      throw new Error(message);
+      throw new ApiError(message, response.status);
     }
 
     return payload as T;

@@ -13,14 +13,17 @@ type Config = {
 };
 
 export function register(config?: Config) {
-  if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
-    const publicUrl = new URL(process.env.PUBLIC_URL || "", window.location.href);
+  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    // Vite exposes the deploy base path here; CRA called the same thing PUBLIC_URL.
+    const publicUrl = new URL(import.meta.env.BASE_URL, window.location.href);
     if (publicUrl.origin !== window.location.origin) {
       return;
     }
 
     window.addEventListener("load", () => {
-      const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+      // injectManifest keeps the source filename, so the built worker is
+      // service-worker.js at the deploy base path.
+      const swUrl = `${import.meta.env.BASE_URL}service-worker.js`.replace("//", "/");
 
       if (isLocalhost) {
         checkValidServiceWorker(swUrl, config);

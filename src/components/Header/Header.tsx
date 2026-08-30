@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   AppBar,
-  Autocomplete,
   Avatar,
   Badge,
   Toolbar,
@@ -16,18 +15,14 @@ import {
   ListItem,
   useTheme,
   useMediaQuery,
-  Dialog,
-  InputAdornment,
   ListItemButton,
   ListItemText,
   Snackbar,
   Alert,
-  TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
 import MenuIcon from "@mui/icons-material/Menu";
-import LocationOnIcon from "@mui/icons-material/LocationOn";
 import LogoutIcon from "@mui/icons-material/Logout";
 import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
@@ -41,10 +36,8 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import { FeedbackDialog } from "../Feedback/FeedbackDialog";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
-import { ApiService, LocationCombinationOption } from "../../services/apiService";
-import { LocationPicker } from "../LocationPicker/LocationPicker";
+import { ApiService } from "../../services/apiService";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { setPostLoginRedirect } from "../../utils/postLoginRedirect";
 import { brand, brandGradient } from "../../theme/brand";
@@ -60,8 +53,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
-  const [locationSearch, setLocationSearch] = useState("");
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [actionableRequestCount, setActionableRequestCount] = useState(0);
@@ -71,39 +62,8 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
   const navigate = useNavigate();
-  const { selectedLocation, setSelectedLocation, locations } = useLocations();
   const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
   // Full hierarchy option for the selected location (village, district, state).
-  const [headerLocationOption, setHeaderLocationOption] =
-    useState<LocationCombinationOption | null>(null);
-
-  const applyLocation = useCallback(
-    (option: LocationCombinationOption | null) => {
-      setHeaderLocationOption(option);
-      setSelectedLocation(option?.locationId || "");
-    },
-    [setSelectedLocation],
-  );
-
-  // Resolve the selected id (e.g. auto-selected default) to its full hierarchy label.
-  useEffect(() => {
-    if (!selectedLocation) {
-      setHeaderLocationOption(null);
-      return;
-    }
-    if (headerLocationOption?.locationId === selectedLocation) return;
-    let active = true;
-    ApiService.searchLocationCombinations({ locationId: selectedLocation, limit: 1 })
-      .then((rows) => {
-        if (active) setHeaderLocationOption(rows[0] || null);
-      })
-      .catch(() => {
-        /* leave label empty on failure */
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedLocation, headerLocationOption?.locationId]);
 
   useEffect(() => {
     let active = true;
@@ -236,15 +196,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
     [currentUser, navigate],
   );
 
-  const selectedLocationOption =
-    locations.find((location) => location.id === selectedLocation) || null;
-  const filteredLocations = useMemo(() => {
-    const search = locationSearch.trim().toLowerCase();
-    if (!search) return locations;
-    return locations.filter((location) =>
-      location.name.toLowerCase().includes(search),
-    );
-  }, [locationSearch, locations]);
 
   const drawerContent = (
     <Box sx={{ width: 300, p: 2 }}>
@@ -252,20 +203,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
         <IconButton onClick={() => setDrawerOpen(false)}>
           <CloseIcon />
         </IconButton>
-      </Box>
-
-      {/* Location Selector for Mobile */}
-      <Box sx={{ mb: 2, px: 2 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={() => setLocationPickerOpen(true)}
-          sx={{ justifyContent: "flex-start", textTransform: "none" }}
-        >
-          {headerLocationOption?.label ||
-            selectedLocationOption?.name ||
-            (locations.length === 0 ? "Loading locations..." : "Select Location")}
-        </Button>
       </Box>
 
       <List>
@@ -588,19 +525,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             </Box>
           )}
 
-          {/* Location Selector */}
-          {!isMobile && (
-            <Box sx={{ minWidth: 240, flexShrink: 0, ml: 1 }}>
-              <LocationPicker
-                value={headerLocationOption}
-                onChange={applyLocation}
-                label=""
-                placeholder="Search location"
-                size="small"
-                withTreesOnly
-              />
-            </Box>
-          )}
 
           {/* Auth Buttons */}
           {!isMobile && (
@@ -748,35 +672,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
 
           {isMobile && (
             <>
-              <Box sx={{ flexGrow: 1, px: 1, minWidth: 0, display: "flex", justifyContent: "flex-end" }}>
-                <Button
-                  color="inherit"
-                  variant="outlined"
-                  startIcon={<LocationOnIcon fontSize="small" />}
-                  onClick={() => setLocationPickerOpen(true)}
-                  sx={{
-                    textTransform: "none",
-                    borderColor: "rgba(15,23,42,0.2)",
-                    color: "#0f172a",
-                    // Give guests room for the Login button next to it.
-                    minWidth: currentUser ? 150 : 96,
-                    maxWidth: currentUser ? 220 : 150,
-                    justifyContent: "flex-start",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    "&:hover": {
-                      borderColor: brand.primary,
-                      backgroundColor: brand.primarySoft,
-                    },
-                  }}
-                >
-                  <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {locations.find((v) => v.id === selectedLocation)?.name ||
-                      (locations.length === 0 ? "Loading..." : "Select Location")}
-                  </Box>
-                </Button>
-              </Box>
+<Box sx={{ flexGrow: 1, minWidth: 0 }} />
               {currentUser ? (
                 <IconButton
                   color="inherit"
@@ -856,42 +752,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
         {drawerContent}
       </Drawer>
 
-      <Dialog
-        fullScreen
-        open={locationPickerOpen}
-        onClose={() => {
-          setLocationSearch("");
-          setLocationPickerOpen(false);
-        }}
-      >
-        <AppBar position="static" color="primary">
-          <Toolbar>
-            <Typography sx={{ flexGrow: 1 }} variant="h6">
-              Select Location
-            </Typography>
-            <IconButton
-              color="inherit"
-              onClick={() => {
-                setLocationSearch("");
-                setLocationPickerOpen(false);
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Toolbar>
-        </AppBar>
-        <Box sx={{ p: 2 }}>
-          <LocationPicker
-            value={headerLocationOption}
-            onChange={(option) => {
-              applyLocation(option);
-              if (option) setLocationPickerOpen(false);
-            }}
-            autoFocus
-            withTreesOnly
-          />
-        </Box>
-      </Dialog>
 
       <FeedbackDialog
         open={feedbackOpen}

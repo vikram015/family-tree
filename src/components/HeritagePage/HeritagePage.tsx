@@ -74,7 +74,7 @@ export const HeritagePage: React.FC = () => {
     };
 
     loadHeritageData();
-  }, [selectedLocation]);
+  }, [selectedLocation, dispatch]);
 
   if (!selectedLocation) {
     return (

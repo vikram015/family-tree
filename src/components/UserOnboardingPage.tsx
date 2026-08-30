@@ -1,11 +1,13 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import dayjs from "dayjs";
 import {
+  Link,
+  FormControlLabel,
+  Checkbox,
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Alert,
-  Autocomplete,
   Avatar,
   Box,
   Button,
@@ -14,10 +16,6 @@ import {
   Chip,
   CircularProgress,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   MenuItem,
   Paper,
   Stack,
@@ -241,6 +239,7 @@ export const UserOnboardingPage: React.FC = () => {
   const [profileEmail, setProfileEmail] = useState("");
   const [profileGender, setProfileGender] = useState("");
   const [profileDob, setProfileDob] = useState("");
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState("");
   const [selectedStateId, setSelectedStateId] = useState("");
   const [selectedDistrictId, setSelectedDistrictId] = useState("");
@@ -283,8 +282,19 @@ export const UserOnboardingPage: React.FC = () => {
   // "finish setting up your profile" dashboard nudge while onboarding is still
   // persisted as "complete" from an earlier branch-access request. Falling
   // back to "match" avoids a blank page in that case.
-  const displayStep =
-    stepOverride || (onboarding.currentStep === "complete" ? "match" : onboarding.currentStep);
+  // Basic details are mandatory and come first for everyone — including a user
+  // who arrived through an invite, whose onboarding the backend already marked
+  // complete. Until name, email and acceptance are on file, step one is the only
+  // step, whatever the persisted currentStep says.
+  const needsBasicDetails =
+    !userProfile?.name?.trim() ||
+    !userProfile?.email?.trim() ||
+    !userProfile?.privacyPolicyAccepted;
+
+  const displayStep = needsBasicDetails
+    ? "profile"
+    : stepOverride ||
+      (onboarding.currentStep === "complete" ? "match" : onboarding.currentStep);
   const searchDisplayName = useMemo(
     () =>
       (
@@ -787,6 +797,9 @@ export const UserOnboardingPage: React.FC = () => {
     setProfileEmail(onboarding.profile.email || userProfile?.email || "");
     setProfileGender(userProfile?.gender || "");
     setProfileDob(userProfile?.dob || "");
+    // A returning user who already accepted keeps their tick, so revisiting
+    // step one is not a re-consent.
+    setPrivacyAccepted(Boolean(userProfile?.privacyPolicyAccepted));
     setMatchSearchName(
       onboarding.match.searchName ||
         onboarding.profile.name ||
@@ -822,6 +835,9 @@ export const UserOnboardingPage: React.FC = () => {
     selectedLocationId,
     userProfile?.email,
     userProfile?.name,
+    userProfile?.gender,
+    userProfile?.dob,
+    userProfile?.privacyPolicyAccepted,
   ]);
 
   useEffect(() => {
@@ -1006,6 +1022,13 @@ export const UserOnboardingPage: React.FC = () => {
       return;
     }
 
+    if (!privacyAccepted) {
+      setLocalError(
+        "Please accept the Terms of Use and Privacy Policy to continue.",
+      );
+      return;
+    }
+
     const trimmedDob = profileDob.trim();
 
     setLocalError("");
@@ -1016,7 +1039,7 @@ export const UserOnboardingPage: React.FC = () => {
         trimmedName,
         userProfile?.phone || "",
         trimmedEmail,
-        undefined,
+        true,
         profileGender,
         trimmedDob || undefined,
       );
@@ -1323,8 +1346,9 @@ export const UserOnboardingPage: React.FC = () => {
       setSelectedLocation(selectedLocationId);
     }
     // Return to where login was initiated if we remember it; otherwise open the
-    // freshly created tree so the user can add its root person.
-    const treeUrl = `/families?tree=${encodeURIComponent(treeId)}&createRoot=1`;
+    // freshly created tree and start the guided setup, which collects parents and
+    // grandparents while the user is still in a filling-things-in frame of mind.
+    const treeUrl = `/families?tree=${encodeURIComponent(treeId)}&setup=1`;
     navigate(consumePostLoginRedirect() || treeUrl, { replace: true });
   };
 
@@ -1642,15 +1666,20 @@ export const UserOnboardingPage: React.FC = () => {
               }}
             >
               <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
-                <Button
-                  variant="text"
-                  size="small"
-                  onClick={handleSkipOnboarding}
-                  disabled={skipping || onboardingLoading || !onboardingLoaded}
-                  sx={{ color: brand.slateMuted, fontWeight: 700, textTransform: "none" }}
-                >
-                  {skipping ? "Skipping…" : "Skip for now"}
-                </Button>
+                {/* Basic details are mandatory: we need a name, an email and a
+                    recorded acceptance before any family data is created, so the
+                    skip only appears once step one is behind the user. */}
+                {displayStep !== "profile" && (
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={handleSkipOnboarding}
+                    disabled={skipping || onboardingLoading || !onboardingLoaded}
+                    sx={{ color: brand.slateMuted, fontWeight: 700, textTransform: "none" }}
+                  >
+                    {skipping ? "Skipping…" : "Skip for now"}
+                  </Button>
+                )}
               </Box>
               {renderOnboardingStepRail()}
             </Box>
@@ -1774,6 +1803,42 @@ export const UserOnboardingPage: React.FC = () => {
                             </InputAdornment>
                           ),
                         }}
+                      />
+                      <FormControlLabel
+                        sx={{ alignItems: "flex-start", mt: 0.5 }}
+                        control={
+                          <Checkbox
+                            checked={privacyAccepted}
+                            onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                            sx={{ pt: 0.25 }}
+                          />
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ color: brand.slate }}>
+                            I agree to the{" "}
+                            <Link
+                              href="/terms"
+                              target="_blank"
+                              rel="noopener"
+                              underline="hover"
+                              sx={{ fontWeight: 700 }}
+                            >
+                              Terms of Use
+                            </Link>{" "}
+                            and{" "}
+                            <Link
+                              href="/privacy-policy"
+                              target="_blank"
+                              rel="noopener"
+                              underline="hover"
+                              sx={{ fontWeight: 700 }}
+                            >
+                              Privacy Policy
+                            </Link>
+                            . I understand I am responsible for the details I add
+                            about my relatives.
+                          </Typography>
+                        }
                       />
                       </Stack>
                     </Stack>
@@ -2437,7 +2502,7 @@ export const UserOnboardingPage: React.FC = () => {
                 <Button
                   variant="contained"
                   onClick={handleSaveProfile}
-                  disabled={onboardingSaving}
+                  disabled={onboardingSaving || !privacyAccepted}
                   endIcon={
                     !onboardingSaving ? <Box component="span">→</Box> : undefined
                   }

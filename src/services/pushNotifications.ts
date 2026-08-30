@@ -11,7 +11,7 @@ import { ApiService } from "./apiService";
  * missing, so callers never need to guard.
  */
 
-const VAPID_KEY = process.env.REACT_APP_FIREBASE_VAPID_KEY;
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
 /** Key under which the last-registered token is cached, so we can unregister it on sign-out. */
 const TOKEN_STORAGE_KEY = "kinvia.fcmToken";
@@ -142,7 +142,7 @@ export const pushNotifications = {
 
     if (!VAPID_KEY) {
       console.warn(
-        "REACT_APP_FIREBASE_VAPID_KEY is not set — push notifications are disabled.",
+        "VITE_FIREBASE_VAPID_KEY is not set — push notifications are disabled.",
       );
       return null;
     }

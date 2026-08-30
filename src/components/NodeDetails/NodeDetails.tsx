@@ -51,7 +51,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
 import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
-import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
@@ -499,7 +498,7 @@ export const NodeDetails = memo(function NodeDetails({
     } finally {
       setRequestingAccess(false);
     }
-  }, [node, treeId, showSnackbar]);
+  }, [node, treeId, showSnackbar, offerNotifications]);
 
   // Load the user's pending link requests so the self-link icon and the
   // "Request Branch Access" button can reflect an already-requested state (both
@@ -522,6 +521,9 @@ export const NodeDetails = memo(function NodeDetails({
       cancelled = true;
     };
     // node.id keeps this fresh when navigating between nodes in the open dialog.
+    // Depending on the whole `node` object would refetch on every re-render that
+    // gives it a new identity, which is why only the id is listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id, currentUser]);
 
   const handleSelfLinkClick = useCallback(() => {
@@ -557,7 +559,7 @@ export const NodeDetails = memo(function NodeDetails({
     } finally {
       setSelfLinkRequesting(false);
     }
-  }, [node, showSnackbar]);
+  }, [node, showSnackbar, offerNotifications]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -2116,6 +2118,11 @@ export const NodeDetails = memo(function NodeDetails({
                 onPersonSelect={handleSelectExternalPerson}
                 selectedPerson={selectedExternalPerson}
                 locationId={linkExternalLocationId}
+                // This is the cross-tree marriage lookup, so it deliberately
+                // reaches beyond the trees this user can see — via the narrow
+                // candidate endpoint rather than the general people search.
+                marriageCandidates
+                excludeTreeId={node.treeId}
                 filterGender={node.gender}
                 disabled={!linkExternalLocationId}
                 placeholder={`Search for a ${

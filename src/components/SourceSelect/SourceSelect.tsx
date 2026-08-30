@@ -18,7 +18,6 @@ import {
   TextField,
 } from "@mui/material";
 import { useSearchParams } from "react-router-dom";
-import { useLocations } from "../hooks/useLocations";
 import { useAppSelector } from "../../store/hooks";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 
@@ -47,7 +46,6 @@ export const SourceSelect = memo(function SourceSelect({
   const [value, setValue] = React.useState<string>(urlTreeId);
   const [selectedTreePreview, setSelectedTreePreview] = useState<TreeItem | null>(null);
   const valueRef = useRef(value);
-  const { selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const casteMap = useMemo(
@@ -60,7 +58,6 @@ export const SourceSelect = memo(function SourceSelect({
   );
   const initNotifiedTreeRef = useRef<string | null>(null);
   const sharedTreeResolvedRef = useRef<string | null>(null);
-  const resolveSharedTreeOnInitRef = useRef(true);
   const previousUrlTreeIdRef = useRef<string>(urlTreeId);
   const loadRequestIdRef = useRef(0);
   const onChangeRef = useRef(onChange);
@@ -73,7 +70,6 @@ export const SourceSelect = memo(function SourceSelect({
     if (previousUrlTreeIdRef.current !== urlTreeId) {
       previousUrlTreeIdRef.current = urlTreeId;
       sharedTreeResolvedRef.current = null;
-      resolveSharedTreeOnInitRef.current = Boolean(urlTreeId);
       setSelectedTreePreview(null);
     }
 
@@ -115,16 +111,26 @@ export const SourceSelect = memo(function SourceSelect({
     const loadTrees = async () => {
       const requestId = ++loadRequestIdRef.current;
       try {
-        // If a shared tree link points to a tree in a different location,
-        // switch location first so that tree appears in the filtered tree list.
-        // Do this only once per URL tree value to avoid blocking manual location changes.
-        if (
-          resolveSharedTreeOnInitRef.current &&
-          urlTreeId &&
-          sharedTreeResolvedRef.current !== urlTreeId
-        ) {
+        const sourceTrees = await ApiService.getTrees();
+        if (loadRequestIdRef.current !== requestId) {
+          return;
+        }
+        setTrees(sourceTrees);
+
+        // The list is scoped by ACCESS, so a tree reached another way — a shared
+        // link, or following a spouse who married in from another family — will
+        // not be in it. Resolve that one tree separately so the selector still
+        // shows its name instead of going blank. Cached per tree id so switching
+        // back and forth does not refetch.
+        const outsideTreeId =
+          urlTreeId && !sourceTrees.some((s) => s.id === urlTreeId) ? urlTreeId : null;
+
+        if (!outsideTreeId) {
+          setSelectedTreePreview(null);
+          sharedTreeResolvedRef.current = null;
+        } else if (sharedTreeResolvedRef.current !== outsideTreeId) {
           try {
-            const targetTree = await ApiService.getTreeWithDetails(urlTreeId);
+            const targetTree = await ApiService.getTreeWithDetails(outsideTreeId);
             if (loadRequestIdRef.current !== requestId) {
               return;
             }
@@ -138,46 +144,23 @@ export const SourceSelect = memo(function SourceSelect({
                 locationName: targetTree.location?.name,
               });
             }
-            if (
-              targetTree?.locationId &&
-              targetTree.locationId !== selectedLocation
-            ) {
-              sharedTreeResolvedRef.current = urlTreeId;
-              resolveSharedTreeOnInitRef.current = false;
-              setSelectedLocation(targetTree.locationId);
-              return;
-            }
-            sharedTreeResolvedRef.current = urlTreeId;
-            resolveSharedTreeOnInitRef.current = false;
           } catch (err) {
             if (loadRequestIdRef.current !== requestId) {
               return;
             }
-            console.warn("Could not resolve shared tree location:", err);
-            sharedTreeResolvedRef.current = urlTreeId;
-            resolveSharedTreeOnInitRef.current = false;
+            console.warn("Could not resolve tree reached by link:", err);
           }
-        }
-
-        if (resolveSharedTreeOnInitRef.current && !urlTreeId) {
-          resolveSharedTreeOnInitRef.current = false;
-        }
-
-        const sourceTrees = await ApiService.getTrees(selectedLocation);
-        if (loadRequestIdRef.current !== requestId) {
-          return;
-        }
-        setTrees(sourceTrees);
-        if (valueRef.current && sourceTrees.some((s) => s.id === valueRef.current)) {
-          setSelectedTreePreview(null);
+          sharedTreeResolvedRef.current = outsideTreeId;
         }
 
         let nextValue = valueRef.current;
         let notifyValue: string | null = null;
 
-        // Keep URL tree only when it exists in the currently loaded location tree list.
-        // If not present (e.g. user switched location), fall back to a valid local tree.
-        if (urlTreeId && sourceTrees.some((s) => s.id === urlTreeId)) {
+        // Keep the URL's tree when it is one of ours, and ALSO when it is a tree
+        // we reached from outside the list (a shared link, or a spouse who
+        // married in). Without that second case the fallback below would bounce
+        // the user straight back to their own first tree.
+        if (urlTreeId && (sourceTrees.some((s) => s.id === urlTreeId) || outsideTreeId)) {
           nextValue = urlTreeId;
         }
         // Otherwise auto-select first only once and notify parent.
@@ -221,14 +204,7 @@ export const SourceSelect = memo(function SourceSelect({
     };
 
     loadTrees();
-  }, [
-    autoNotifyOnInit,
-    casteMap,
-    selectedLocation,
-    setSelectedLocation,
-    subCasteMap,
-    urlTreeId,
-  ]);
+  }, [autoNotifyOnInit, casteMap, subCasteMap, urlTreeId]);
 
   const changeHandler = useCallback(
     (event: any) => {

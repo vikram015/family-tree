@@ -458,23 +458,6 @@ export const ApiService = {
     return (tree?.members || []) as PersonWithRelations[];
   },
 
-  /**
-   * Fetch all people for a specific location across all trees
-   */
-  async getPeopleByLocation(locationId: string): Promise<PersonWithRelations[]> {
-    const trees = await backendApi.get<any[]>("/api/tree", { locationId });
-    const treeIds = (trees || []).map((tree: any) => tree.id).filter(Boolean);
-    if (treeIds.length === 0) return [];
-
-    const allMembers = await Promise.all(
-      treeIds.map(async (id: string) => {
-        const complete = await backendApi.get<any>(`/api/tree/${id}/complete`);
-        return complete?.members || [];
-      }),
-    );
-
-    return allMembers.flat() as PersonWithRelations[];
-  },
 
   /**
    * Get relationships for a person from people_relations table
@@ -500,6 +483,15 @@ export const ApiService = {
    */
   async getCompleteTreeById(treeId: string): Promise<CompleteTreeResponse> {
     return backendApi.get<CompleteTreeResponse>(`/api/tree/${treeId}/complete`);
+  },
+
+  /**
+   * Structure-only view of a tree you may not have access to, for deciding
+   * whether it is your family. Same shape as getCompleteTreeById, but living
+   * members come back without birth date, photo or blood group.
+   */
+  async getTreePreviewById(treeId: string): Promise<CompleteTreeResponse> {
+    return backendApi.get<CompleteTreeResponse>(`/api/tree/${treeId}/preview`);
   },
 
   /**
@@ -584,13 +576,6 @@ export const ApiService = {
    */
   async deletePerson(personId: string, force: boolean = false): Promise<any> {
     return backendApi.delete<any>(`/api/people/${personId}`, { force: String(force) });
-  },
-
-  /**
-   * Add a parent relationship
-   */
-  async addParent(childId: string, parentId: string): Promise<void> {
-    throw new Error("addParent is not supported in Node API yet. Use addPersonToTree workflow.");
   },
 
   /**
@@ -1276,6 +1261,47 @@ export const ApiService = {
   },
 
   /**
+   * Nodes the signed-in user could claim as their own profile, restricted to the
+   * trees they can see. Called with no `query` it matches on their account name,
+   * so likely candidates are on screen before they type.
+   */
+  async getProfileLinkCandidates(options: {
+    query?: string;
+    locationId?: string;
+  } = {}): Promise<any[]> {
+    return backendApi.get<any[]>("/api/people/link-candidates", {
+      query: options.query,
+      locationId: options.locationId,
+    });
+  },
+
+  /**
+   * People in OTHER trees who could be the spouse being linked. Requires both a
+   * location and a name — it is a targeted lookup, not a browsable listing — and
+   * returns only enough to recognise someone.
+   */
+  async getMarriageCandidates(options: {
+    name: string;
+    locationId: string;
+    excludeTreeId?: string;
+  }): Promise<Array<{
+    personId: string;
+    name: string;
+    nameHindi: string | null;
+    gender: string | null;
+    treeId: string | null;
+    treeName: string | null;
+    locationName: string | null;
+    parentHierarchy: Array<{ id: string; name: string; generation: number }>;
+  }>> {
+    return backendApi.get("/api/people/marriage-candidates", {
+      name: options.name,
+      locationId: options.locationId,
+      excludeTreeId: options.excludeTreeId,
+    });
+  },
+
+  /**
    * Same as searchPeopleWithHierarchy, but restricted to people the logged-in
    * user has write access to (a superadmin gets everyone). Used to pick an owner
    * you're actually allowed to manage.
@@ -1306,17 +1332,6 @@ export const ApiService = {
       { personIds },
     );
     return res?.manageableIds || [];
-  },
-
-  /**
-   * Search people by name in a location with parent hierarchy.
-   * Kept as a compatibility wrapper for existing callers.
-   */
-  async searchPeopleByLocationWithHierarchy(
-    searchTerm: string,
-    locationId: string
-  ): Promise<any[]> {
-    return this.searchPeopleWithHierarchy(searchTerm, { locationId });
   },
 
   /**

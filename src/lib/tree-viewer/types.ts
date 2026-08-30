@@ -111,6 +111,11 @@ export interface TreeViewerProps {
   highlightedPersonId?: string;
   onMobileSheetChange?: (open: boolean) => void;
   initialMainId?: string | null;
+  /** Distraction-free mode. When `onToggleFullscreen` is supplied the viewer
+   *  renders the toggle in its floating toolbar — the one control that stays
+   *  reachable in both states. */
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   initialShowFullTree?: boolean;
   initialShowSpouses?: boolean;
   initialLanguage?: TreeViewerLanguage;

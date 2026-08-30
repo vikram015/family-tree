@@ -17,11 +17,11 @@ function browserOrigin(): string {
  * makes Facebook use THIS page's preview image instead of re-scraping the SPA
  * and falling back to the generic site card.
  *
- * `REACT_APP_SHARE_BASE_URL` overrides it for local dev, where there is no
+ * `VITE_SHARE_BASE_URL` overrides it for local dev, where there is no
  * Hosting rewrite in front of the API.
  */
 export const SHARE_BASE = (
-  process.env.REACT_APP_SHARE_BASE_URL || browserOrigin()
+  import.meta.env.VITE_SHARE_BASE_URL || browserOrigin()
 ).replace(/\/+$/, '');
 
 /**

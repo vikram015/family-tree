@@ -21,6 +21,7 @@ const navLinks: { label: string; to: string }[] = [
   { label: "About", to: "/about" },
   { label: "FAQ", to: "/faq" },
   { label: "Privacy Policy", to: "/privacy-policy" },
+  { label: "Terms of Use", to: "/terms" },
 ];
 
 /**

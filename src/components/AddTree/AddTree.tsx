@@ -9,6 +9,7 @@ import {
   DialogActions,
   TextField,
   Alert,
+  Snackbar,
   CircularProgress,
   Box,
   Fab,
@@ -26,7 +27,6 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
 import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
@@ -153,7 +153,6 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const [loading, setLoading] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const modalHistoryRef = useRef(false);
   const previousSelectedCasteRef = useRef("");
@@ -166,7 +165,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
     () => subCastes.filter((s) => !selectedCaste || s.casteId === selectedCaste),
     [subCastes, selectedCaste],
   );
-  const { locations, selectedLocation, setSelectedLocation } = useLocations();
+  const { selectedLocation, setSelectedLocation } = useLocations();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
   const isControlledOpen = typeof open === "boolean";
@@ -301,7 +300,6 @@ export const AddTree: React.FC<AddTreeProps> = ({
     setCasteInputValue("");
     setSubCasteInputValue("");
     setError(null);
-    setCreatedId(null);
     previousSelectedCasteRef.current = initialCasteId || "";
   }, [
     isModalOpen,
@@ -309,6 +307,38 @@ export const AddTree: React.FC<AddTreeProps> = ({
     initialCasteId,
     initialSubCasteId,
     selectedLocation,
+  ]);
+
+  // Resolve the prefilled location id into the full "village, district, state"
+  // option the picker renders. Setting only the id left the field looking empty,
+  // so onboarding users retyped a location they had already chosen. Mirrors the
+  // same lookup the header does.
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const locationId = initialLocationId || selectedLocation || "";
+    if (!locationId) {
+      setSelectedLocationOption(null);
+      return;
+    }
+    if (selectedLocationOption?.locationId === locationId) return;
+
+    let active = true;
+    ApiService.searchLocationCombinations({ locationId, limit: 1 })
+      .then((rows) => {
+        if (active && rows?.[0]) setSelectedLocationOption(rows[0]);
+      })
+      .catch(() => {
+        /* Non-fatal: the user can still search for the location by hand. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    isModalOpen,
+    initialLocationId,
+    selectedLocation,
+    selectedLocationOption?.locationId,
   ]);
 
   useEffect(() => {
@@ -367,7 +397,6 @@ export const AddTree: React.FC<AddTreeProps> = ({
       const newTree = await ApiService.createTree(treeData);
       const treeId = newTree.id;
 
-      setCreatedId(treeId);
       setName("");
       setDescription("");
       setSelectedCaste("");
@@ -394,7 +423,6 @@ export const AddTree: React.FC<AddTreeProps> = ({
       return;
     }
     setError(null);
-    setCreatedId(null);
     setName("");
     setDescription("");
     setSelectedCaste(initialCasteId || "");
@@ -695,16 +723,20 @@ export const AddTree: React.FC<AddTreeProps> = ({
         </DialogActions>
       </Dialog>
 
-      {createdId && !showModal && (
-        <Alert severity="success" sx={{ mt: 1 }}>
-          Created: {createdId}
+      {/* Failures surface in a portalled snackbar rather than inline. An Alert
+          rendered here sits inside the same fixed, right-anchored box as the FAB,
+          so it widened the box and pushed the button sideways. Success needs no
+          message at all — the user is taken straight into the new tree. */}
+      <Snackbar
+        open={Boolean(error) && !showModal}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" variant="filled" onClose={() => setError(null)}>
+          {error}
         </Alert>
-      )}
-      {error && !showModal && (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          Error: {error}
-        </Alert>
-      )}
+      </Snackbar>
     </Box>
   );
 };

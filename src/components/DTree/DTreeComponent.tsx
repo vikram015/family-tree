@@ -41,6 +41,8 @@ export interface DTreeComponentProps {
   onMobileSheetChange?: (open: boolean) => void;
   initialMainId?: string | null;
   initialShowFullTree?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
   allowNameDetailsClick?: boolean;
   allowHoverPreview?: boolean;
   /** Open the node action sheet on any screen size (not just mobile). */
@@ -115,6 +117,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   onMobileSheetChange,
   initialMainId = null,
   initialShowFullTree = true,
+  isFullscreen,
+  onToggleFullscreen,
   allowNameDetailsClick = true,
   allowHoverPreview = false,
   alwaysShowNodeSheet = false,
@@ -251,6 +255,8 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       highlightedPersonId={highlightedPersonId}
       onMobileSheetChange={onMobileSheetChange}
       initialMainId={initialMainId}
+      isFullscreen={isFullscreen}
+      onToggleFullscreen={onToggleFullscreen}
       initialShowFullTree={viewerPreferences.showFullTree}
       initialShowSpouses={viewerPreferences.showSpouses}
       initialLanguage={viewerPreferences.language}
