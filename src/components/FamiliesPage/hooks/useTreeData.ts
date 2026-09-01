@@ -33,6 +33,12 @@ export function useTreeData({
    * birth dates, photos or blood groups, and nothing here is editable.
    */
   const [isPreview, setIsPreview] = useState(false);
+  /**
+   * True when the tree could not be read because nobody is signed in. Distinct
+   * from `isPreview`: the masked preview also needs an account, so there is
+   * nothing to fall back to — the only way forward is to sign in.
+   */
+  const [requiresSignIn, setRequiresSignIn] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
   const [locationId, setLocationId] = useState<string | undefined>(undefined);
@@ -61,11 +67,23 @@ export function useTreeData({
         try {
           treeData = await ApiService.getCompleteTreeById(treeId);
         } catch (err: any) {
+          // 401 means signed out — the preview needs an account too, so there is
+          // no degraded view to offer, only a prompt to sign in.
+          if (err?.status === 401) {
+            if (requestId !== loadRequestIdRef.current) return;
+            setRequiresSignIn(true);
+            setIsPreview(false);
+            setNodes([]);
+            setRootId("");
+            setIsLoading(false);
+            return;
+          }
           if (err?.status !== 403) throw err;
           treeData = await ApiService.getTreePreviewById(treeId);
           previewOnly = true;
         }
         if (requestId !== loadRequestIdRef.current) return;
+        setRequiresSignIn(false);
         setIsPreview(previewOnly);
         setLocationId(treeData.tree?.location?.id);
 
@@ -240,6 +258,7 @@ export function useTreeData({
         if (requestId !== loadRequestIdRef.current) return;
         console.error("FamiliesPage: Failed to load tree data:", error);
         setIsPreview(false);
+        setRequiresSignIn(false);
         setNodes([]);
         setIsLoading(false);
       }
@@ -364,5 +383,6 @@ export function useTreeData({
     loadTreeData,
     mergeAffectedNodes,
     isPreview,
+    requiresSignIn,
   };
 }

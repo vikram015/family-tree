@@ -20,6 +20,7 @@ const navLinks: { label: string; to: string }[] = [
   { label: "Families", to: "/families" },
   { label: "About", to: "/about" },
   { label: "FAQ", to: "/faq" },
+  { label: "Browse by location", to: "/locations" },
   { label: "Privacy Policy", to: "/privacy-policy" },
   { label: "Terms of Use", to: "/terms" },
 ];

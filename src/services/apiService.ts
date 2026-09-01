@@ -1261,6 +1261,44 @@ export const ApiService = {
   },
 
   /**
+   * Public location directory — every location that has trees, with counts.
+   * Aggregate only, so it works signed-out.
+   */
+  async getLocationDirectory(params: { stateId?: string; query?: string } = {}): Promise<
+    Array<{
+      stateId: string;
+      stateName: string;
+      districtId: string;
+      districtName: string;
+      locationId: string;
+      locationName: string;
+      treeCount: number;
+      peopleCount: number;
+    }>
+  > {
+    return backendApi.get("/api/lookup/directory", {
+      stateId: params.stateId,
+      query: params.query,
+    });
+  },
+
+  /** The trees in one location, as public cards (no people). */
+  async getTreesForDirectory(locationId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      casteName: string | null;
+      subCasteName: string | null;
+      locationName: string | null;
+      districtName: string | null;
+      stateName: string | null;
+      peopleCount: number;
+    }>
+  > {
+    return backendApi.get(`/api/lookup/directory/${locationId}`);
+  },
+
+  /**
    * Nodes the signed-in user could claim as their own profile, restricted to the
    * trees they can see. Called with no `query` it matches on their account name,
    * so likely candidates are on screen before they type.

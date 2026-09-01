@@ -163,6 +163,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     loadTreeData,
     mergeAffectedNodes,
     isPreview,
+    requiresSignIn,
   } = useTreeData({ treeId, treeReloadKey, resetSelection });
 
   // Set when the viewer follows a marriage into a family they cannot access.
@@ -1375,7 +1376,39 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               </IconButton>
             </Stack>
           )}
-        {isLoading ? (
+        {requiresSignIn ? (
+          <Paper
+            elevation={0}
+            sx={{
+              maxWidth: 520,
+              mx: "auto",
+              mt: { xs: 4, sm: 6 },
+              px: { xs: 2.5, sm: 4 },
+              py: { xs: 3.5, sm: 4.5 },
+              textAlign: "center",
+              borderRadius: 4,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <LockOutlinedIcon sx={{ fontSize: 32, color: "text.secondary", mb: 1.5 }} />
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>
+              Sign in to view family trees
+            </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary", mb: 3 }}>
+              Family trees are shared with the people in them, so we need to know
+              who you are before showing one.
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => openLoginModal()}
+              sx={{ minHeight: 44, fontWeight: 700 }}
+            >
+              Sign in
+            </Button>
+          </Paper>
+        ) : isLoading ? (
           <Paper
             elevation={0}
             sx={{

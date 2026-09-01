@@ -309,11 +309,19 @@ const adornment = (icon: React.ReactNode) => (
   >("");
   const [newSpouseDob, setNewSpouseDob] = useState<Dayjs | null>(null);
 
-  useEffect(() => {
-    // Choose a sensible default for the other parent:
-    // - exactly one existing spouse -> preselect it
-    // - multiple existing spouses -> default to "existing" but make the user pick which one
-    // - no existing spouse -> default to "unknown" (user can switch to "create new")
+  /**
+   * The sensible default for a child's other parent, derived from who the target
+   * is actually married to:
+   *   - exactly one spouse   -> preselect it
+   *   - several spouses      -> "existing", but the user picks which
+   *   - none                 -> "unknown"
+   *
+   * Kept as a callback rather than inlined in the effect because the reset
+   * handlers need it too. They used to hardcode "unknown", which meant "add
+   * another son" silently dropped a known parent — the effect below only re-runs
+   * when `spouseOptions` changes identity, and a reset does not change it.
+   */
+  const applyDefaultOtherParent = useCallback(() => {
     if (spouseOptions.length === 1) {
       setOtherParentMode("existing");
       setSelectedOtherParentId(spouseOptions[0].id);
@@ -325,6 +333,10 @@ const adornment = (icon: React.ReactNode) => (
       setSelectedOtherParentId("");
     }
   }, [spouseOptions]);
+
+  useEffect(() => {
+    applyDefaultOtherParent();
+  }, [applyDefaultOtherParent]);
 
   // Sync initialRelation / initialGender props into state when they change
   // (e.g. when user taps a different placeholder node while the dialog stays mounted)
@@ -377,8 +389,7 @@ const adornment = (icon: React.ReactNode) => (
     setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
-    setOtherParentMode("unknown");
-    setSelectedOtherParentId("");
+    applyDefaultOtherParent();
     setNewSpouseName("");
     setNewSpouseNameHindi("");
     setNewSpouseGender("");
@@ -400,7 +411,7 @@ const adornment = (icon: React.ReactNode) => (
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
-  }, [onCancel]);
+  }, [onCancel, applyDefaultOtherParent]);
 
   /** Called when the full add flow is done (Step 2 skip or save).
    *  Uses onComplete to close the entire dialog, falling back to onCancel. */
@@ -415,8 +426,7 @@ const adornment = (icon: React.ReactNode) => (
     setRelationEndDate(null);
     setCustomFields({});
     setMode("create");
-    setOtherParentMode("unknown");
-    setSelectedOtherParentId("");
+    applyDefaultOtherParent();
     setNewSpouseName("");
     setNewSpouseNameHindi("");
     setNewSpouseGender("");
@@ -446,7 +456,7 @@ const adornment = (icon: React.ReactNode) => (
     } else {
       onCancel?.();
     }
-  }, [onComplete, onCancel, targetId]);
+  }, [onComplete, onCancel, targetId, applyDefaultOtherParent]);
 
   const handleContinueWithSon = useCallback(() => {
     setName("");
@@ -459,8 +469,7 @@ const adornment = (icon: React.ReactNode) => (
     setSelectedRelType(RelType.blood);
     setCustomFields({});
     setMode("create");
-    setOtherParentMode("unknown");
-    setSelectedOtherParentId("");
+    applyDefaultOtherParent();
     setNewSpouseName("");
     setNewSpouseNameHindi("");
     setNewSpouseGender("");
@@ -482,7 +491,7 @@ const adornment = (icon: React.ReactNode) => (
     setJobTitle("");
     setJobContact("");
     setOccupationType("business");
-  }, [targetId]);
+  }, [targetId, applyDefaultOtherParent]);
 
   const handleSaveDetails = useCallback(async (nextAction?: "add-son") => {
     if (isSavingDetails) return;

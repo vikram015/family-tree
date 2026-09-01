@@ -45,6 +45,7 @@ import {
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 import { TermsPage } from "../TermsPage/TermsPage";
+import { LocationsPage } from "../LocationsPage/LocationsPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
 import { UserOnboardingPage } from "../UserOnboardingPage";
 import { UserOnboardingRouteGuard } from "../UserOnboardingRouteGuard";
@@ -266,6 +267,7 @@ function AppContent() {
               <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
               <Route path="/terms" element={<TermsPage />} />
+              <Route path="/locations" element={<LocationsPage />} />
             </Routes>
             </ErrorBoundary>
             {showFooter && <Footer />}

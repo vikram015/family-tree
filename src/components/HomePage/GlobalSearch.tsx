@@ -20,6 +20,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import StoreIcon from "@mui/icons-material/Store";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import { ApiService } from "../../services/apiService";
+import { useAuth } from "../hooks/useAuth";
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
 import { brand } from "../../theme/brand";
 import { avatarTint, initialsOf } from "./homeTheme";
@@ -85,10 +86,20 @@ export interface GlobalSearchProps {
 }
 
 export const GlobalSearch: React.FC<GlobalSearchProps> = ({
-  placeholder = "Search family members, businesses...",
+  placeholder,
   maxWidth = 640,
 }) => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
+
+  // People results are limited to trees the viewer can see, so a signed-out
+  // visitor gets businesses and professions only. Promising "family members"
+  // to someone who cannot receive them just produces an empty result list.
+  const effectivePlaceholder =
+    placeholder ??
+    (currentUser
+      ? "Search family members, businesses..."
+      : "Search businesses and professions...");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -276,6 +287,11 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
             <Typography variant="body2" color="text.secondary">
               No results found for "{searchQuery}"
             </Typography>
+            {!currentUser && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Family members are only searchable once you sign in.
+              </Typography>
+            )}
           </Box>
         ) : null}
       </Paper>
@@ -304,7 +320,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
           <TextField
             fullWidth
             autoFocus
-            placeholder={placeholder}
+            placeholder={effectivePlaceholder}
             value={searchQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
             onFocus={() => {
@@ -327,7 +343,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
           <Box sx={{ maxWidth, position: "relative", width: "100%" }}>
             <TextField
               fullWidth
-              placeholder={placeholder}
+              placeholder={effectivePlaceholder}
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               onClick={openDialog}

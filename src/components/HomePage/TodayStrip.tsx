@@ -226,18 +226,12 @@ export const TodayStrip: React.FC<TodayStripProps> = ({ events, upcoming, loadin
     );
   }
 
+  // Nothing to celebrate this week is not news, and a full card announcing it
+  // pushed the worklist — the page's actual job — below the fold. One quiet line.
   return (
-    <SectionShell>
-      <Stack spacing={0.5}>
-        <Typography sx={eyebrowSx}>Today in your family</Typography>
-        <Typography component="h2" sx={sectionTitleSx}>
-          No family dates this week.
-        </Typography>
-        <Typography variant="body2" sx={{ color: brand.slateMuted }}>
-          Birthdays, anniversaries and remembrances will appear here as they come around.
-        </Typography>
-      </Stack>
-    </SectionShell>
+    <Typography variant="body2" sx={{ color: brand.slateMuted }}>
+      No birthdays or anniversaries this week.
+    </Typography>
   );
 };
 

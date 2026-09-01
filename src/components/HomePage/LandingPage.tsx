@@ -207,9 +207,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 >
                   Get started
                 </Button>
+                {/* Points at the location directory, not /families. Opening a
+                    tree needs an account, but browsing which families exist and
+                    how big they are does not — so a visitor gets to see their
+                    village is already here before being asked to sign up. */}
                 <Button
                   component={Link}
-                  to="/families"
+                  to="/locations"
                   variant="outlined"
                   size="large"
                   sx={{
@@ -223,7 +227,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     "&:hover": { borderColor: brand.primary, color: brand.primary },
                   }}
                 >
-                  Explore family trees
+                  Browse families by location
                 </Button>
               </Stack>
 

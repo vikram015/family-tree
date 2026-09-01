@@ -36,7 +36,7 @@ import { TreeGaps } from "./TreeGaps";
 import { FeatureGrid } from "./FeatureGrid";
 import { NetworkStrip } from "./NetworkStrip";
 import { ContributorList, Contributor } from "./ContributorList";
-import { eyebrowSx, heroSurface, panelSx, sectionSpacing } from "./homeTheme";
+import {heroSurface, panelSx, sectionSpacing } from "./homeTheme";
 
 type NextAction = {
   title: string;
@@ -182,6 +182,23 @@ export const HomePage: React.FC = () => {
       const joinedThroughInvite =
         onboarding?.completion?.result === "invite_accepted";
 
+      // The decisive signal: can they already see a tree?
+      //
+      // The two flags above only catch users who arrived via an approved request
+      // or an invite. Someone who CREATED their own tree has neither — no request
+      // row exists — and was being sent to onboarding to "find my tree" when the
+      // tree was already theirs. getTrees() is access-scoped, so a non-empty
+      // result means they have somewhere to link themselves.
+      let hasAccessibleTree = false;
+      try {
+        const trees = await ApiService.getTrees();
+        hasAccessibleTree = (trees || []).length > 0;
+      } catch (err) {
+        // Non-fatal: fall back to the request-derived signals below.
+        console.warn("Could not check accessible trees for next action:", err);
+      }
+      if (cancelled) return;
+
       if (pendingLink) {
         setNextAction({
           title: "Profile link pending approval",
@@ -193,7 +210,7 @@ export const HomePage: React.FC = () => {
       }
 
       setNextAction(
-        hasApprovedBranchAccess || joinedThroughInvite
+        hasAccessibleTree || hasApprovedBranchAccess || joinedThroughInvite
           ? {
               title: "Link your profile",
               description:
@@ -263,31 +280,33 @@ export const HomePage: React.FC = () => {
       </Helmet>
 
       <Box sx={{ background: heroSurface, borderBottom: "1px solid", borderColor: brand.border }}>
-        <Container maxWidth="lg" sx={{ py: { xs: 3.5, md: 5.5 } }}>
-          {personName && (
-            <Typography sx={{ ...eyebrowSx, mb: 0.75 }}>Welcome back</Typography>
-          )}
-          <Typography
-            component="h1"
-            sx={{
-              fontWeight: 800,
-              fontSize: { xs: 27, sm: 34, md: 40 },
-              lineHeight: 1.15,
-              color: brand.ink,
-              mb: 1,
-            }}
+        {/* A signed-in dashboard earns its space with what changed and what to do
+            next, so this band stays small: a greeting, search, and one action.
+            The slogan that used to sit here is landing-page copy — it pushed the
+            worklist below the fold without telling the user anything. */}
+        <Container maxWidth="lg" sx={{ py: { xs: 2, md: 2.5 } }}>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            spacing={{ xs: 1.5, md: 3 }}
+            alignItems={{ xs: "stretch", md: "center" }}
+            sx={{ mb: 2 }}
           >
-            {personName || "Welcome back"}
-          </Typography>
-          {/* The tree name lives on the stats block below — repeating it here
-              read as if the greeting were addressing the tree. */}
-          <Typography sx={{ color: brand.slate, mb: 3, maxWidth: 560 }}>
-            Every update you make today becomes heritage tomorrow.
-          </Typography>
-
-          <Box sx={{ mb: 3, maxWidth: 640 }}>
-            <GlobalSearch />
-          </Box>
+            <Typography
+              component="h1"
+              sx={{
+                fontWeight: 800,
+                fontSize: { xs: 22, sm: 25, md: 27 },
+                lineHeight: 1.2,
+                color: brand.ink,
+                flexShrink: 0,
+              }}
+            >
+              {personName ? `Welcome back, ${personName}` : "Welcome back"}
+            </Typography>
+            <Box sx={{ flex: 1, minWidth: 0, maxWidth: { md: 520 } }}>
+              <GlobalSearch />
+            </Box>
+          </Stack>
 
           {nextAction && (
             <Box
@@ -331,35 +350,20 @@ export const HomePage: React.FC = () => {
             </Box>
           )}
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-            <Button
-              variant="contained"
-              onClick={() => void handleContinueToYourTree()}
-              disabled={continueTreeLoading}
-              endIcon={<ArrowForwardIcon />}
-              sx={{
-                fontWeight: 700,
-                minHeight: 44,
-                bgcolor: brand.primary,
-                "&:hover": { bgcolor: brand.primaryDark },
-              }}
-            >
-              {continueTreeLoading ? "Opening..." : "Continue your tree"}
-            </Button>
-            <Button
-              variant="outlined"
-              component={Link}
-              to="/photos"
-              sx={{
-                fontWeight: 700,
-                minHeight: 44,
-                borderColor: brand.primary,
-                color: brand.primary,
-              }}
-            >
-              Family photos
-            </Button>
-          </Stack>
+          <Button
+            variant="contained"
+            onClick={() => void handleContinueToYourTree()}
+            disabled={continueTreeLoading}
+            endIcon={<ArrowForwardIcon />}
+            sx={{
+              fontWeight: 700,
+              minHeight: 44,
+              bgcolor: brand.primary,
+              "&:hover": { bgcolor: brand.primaryDark },
+            }}
+          >
+            {continueTreeLoading ? "Opening..." : "Continue your tree"}
+          </Button>
         </Container>
       </Box>
 
@@ -378,7 +382,6 @@ export const HomePage: React.FC = () => {
             gaps={insights?.gaps || []}
             loading={insightsLoading}
             treeName={insights?.tree?.name}
-            incompleteCount={stats.incompleteProfiles}
           />
 
           <FeatureGrid counts={counts} loading={insightsLoading} />

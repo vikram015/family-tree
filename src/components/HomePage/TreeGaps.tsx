@@ -22,8 +22,6 @@ export interface TreeGapsProps {
   gaps: TreeGap[];
   loading: boolean;
   treeName?: string | null;
-  /** Total people in the tree still missing details, for the summary line. */
-  incompleteCount?: number;
 }
 
 /** Copy + icon per gap kind. The label itself comes from the API. */
@@ -35,36 +33,34 @@ const GAP_META: Record<TreeGapType, { action: string; Icon: typeof CakeOutlinedI
 
 const ROW_MIN_HEIGHT = 68;
 
-function summaryLine(count: number, treeName?: string | null): string {
-  const who = count === 1 ? "1 person" : `${count} people`;
-  const verb = count === 1 ? "is" : "are";
-  const where = treeName ? ` in ${treeName}` : "";
-  return `${who}${where} ${verb} missing details.`;
-}
 
 export const TreeGaps: React.FC<TreeGapsProps> = ({
   gaps,
   loading,
   treeName,
-  incompleteCount,
 }) => {
   const navigate = useNavigate();
 
   // The list is capped by the API, so the headline count comes from the tree-wide
   // total when the caller has it — the visible rows are only the first few.
-  const count = typeof incompleteCount === "number" ? incompleteCount : gaps.length;
   const isEmpty = !loading && gaps.length === 0;
 
   return (
     <Box component="section">
       <Typography sx={eyebrowSx}>COMPLETE YOUR TREE</Typography>
       <Typography sx={{ ...(sectionTitleSx as object), mt: 0.5 }}>
-        {isEmpty ? "Nothing left to fill in" : "A few details are missing"}
+        {isEmpty
+          ? "Nothing left to fill in"
+          : gaps.length === 1
+            ? "One detail you can add now"
+            : `${gaps.length} details you can add now`}
       </Typography>
 
       {!isEmpty && (
         <Typography sx={{ mt: 0.5, fontSize: 14, color: brand.slateMuted }}>
-          {loading ? "Looking for gaps in your tree…" : summaryLine(count, treeName)}
+          {loading
+            ? "Looking for gaps in your tree…"
+            : "Closest family first — each one takes a few seconds."}
         </Typography>
       )}
 

@@ -31,6 +31,7 @@ import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
@@ -157,6 +158,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
     { label: "Business", path: "/business", icon: <BusinessOutlinedIcon fontSize="small" /> },
     // { label: "Heritage", path: "/heritage" },
     { label: "Families", path: "/families", icon: <GroupsOutlinedIcon fontSize="small" /> },
+    { label: "Explore", path: "/locations", icon: <PlaceOutlinedIcon fontSize="small" /> },
     { label: "Photos", path: "/photos", icon: <PhotoLibraryOutlinedIcon fontSize="small" /> },
     { label: "About", path: "/about", icon: <InfoOutlinedIcon fontSize="small" /> },
     // Contact page hidden for now (kept in code, just not linked).
