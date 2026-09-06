@@ -12,6 +12,45 @@ type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 // was removed for now — only two tiers exist today.
 export type PhotoVisibility = 'private' | 'family';
 
+/**
+ * One business as shown on its public profile page.
+ *
+ * Mirrors `businessService.getBusinessProfile` on the backend. The owner is
+ * represented by name and ids only — deliberately no date of birth, gender or
+ * photo, since this page needs no account to open.
+ */
+export interface BusinessProfile {
+  id: string;
+  name: string;
+  category?: string | null;
+  /** Short blurb, also used on directory cards. */
+  description?: string | null;
+  contact?: string | null;
+  email?: string | null;
+  /** One line under the name. */
+  tagline?: string | null;
+  /** Long-form history. */
+  story?: string | null;
+  /** ISO date; year-only knowledge is stored as January 1st. */
+  foundedOn?: string | null;
+  website?: string | null;
+  address?: string | null;
+  hours?: string | null;
+  /** Short-lived signed URLs from Cloudflare R2 — display them, never store
+   *  them. They expire, so a page kept open for a long time should re-fetch. */
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+  createdAt?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
+  treeId?: string | null;
+  treeName?: string | null;
+  locationId?: string | null;
+  locationName?: string | null;
+  districtName?: string | null;
+  stateName?: string | null;
+}
+
 export interface FamilyPhoto {
   id: string;
   personId: string;
@@ -486,6 +525,24 @@ export const ApiService = {
   },
 
   /**
+   * Public, aggregate-only facts about a tree: name, place, and how many people
+   * are in it. Carries no members, so it is what the Families page falls back to
+   * when the viewer has no access and only needs to size the locked placeholder.
+   *
+   * Same endpoint as `getTreeWithDetails`, typed down to the fields that view
+   * needs — the call sites read very differently, and this one must stay
+   * aggregate-only.
+   */
+  async getTreeSummary(treeId: string): Promise<{
+    id: string;
+    name: string;
+    peopleCount: number;
+    location?: { id: string; name: string } | null;
+  }> {
+    return backendApi.get(`/api/tree/${treeId}`);
+  },
+
+  /**
    * Structure-only view of a tree you may not have access to, for deciding
    * whether it is your family. Same shape as getCompleteTreeById, but living
    * members come back without birth date, photo or blood group.
@@ -808,6 +865,24 @@ export const ApiService = {
     return backendApi.get<any>(`/api/tree/${treeId}`);
   },
 
+  /**
+   * Whether the signed-in caller may read this tree. For surfaces that link
+   * into a tree and should not offer a door that will not open. Signed out is
+   * simply a `false`.
+   */
+  async canReadTree(treeId: string): Promise<boolean> {
+    try {
+      const result = await backendApi.get<{ canRead: boolean }>(
+        `/api/tree/${treeId}/access`,
+      );
+      return Boolean(result?.canRead);
+    } catch {
+      // Treat an unavailable answer as "no": hiding a link the viewer could
+      // have used is better than showing one that dead-ends in a locked tree.
+      return false;
+    }
+  },
+
   async getTreeWriteScope(treeId: string): Promise<TreeWriteScope> {
     return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
   },
@@ -948,6 +1023,35 @@ export const ApiService = {
   },
 
   /**
+   * One business's public listing: what it is, how to reach it, where it is,
+   * and the owner's name. Carries nothing else about the owner — the profile
+   * page is public, and their date of birth and gender are not the business's
+   * to publish.
+   */
+  async getBusinessProfile(businessId: string): Promise<BusinessProfile> {
+    return backendApi.get<BusinessProfile>(`/api/business/${businessId}`);
+  },
+
+  /** Store a business logo or cover image; returns its public URL. */
+  async uploadBusinessImage(
+    businessId: string,
+    kind: "logo" | "cover",
+    blob: Blob,
+  ): Promise<string> {
+    const formData = new FormData();
+    formData.append("image", blob, `${businessId}-${kind}.jpg`);
+    const result = await backendApi.upload<{ url: string }>(
+      `/api/business/${businessId}/image/${kind}`,
+      formData,
+    );
+    return result.url;
+  },
+
+  async removeBusinessImage(businessId: string, kind: "logo" | "cover"): Promise<void> {
+    await backendApi.delete(`/api/business/${businessId}/image/${kind}`);
+  },
+
+  /**
    * Get businesses for a person
    */
   async getBusinessesByPerson(peopleId: string): Promise<any[]> {
@@ -965,6 +1069,12 @@ export const ApiService = {
       contact: business.contact || null,
       email: business.email || null,
       peopleId: business.peopleId || null,
+      tagline: business.tagline || null,
+      story: business.story || null,
+      foundedOn: business.foundedOn || null,
+      website: business.website || null,
+      address: business.address || null,
+      hours: business.hours || null,
     });
   },
 
@@ -979,6 +1089,12 @@ export const ApiService = {
       peopleId: updates.peopleId,
       contact: updates.contact,
       email: updates.email,
+      tagline: updates.tagline,
+      story: updates.story,
+      foundedOn: updates.foundedOn,
+      website: updates.website,
+      address: updates.address,
+      hours: updates.hours,
       isDeleted: updates.isDeleted,
     });
   },

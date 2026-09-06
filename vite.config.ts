@@ -33,6 +33,40 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    optimizeDeps: {
+      // These are all reached through `React.lazy`. When Vite's dependency
+      // scanner misses one — most reliably when a dev server was started before
+      // the package was installed — it discovers it on first use instead, then
+      // re-optimizes and reloads mid-session. TipTap does not survive that
+      // cleanly: an editor torn down by the reload can still be reached by a
+      // stale effect, and a destroyed editor has `schema === null`, which
+      // surfaces as "Cannot read properties of null (reading 'cached')" from
+      // ProseMirror's DOMParser.fromSchema. Naming them here means they are
+      // bundled once, at start, and never re-optimized mid-session.
+      include: [
+        "@tiptap/react",
+        "@tiptap/core",
+        "@tiptap/starter-kit",
+        "@tiptap/pm/state",
+        "@tiptap/pm/model",
+        "@tiptap/pm/view",
+        "@tiptap/pm/transform",
+        "dompurify",
+        "@mui/x-date-pickers/DatePicker",
+      ],
+    },
+    resolve: {
+      // One copy of each, whatever the dependency graph looks like. ProseMirror
+      // in particular breaks in confusing ways when two instances coexist.
+      dedupe: [
+        "react",
+        "react-dom",
+        "prosemirror-model",
+        "prosemirror-state",
+        "prosemirror-view",
+        "prosemirror-transform",
+      ],
+    },
     server: {
       port: 3000,
       host: true, // keeps LAN access working, as CRA's HOST=0.0.0.0 did

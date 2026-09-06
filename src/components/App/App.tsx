@@ -25,6 +25,7 @@ import Header from "../Header/Header";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
 import { BusinessPage } from "../BusinessPage/BusinessPage";
+import { BusinessProfilePage } from "../BusinessProfilePage/BusinessProfilePage";
 import { FamousPage } from "../FamousPage/FamousPage";
 // Route is disabled but the import is kept so restoring Contact is a one-line change.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -246,6 +247,10 @@ function AppContent() {
                   </RequireAuth>
                 }
               />
+              {/* A single business is public, like its search result: businesses
+                  are listed to be found, and the page carries no personal data
+                  about the owner. */}
+              <Route path="/business/:businessId" element={<BusinessProfilePage />} />
               <Route path="/famous" element={<FamousPage />} />
               <Route
                 path="/photos"

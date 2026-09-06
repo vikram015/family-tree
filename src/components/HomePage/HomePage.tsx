@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Container,
+  Skeleton,
   Stack,
   Typography,
   useMediaQuery,
@@ -27,7 +28,7 @@ import {
 import { selectEffectiveUserOnboardingData } from "../../store/slices/userOnboardingSlice";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
-import { brand } from "../../theme/brand";
+import { brand, washBorder } from "../../theme/brand";
 import { GlobalSearch } from "./GlobalSearch";
 import { LandingPage } from "./LandingPage";
 import { TodayStrip } from "./TodayStrip";
@@ -59,13 +60,20 @@ const EMPTY_STATS: DashboardInsights["stats"] = {
  * anonymous visitors with "Welcome back, Family Member" over internal metrics.
  * Signed in it's a dashboard built around what the user can do next: today's
  * family dates, their own tree's numbers, and the gaps worth filling.
+ *
+ * Which of the two we render must not flip after the first paint: a returning
+ * user seeing the landing page for a moment before the dashboard replaces it
+ * reads as a bug. Firebase resolves its persisted session asynchronously, so
+ * until it reports (`initialized`) we pick the side from `hadSession` — the
+ * previous visit's outcome — and render that side's loading state rather than
+ * guessing "signed out".
  */
 export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, loading: authLoading, initialized, hadSession } = useAuth();
   const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
@@ -242,8 +250,17 @@ export const HomePage: React.FC = () => {
     }
   }, [navigate]);
 
+  // Before Firebase reports, the last visit's outcome is the best available
+  // guess — and the one that is right for this browser almost every time.
+  const showDashboard = initialized ? !!currentUser : hadSession;
+  // Auth still settling: the sections have skeletons, so show those instead of
+  // real zeros/empty states that would be replaced a moment later. Once the
+  // profile is in hand a later refetch (the hourly token refresh) must not send
+  // an already-populated dashboard back to skeletons.
+  const authPending = !initialized || (authLoading && !userProfile);
+
   // ---- Signed out: a proper landing page, not an empty dashboard. ----------
-  if (!currentUser) {
+  if (!showDashboard) {
     return (
       <>
         <Helmet>
@@ -254,7 +271,7 @@ export const HomePage: React.FC = () => {
           />
         </Helmet>
         <LandingPage
-          searchSlot={<GlobalSearch maxWidth="100%" />}
+          searchSlot={<GlobalSearch maxWidth="100%" rounded showTypeFilter />}
           totalPeople={totalPeople}
           totalTrees={totalTrees}
           totalLocations={totalLocations}
@@ -279,7 +296,7 @@ export const HomePage: React.FC = () => {
         />
       </Helmet>
 
-      <Box sx={{ background: heroSurface, borderBottom: "1px solid", borderColor: brand.border }}>
+      <Box sx={{ background: heroSurface, borderBottom: "1px solid", borderColor: washBorder }}>
         {/* A signed-in dashboard earns its space with what changed and what to do
             next, so this band stays small: a greeting, search, and one action.
             The slogan that used to sit here is landing-page copy — it pushed the
@@ -301,7 +318,20 @@ export const HomePage: React.FC = () => {
                 flexShrink: 0,
               }}
             >
-              {personName ? `Welcome back, ${personName}` : "Welcome back"}
+              {personName ? (
+                `Welcome back, ${personName}`
+              ) : authPending ? (
+                <>
+                  Welcome back,{" "}
+                  <Skeleton
+                    variant="text"
+                    width={140}
+                    sx={{ display: "inline-block", verticalAlign: "middle" }}
+                  />
+                </>
+              ) : (
+                "Welcome back"
+              )}
             </Typography>
             <Box sx={{ flex: 1, minWidth: 0, maxWidth: { md: 520 } }}>
               <GlobalSearch />
@@ -369,22 +399,26 @@ export const HomePage: React.FC = () => {
 
       <Container maxWidth="lg" sx={{ py: sectionSpacing }}>
         <Stack spacing={sectionSpacing}>
-          <TodayStrip events={familyEvents} upcoming={upcoming} loading={eventsLoading} />
+          <TodayStrip
+            events={familyEvents}
+            upcoming={upcoming}
+            loading={eventsLoading || authPending}
+          />
 
           <PersonalStats
             stats={stats}
             treeName={insights?.tree?.name}
             treeId={insights?.tree?.id}
-            loading={insightsLoading}
+            loading={insightsLoading || authPending}
           />
 
           <TreeGaps
             gaps={insights?.gaps || []}
-            loading={insightsLoading}
+            loading={insightsLoading || authPending}
             treeName={insights?.tree?.name}
           />
 
-          <FeatureGrid counts={counts} loading={insightsLoading} />
+          <FeatureGrid counts={counts} loading={insightsLoading || authPending} />
 
           <Box sx={{ ...(panelSx as object), p: { xs: 2.5, md: 3 } }}>
             <ContributorList contributors={topContributors} loading={loadingStats} />

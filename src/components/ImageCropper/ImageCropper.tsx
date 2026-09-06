@@ -12,8 +12,10 @@ import {
   IconButton,
   CircularProgress,
   Alert,
+  Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import EditIcon from "@mui/icons-material/Edit";
 import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -79,6 +81,17 @@ interface ImageCropperProps {
   previewSize?: number;
   /** Visual style for the preview */
   previewVariant?: "circle" | "rounded";
+  /**
+   * Offer the camera as a source. Off for images that are almost never taken
+   * on the spot — a shop logo is a file someone already has.
+   */
+  allowCamera?: boolean;
+  /**
+   * How the picker is triggered. "buttons" puts labelled buttons under the
+   * preview; "overlay" puts a small edit badge on the preview itself and makes
+   * the whole preview clickable — the pattern most apps use for an avatar.
+   */
+  triggerVariant?: "buttons" | "overlay";
 }
 
 const ImageCropper: React.FC<ImageCropperProps> = ({
@@ -88,6 +101,8 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   uploading = false,
   previewSize = 80,
   previewVariant = "circle",
+  allowCamera = true,
+  triggerVariant = "buttons",
 }) => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
@@ -283,10 +298,16 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
         }}
       >
         <Box
+          onClick={
+            triggerVariant === "overlay" && !uploading
+              ? () => fileInputRef.current?.click()
+              : undefined
+          }
           sx={{
             position: "relative",
             width: previewSize,
             height: previewSize,
+            cursor: triggerVariant === "overlay" && !uploading ? "pointer" : "default",
           }}
         >
           {currentPhoto ? (
@@ -336,48 +357,110 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
               <CircularProgress size={24} />
             </Box>
           )}
-        </Box>
 
-        <Box
-          sx={{
-            display: "flex",
-            gap: 1,
-            flexWrap: "wrap",
-            justifyContent: "center",
-          }}
-        >
-          {/* Gallery / file picker */}
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<PhotoLibraryIcon />}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {currentPhoto ? "Change" : "Gallery"}
-          </Button>
+          {triggerVariant === "overlay" && (
+            <>
+              <Tooltip title={currentPhoto ? "Change image" : "Add an image"}>
+                <IconButton
+                  size="small"
+                  aria-label={currentPhoto ? "Change image" : "Add an image"}
+                  disabled={uploading}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  sx={{
+                    position: "absolute",
+                    right: -6,
+                    bottom: -6,
+                    width: 30,
+                    height: 30,
+                    bgcolor: "primary.main",
+                    color: "primary.contrastText",
+                    border: "2px solid",
+                    borderColor: "background.paper",
+                    "&:hover": { bgcolor: "primary.dark" },
+                  }}
+                >
+                  <EditIcon sx={{ fontSize: 15 }} />
+                </IconButton>
+              </Tooltip>
 
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<CameraAltIcon />}
-            onClick={handleOpenCamera}
-            disabled={uploading || isStartingCamera}
-          >
-            Camera
-          </Button>
-
-          {currentPhoto && onRemove && (
-            <IconButton
-              size="small"
-              color="error"
-              onClick={onRemove}
-              disabled={uploading}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
+              {currentPhoto && onRemove && (
+                <Tooltip title="Remove image">
+                  <IconButton
+                    size="small"
+                    aria-label="Remove image"
+                    disabled={uploading}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemove();
+                    }}
+                    sx={{
+                      position: "absolute",
+                      right: -6,
+                      top: -6,
+                      width: 26,
+                      height: 26,
+                      bgcolor: "background.paper",
+                      color: "error.main",
+                      border: "1px solid",
+                      borderColor: "divider",
+                      "&:hover": { bgcolor: "error.light", color: "common.white" },
+                    }}
+                  >
+                    <CloseIcon sx={{ fontSize: 14 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
           )}
         </Box>
+
+        {triggerVariant === "buttons" && (
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1,
+              flexWrap: "wrap",
+              justifyContent: "center",
+            }}
+          >
+            {/* Gallery / file picker */}
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<PhotoLibraryIcon />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {currentPhoto ? "Change" : "Gallery"}
+            </Button>
+
+            {allowCamera && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<CameraAltIcon />}
+                onClick={handleOpenCamera}
+                disabled={uploading || isStartingCamera}
+              >
+                Camera
+              </Button>
+            )}
+
+            {currentPhoto && onRemove && (
+              <IconButton
+                size="small"
+                color="error"
+                onClick={onRemove}
+                disabled={uploading}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
+        )}
 
         {/* Hidden file input — gallery / file picker */}
         <input
@@ -389,14 +472,14 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
         />
 
         {/* Hidden file input — camera capture (mobile) */}
-        <input
+        {allowCamera && <input
           ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="user"
           style={{ display: "none" }}
           onChange={handleFileChange}
-        />
+        />}
       </Box>
 
       <Dialog

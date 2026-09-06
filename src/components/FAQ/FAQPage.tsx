@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
-import { brand } from "../../theme/brand";
+import { pageGradient } from "../../theme/brand";
 
 type FaqItem = {
   q: string;
@@ -88,7 +88,7 @@ export const FAQPage: React.FC = () => {
 
       <Box
         sx={{
-          background: `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
+          background: pageGradient,
           minHeight: "100%",
           py: { xs: 4, md: 6 },
         }}

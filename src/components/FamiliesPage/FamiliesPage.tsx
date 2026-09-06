@@ -32,6 +32,7 @@ import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
+import { LockedTreePreview } from "./LockedTreePreview";
 import AddNode from "../AddNode/AddNode";
 import { ApiService } from "../../services/apiService";
 import { FNode } from "../model/FNode";
@@ -71,8 +72,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const dispatch = useAppDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { currentUser, userProfile, loading, hasPermission, isApproved, isAdmin, isSuperAdmin } =
-    useAuth();
+  const {
+    currentUser,
+    userProfile,
+    loading,
+    initialized: authInitialized,
+    hasPermission,
+    isApproved,
+    isAdmin,
+    isSuperAdmin,
+  } = useAuth();
   const { setSelectedLocation } = useLocations();
   const { openLoginModal } = useLoginModal();
   const { offerNotifications } = useNotificationPrompt();
@@ -128,6 +137,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   );
   // Bumped to force a tree-data reload (e.g. after accepting an invite grants access).
   const [treeReloadKey, setTreeReloadKey] = useState(0);
+  /**
+   * Whether this viewer holds any tree of their own. `null` while unknown.
+   *
+   * Someone who belongs to no tree yet has nothing to be shown here — the tree
+   * selector is empty and the canvas has nothing to draw — so the page offers
+   * the one thing that moves them forward: creating their own.
+   */
+  const [hasAnyTree, setHasAnyTree] = useState<boolean | null>(null);
+  const [createTreeOpen, setCreateTreeOpen] = useState(false);
+  // The create dialog opens by itself once per visit. Re-opening it every time
+  // the effect re-runs would trap someone who deliberately closed it.
+  const createTreePromptedRef = useRef(false);
   const [requestingAccess, setRequestingAccess] = useState(false);
   // Tree id for which the view-only banner has been dismissed (re-shows per tree).
   const [accessBannerDismissedFor, setAccessBannerDismissedFor] = useState<string | null>(
@@ -163,8 +184,39 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     loadTreeData,
     mergeAffectedNodes,
     isPreview,
+    previewPeopleCount,
     requiresSignIn,
-  } = useTreeData({ treeId, treeReloadKey, resetSelection });
+  } = useTreeData({
+    treeId,
+    treeReloadKey,
+    resetSelection,
+    authUserId: currentUser?.uid,
+    authReady: authInitialized,
+  });
+
+  // The same access-scoped list the tree selector is built from, so "you have no
+  // tree" here and an empty selector can never disagree.
+  useEffect(() => {
+    if (!authInitialized) return;
+    if (!currentUser) {
+      setHasAnyTree(null);
+      return;
+    }
+    let active = true;
+    ApiService.getTrees()
+      .then((trees) => {
+        if (active) setHasAnyTree(Array.isArray(trees) && trees.length > 0);
+      })
+      .catch((error) => {
+        // Unknown, not zero: never prompt someone to create a second tree
+        // because a request failed.
+        console.warn("Could not check whether the user has any tree:", error);
+        if (active) setHasAnyTree(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [currentUser, authInitialized, treeReloadKey]);
 
   // Set when the viewer follows a marriage into a family they cannot access.
   const [previewAccessRequested, setPreviewAccessRequested] = useState(false);
@@ -956,12 +1008,53 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     setMyPendingRequests,
   ]);
 
-  // Handler for "View Details" — opens NodeDetails in details view
-  const handleViewDetails = useCallback((nodeId: string) => {
-    setNodeDetailsInitialView("details");
-    setNodeDetailsAddInfo(undefined);
-    setSelectId(nodeId);
-  }, []);
+  // The "request access" action appears twice while a tree is locked — in the
+  // banner and on the card over the placeholder — so its label and disabled
+  // state are derived once here rather than kept in sync by hand.
+  const previewAccessPending =
+    previewAccessRequested || Boolean(pendingConnectedFamilyRequest);
+  const previewAccessDisabled = previewAccessBusy || previewAccessPending;
+  const previewAccessLabel = !currentUser
+    ? "Sign in to request"
+    : previewAccessPending
+      ? "Request pending"
+      : previewAccessBusy
+        ? "Sending…"
+        : connectedFamilyRootId || highlightedPersonId
+          ? "Request access to this branch"
+          : "Request access to this family";
+
+  // No tree in the URL and none of their own: there is nothing to show this
+  // viewer but the way to start one. A shared or followed link (which carries a
+  // ?tree=) is deliberately excluded — that lands on the locked view instead.
+  const showCreateFirstTree = Boolean(!treeId && currentUser && hasAnyTree === false);
+
+  useEffect(() => {
+    if (showCreateFirstTree && !createTreePromptedRef.current) {
+      createTreePromptedRef.current = true;
+      setCreateTreeOpen(true);
+    }
+  }, [showCreateFirstTree]);
+
+  // Handler for "View Details" — opens NodeDetails in details view.
+  // In the masked preview there is no profile to open: the viewer has no access
+  // to this tree, so the panel would be an empty shell over hidden data. Say why
+  // instead — the banner above carries the "request access" action.
+  const handleViewDetails = useCallback(
+    (nodeId: string) => {
+      if (isPreview) {
+        showSnackbar(
+          "You don't have access to this family tree yet, so profiles stay hidden. Request access to open them.",
+          "info",
+        );
+        return;
+      }
+      setNodeDetailsInitialView("details");
+      setNodeDetailsAddInfo(undefined);
+      setSelectId(nodeId);
+    },
+    [isPreview, showSnackbar],
+  );
 
   // Handler for edit icon on tree nodes — opens NodeDetails in edit view
   const handleEditNode = useCallback(
@@ -1292,31 +1385,19 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               variant="body2"
               sx={{ color: "text.secondary", minWidth: 0, flex: 1 }}
             >
-              {previewAccessRequested || pendingConnectedFamilyRequest
-                ? `${arrivedViaMarriage ? "You're viewing a connected family." : "You don't have access to this family tree yet."} Your access request is waiting for its admin to review it.`
-                : `${arrivedViaMarriage ? "You're viewing a connected family." : "You don't have access to this family tree."} Names and relationships are shown; personal details are hidden until you're given access.`}
+              {previewAccessPending
+                ? `${arrivedViaMarriage ? "This family is connected to yours by marriage." : "You don't have access to this family tree yet."} Your access request is waiting for its admin to review it.`
+                : `${arrivedViaMarriage ? "This family is connected to yours by marriage." : "You don't have access to this family tree."} Its members stay hidden until you're given access.`}
             </Typography>
             <Button
               size="small"
               variant="outlined"
               color="warning"
-              disabled={
-                previewAccessBusy ||
-                previewAccessRequested ||
-                Boolean(pendingConnectedFamilyRequest)
-              }
+              disabled={previewAccessDisabled}
               onClick={() => void handleRequestPreviewAccess()}
               sx={{ flexShrink: 0, whiteSpace: "nowrap", textTransform: "none" }}
             >
-              {!currentUser
-                ? "Sign in to request"
-                : previewAccessRequested || pendingConnectedFamilyRequest
-                  ? "Request pending"
-                  : previewAccessBusy
-                    ? "Sending…"
-                    : connectedFamilyRootId || highlightedPersonId
-                      ? "Request access to this branch"
-                      : "Request access to this family"}
+              {previewAccessLabel}
             </Button>
           </Stack>
         )}
@@ -1431,6 +1512,14 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               Building relationships, permissions, and branch data.
             </Typography>
           </Paper>
+        ) : isPreview ? (
+          <LockedTreePreview
+            peopleCount={previewPeopleCount}
+            seed={treeId}
+            requestLabel={previewAccessLabel}
+            requestDisabled={previewAccessDisabled}
+            onRequestAccess={() => void handleRequestPreviewAccess()}
+          />
         ) : nodes.length > 0 ? (
           <Paper
             elevation={0}
@@ -1570,6 +1659,45 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               </Box>
             )}
           </Paper>
+        ) : showCreateFirstTree ? (
+          <Paper
+            elevation={0}
+            sx={{
+              maxWidth: 620,
+              mx: "auto",
+              mt: { xs: 2, sm: 3 },
+              px: { xs: 2, sm: 3 },
+              py: { xs: 3, sm: 4 },
+              textAlign: "center",
+              borderRadius: 4,
+              border: "1px solid",
+              borderColor: "divider",
+              background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${theme.palette.background.paper} 100%)`,
+            }}
+          >
+            <Typography variant="overline" sx={{ color: "text.secondary" }}>
+              Start here
+            </Typography>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 800 }}>
+              Create your family tree
+            </Typography>
+            <Typography
+              variant="body1"
+              sx={{ color: "text.secondary", maxWidth: 520, mx: "auto" }}
+            >
+              You're not part of a family tree yet. Create one — we'll ask for
+              your family's name and where they're from, then walk you through
+              adding the first few people.
+            </Typography>
+            <Button
+              variant="contained"
+              size="large"
+              sx={{ mt: 3 }}
+              onClick={() => setCreateTreeOpen(true)}
+            >
+              Create your family tree
+            </Button>
+          </Paper>
         ) : (
           treeId &&
           treeId !== "" && (
@@ -1637,6 +1765,23 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           )
         )}
       </Box>
+      {/* Trigger-less: this one is opened by the empty-account state above (and
+          on its own, once, when a viewer with no tree lands here). */}
+      <AddTree
+        hideTrigger
+        open={createTreeOpen}
+        onClose={() => setCreateTreeOpen(false)}
+        onCreate={(createdTreeId) => {
+          setCreateTreeOpen(false);
+          setHasAnyTree(true);
+          setTreeId(createdTreeId);
+          // A new tree is empty, so continue straight into the guided setup
+          // rather than dropping the user on a blank canvas.
+          setShowSetupWizard(true);
+          onCreate?.(createdTreeId);
+        }}
+      />
+
       <TreeSetupWizard
         open={showSetupWizard}
         treeId={treeId || ""}
@@ -1928,7 +2073,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         onCreateInvite={handleCreateInvite}
       />
 
-      {selected && (
+      {/* `isPreview` is re-checked here, not just in the handlers: no path —
+          a relative clicked inside the panel, a restored selection — may open a
+          profile in a tree the viewer has no access to. */}
+      {selected && !isPreview && (
         <NodeDetails
           node={selected}
           nodes={nodes}

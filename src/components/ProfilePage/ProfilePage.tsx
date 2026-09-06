@@ -68,6 +68,7 @@ import {
 } from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
+import { RichText } from "../common/RichText";
 import { formatDisplayDate } from "../../utils/dateFormatter";
 import { selectCastes, selectSubCastes } from "../../store/slices/casteSlice";
 import {
@@ -1495,8 +1496,11 @@ export const ProfilePage: React.FC = () => {
                                   color="action"
                                   sx={{ mt: 0.25 }}
                                 />
-                                <Typography variant="body2" color="text.secondary">
-                                  {biz.description || "No description provided."}
+                                <Typography variant="body2" color="text.secondary" component="div">
+                                  <RichText
+                                    value={biz.description}
+                                    fallback="No description provided."
+                                  />
                                 </Typography>
                               </Box>
                               {biz.contact && (

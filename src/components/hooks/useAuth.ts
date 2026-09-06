@@ -4,6 +4,8 @@ import {
   selectCurrentUser,
   selectUserProfile,
   selectAuthLoading,
+  selectAuthInitialized,
+  selectHadSession,
   selectIsSuperAdmin,
   selectIsAdmin,
   logout as logoutAction,
@@ -17,6 +19,8 @@ export function useAuth() {
   const currentUser = useAppSelector(selectCurrentUser);
   const userProfile = useAppSelector(selectUserProfile);
   const loading = useAppSelector(selectAuthLoading);
+  const initialized = useAppSelector(selectAuthInitialized);
+  const hadSession = useAppSelector(selectHadSession);
   const isSuperAdminValue = useAppSelector(selectIsSuperAdmin);
   const isAdminValue = useAppSelector(selectIsAdmin);
 
@@ -97,6 +101,11 @@ export function useAuth() {
       currentUser,
       userProfile,
       loading,
+      // `initialized` is false until Firebase first reports; `hadSession` says
+      // whether the previous visit was signed in. Together they let a view pick
+      // its first paint instead of defaulting to the signed-out one.
+      initialized,
+      hadSession,
       logout,
       linkUserToNode,
       hasPermission,
@@ -111,6 +120,8 @@ export function useAuth() {
       currentUser,
       userProfile,
       loading,
+      initialized,
+      hadSession,
       logout,
       linkUserToNode,
       hasPermission,

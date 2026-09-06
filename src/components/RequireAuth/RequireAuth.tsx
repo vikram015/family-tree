@@ -12,10 +12,14 @@ import { setPostLoginRedirect } from "../../utils/postLoginRedirect";
 export const RequireAuth: React.FC<{ children: React.ReactElement }> = ({
   children,
 }) => {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, initialized } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  // Only the first resolve is unknown. Later auth updates (the hourly ID-token
+  // refresh re-runs the profile fetch) keep `currentUser`, so gating on
+  // `initialized` rather than `loading` stops the page being torn down and
+  // remounted behind a spinner mid-session.
+  if (!initialized) {
     return (
       <Box
         sx={{

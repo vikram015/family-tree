@@ -73,7 +73,7 @@ export const AboutPage: React.FC = () => {
 
       <Box
         sx={{
-          background: `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
+          background: pageGradient,
           minHeight: "100%",
           py: { xs: 4, md: 6 },
         }}
@@ -110,7 +110,11 @@ export const AboutPage: React.FC = () => {
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mt: 3 }}>
                 <Button
                   variant="contained"
-                  onClick={() => navigate("/families")}
+                  // The locations directory, not /families: someone reading the
+                  // About page has no tree open, and /families would drop them
+                  // into their own (or a sign-in wall). Browsing places is the
+                  // way in that works signed out and answers "what's here?".
+                  onClick={() => navigate("/locations")}
                   sx={{ bgcolor: brand.accent, "&:hover": { bgcolor: brand.accentDark } }}
                 >
                   Explore family trees

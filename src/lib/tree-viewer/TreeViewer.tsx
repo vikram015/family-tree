@@ -87,6 +87,15 @@ const isAnniversaryToday = (dateValue?: string) => {
   return month === today.getMonth() + 1 && day === today.getDate();
 };
 
+/**
+ * Key for the set of children a person has with a given spouse. Children with no
+ * recorded other parent share the NO_SPOUSE bucket, so a single parent's children
+ * can be collapsed like any marriage rather than being the one branch that cannot.
+ */
+const NO_SPOUSE = "__none__";
+const marriageKey = (personId: string, spouseId: string = NO_SPOUSE) =>
+  `${personId}::${spouseId}`;
+
 export const TreeViewer: React.FC<TreeViewerProps> = ({
   nodes,
   rootId,
@@ -433,6 +442,18 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   }, [showInteractionHint]);
 
   // Keep refs in sync
+  // Per-marriage collapse describes how the user is examining ONE person right
+  // now, not a durable property of the marriage. Carrying it across a focus
+  // change is what made this feel random: collapse a spouse under A, wander off,
+  // come back to A, and the branch is still hidden with nothing in the current
+  // interaction to explain why.
+  const previousMainIdRef = useRef<string | null>(mainId);
+  useEffect(() => {
+    if (previousMainIdRef.current === mainId) return;
+    previousMainIdRef.current = mainId;
+    setCollapsedMarriages((prev) => (prev.size ? new Set<string>() : prev));
+  }, [mainId]);
+
   useEffect(() => {
     mainIdRef.current = mainId;
   }, [mainId]);
@@ -441,17 +462,28 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   }, [addMenuNodeId]);
 
   // Parent-driven focus request after add-child.
-  // In collapsed mode, this expands the requested node's branch.
+  //
+  // Adding a child is a focus action: the user is working on one family, and the
+  // thing they just changed should be centred and fully expanded. So this drops
+  // out of full-tree view rather than honouring it — previously the request was
+  // silently swallowed whenever "Show full tree" happened to be on, which is the
+  // state most users leave it in, so the new child could land anywhere on screen.
   useEffect(() => {
     if (!autoExpandNodeId) return;
 
-    if (!showFullTree) {
-      setAddMenuNodeId(null);
-      setMainId(autoExpandNodeId);
-    }
+    setAddMenuNodeId(null);
+    setShowFullTree(false);
+    setMainId(autoExpandNodeId);
+
+    // The layout rebuilds around the new focus before the viewport can be moved
+    // to it, so centre on the next tick rather than against the old geometry.
+    const timer = window.setTimeout(() => {
+      centerOnNodeRef.current(autoExpandNodeId);
+    }, 140);
 
     onAutoExpandHandled?.();
-  }, [autoExpandNodeId, showFullTree, onAutoExpandHandled]);
+    return () => window.clearTimeout(timer);
+  }, [autoExpandNodeId, onAutoExpandHandled]);
 
   // Keep isMobile in sync and listen for resize
   useEffect(() => {
@@ -660,7 +692,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       if (!handledByMobileSheet && mainId && nodeId !== mainId) {
         const focusedNode = nodes.find((n) => n.id === mainId);
         if (focusedNode?.spouses?.some((s) => s.id === nodeId)) {
-          const key = `${mainId}::${nodeId}`;
+          const key = marriageKey(mainId, nodeId);
           setCollapsedMarriages((prev) => {
             const next = new Set(prev);
             if (next.has(key)) next.delete(key);
@@ -669,6 +701,32 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
           });
           return;
         }
+      }
+
+      // Tapping the already-focused person toggles ALL of their marriages at
+      // once: collapse everything if anything is open, otherwise reopen it all.
+      //
+      // Without this the focused node was the one node in the tree that did
+      // nothing when tapped — and with a single spouse it left no way back,
+      // because the only working toggle was the spouse the user had just
+      // collapsed and was no longer looking for.
+      if (!handledByMobileSheet && mainId === nodeId) {
+        const focusedNode = nodes.find((n) => n.id === nodeId);
+        if (!focusedNode) return;
+
+        const spouseIds = (focusedNode.spouses || []).map((sp) => sp.id);
+        const keys = spouseIds.length
+          ? spouseIds.map((spouseId) => marriageKey(nodeId, spouseId))
+          : [marriageKey(nodeId)];
+
+        setCollapsedMarriages((prev) => {
+          const next = new Set(prev);
+          const anythingExpanded = keys.some((key) => !next.has(key));
+          if (anythingExpanded) keys.forEach((key) => next.add(key));
+          else keys.forEach((key) => next.delete(key));
+          return next;
+        });
+        return;
       }
 
       // If tapping the same node that's already focused, do nothing extra
@@ -1169,7 +1227,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
 
         // This marriage can be individually collapsed even when the branch is expanded.
         const isMarriageCollapsed = collapsedMarriages.has(
-          `${person.id}::${spouse.id}`,
+          marriageKey(person.id, spouse.id),
         );
 
         // Find children that belong to this specific marriage
@@ -1307,9 +1365,11 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         });
       }
     }
-    // If no spouses but has children, add them directly
+    // If no spouses but has children, add them directly. These share the
+    // NO_SPOUSE bucket so tapping the person can collapse them.
     else if (
       shouldExpandChildren &&
+      !collapsedMarriages.has(marriageKey(person.id)) &&
       person.children &&
       person.children.length > 0
     ) {

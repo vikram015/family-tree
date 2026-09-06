@@ -83,11 +83,23 @@ export interface GlobalSearchProps {
   placeholder?: string;
   /** Caps the field on wide screens; the hero and landing use different widths. */
   maxWidth?: number | string;
+  /**
+   * Show the entity-type filters inside the field. Off by default: the header's
+   * search is a narrow control with no room for them.
+   */
+  showTypeFilter?: boolean;
+  /** Pill-shaped field, for the landing hero. */
+  rounded?: boolean;
 }
+
+/** The entity kinds the global search can return, as filter chips. */
+type ResultType = SearchResult["type"];
 
 export const GlobalSearch: React.FC<GlobalSearchProps> = ({
   placeholder,
   maxWidth = 640,
+  showTypeFilter = false,
+  rounded = false,
 }) => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
@@ -100,6 +112,9 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
     (currentUser
       ? "Search family members, businesses..."
       : "Search businesses and professions...");
+  // No chip selected means "everything". A filter narrows what is already on
+  // screen — it never changes the request, so switching chips costs nothing.
+  const [typeFilter, setTypeFilter] = useState<ResultType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -167,14 +182,75 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
     setSearchQuery("");
     if (result.type === "person" && result.id) {
       navigate(`/profile/person/${result.id}`);
-    } else if (result.type === "business") {
-      // Open the business owner's profile when we know them; else the listing.
-      navigate(result.personId ? `/profile/person/${result.personId}` : "/business");
+    } else if (result.type === "business" && result.id) {
+      // The business's own page — not its owner's profile, which answers a
+      // different question and shows their personal details.
+      navigate(`/business/${result.id}`);
     } else if (result.treeId) {
       navigate(`/families?tree=${result.treeId}`);
     } else if (result.type === "profession") {
       navigate("/business");
     }
+  };
+
+  // A signed-out visitor gets no people back from the API at all, so offering
+  // to filter by them would just be an always-empty chip.
+  const filterOptions: Array<{ value: ResultType; label: string }> = currentUser
+    ? [
+        { value: "person", label: "Family" },
+        { value: "business", label: "Businesses" },
+        { value: "profession", label: "Professions" },
+      ]
+    : [
+        { value: "business", label: "Businesses" },
+        { value: "profession", label: "Professions" },
+      ];
+
+  const visibleResults = typeFilter
+    ? searchResults.filter((result) => result.type === typeFilter)
+    : searchResults;
+
+  const renderFilters = () => {
+    if (!showTypeFilter) return null;
+    return (
+      <Stack
+        direction="row"
+        spacing={0.5}
+        sx={{
+          // Chips inside the field need room; below sm the field is barely wider
+          // than the placeholder, so they move out of the way entirely.
+          display: { xs: "none", sm: "flex" },
+          flexShrink: 0,
+          pr: 0.5,
+        }}
+      >
+        {filterOptions.map((option) => {
+          const active = typeFilter === option.value;
+          return (
+            <Chip
+              key={option.value}
+              label={option.label}
+              size="small"
+              // Clicking the active chip clears it — back to everything.
+              onClick={() => setTypeFilter(active ? null : option.value)}
+              sx={{
+                fontWeight: 700,
+                fontSize: 12,
+                height: 28,
+                cursor: "pointer",
+                bgcolor: active ? brand.primarySoft : brand.canvas,
+                color: active ? brand.primary : brand.slate,
+                border: "1px solid",
+                borderColor: active ? brand.primary : brand.border,
+                "&:hover": {
+                  bgcolor: active ? brand.primarySoft : brand.border,
+                },
+              }}
+            />
+          );
+        })}
+      </Stack>
+    );
   };
 
   const renderResults = (onPick?: () => void, floating = true) => {
@@ -195,9 +271,9 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
           borderRadius: 2,
         }}
       >
-        {searchResults.length > 0 ? (
+        {visibleResults.length > 0 ? (
           <List dense disablePadding>
-            {searchResults.map((result) => {
+            {visibleResults.map((result) => {
               const tint = avatarTint(result.name);
               return (
                 <ListItem
@@ -304,11 +380,21 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
         <SearchIcon sx={{ color: brand.primary, mr: 1 }} />
       </InputAdornment>
     ),
-    endAdornment: isSearching ? (
-      <InputAdornment position="end">
-        <CircularProgress size={18} />
-      </InputAdornment>
-    ) : null,
+    endAdornment:
+      isSearching || showTypeFilter ? (
+        <InputAdornment position="end">
+          {isSearching ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+          {renderFilters()}
+        </InputAdornment>
+      ) : null,
+  };
+
+  const fieldSx = {
+    bgcolor: brand.surface,
+    borderRadius: rounded ? 999 : 2,
+    ...(rounded
+      ? { "& .MuiOutlinedInput-root": { borderRadius: 999, pl: 2, pr: 0.75 } }
+      : null),
   };
 
   return (
@@ -360,7 +446,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                 }
               }}
               InputProps={inputProps}
-              sx={{ bgcolor: brand.surface, borderRadius: 2 }}
+              sx={fieldSx}
               inputProps={{ readOnly: mobilePicker }}
             />
             {!mobilePicker && renderResults()}

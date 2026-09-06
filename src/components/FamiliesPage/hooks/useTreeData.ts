@@ -10,6 +10,24 @@ interface UseTreeDataParams {
   treeReloadKey: number;
   /** Clears the current node selection — invoked whenever the tree data reloads. */
   resetSelection: () => void;
+  /**
+   * Firebase uid of the signed-in viewer, or undefined when signed out.
+   *
+   * Who is asking decides what comes back — full tree, masked preview, or a 401
+   * — so this is part of the request, not ambient context. Signing in from the
+   * "Sign in to view family trees" prompt changes it, which reloads the tree
+   * the viewer just unlocked instead of leaving that prompt on screen. It is
+   * the uid rather than the user object because the object is rebuilt on every
+   * ID-token refresh, which would refetch the tree hourly for no reason.
+   */
+  authUserId?: string;
+  /**
+   * False until Firebase has reported whether anyone is signed in. The first
+   * fetch waits for it: firing early would load the tree once as "nobody", then
+   * again as the real viewer the moment `authUserId` arrives — two full-tree
+   * requests, with the signed-out prompt flashing in between.
+   */
+  authReady: boolean;
 }
 
 /**
@@ -24,15 +42,20 @@ export function useTreeData({
   treeId,
   treeReloadKey,
   resetSelection,
+  authUserId,
+  authReady,
 }: UseTreeDataParams) {
   const [nodes, setNodes] = useState<Array<FNode>>([]);
   /**
-   * True when this tree was loaded through the limited preview because the
-   * viewer has no permission on it — reached, for example, by following a
-   * spouse who married in from another family. Living members come back without
-   * birth dates, photos or blood groups, and nothing here is editable.
+   * True when the viewer has no permission on this tree — reached, for example,
+   * by following a spouse who married in from another family. Nothing real is
+   * fetched in that case: `nodes` stays empty and the page draws a placeholder
+   * sized by `previewPeopleCount`, so no member of a tree you cannot read ever
+   * reaches the browser.
    */
   const [isPreview, setIsPreview] = useState(false);
+  /** Public people count for a locked tree — the size of the placeholder. */
+  const [previewPeopleCount, setPreviewPeopleCount] = useState(0);
   /**
    * True when the tree could not be read because nobody is signed in. Distinct
    * from `isPreview`: the masked preview also needs an account, so there is
@@ -60,9 +83,9 @@ export function useTreeData({
           setIsLoading(true);
         }
         // Full read first. A 403 means this is someone else's tree, reached
-        // through a marriage link — fall back to the masked preview so the user
-        // can still see who the family is and ask for access.
-        let previewOnly = false;
+        // through a marriage link or a shared URL — show its size and nothing
+        // else, so the viewer can ask for access without the tree's members
+        // being handed to a browser that has no right to them.
         let treeData: any;
         try {
           treeData = await ApiService.getCompleteTreeById(treeId);
@@ -79,12 +102,23 @@ export function useTreeData({
             return;
           }
           if (err?.status !== 403) throw err;
-          treeData = await ApiService.getTreePreviewById(treeId);
-          previewOnly = true;
+          // Locked. The summary is public aggregate data (the same count the
+          // location directory publishes), so it needs no permission.
+          const summary = await ApiService.getTreeSummary(treeId).catch(() => null);
+          if (requestId !== loadRequestIdRef.current) return;
+          setRequiresSignIn(false);
+          setIsPreview(true);
+          setPreviewPeopleCount(summary?.peopleCount || 0);
+          setLocationId(summary?.location?.id);
+          setNodes([]);
+          setRootId("");
+          setIsLoading(false);
+          return;
         }
         if (requestId !== loadRequestIdRef.current) return;
         setRequiresSignIn(false);
-        setIsPreview(previewOnly);
+        setIsPreview(false);
+        setPreviewPeopleCount(0);
         setLocationId(treeData.tree?.location?.id);
 
         // Convert tree data to FNode format
@@ -258,16 +292,18 @@ export function useTreeData({
         if (requestId !== loadRequestIdRef.current) return;
         console.error("FamiliesPage: Failed to load tree data:", error);
         setIsPreview(false);
+        setPreviewPeopleCount(0);
         setRequiresSignIn(false);
         setNodes([]);
         setIsLoading(false);
       }
     },
-    // treeReloadKey is intentionally here despite being unused in the body: it is
-    // the reload trigger. Bumping it rebuilds this callback, which re-runs the
-    // effect below. Removing it silences the lint and breaks tree refresh.
+    // treeReloadKey and authUserId are intentionally here despite being unused
+    // in the body: they are reload triggers. Changing either rebuilds this
+    // callback, which re-runs the effect below. Removing them silences the lint
+    // and breaks tree refresh on invite-accept and on sign-in/sign-out.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [treeId, treeReloadKey, resetSelection],
+    [treeId, treeReloadKey, resetSelection, authUserId],
   );
 
   useEffect(() => {
@@ -275,8 +311,14 @@ export function useTreeData({
     setNodes([]);
     setRootId("");
     resetSelection();
+    if (!authReady) {
+      // Hold the spinner rather than the empty state — a tree is coming as soon
+      // as we know who is asking for it.
+      setIsLoading(Boolean(treeId));
+      return;
+    }
     loadTreeData();
-  }, [loadTreeData, resetSelection]);
+  }, [authReady, treeId, loadTreeData, resetSelection]);
 
   /**
    * Merges affected nodes from add_person_to_tree into the current state.
@@ -383,6 +425,7 @@ export function useTreeData({
     loadTreeData,
     mergeAffectedNodes,
     isPreview,
+    previewPeopleCount,
     requiresSignIn,
   };
 }

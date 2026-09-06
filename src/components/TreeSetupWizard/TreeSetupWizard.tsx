@@ -24,6 +24,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { ApiService } from "../../services/apiService";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { brand } from "../../theme/brand";
+import { DateField } from "../common/DateField";
 
 /**
  * Guided first-run setup for a brand-new tree.
@@ -423,24 +424,20 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
             </TextField>
           )}
 
-          <TextField
-            fullWidth
-            type="date"
+          <DateField
             label="Date of birth (optional)"
             value={form.dob}
-            onChange={(e) => setForm((f) => ({ ...f, dob: e.target.value }))}
-            InputLabelProps={{ shrink: true }}
+            onChange={(value) => setForm((f) => ({ ...f, dob: value }))}
+            disableFuture
             disabled={saving}
           />
 
           {step.offerAnniversary && (
-            <TextField
-              fullWidth
-              type="date"
+            <DateField
               label="Wedding anniversary (optional)"
               value={form.anniversary}
-              onChange={(e) => setForm((f) => ({ ...f, anniversary: e.target.value }))}
-              InputLabelProps={{ shrink: true }}
+              onChange={(value) => setForm((f) => ({ ...f, anniversary: value }))}
+              disableFuture
               disabled={saving}
             />
           )}
@@ -460,15 +457,11 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
                 label="No longer with us"
               />
               {form.deceased && (
-                <TextField
-                  fullWidth
-                  type="date"
+                <DateField
                   label="Date of passing (optional)"
                   value={form.deceasedDate}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, deceasedDate: e.target.value }))
-                  }
-                  InputLabelProps={{ shrink: true }}
+                  onChange={(value) => setForm((f) => ({ ...f, deceasedDate: value }))}
+                  disableFuture
                   disabled={saving}
                 />
               )}

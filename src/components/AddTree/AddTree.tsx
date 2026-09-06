@@ -25,11 +25,11 @@ import AddIcon from "@mui/icons-material/Add";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
-import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
+import { RichTextEditor } from "../common/RichTextEditor";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchAllSubCastes,
@@ -683,24 +683,15 @@ export const AddTree: React.FC<AddTreeProps> = ({
             sx={{ mb: 2 }}
           />
 
-          <TextField
-            margin="dense"
-            label="Description (Optional)"
-            placeholder="e.g. A detailed description about the family"
-            fullWidth
-            variant="outlined"
-            multiline
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={loading}
-            sx={[{ mb: 2 }, inputWithIconSx]}
-            InputProps={{
-              startAdornment: adornment(
-                <DescriptionOutlinedIcon fontSize="small" />,
-              ),
-            }}
-          />
+          <Box sx={{ mt: 2 }}>
+            <RichTextEditor
+              label="Description (optional)"
+              value={description}
+              onChange={setDescription}
+              minHeight={140}
+              placeholder="e.g. A detailed description about the family"
+            />
+          </Box>
 
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>

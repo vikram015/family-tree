@@ -176,6 +176,27 @@ interface NodeDetailsProps {
   };
 }
 
+/**
+ * Action bars inside the drawer.
+ *
+ * MUI's DialogActions has no background of its own — inside a Dialog it simply
+ * shows the Paper behind it. In this drawer the content scrolls underneath, so
+ * it needs to be opaque in its own right, with a divider and a lift to separate
+ * it from what is passing behind. The safe-area padding keeps the buttons clear
+ * of the home indicator on phones.
+ */
+const drawerActionsSx = {
+  flexShrink: 0,
+  px: { xs: 2, sm: 3 },
+  py: 1.5,
+  gap: 1,
+  bgcolor: "background.paper",
+  borderTop: 1,
+  borderColor: "divider",
+  boxShadow: "0 -4px 16px rgba(15, 23, 42, 0.06)",
+  pb: { xs: "calc(12px + env(safe-area-inset-bottom))", sm: 1.5 },
+} as const;
+
 export const NodeDetails = memo(function NodeDetails({
   node,
   nodes,
@@ -2024,7 +2045,7 @@ export const NodeDetails = memo(function NodeDetails({
                 </Accordion>
               </Stack>
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={drawerActionsSx}>
               <Button onClick={() => setView("details")}>Cancel</Button>
               <Button
                 onClick={handleSaveEdit}
@@ -2313,7 +2334,7 @@ export const NodeDetails = memo(function NodeDetails({
                 </Box>
               )}
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={drawerActionsSx}>
               <Button onClick={() => setView("details")}>Cancel</Button>
               <Button
                 onClick={handleConfirmLinkExternal}

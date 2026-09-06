@@ -4,12 +4,21 @@ import { firebaseAuth } from "../../firebase";
 import { backendApi } from "../../services/backendApi";
 import { pushNotifications } from "../../services/pushNotifications";
 import { AppUser, UserRole } from "../../components/model/User";
+import { readSessionHint, writeSessionHint } from "../../utils/authSessionHint";
 
 interface AuthState {
   currentUser: any;
   userProfile: AppUser | null;
   loading: boolean;
   error: string | null;
+  /**
+   * True once Firebase has reported whether a session exists. Until then
+   * `currentUser === null` means "not known yet", not "signed out" — views that
+   * branch on sign-in state must wait for this instead of assuming logged out.
+   */
+  initialized: boolean;
+  /** Whether the last visit on this browser ended signed in. See authSessionHint. */
+  hadSession: boolean;
 }
 
 const initialState: AuthState = {
@@ -17,6 +26,8 @@ const initialState: AuthState = {
   userProfile: null,
   loading: true,
   error: null,
+  initialized: false,
+  hadSession: readSessionHint(),
 };
 
 type BackendUserProfile = {
@@ -93,6 +104,7 @@ export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValu
       // Best-effort: never block sign-out on push cleanup.
     }
     await signOut(firebaseAuth);
+    writeSessionHint(false);
     return null;
   } catch (error: any) {
     return rejectWithValue(error?.message || "Failed to logout");
@@ -160,16 +172,23 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(updateAuthState.pending, (state) => {
+      .addCase(updateAuthState.pending, (state, action) => {
+        // Firebase has already answered by the time this fires, so publish the
+        // user immediately — the profile fetch below is a separate, slower
+        // round trip and the UI shouldn't look signed out while it runs.
+        state.currentUser = action.meta.arg?.user ?? null;
+        state.initialized = true;
         state.loading = true;
       })
       .addCase(updateAuthState.fulfilled, (state, action) => {
+        state.initialized = true;
         state.currentUser = action.payload.currentUser;
         state.userProfile = action.payload.userProfile;
         state.loading = false;
         state.error = null;
       })
       .addCase(updateAuthState.rejected, (state, action) => {
+        state.initialized = true;
         state.currentUser = null;
         state.userProfile = null;
         state.loading = false;
@@ -196,6 +215,8 @@ export const { setCurrentUser, clearError } = authSlice.actions;
 export const selectCurrentUser = (state: any) => state.auth.currentUser;
 export const selectUserProfile = (state: any) => state.auth.userProfile;
 export const selectAuthLoading = (state: any) => state.auth.loading;
+export const selectAuthInitialized = (state: any) => state.auth.initialized;
+export const selectHadSession = (state: any) => state.auth.hadSession;
 export const selectAuthError = (state: any) => state.auth.error;
 
 export const selectIsSuperAdmin = (state: any) =>

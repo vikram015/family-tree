@@ -63,7 +63,11 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
+  const { currentUser, userProfile, logout, isSuperAdmin, initialized, hadSession } = useAuth();
+  // Match the homepage: don't paint a logged-out header for a returning user
+  // and swap it for their avatar once Firebase restores the session. Only the
+  // rendered shell uses this hint — actions still key off the real `currentUser`.
+  const showAuthed = initialized ? !!currentUser : hadSession;
   // Full hierarchy option for the selected location (village, district, state).
 
   useEffect(() => {
@@ -228,7 +232,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
 
       {/* Auth Section for Mobile */}
       <Box sx={{ px: 2, pt: 2, borderTop: 1, borderColor: "divider", mt: 2 }}>
-        {currentUser ? (
+        {showAuthed ? (
           <>
             <Box
               sx={{
@@ -531,7 +535,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
           {/* Auth Buttons */}
           {!isMobile && (
             <Box sx={{ ml: 1, flexShrink: 0 }}>
-              {currentUser ? (
+              {showAuthed ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Button
                     color="inherit"
@@ -675,7 +679,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
           {isMobile && (
             <>
 <Box sx={{ flexGrow: 1, minWidth: 0 }} />
-              {currentUser ? (
+              {showAuthed ? (
                 <IconButton
                   color="inherit"
                   edge="end"

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
   Container,
@@ -28,15 +28,8 @@ import {
   Tooltip,
   InputAdornment,
 } from "@mui/material";
-import StoreIcon from "@mui/icons-material/Store";
-import AgricultureIcon from "@mui/icons-material/Agriculture";
-import SchoolIcon from "@mui/icons-material/School";
-import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
-import EngineeringIcon from "@mui/icons-material/Engineering";
-import ComputerIcon from "@mui/icons-material/Computer";
 import BusinessIcon from "@mui/icons-material/Business";
 import HandshakeIcon from "@mui/icons-material/Handshake";
-import ApartmentIcon from "@mui/icons-material/Apartment";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -66,6 +59,15 @@ import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { FNode } from "../model/FNode";
 import { brand, pageGradient } from "../../theme/brand";
+import { RichText } from "../common/RichText";
+import { richTextToPlain } from "../common/richText";
+import {
+  BUSINESS_CATEGORY_OPTIONS,
+  businessCategoryColor as getCategoryColor,
+  businessCategoryLabel as getCategoryLabel,
+  normalizeCategory,
+} from "../Business/businessCategories";
+import { businessCategoryIcon as getCategoryIcon } from "../Business/businessCategoryIcon";
 
 interface Business {
   id: string;
@@ -88,15 +90,6 @@ interface Business {
   subCasteName?: string; // Sub-caste name
 }
 
-interface BusinessCategory {
-  id: string;
-  title: string;
-  description: string;
-  color: string;
-  icon: string;
-  displayName: string;
-}
-
 interface Profession {
   id: string;
   name: string;
@@ -113,7 +106,6 @@ const buildFamilyPagePath = (treeId?: string, personId?: string): string => {
 };
 
 const businessBlue = brand.primary;
-const businessGreen = brand.accent;
 const slateText = brand.ink;
 const mutedText = brand.slateMuted;
 
@@ -142,16 +134,6 @@ const cardSx = {
     boxShadow: "0 16px 36px rgba(15,23,42,0.1)",
   },
 };
-
-const normalizeCategory = (category?: string) =>
-  category?.trim().toLowerCase() || "";
-
-const titleCaseCategory = (category: string) =>
-  category
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 // Owner link component with hierarchy tooltip
 const OwnerLink: React.FC<{
@@ -275,7 +257,8 @@ export const BusinessPage: React.FC = () => {
   }, [businesses, peopleWithProfessions, currentUser]);
 
   // Local component state
-  const [categories, setCategories] = useState<BusinessCategory[]>([]);
+  // Categories are a fixed vocabulary shared with the business profile page.
+  const categories = BUSINESS_CATEGORY_OPTIONS;
   const [openDialog, setOpenDialog] = useState(false);
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
@@ -290,72 +273,6 @@ export const BusinessPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const defaultLocationAppliedForUserRef = useRef<string | null>(null);
-
-  // Initialize default categories (static - no need to fetch from DB)
-  const initializeCategories = () => {
-    const defaultCategories: BusinessCategory[] = [
-      {
-        id: "retail",
-        title: "Retail & Shops",
-        description: "Family-owned stores, boutiques, and retail businesses",
-        color: "#d97706",
-        icon: "StoreIcon",
-        displayName: "Retail & Shops",
-      },
-      {
-        id: "agriculture",
-        title: "Agriculture & Farming",
-        description: "Agricultural businesses, farming, and related services",
-        color: businessGreen,
-        icon: "AgricultureIcon",
-        displayName: "Agriculture & Farming",
-      },
-      {
-        id: "it",
-        title: "IT & Technology",
-        description:
-          "Software development, IT services, and tech professionals",
-        color: businessBlue,
-        icon: "ComputerIcon",
-        displayName: "IT & Technology",
-      },
-      {
-        id: "education",
-        title: "Education",
-        description:
-          "Teachers, tutors, coaching centers, and educational services",
-        color: "#0891b2",
-        icon: "SchoolIcon",
-        displayName: "Education",
-      },
-      {
-        id: "healthcare",
-        title: "Healthcare",
-        description: "Doctors, nurses, clinics, and medical professionals",
-        color: "#dc2626",
-        icon: "LocalHospitalIcon",
-        displayName: "Healthcare",
-      },
-      {
-        id: "engineering",
-        title: "Engineering & Construction",
-        description: "Engineers, contractors, and construction businesses",
-        color: "#7c3aed",
-        icon: "EngineeringIcon",
-        displayName: "Engineering & Construction",
-      },
-      {
-        id: "properties",
-        title: "Properties & Real Estate",
-        description:
-          "Real estate agents, property management, and property sales",
-        color: "#475569",
-        icon: "ApartmentIcon",
-        displayName: "Properties & Real Estate",
-      },
-    ];
-    setCategories(defaultCategories);
-  };
 
   const locationName =
     locations.find((v) => v.id === selectedLocation)?.name || "Select a location";
@@ -386,11 +303,6 @@ export const BusinessPage: React.FC = () => {
       active = false;
     };
   }, [selectedLocation, locationOption?.locationId]);
-
-  useEffect(() => {
-    // Initialize categories on component mount
-    initializeCategories();
-  }, []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -533,42 +445,6 @@ export const BusinessPage: React.FC = () => {
     ).length;
   };
 
-  const getCategoryColor = (category?: string) => {
-    const categoryMeta = categories.find(
-      (cat) => cat.id === normalizeCategory(category),
-    );
-    return categoryMeta?.color || "#475569";
-  };
-
-  const getCategoryLabel = (category?: string) => {
-    const normalizedCategory = normalizeCategory(category);
-    if (!normalizedCategory) return "";
-    const categoryMeta = categories.find((cat) => cat.id === normalizedCategory);
-    return categoryMeta?.displayName || titleCaseCategory(normalizedCategory);
-  };
-
-  const getCategoryIcon = (category?: string, size = 24) => {
-    const color = getCategoryColor(category);
-    switch (normalizeCategory(category)) {
-      case "retail":
-        return <StoreIcon sx={{ fontSize: size, color }} />;
-      case "agriculture":
-        return <AgricultureIcon sx={{ fontSize: size, color }} />;
-      case "it":
-        return <ComputerIcon sx={{ fontSize: size, color }} />;
-      case "education":
-        return <SchoolIcon sx={{ fontSize: size, color }} />;
-      case "healthcare":
-        return <LocalHospitalIcon sx={{ fontSize: size, color }} />;
-      case "engineering":
-        return <EngineeringIcon sx={{ fontSize: size, color }} />;
-      case "properties":
-        return <ApartmentIcon sx={{ fontSize: size, color }} />;
-      default:
-        return <BusinessIcon sx={{ fontSize: size, color }} />;
-    }
-  };
-
   const getCategoryIconLarge = (category: string) => {
     return getCategoryIcon(category, 44);
   };
@@ -661,7 +537,7 @@ export const BusinessPage: React.FC = () => {
       !term ||
       [
         business.name,
-        business.description,
+        richTextToPlain(business.description),
         business.owner,
         getCategoryLabel(business.category),
         business.contact,
@@ -987,10 +863,15 @@ export const BusinessPage: React.FC = () => {
                         <Typography
                           variant="h6"
                           gutterBottom
+                          component={RouterLink}
+                          to={`/business/${business.id}`}
                           sx={{
+                            display: "block",
                             fontWeight: 900,
                             color: slateText,
                             letterSpacing: 0,
+                            textDecoration: "none",
+                            "&:hover": { color: businessBlue },
                           }}
                         >
                           {business.name}
@@ -1002,7 +883,10 @@ export const BusinessPage: React.FC = () => {
                           paragraph
                           sx={{ minHeight: 60, mb: 3, color: mutedText }}
                         >
-                          {business.description || "No description added yet."}
+                          <RichText
+                            value={business.description}
+                            fallback="No description added yet."
+                          />
                         </Typography>
 
                         <Stack spacing={1.5}>

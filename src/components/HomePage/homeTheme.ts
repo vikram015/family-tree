@@ -1,5 +1,5 @@
 import { SxProps, Theme } from "@mui/material";
-import { brand } from "../../theme/brand";
+import { brand, heroGradient } from "../../theme/brand";
 
 /**
  * Shared visual language for the homepage sections.
@@ -13,12 +13,48 @@ import { brand } from "../../theme/brand";
  * than shrinking down, and nothing assumes a hover-capable pointer.
  */
 
-/** Warm heritage wash for the hero — deliberately not the blue used elsewhere. */
-export const heroSurface = [
-  `radial-gradient(circle at 8% 0%, rgba(13, 110, 253, 0.10) 0%, rgba(13, 110, 253, 0) 42%)`,
-  `radial-gradient(circle at 92% 8%, rgba(22, 163, 74, 0.07) 0%, rgba(22, 163, 74, 0) 38%)`,
-  `linear-gradient(160deg, ${brand.warmSoft} 0%, ${brand.warm} 55%, ${brand.surface} 100%)`,
-].join(", ");
+/**
+ * The hero's ground: the shared page wash plus its ambient glows.
+ *
+ * It was a warm cream, deliberately unlike the rest of the app; that fought the
+ * blue chart and blue CTAs sitting on it, and made the homepage look like a
+ * different product from the pages it links to. Aliased rather than redefined so
+ * there is exactly one place to change it.
+ */
+export const heroSurface = heroGradient;
+
+/**
+ * Section eyebrow as a pill: a blue dot, then the label, inside a tinted
+ * capsule. Used on the marketing page, where each section needs a visible
+ * opening marker; the plainer `eyebrowSx` stays for the dashboard, where a
+ * pill on every small heading would be noise.
+ *
+ * The dot is a `::before` rather than an element so the whole thing stays a
+ * style token and call sites remain one `<Typography>`.
+ */
+export const eyebrowPillSx: SxProps<Theme> = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 0.75,
+  px: 1.5,
+  py: 0.5,
+  borderRadius: 999,
+  bgcolor: brand.primarySoft,
+  border: "1px solid",
+  borderColor: "rgba(191, 219, 254, 0.8)",
+  color: brand.primary,
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  "&::before": {
+    content: '""',
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    backgroundColor: brand.primary,
+  },
+};
 
 /** Small uppercase label that opens a section — replaces the old h6-in-a-card. */
 export const eyebrowSx: SxProps<Theme> = {

@@ -13,7 +13,7 @@ import {
   Card,
   CardContent,
 } from "@mui/material";
-import { brand } from "../../theme/brand";
+import { brand, pageGradient } from "../../theme/brand";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import EmailIcon from "@mui/icons-material/Email";
 import LinkedInIcon from "@mui/icons-material/LinkedIn";
@@ -73,7 +73,7 @@ export const ContactPage: React.FC = () => {
       <Box
         sx={{
           background:
-            `linear-gradient(130deg, ${brand.primarySoft} 0%, ${brand.canvas} 45%, ${brand.primarySoft} 100%)`,
+            pageGradient,
           minHeight: "100%",
           py: { xs: 4, md: 6 },
         }}
