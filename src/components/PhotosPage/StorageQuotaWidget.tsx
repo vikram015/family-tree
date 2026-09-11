@@ -1,7 +1,8 @@
 import React from "react";
-import { Box, Paper, Stack, Typography, LinearProgress, Tooltip, IconButton } from "@mui/material";
+import { Box, Stack, Typography } from "@mui/material";
+import { Link } from "react-router-dom";
 import Diversity2OutlinedIcon from "@mui/icons-material/Diversity2Outlined";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import type { StorageQuotaStatus } from "../../services/apiService";
 import { brand } from "../../theme/brand";
 
@@ -17,10 +18,12 @@ interface StorageQuotaWidgetProps {
 }
 
 /**
- * Used/limit bar plus the earn-more-storage nudge. Sits at the top of the
- * Photos page. Deliberately compact on mobile — a single tight row plus a
- * thin bar; the full explanation collapses behind an info icon there instead
- * of a paragraph, matching the desktop version's tip text.
+ * Used/limit bar plus the earn-more-storage nudge, at the top of the Photos
+ * page.
+ *
+ * The nudge is the point of the card: storage is earned by building a
+ * relative's tree and linking it, so the banner is a call to action rather than
+ * a note. It disappears once the account is at the ceiling.
  */
 export function StorageQuotaWidget({ status }: StorageQuotaWidgetProps) {
   const { usedBytes, limitBytes, maxBytes, bonusPerActionBytes } = status;
@@ -28,76 +31,143 @@ export function StorageQuotaWidget({ status }: StorageQuotaWidgetProps) {
   const atMax = limitBytes >= maxBytes;
   const isNearOrOverLimit = percentUsed >= 90;
 
-  const tipText = `Build a relative's tree and link it to yours to unlock +${formatBytes(
-    bonusPerActionBytes,
-  )}, up to ${formatBytes(maxBytes)} total.`;
-
   return (
-    <Paper
-      variant="outlined"
+    <Box
       sx={{
-        p: { xs: 1.25, sm: 2.5 },
-        borderRadius: 2,
-        borderColor: brand.border,
+        bgcolor: brand.surface,
+        borderRadius: 3,
+        border: "1px solid #dbeafe",
+        boxShadow: "0 4px 20px -4px rgba(29, 78, 216, 0.06)",
+        p: { xs: 2, sm: 2.5 },
       }}
     >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: { xs: 0.5, sm: 1 } }}>
-        <Stack direction="row" alignItems="center" spacing={0.25}>
-          <Typography
-            variant="subtitle1"
-            sx={{ fontWeight: 700, fontSize: { xs: "0.85rem", sm: "1rem" } }}
-          >
-            Storage
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        alignItems={{ xs: "flex-start", sm: "center" }}
+        justifyContent="space-between"
+        spacing={1}
+        sx={{ mb: 1.5 }}
+      >
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography sx={{ fontWeight: 700, fontSize: 16, color: brand.ink }}>
+            Photo storage
           </Typography>
-          {!atMax && (
-            <Tooltip title={tipText}>
-              <IconButton size="small" sx={{ p: 0.25, display: { xs: "inline-flex", sm: "none" } }}>
-                <InfoOutlinedIcon sx={{ fontSize: 15 }} />
-              </IconButton>
-            </Tooltip>
-          )}
+          <Box
+            sx={{
+              px: 1,
+              py: 0.25,
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              bgcolor: brand.primarySoft,
+              border: "1px solid rgba(191, 219, 254, 0.9)",
+              color: brand.primaryDark,
+            }}
+          >
+            {atMax ? "Max space" : "Free tier"}
+          </Box>
         </Stack>
+
         <Typography
-          variant="body2"
           sx={{
+            fontSize: 13.5,
             fontWeight: 600,
-            fontSize: { xs: "0.75rem", sm: "0.875rem" },
-            color: isNearOrOverLimit ? "warning.dark" : "text.secondary",
+            color: isNearOrOverLimit ? "#b45309" : brand.slate,
           }}
         >
-          {formatBytes(usedBytes)} / {formatBytes(limitBytes)}
+          <Box
+            component="span"
+            sx={{ fontWeight: 800, color: isNearOrOverLimit ? "#b45309" : brand.primaryDark }}
+          >
+            {formatBytes(usedBytes)}
+          </Box>{" "}
+          used of{" "}
+          <Box component="span" sx={{ color: brand.ink }}>
+            {formatBytes(limitBytes)}
+          </Box>
         </Typography>
       </Stack>
 
-      <LinearProgress
-        variant="determinate"
-        value={percentUsed}
-        color={isNearOrOverLimit ? "warning" : "primary"}
-        sx={{ height: { xs: 5, sm: 8 }, borderRadius: 999 }}
-      />
+      <Box
+        sx={{
+          width: "100%",
+          height: 10,
+          borderRadius: 999,
+          bgcolor: "#f1f5f9",
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          sx={{
+            width: `${percentUsed}%`,
+            height: "100%",
+            borderRadius: 999,
+            transition: "width 300ms ease",
+            background: isNearOrOverLimit
+              ? "linear-gradient(to right, #d97706, #f59e0b)"
+              : `linear-gradient(to right, ${brand.primaryDark}, ${brand.primary})`,
+          }}
+        />
+      </Box>
 
       {!atMax && (
         <Stack
-          direction="row"
-          spacing={1}
-          alignItems="center"
-          sx={{ mt: 1.5, color: brand.accentDark, cursor: "default", display: { xs: "none", sm: "flex" } }}
+          direction={{ xs: "column", sm: "row" }}
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          justifyContent="space-between"
+          spacing={1.5}
+          sx={{
+            mt: 2,
+            p: 1.5,
+            borderRadius: 2.5,
+            bgcolor: "#f8fafc",
+            border: "1px solid #f1f5f9",
+          }}
         >
-          <Diversity2OutlinedIcon fontSize="small" />
-          <Typography variant="body2">{tipText}</Typography>
+          <Stack direction="row" spacing={1.25} alignItems="flex-start">
+            <Diversity2OutlinedIcon sx={{ fontSize: 19, color: brand.accentDark, mt: "1px" }} />
+            <Typography sx={{ fontSize: 13.5, color: brand.slate, lineHeight: 1.5 }}>
+              <Box component="span" sx={{ fontWeight: 700, color: brand.ink }}>
+                Unlock more space:
+              </Box>{" "}
+              build a relative&apos;s tree and link it to yours to get{" "}
+              <Box component="span" sx={{ fontWeight: 700, color: brand.accentDark }}>
+                +{formatBytes(bonusPerActionBytes)} free
+              </Box>{" "}
+              (up to {formatBytes(maxBytes)} total).
+            </Typography>
+          </Stack>
+
+          <Typography
+            component={Link}
+            to="/families"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.5,
+              flexShrink: 0,
+              fontSize: 13,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              color: brand.primaryDark,
+              textDecoration: "none",
+              "&:hover": { textDecoration: "underline" },
+            }}
+          >
+            Link a branch
+            <ArrowForwardIcon sx={{ fontSize: 15 }} />
+          </Typography>
         </Stack>
       )}
 
       {isNearOrOverLimit && (
-        <Box sx={{ mt: { xs: 0.75, sm: 1 } }}>
-          <Typography variant="caption" color="warning.dark" sx={{ fontSize: { xs: "0.7rem", sm: "0.75rem" } }}>
-            {atMax
-              ? "You've reached your storage limit. A subscription option for more storage is coming soon."
-              : "You're almost at your storage limit — build a relative's tree and link it to unlock more."}
-          </Typography>
-        </Box>
+        <Typography sx={{ mt: 1.25, fontSize: 12.5, color: "#b45309" }}>
+          {atMax
+            ? "You've reached your storage limit. A subscription option for more storage is coming soon."
+            : "You're almost at your storage limit — build a relative's tree and link it to unlock more."}
+        </Typography>
       )}
-    </Paper>
+    </Box>
   );
 }
 

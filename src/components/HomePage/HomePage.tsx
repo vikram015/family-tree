@@ -13,6 +13,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
+import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchDashboardStatistics,
@@ -28,7 +29,7 @@ import {
 import { selectEffectiveUserOnboardingData } from "../../store/slices/userOnboardingSlice";
 import { useAuth } from "../hooks/useAuth";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
-import { brand, washBorder } from "../../theme/brand";
+import { brand, fontSerif } from "../../theme/brand";
 import { GlobalSearch } from "./GlobalSearch";
 import { LandingPage } from "./LandingPage";
 import { TodayStrip } from "./TodayStrip";
@@ -36,8 +37,24 @@ import { PersonalStats } from "./PersonalStats";
 import { TreeGaps } from "./TreeGaps";
 import { FeatureGrid } from "./FeatureGrid";
 import { NetworkStrip } from "./NetworkStrip";
+import { RecentPhotos } from "./RecentPhotos";
+import { QuickActions } from "./QuickActions";
 import { ContributorList, Contributor } from "./ContributorList";
-import {heroSurface, panelSx, sectionSpacing } from "./homeTheme";
+import { eyebrowSx, panelSx } from "./homeTheme";
+
+/**
+ * The dashboard's ground.
+ *
+ * A flat near-white rather than the app's blue wash: this page is a field of
+ * white cards, and a gradient behind them made the cards read as floating on a
+ * second, differently-coloured page.
+ */
+const DASHBOARD_SURFACE = "#fafbfd";
+
+/** The small separator between eyebrow items. */
+const Dot: React.FC = () => (
+  <Box aria-hidden sx={{ width: 3, height: 3, borderRadius: "50%", bgcolor: "#cbd5e1" }} />
+);
 
 type NextAction = {
   title: string;
@@ -73,6 +90,8 @@ export const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  // From `xl` the page has room for the design's right rail.
+  const isWide = useMediaQuery(theme.breakpoints.up("xl"));
   const { currentUser, userProfile, loading: authLoading, initialized, hadSession } = useAuth();
   const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
   const statistics = useAppSelector(selectStatistics);
@@ -90,6 +109,16 @@ export const HomePage: React.FC = () => {
   // (phone signups) has neither. Greet them without a placeholder standing in
   // for their name.
   const personName = (userProfile?.displayName || userProfile?.name || "").trim();
+
+  // Shown as a chip beside the greeting. Only roles the app actually grants —
+  // an invented status label ("Custodian", "Branch Keeper") would look like a
+  // standing the user had earned when it means nothing.
+  const roleLabel =
+    userProfile?.role === "superadmin"
+      ? "Super admin"
+      : userProfile?.role === "admin"
+        ? "Admin"
+        : null;
 
   const totalPeople = Number(statistics?.totalPeople || 0);
   const totalTrees = Number(statistics?.totalTrees || 0);
@@ -296,143 +325,285 @@ export const HomePage: React.FC = () => {
         />
       </Helmet>
 
-      <Box sx={{ background: heroSurface, borderBottom: "1px solid", borderColor: washBorder }}>
-        {/* A signed-in dashboard earns its space with what changed and what to do
-            next, so this band stays small: a greeting, search, and one action.
-            The slogan that used to sit here is landing-page copy — it pushed the
-            worklist below the fold without telling the user anything. */}
-        <Container maxWidth="lg" sx={{ py: { xs: 2, md: 2.5 } }}>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={{ xs: 1.5, md: 3 }}
-            alignItems={{ xs: "stretch", md: "center" }}
-            sx={{ mb: 2 }}
-          >
-            <Typography
-              component="h1"
-              sx={{
-                fontWeight: 800,
-                fontSize: { xs: 22, sm: 25, md: 27 },
-                lineHeight: 1.2,
-                color: brand.ink,
-                flexShrink: 0,
-              }}
-            >
-              {personName ? (
-                `Welcome back, ${personName}`
-              ) : authPending ? (
-                <>
-                  Welcome back,{" "}
-                  <Skeleton
-                    variant="text"
-                    width={140}
-                    sx={{ display: "inline-block", verticalAlign: "middle" }}
-                  />
-                </>
-              ) : (
-                "Welcome back"
-              )}
-            </Typography>
-            <Box sx={{ flex: 1, minWidth: 0, maxWidth: { md: 520 } }}>
-              <GlobalSearch />
-            </Box>
-          </Stack>
+      {/*
+        One continuous surface, top to bottom.
 
-          {nextAction && (
+        The dashboard used to open with a tinted, bordered hero band, which cut
+        the page in two: a coloured strip at the top and a different-looking page
+        under it. The design treats the greeting as simply the first section of
+        the page, so the wash runs the whole way and the sections themselves
+        provide the structure.
+      */}
+      <Box sx={{ bgcolor: DASHBOARD_SURFACE, minHeight: "100vh" }}>
+        <Container
+          maxWidth={false}
+          sx={{ maxWidth: 1440, px: { xs: 2, sm: 3, lg: 4 }, py: { xs: 3, md: 4 } }}
+        >
+          <Stack spacing={{ xs: 3, md: 4 }}>
+            {/* ---- Greeting, primary actions, search ------------------------ */}
+            <Box component="section">
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "stretch", sm: "flex-end" }}
+                spacing={{ xs: 2, sm: 3 }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    alignItems="center"
+                    flexWrap="wrap"
+                    useFlexGap
+                    sx={{ mb: 0.5 }}
+                  >
+                    <Typography sx={{ ...(eyebrowSx as object), color: brand.primary }}>
+                      Welcome back
+                    </Typography>
+                    {roleLabel && (
+                      <>
+                        <Dot />
+                        <Box
+                          sx={{
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: 1,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: brand.primaryDark,
+                            bgcolor: brand.primarySoft,
+                            border: "1px solid",
+                            borderColor: "rgba(191, 219, 254, 0.9)",
+                          }}
+                        >
+                          {roleLabel}
+                        </Box>
+                      </>
+                    )}
+                    {/* Which branch this dashboard is about — the design's
+                        "Dhana Ram Lineage Lead" line, minus the invented title. */}
+                    {insights?.tree?.name && (
+                      <>
+                        <Dot />
+                        <Typography
+                          noWrap
+                          sx={{
+                            display: { xs: "none", sm: "block" },
+                            fontSize: 12,
+                            color: brand.slateMuted,
+                            maxWidth: 260,
+                          }}
+                        >
+                          {insights.tree.name}
+                        </Typography>
+                      </>
+                    )}
+                  </Stack>
+
+                  <Typography
+                    component="h1"
+                    sx={{
+                      fontWeight: 800,
+                      fontSize: { xs: 26, sm: 32, md: 36 },
+                      letterSpacing: "-0.02em",
+                      lineHeight: 1.15,
+                      color: brand.ink,
+                    }}
+                  >
+                    {personName ? (
+                      personName
+                    ) : authPending ? (
+                      <Skeleton variant="text" width={200} sx={{ maxWidth: "100%" }} />
+                    ) : (
+                      "Your family dashboard"
+                    )}
+                  </Typography>
+
+                  {/* The design's one serif line — a deliberate break from the
+                      UI typeface, so the sentiment doesn't read as chrome. */}
+                  <Typography
+                    sx={{
+                      mt: 0.5,
+                      fontFamily: fontSerif,
+                      fontSize: 15,
+                      fontStyle: "italic",
+                      color: brand.slateMuted,
+                    }}
+                  >
+                    Every update you make today becomes heritage tomorrow.
+                  </Typography>
+                </Box>
+
+                {/* The two destinations a returning user opens by name. */}
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{ flexShrink: 0, "& > *": { flex: { xs: 1, sm: "0 0 auto" } } }}
+                >
+                  <Button
+                    variant="contained"
+                    onClick={() => void handleContinueToYourTree()}
+                    disabled={continueTreeLoading}
+                    endIcon={<ArrowForwardIcon />}
+                    sx={{
+                      fontWeight: 700,
+                      minHeight: 44,
+                      px: 2.25,
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontSize: 14,
+                      boxShadow: "0 1px 2px rgba(13, 110, 253, 0.25)",
+                      bgcolor: brand.primary,
+                      "&:hover": { bgcolor: brand.primaryDark },
+                    }}
+                  >
+                    {continueTreeLoading ? "Opening…" : "Continue your tree"}
+                  </Button>
+                  <Button
+                    component={Link}
+                    to="/photos"
+                    variant="outlined"
+                    startIcon={<PhotoLibraryOutlinedIcon />}
+                    sx={{
+                      // Hidden on phones, where two side-by-side buttons force
+                      // the primary label onto two lines. Photos keeps its
+                      // Explore tile a screen below, so nothing is lost.
+                      display: { xs: "none", sm: "inline-flex" },
+                      fontWeight: 600,
+                      minHeight: 44,
+                      px: 2.25,
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontSize: 14,
+                      whiteSpace: "nowrap",
+                      bgcolor: brand.surface,
+                      color: brand.slate,
+                      borderColor: brand.border,
+                      "&:hover": { bgcolor: brand.canvas, borderColor: "#cbd5e1" },
+                    }}
+                  >
+                    Family photos
+                  </Button>
+                </Stack>
+              </Stack>
+
+              {/* Full width rather than sharing the greeting's row: search is
+                  the fastest way into a 600-person tree, not a sliver. */}
+              <Box sx={{ mt: { xs: 2, md: 2.5 }, maxWidth: 860 }}>
+                <GlobalSearch maxWidth="100%" rounded showTypeFilter />
+              </Box>
+
+              {nextAction && (
+                <Box
+                  sx={{
+                    ...(panelSx as object),
+                    p: { xs: 1.75, sm: 2 },
+                    mt: { xs: 2, md: 2.5 },
+                    display: "flex",
+                    flexDirection: { xs: "column", sm: "row" },
+                    alignItems: { xs: "flex-start", sm: "center" },
+                    gap: { xs: 1.5, sm: 2 },
+                    borderColor: brand.primary,
+                    bgcolor: brand.primarySoft,
+                  }}
+                >
+                  <AutoAwesomeOutlinedIcon sx={{ color: brand.primary, flexShrink: 0 }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, color: brand.ink }}>
+                      {nextAction.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: brand.slate }}>
+                      {nextAction.description}
+                    </Typography>
+                  </Box>
+                  <Button
+                    component={Link}
+                    to={nextAction.to}
+                    variant="contained"
+                    endIcon={<ArrowForwardIcon />}
+                    fullWidth={isMobile}
+                    sx={{
+                      flexShrink: 0,
+                      fontWeight: 700,
+                      minHeight: 44,
+                      textTransform: "none",
+                      fontSize: 14,
+                      bgcolor: brand.primary,
+                      "&:hover": { bgcolor: brand.primaryDark },
+                    }}
+                  >
+                    {nextAction.cta}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+
+            {/*
+              Below `xl` everything is one column, exactly as the desktop
+              design. From `xl` the page splits 8/4 and the ranking, the archive
+              and the shortcuts move into a rail — the widescreen design — so a
+              2560px monitor isn't a column of content with empty margins.
+            */}
             <Box
               sx={{
-                ...(panelSx as object),
-                p: { xs: 1.75, sm: 2 },
-                mb: 3,
-                display: "flex",
-                flexDirection: { xs: "column", sm: "row" },
-                alignItems: { xs: "flex-start", sm: "center" },
-                gap: { xs: 1.5, sm: 2 },
-                borderColor: brand.primary,
-                bgcolor: brand.primarySoft,
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 8fr) minmax(0, 4fr)" },
+                gap: { xs: 3, md: 4 },
+                alignItems: "start",
               }}
             >
-              <AutoAwesomeOutlinedIcon sx={{ color: brand.primary, flexShrink: 0 }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={{ fontWeight: 700, color: brand.ink }}>
-                  {nextAction.title}
-                </Typography>
-                <Typography variant="body2" sx={{ color: brand.slate }}>
-                  {nextAction.description}
-                </Typography>
-              </Box>
-              <Button
-                component={Link}
-                to={nextAction.to}
-                variant="contained"
-                endIcon={<ArrowForwardIcon />}
-                fullWidth={isMobile}
-                sx={{
-                  flexShrink: 0,
-                  fontWeight: 700,
-                  minHeight: 44,
-                  bgcolor: brand.primary,
-                  "&:hover": { bgcolor: brand.primaryDark },
-                }}
-              >
-                {nextAction.cta}
-              </Button>
-            </Box>
-          )}
+              <Stack spacing={{ xs: 3, md: 4 }} sx={{ minWidth: 0 }}>
+                <TodayStrip
+                  events={familyEvents}
+                  upcoming={upcoming}
+                  loading={eventsLoading || authPending}
+                  treeId={insights?.tree?.id}
+                />
 
-          <Button
-            variant="contained"
-            onClick={() => void handleContinueToYourTree()}
-            disabled={continueTreeLoading}
-            endIcon={<ArrowForwardIcon />}
-            sx={{
-              fontWeight: 700,
-              minHeight: 44,
-              bgcolor: brand.primary,
-              "&:hover": { bgcolor: brand.primaryDark },
-            }}
-          >
-            {continueTreeLoading ? "Opening..." : "Continue your tree"}
-          </Button>
+                <PersonalStats
+                  stats={stats}
+                  treeName={insights?.tree?.name}
+                  treeId={insights?.tree?.id}
+                  loading={insightsLoading || authPending}
+                />
+
+                <TreeGaps
+                  gaps={insights?.gaps || []}
+                  loading={insightsLoading || authPending}
+                  treeName={insights?.tree?.name}
+                  totalIncomplete={stats.incompleteProfiles}
+                />
+
+                <FeatureGrid counts={counts} loading={insightsLoading || authPending} />
+
+                {!isWide && (
+                  <ContributorList contributors={topContributors} loading={loadingStats} />
+                )}
+
+                <NetworkStrip
+                  totalPeople={totalPeople}
+                  totalTrees={totalTrees}
+                  totalLocations={totalLocations}
+                  totalBusinesses={totalBusinesses}
+                  loading={loadingStats}
+                />
+              </Stack>
+
+              {isWide && (
+                <Stack spacing={3} sx={{ minWidth: 0, position: "sticky", top: 88 }}>
+                  <RecentPhotos />
+                  <ContributorList
+                    contributors={topContributors}
+                    loading={loadingStats}
+                    compact
+                  />
+                  <QuickActions pendingRequests={Number(counts?.pendingRequests) || 0} />
+                </Stack>
+              )}
+            </Box>
+          </Stack>
         </Container>
       </Box>
-
-      <Container maxWidth="lg" sx={{ py: sectionSpacing }}>
-        <Stack spacing={sectionSpacing}>
-          <TodayStrip
-            events={familyEvents}
-            upcoming={upcoming}
-            loading={eventsLoading || authPending}
-          />
-
-          <PersonalStats
-            stats={stats}
-            treeName={insights?.tree?.name}
-            treeId={insights?.tree?.id}
-            loading={insightsLoading || authPending}
-          />
-
-          <TreeGaps
-            gaps={insights?.gaps || []}
-            loading={insightsLoading || authPending}
-            treeName={insights?.tree?.name}
-          />
-
-          <FeatureGrid counts={counts} loading={insightsLoading || authPending} />
-
-          <Box sx={{ ...(panelSx as object), p: { xs: 2.5, md: 3 } }}>
-            <ContributorList contributors={topContributors} loading={loadingStats} />
-          </Box>
-
-          <NetworkStrip
-            totalPeople={totalPeople}
-            totalTrees={totalTrees}
-            totalLocations={totalLocations}
-            totalBusinesses={totalBusinesses}
-            loading={loadingStats}
-          />
-        </Stack>
-      </Container>
     </>
   );
 };

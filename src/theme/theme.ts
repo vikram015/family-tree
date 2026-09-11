@@ -1,5 +1,5 @@
 import { createTheme } from "@mui/material/styles";
-import { brand } from "./brand";
+import { brand, fontSans } from "./brand";
 
 /**
  * The application MUI theme, derived from the brand tokens (which come from the
@@ -8,6 +8,10 @@ import { brand } from "./brand";
  * render consistent, on-brand colors everywhere — no per-component hex literals.
  */
 export const theme = createTheme({
+  // MUI defaults to Roboto, which the app never loads — so every MUI surface
+  // was rendering in a system fallback while plain DOM text used the stack in
+  // index.css. One family, set here, covers both.
+  typography: { fontFamily: fontSans },
   palette: {
     primary: {
       main: brand.primary,

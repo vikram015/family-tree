@@ -86,6 +86,9 @@ const dTree = {
       nodeWidth: 100,
       nodeHeight: 50,
       marriageNodeSize: 10,
+      /** Slot given to the person↔marriage↔spouse pairs. Raising it moves the
+       *  spouse cards apart, leaving air around the heart. */
+      marriageSeparation: 0.3,
       styles: {
         node: 'node',
         marriageNode: 'marriageNode',

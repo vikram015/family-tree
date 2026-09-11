@@ -60,6 +60,10 @@ export interface FamilyPhoto {
   visibility: PhotoVisibility;
   createdBy: string;
   createdAt: string;
+  /** Whose photo this is. Null if the person record is gone. */
+  personName?: string | null;
+  /** Who added it — the contributor shown on shared photos. */
+  uploaderName?: string | null;
   /** Short-lived signed URL — refetch the list rather than caching this long-term. */
   photoUrl: string;
   thumbUrl: string;
@@ -214,6 +218,8 @@ export interface FamilyDeceased {
   gender?: string | null;
   photoUrl?: string | null;
   deceasedDate: string;
+  /** Birth date, when recorded — lets a remembrance card show a full lifespan. */
+  dob?: string | null;
   yearsAgo: number;
 }
 
@@ -262,6 +268,9 @@ export interface TreeGap {
   gap: TreeGapType;
   /** Ready-to-render copy, e.g. "No birth date". */
   label: string;
+  /** Ready-to-render placement in the tree, e.g. "Son of Ram Kumar". Null when
+   *  no parent is recorded. */
+  relation?: string | null;
 }
 
 /** Everything the personalized homepage needs, in one round trip. */
@@ -485,6 +494,20 @@ export const ApiService = {
     const trimmed = String(value).trim();
     return trimmed ? trimmed : undefined;
   },
+  /**
+   * Same as `normalizeDateValue`, but for PATCHes rather than creates.
+   *
+   * On an update, an emptied field has to survive the request: `undefined` is
+   * dropped by JSON.stringify, so the server sees no key and leaves the old
+   * date in place — the user clears the field, saves, and it comes back. `null`
+   * travels, and the server reads it as "clear this".
+   */
+  normalizeDateUpdate(value?: string | null): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : null;
+  },
   /** Record a login event for the current user (call once on successful sign-in). */
   async recordLoginEvent(): Promise<void> {
     await backendApi.post("/api/auth/login-event", {});
@@ -586,15 +609,18 @@ export const ApiService = {
    */
   async updatePerson(personId: string, updates: Partial<FNode>): Promise<PersonWithRelations> {
     const { customFields, ...coreUpdates } = updates;
-    const normalizedDob = this.normalizeDateValue(coreUpdates.dob);
-    const normalizedDeceasedDate = this.normalizeDateValue(coreUpdates.deceasedDate);
+    const normalizedDob = this.normalizeDateUpdate(coreUpdates.dob);
+    const normalizedDeceasedDate = this.normalizeDateUpdate(coreUpdates.deceasedDate);
     const payload = {
       name: coreUpdates.name,
       nameHindi: coreUpdates.nameHindi,
       gender: coreUpdates.gender,
       dob: normalizedDob,
       additionalFields: customFields && Object.keys(customFields).length > 0 ? customFields : undefined,
-      bloodGroup: coreUpdates.bloodGroup,
+      bloodGroup:
+        coreUpdates.bloodGroup === undefined
+          ? undefined
+          : coreUpdates.bloodGroup || null,
       isAlive: coreUpdates.isAlive,
       deceasedDate: normalizedDeceasedDate,
       photoUrl: coreUpdates.photo,

@@ -138,7 +138,16 @@ class TreeBuilder {
         opts.callbacks.nodeHeightSeperation.call(this, nodeSize[0], nodeSize[1])
       ]);
 
+    // A marriage node is hidden, so without a case of its own it takes the same
+    // narrow slot as layout padding — which is what leaves the heart almost
+    // touching both spouse cards. `marriageSeparation` widens just that pair.
+    const marriageSeparation = opts.marriageSeparation ?? 0.3;
     this.tree.separation(function separation(a: any, b: any) {
+      const isMarriagePair =
+        (a.data && a.data.isMarriage) || (b.data && b.data.isMarriage);
+      if (isMarriagePair) {
+        return marriageSeparation;
+      }
       if (a.data.hidden || b.data.hidden) {
         return 0.3;
       } else {

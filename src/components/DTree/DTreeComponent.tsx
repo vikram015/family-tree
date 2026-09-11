@@ -10,6 +10,7 @@ import {
 import { TreeViewer } from "../../lib/tree-viewer/TreeViewer";
 import type {
   TreeViewerLanguage,
+  TreeViewerNodeShape,
   TreeViewerNode,
   TreeViewerProps,
 } from "../../lib/tree-viewer/types";
@@ -99,6 +100,19 @@ function toTreeViewerNode(
   };
 }
 
+/** Where the browser remembers the card layout between visits. */
+const NODE_SHAPE_STORAGE_KEY = "kinvia:treeNodeShape";
+
+function readStoredNodeShape(): TreeViewerNodeShape {
+  try {
+    return window.localStorage.getItem(NODE_SHAPE_STORAGE_KEY) === "vertical"
+      ? "vertical"
+      : "horizontal";
+  } catch {
+    return "horizontal";
+  }
+}
+
 export const DTreeComponent: React.FC<DTreeComponentProps> = ({
   nodes,
   rootId,
@@ -132,8 +146,20 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     showFullTree: initialShowFullTree,
     showSpouses: true,
     language: "hindi" as TreeViewerLanguage,
+    nodeShape: readStoredNodeShape(),
   });
   const hydratedPreferenceRef = useRef(false);
+  // Node shape lives in the browser rather than the account preference row:
+  // it is a view setting for this screen, and adding it server-side would mean
+  // a schema change for something that does not need to follow the user across
+  // devices. Swap this for the API the day it should.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NODE_SHAPE_STORAGE_KEY, viewerPreferences.nodeShape);
+    } catch {
+      // Private mode or storage disabled — the choice just won't persist.
+    }
+  }, [viewerPreferences.nodeShape]);
   const savedPreferenceSnapshotRef = useRef("");
 
   useEffect(() => {
@@ -167,6 +193,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
     hydratedPreferenceRef.current = true;
 
     setViewerPreferences((current) => ({
+      ...current,
       showFullTree:
         highlightedPersonId || initialMainId
           ? current.showFullTree
@@ -188,7 +215,11 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       return;
     }
 
-    const nextSnapshot = JSON.stringify(viewerPreferences);
+    const nextSnapshot = JSON.stringify({
+      showFullTree: viewerPreferences.showFullTree,
+      showSpouses: viewerPreferences.showSpouses,
+      language: viewerPreferences.language,
+    });
     if (nextSnapshot === savedPreferenceSnapshotRef.current) {
       return;
     }
@@ -225,6 +256,10 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           context.isMobile,
           context.canEditNode ?? true,
           context.allowNameDetailsClick ?? true,
+          // Without this the viewer's layout choice never reaches the card:
+          // this renderer overrides the viewer's default one, so anything it
+          // forgets to forward is silently dropped.
+          context.nodeShape ?? "horizontal",
         ),
       renderPlaceholderCardSvg,
       renderMarriageNodeSvg,
@@ -260,6 +295,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
       initialShowFullTree={viewerPreferences.showFullTree}
       initialShowSpouses={viewerPreferences.showSpouses}
       initialLanguage={viewerPreferences.language}
+      initialNodeShape={viewerPreferences.nodeShape}
       onPreferencesChange={setViewerPreferences}
       features={features}
       renderers={renderers}

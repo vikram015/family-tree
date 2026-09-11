@@ -233,7 +233,10 @@ export const NodeDetails = memo(function NodeDetails({
     return parsed;
   }, []);
   const formatPickerDate = useCallback((value: Dayjs | null) => {
-    if (!value || !value.isValid()) return undefined;
+    // Empty string, not undefined: an emptied date has to reach the server as a
+    // value. `undefined` is stripped by JSON.stringify, so clearing a date
+    // silently sent nothing and the old date stayed in the database.
+    if (!value || !value.isValid()) return "";
     return value.format("YYYY-MM-DD");
   }, []);
   const theme = useTheme();
@@ -649,12 +652,14 @@ export const NodeDetails = memo(function NodeDetails({
           nameHindi: editedNameHindi.trim(),
           dob: formatPickerDate(editedDob),
           gender: editedGender,
-          bloodGroup: editedBloodGroup || undefined,
+          bloodGroup: editedBloodGroup,
           isAlive: editedIsAlive,
+          // Cleared, or the person is marked living again — either way the
+          // stored date of death should go.
           deceasedDate:
             !editedIsAlive && editedDeceasedDate
               ? formatPickerDate(editedDeceasedDate)
-              : undefined,
+              : "",
           customFields: editedCustomFields,
         };
 

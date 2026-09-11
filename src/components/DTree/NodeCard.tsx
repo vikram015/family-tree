@@ -85,10 +85,75 @@ const DIM_MOBILE = buildDim({
   lineH: 18,
 });
 
+/**
+ * Portrait cards.
+ *
+ * A wide card spends its width on empty space: a tree is laid out by generation,
+ * so every node in a row is pushed apart by the widest card in it, and the
+ * horizontal card's 236px leaves long gaps between siblings while the depth of
+ * the tree stays cramped. Turning the card portrait — avatar over name, name
+ * over dates — narrows each node to about 150px and lets a generation fit in
+ * roughly two thirds of the width.
+ */
+function buildVerticalDim(base: {
+  w: number;
+  h: number;
+  r: number;
+  pad: number;
+  avatar: number;
+  gap: number;
+  nameSize: number;
+  metaSize: number;
+  lineH: number;
+}): CardDim {
+  const img_x = Math.round((base.w - base.avatar) / 2);
+  const img_y = base.pad + 6;
+  return {
+    ...base,
+    img_w: base.avatar,
+    img_h: base.avatar,
+    img_x,
+    img_y,
+    // Text is centred in a portrait card, so the "column" is the whole width.
+    text_x: Math.round(base.w / 2),
+    text_y: img_y + base.avatar + base.gap,
+  };
+}
+
+const DIM_VERTICAL_DESKTOP = buildVerticalDim({
+  w: 106,
+  h: 106,
+  r: 10,
+  pad: 7,
+  avatar: 44,
+  gap: 9,
+  nameSize: 11.5,
+  metaSize: 9.5,
+  lineH: 13,
+});
+
+const DIM_VERTICAL_MOBILE = buildVerticalDim({
+  w: 100,
+  h: 104,
+  r: 10,
+  pad: 7,
+  avatar: 42,
+  gap: 9,
+  nameSize: 11.5,
+  metaSize: 9.5,
+  lineH: 13,
+});
+
+/** Which way a node card is laid out. Chosen by the viewer, not the data. */
+export type CardShape = "horizontal" | "vertical";
+
 /** Desktop dimensions — the default the layout engine sizes nodes with. */
 export const CARD_DIM = DIM_DESKTOP;
 
-export function getCardDim(isMobile?: boolean): CardDim {
+export function getCardDim(isMobile?: boolean, shape: CardShape = "horizontal"): CardDim {
+  if (shape === "vertical") {
+    return isMobile ? DIM_VERTICAL_MOBILE : DIM_VERTICAL_DESKTOP;
+  }
   return isMobile ? DIM_MOBILE : DIM_DESKTOP;
 }
 
@@ -494,6 +559,251 @@ function statusBadgeSvg(
  * Renders a node card as pure SVG string.
  * Layout: [gender edge bar | circular avatar | name (up to 2 lines) + meta]
  */
+
+/**
+ * Portrait node card: avatar over name over dates, actions along the bottom.
+ *
+ * Shares every helper with the horizontal card — the same wrapping, the same
+ * status badges, the same Devanagari handling — and differs only in where the
+ * pieces sit. Kept as its own function rather than a pile of shape conditionals
+ * inside the horizontal renderer, which is already long enough to be hard to
+ * follow.
+ */
+function renderVerticalNodeCardSvg(
+  name: string,
+  extra: any,
+  id: string,
+  currentTreeId: string | undefined,
+  isMain: boolean | undefined,
+  isHighlighted: boolean | undefined,
+  isMobile: boolean | undefined,
+  canEditNode: boolean,
+  isNameClickable: boolean,
+): string {
+  const dim = getCardDim(isMobile, "vertical");
+  const gender = extra?.gender || "";
+  const isDeceased = extra?.isAlive === false;
+  const isReadOnly = extra?.isReadOnly === true;
+  const isBirthdayToday = !isDeceased && isMonthDayToday(extra?.dob);
+  const photo = extra?.photo || "";
+
+  const genderKey =
+    gender === "male" ? "male" : gender === "female" ? "female" : "person";
+  const barColor = isDeceased ? EDGE_BAR.deceased : EDGE_BAR[genderKey];
+  const surfaceFill = isDeceased ? SURFACE.bgDeceased : SURFACE.bg;
+  const nameColor = isDeceased ? SURFACE.inkMuted : SURFACE.ink;
+  const metaColor = isDeceased ? SURFACE.metaDeceased : SURFACE.meta;
+
+  const clipId = `clip-${id}`;
+  const imgClipId = `imgclip-${id}`;
+  const shadowId = `shadow-${id}`;
+
+  const showExternalLink = Boolean(
+    currentTreeId && extra?.treeId && extra.treeId !== currentTreeId,
+  );
+  const hasActionIcons = Boolean(
+    canEditNode && extra?.id && !extra?._placeholder && !isMobile,
+  );
+
+  const resolvedName =
+    extra?.preferredName || name || extra?.nameEnglish || extra?.nameHindi || "";
+  const normalizedName = normalizeDisplayText(resolvedName);
+  const isDevanagariName = hasDevanagari(normalizedName);
+  const nameFontFamily = isDevanagariName
+    ? DEVANAGARI_FONT_STACK
+    : DEFAULT_FONT_STACK;
+
+  const textWidth = dim.w - dim.pad * 2;
+  const centreX = Math.round(dim.w / 2);
+  const nameLines = wrapText(
+    normalizedName,
+    textWidth,
+    2,
+    dim.nameSize,
+    700,
+    nameFontFamily,
+  );
+  const lineCount = Math.max(1, nameLines.length);
+
+  const birthYear = yearOf(extra?.dob);
+  const deathYear = isDeceased ? yearOf(extra?.deceasedDate) : "";
+  const childrenCount =
+    typeof extra?.childrenCount === "number" ? extra.childrenCount : 0;
+  const metaParts: string[] = [];
+  if (birthYear && deathYear) metaParts.push(`${birthYear}–${deathYear}`);
+  else if (birthYear) metaParts.push(birthYear);
+  else if (deathYear) metaParts.push(`d. ${deathYear}`);
+  if (childrenCount > 0) {
+    metaParts.push(`${childrenCount} ${childrenCount === 1 ? "child" : "children"}`);
+  }
+  let metaLine = "";
+  for (let take = metaParts.length; take > 0; take -= 1) {
+    const candidate = metaParts.slice(0, take).join(" · ");
+    if (measureText(candidate, dim.metaSize, 600, DEFAULT_FONT_STACK) <= textWidth) {
+      metaLine = candidate;
+      break;
+    }
+    if (take === 1) {
+      metaLine = ellipsize(candidate, textWidth, dim.metaSize, 600, DEFAULT_FONT_STACK);
+    }
+  }
+
+  const avatarR = dim.avatar / 2;
+  const avatarCx = centreX;
+  const avatarCy = dim.img_y + avatarR;
+  const firstBaseline = dim.text_y + Math.round(dim.nameSize * 0.9);
+  const metaBaseline = firstBaseline + (lineCount - 1) * dim.lineH + 12;
+
+  let svg = "";
+
+  svg += `<defs>`;
+  svg += `<clipPath id="${clipId}">`;
+  svg += `<rect x="0" y="0" width="${dim.w}" height="${dim.h}" rx="${dim.r}" ry="${dim.r}"/>`;
+  svg += `</clipPath>`;
+  svg += `<clipPath id="${imgClipId}">`;
+  svg += `<circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}"/>`;
+  svg += `</clipPath>`;
+  svg += `<filter id="${shadowId}" x="-10%" y="-10%" width="130%" height="140%">`;
+  svg += `<feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#0f172a" flood-opacity="0.10"/>`;
+  svg += `</filter>`;
+  svg += `</defs>`;
+
+  const borderColor = isMain ? SURFACE.selected : SURFACE.border;
+  const borderWidth = isMain ? 2 : 1;
+  svg += `<rect class="card-bg" data-person-id="${extra?.id || ""}" x="0" y="0" width="${dim.w}" height="${dim.h}" rx="${dim.r}" ry="${dim.r}" `;
+  svg += `fill="${surfaceFill}" filter="url(#${shadowId})" stroke="${borderColor}" stroke-width="${borderWidth}" cursor="pointer"/>`;
+
+  svg += `<g clip-path="url(#${clipId})">`;
+  // The gender bar runs across the top here — a left edge bar on a narrow card
+  // reads as a border, not a marker.
+  svg += `<rect x="0" y="0" width="${dim.w}" height="3" fill="${barColor}"/>`;
+
+  if (photo) {
+    svg += `<circle cx="${avatarCx}" cy="${avatarCy}" r="${avatarR}" fill="#f1f5f9"/>`;
+    svg += `<image href="${escapeXml(photo)}" x="${dim.img_x}" y="${dim.img_y}" width="${dim.avatar}" height="${dim.avatar}" `;
+    svg += `clip-path="url(#${imgClipId})" preserveAspectRatio="xMidYMid slice"/>`;
+  } else {
+    const initialsSource =
+      [extra?.nameEnglish, name, extra?.preferredName, normalizedName]
+        .map((s: any) => (s ? String(s).trim() : ""))
+        .find((s: string) => s && !hasDevanagari(s)) || normalizedName;
+    const tint = avatarTintFor(extra?.id || normalizedName || id);
+    svg += initialsAvatarSvg(
+      avatarCx,
+      avatarCy,
+      avatarR,
+      tint.bg,
+      tint.fg,
+      getNodeInitials(initialsSource),
+    );
+  }
+
+  // --- Name, centred ---
+  svg += `<g class="node-name-group">`;
+  if (isDevanagariName && NEEDS_FOREIGN_OBJECT_FOR_INDIC) {
+    const foLineH = Math.max(dim.lineH, Math.round(dim.nameSize * 1.5));
+    const foPadTop = Math.round(dim.nameSize * 0.5);
+    const foY = firstBaseline - Math.round(dim.nameSize * 0.9) - foPadTop;
+    const foHeight = lineCount * foLineH + foPadTop * 2;
+    svg += `<foreignObject x="${dim.pad}" y="${foY}" width="${textWidth}" height="${foHeight}" `;
+    svg += `class="${isNameClickable ? "node-name-click-target" : ""}" `;
+    svg += `data-node-id="${extra?.id || ""}" `;
+    svg += `cursor="${isNameClickable ? "pointer" : "default"}">`;
+    svg += `<div xmlns="http://www.w3.org/1999/xhtml" lang="hi" style="`;
+    svg += `font-family: ${nameFontFamily};`;
+    svg += `font-size: ${dim.nameSize}px;`;
+    svg += `font-weight: 700;`;
+    svg += `color: ${nameColor};`;
+    svg += `line-height: ${foLineH}px;`;
+    svg += `margin: 0;`;
+    svg += `padding-top: ${foPadTop}px;`;
+    svg += `text-align: center;`;
+    svg += `cursor: ${isNameClickable ? "pointer" : "default"};`;
+    svg += `">`;
+    nameLines.forEach((line) => {
+      svg += `<div style="white-space: nowrap;">${escapeXml(line)}</div>`;
+    });
+    svg += `</div></foreignObject>`;
+  } else {
+    nameLines.forEach((line, index) => {
+      svg += `<text class="${isNameClickable ? "node-name-click-target" : ""}" data-node-id="${extra?.id || ""}" `;
+      if (isDevanagariName) svg += `lang="hi" xml:lang="hi" `;
+      svg += `x="${centreX}" y="${firstBaseline + index * dim.lineH}" text-anchor="middle" `;
+      svg += `font-family="${nameFontFamily}" font-size="${dim.nameSize}" font-weight="700" fill="${nameColor}" `;
+      svg += `cursor="${isNameClickable ? "pointer" : "default"}">`;
+      svg += isDevanagariName ? escapeXml(line) : encodeSvgTextContent(line);
+      svg += `</text>`;
+    });
+  }
+  svg += `</g>`;
+
+  if (metaLine) {
+    svg += `<text x="${centreX}" y="${metaBaseline}" text-anchor="middle" font-family="${DEFAULT_FONT_STACK}" `;
+    svg += `font-size="${dim.metaSize}" font-weight="600" fill="${metaColor}" cursor="pointer">`;
+    svg += escapeXml(metaLine);
+    svg += `</text>`;
+  }
+
+  svg += `</g>`; // close clip group
+
+  const badgeKind = isBirthdayToday
+    ? "birthday"
+    : isDeceased
+      ? "deceased"
+      : isReadOnly && extra?.id && !extra?._placeholder
+        ? "readonly"
+        : null;
+  if (badgeKind) {
+    const offset = avatarR * 0.72;
+    svg += statusBadgeSvg(avatarCx + offset, avatarCy + offset, badgeKind);
+  }
+
+  if (isHighlighted) {
+    svg += `<rect class="card-focus-ring" x="-3" y="-3" width="${dim.w + 6}" height="${dim.h + 6}" rx="${dim.r + 3}" ry="${dim.r + 3}" `;
+    svg += `fill="none" stroke="${SURFACE.focus}" stroke-width="2" pointer-events="none"/>`;
+  }
+
+  if (showExternalLink) {
+    const linkX = dim.w - 12;
+    const linkY = 13;
+    svg += `<g class="external-tree-icon" data-tree-id="${extra.treeId}" data-person-id="${extra.id}" cursor="pointer">`;
+    svg += `<circle cx="${linkX}" cy="${linkY}" r="16" fill="transparent" stroke="none"/>`;
+    svg += `<title>Open connected family</title>`;
+    svg += `<circle cx="${linkX}" cy="${linkY}" r="7.5" fill="#ffffff" stroke="${SURFACE.borderStrong}" stroke-width="1.1"/>`;
+    svg += `<path d="M${linkX - 2.7} ${linkY + 1.9} L${linkX + 1.9} ${linkY - 2.7} M${linkX - 0.5} ${linkY - 2.7} H${linkX + 1.9} V${linkY - 0.3}" stroke="${SURFACE.inkMuted}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
+    svg += `</g>`;
+  }
+
+  // --- Actions, straddling the bottom edge ---
+  // Sitting half outside the card means the card does not have to be tall
+  // enough to contain them: they are only drawn on hover, so the height they
+  // used to occupy was permanent chrome for a transient control.
+  if (hasActionIcons) {
+    const iconR = 9;
+    const gap = 8;
+    const iconY = dim.h;
+    const cx1 = centreX - iconR - gap / 2;
+    const cx2 = centreX + iconR + gap / 2;
+
+    svg += `<g class="node-action-icon node-edit-icon" data-node-id="${extra.id}" cursor="pointer">`;
+    svg += `<circle cx="${cx1}" cy="${iconY}" r="${iconR}" fill="#ffffff" stroke="${SURFACE.borderStrong}" stroke-width="1"/>`;
+    svg += `<title>Edit</title>`;
+    svg += `<g transform="translate(${cx1 - 4.5}, ${iconY - 4.5}) scale(0.375)">`;
+    svg += `<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="${SURFACE.inkMuted}"/>`;
+    svg += `</g>`;
+    svg += `</g>`;
+
+    svg += `<g class="node-action-icon node-add-icon" data-node-id="${extra.id}" cursor="pointer">`;
+    svg += `<circle cx="${cx2}" cy="${iconY}" r="${iconR}" fill="#ffffff" stroke="#86efac" stroke-width="1"/>`;
+    svg += `<title>Add Relative</title>`;
+    svg += `<line x1="${cx2 - 4}" y1="${iconY}" x2="${cx2 + 4}" y2="${iconY}" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>`;
+    svg += `<line x1="${cx2}" y1="${iconY - 4}" x2="${cx2}" y2="${iconY + 4}" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>`;
+    svg += `</g>`;
+  }
+
+  return svg;
+}
+
 export function renderNodeCardSvg(
   name: string,
   extra: any,
@@ -505,10 +815,25 @@ export function renderNodeCardSvg(
   isMobile?: boolean,
   canEditNode: boolean = true,
   isNameClickable: boolean = true,
+  shape: CardShape = "horizontal",
 ): string {
   // On mobile the name is not separately clickable (tapping the card opens
   // details), which also frees the whole width for the name itself.
   isNameClickable = isNameClickable && !isMobile;
+
+  if (shape === "vertical") {
+    return renderVerticalNodeCardSvg(
+      name,
+      extra,
+      id,
+      currentTreeId,
+      isMain,
+      isHighlighted,
+      isMobile,
+      canEditNode,
+      isNameClickable,
+    );
+  }
 
   const dim = getCardDim(isMobile);
   const gender = extra?.gender || "";
@@ -541,7 +866,9 @@ export function renderNodeCardSvg(
   const textX = dim.text_x;
   const nameRight = dim.w - dim.pad - (showExternalLink ? 20 : 0);
   const nameMaxWidth = Math.max(40, nameRight - textX);
-  const metaRight = dim.w - dim.pad - (hasActionIcons ? 46 : 0);
+  // No reserve for the action icons: they appear on hover and may sit over the
+  // tail of the meta line for as long as the pointer is on the card.
+  const metaRight = dim.w - dim.pad;
   const metaMaxWidth = Math.max(40, metaRight - textX);
 
   const resolvedName =
@@ -816,8 +1143,9 @@ export function renderPlaceholderCardSvg(
   id: string,
   nodeClass: string,
   isMobile?: boolean,
+  shape: CardShape = "horizontal",
 ): string {
-  const dim = getCardDim(isMobile);
+  const dim = getCardDim(isMobile, shape);
   const relType: string = extra?._placeholderType || "";
   const targetNodeId: string = extra?._targetNodeId || "";
 
@@ -832,6 +1160,11 @@ export function renderPlaceholderCardSvg(
   const avatarR = dim.avatar / 2;
   const avatarCx = dim.img_x + avatarR;
   const avatarCy = dim.img_y + avatarR;
+  const isVertical = shape === "vertical";
+  const labelX = isVertical ? Math.round(dim.w / 2) : dim.text_x;
+  const labelY = isVertical
+    ? dim.img_y + dim.avatar + dim.gap + Math.round(dim.nameSize * 0.9)
+    : dim.text_y + 5;
 
   let svg = "";
   svg += `<rect class="placeholder-card-bg" x="0.75" y="0.75" width="${dim.w - 1.5}" height="${dim.h - 1.5}" rx="${dim.r}" ry="${dim.r}" `;
@@ -843,14 +1176,15 @@ export function renderPlaceholderCardSvg(
 
   const label = ellipsize(
     name || "Add relative",
-    dim.w - dim.text_x - dim.pad,
+    isVertical ? dim.w - dim.pad * 2 : dim.w - dim.text_x - dim.pad,
     dim.nameSize - 1,
     600,
     DEFAULT_FONT_STACK,
   );
-  svg += `<text x="${dim.text_x}" y="${dim.h / 2 + 1}" font-family="${DEFAULT_FONT_STACK}" `;
+  svg += `<text x="${labelX}" y="${isVertical ? labelY : dim.h / 2 + 1}" font-family="${DEFAULT_FONT_STACK}" `;
+  if (isVertical) svg += `text-anchor="middle" `;
   svg += `font-size="${dim.nameSize - 1}" font-weight="600" fill="${SURFACE.inkMuted}" `;
-  svg += `dominant-baseline="central" cursor="pointer">`;
+  svg += `${isVertical ? "" : 'dominant-baseline="central" '}cursor="pointer">`;
   svg += escapeXml(label);
   svg += `</text>`;
 

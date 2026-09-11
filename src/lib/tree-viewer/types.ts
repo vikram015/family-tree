@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+export type TreeViewerNodeShape = "horizontal" | "vertical";
+
 export type TreeViewerLanguage = "hindi" | "english";
 
 export type TreeViewerRelativeAction =
@@ -42,6 +44,8 @@ export type TreeViewerNodeRendererContext = {
   canEditNode?: boolean;
   /** Whether the node name should render as a clickable "view details" target. */
   allowNameDetailsClick?: boolean;
+  /** Card layout the viewer is currently drawing. */
+  nodeShape?: TreeViewerNodeShape;
 };
 
 export type TreeViewerRenderers = {
@@ -58,6 +62,7 @@ export type TreeViewerRenderers = {
     id: string,
     nodeClass: string,
     isMobile?: boolean,
+    nodeShape?: TreeViewerNodeShape,
   ) => string;
   renderMarriageNodeSvg?: (
     size: number,
@@ -72,6 +77,8 @@ export type TreeViewerFeatureFlags = {
   allowToolbar?: boolean;
   allowShowFullTreeToggle?: boolean;
   allowShowSpousesToggle?: boolean;
+  /** Offer the wide/compact node-layout switch in the controls menu. */
+  allowNodeShapeToggle?: boolean;
   allowLanguageToggle?: boolean;
   allowFitControl?: boolean;
   allowCenterControl?: boolean;
@@ -119,10 +126,13 @@ export interface TreeViewerProps {
   initialShowFullTree?: boolean;
   initialShowSpouses?: boolean;
   initialLanguage?: TreeViewerLanguage;
+  /** Card layout: wide (avatar beside the name) or portrait (avatar above it). */
+  initialNodeShape?: TreeViewerNodeShape;
   onPreferencesChange?: (value: {
     showFullTree: boolean;
     showSpouses: boolean;
     language: TreeViewerLanguage;
+    nodeShape: TreeViewerNodeShape;
   }) => void;
   features?: TreeViewerFeatureFlags;
   renderers?: TreeViewerRenderers;

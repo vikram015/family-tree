@@ -56,3 +56,39 @@ svg foreignObject span[lang="hi"] {
     -webkit-locale: "hi";
   }
 }
+
+/* Action icons appear on hover, not permanently.
+ *
+ * Edit and add sat on every card at all times, so a tree of two hundred people
+ * carried four hundred controls nobody was looking at — visual noise that also
+ * competed with the names for the card's width. They are desktop-only (a phone
+ * opens the node sheet on tap instead), so hover is a safe trigger: there is no
+ * touch device that renders them and cannot hover.
+ *
+ * pointer-events follow the opacity, or an invisible icon would still swallow
+ * clicks meant for the card underneath it.
+ */
+g.node .node-action-icon {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+g.node:hover .node-action-icon,
+g.node:focus-within .node-action-icon {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A keyboard or assistive-tech user gets no hover, so anything focused inside
+   the card stays visible on its own. */
+g.node .node-action-icon:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  g.node .node-action-icon {
+    transition: none;
+  }
+}

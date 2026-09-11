@@ -498,29 +498,39 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                       void handleNavLinkClick(link.path);
                     }}
                     sx={{
-                      px: 1.75,
+                      px: 1.5,
+                      py: 0.75,
                       borderRadius: 2,
                       textTransform: "none",
-                      fontSize: 15,
-                      fontWeight: active ? 700 : 500,
-                      color: active ? brand.primary : brand.slate,
-                      position: "relative",
-                      "&::after": {
-                        content: '""',
-                        position: "absolute",
-                        left: 12,
-                        right: 12,
-                        bottom: 6,
-                        height: 2,
-                        borderRadius: 2,
-                        bgcolor: brand.primary,
-                        transform: active ? "scaleX(1)" : "scaleX(0)",
-                        transformOrigin: "center",
-                        transition: "transform 180ms ease",
+                      fontSize: 14,
+                      fontWeight: active ? 600 : 500,
+                      whiteSpace: "nowrap",
+                      // The current page is a filled pill rather than an
+                      // underline: with seven items the underline was the only
+                      // thing separating "here" from "not here", and it read as
+                      // a hairline rather than a state.
+                      color: active ? brand.primaryDark : brand.slate,
+                      bgcolor: active ? brand.primarySoft : "transparent",
+                      border: "1px solid",
+                      borderColor: active ? "rgba(191, 219, 254, 0.9)" : "transparent",
+                      transition: "background-color 140ms ease, color 140ms ease",
+                      // Icons sit behind the labels: at the same weight and size
+                      // as the text, seven of them turned the bar into a row of
+                      // competing glyphs. Muted and smaller, they read as
+                      // markers for the word next to them.
+                      "& .MuiButton-startIcon": {
+                        mr: 0.75,
+                        ml: 0,
+                        color: active ? brand.primary : "#94a3b8",
+                        transition: "color 140ms ease",
                       },
+                      "& .MuiButton-startIcon .MuiSvgIcon-root": { fontSize: 18 },
                       "&:hover": {
-                        color: brand.primary,
-                        bgcolor: brand.primarySoft,
+                        color: active ? brand.primaryDark : brand.ink,
+                        bgcolor: active ? brand.primarySoft : "#f8fafc",
+                        "& .MuiButton-startIcon": {
+                          color: active ? brand.primary : brand.slate,
+                        },
                       },
                     }}
                   >

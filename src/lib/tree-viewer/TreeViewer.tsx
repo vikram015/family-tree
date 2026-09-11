@@ -37,6 +37,7 @@ import {
 import type {
   TreeViewerFeatureFlags,
   TreeViewerLanguage,
+  TreeViewerNodeShape,
   TreeViewerNode,
   TreeViewerProps,
   TreeViewerRelation,
@@ -119,6 +120,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   initialShowFullTree = true,
   initialShowSpouses = true,
   initialLanguage = "hindi",
+  initialNodeShape = "horizontal",
   onPreferencesChange,
   features,
   renderers,
@@ -159,6 +161,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   // When true, the full tree is shown without any collapse behaviour
   const [showFullTree, setShowFullTree] = useState(initialShowFullTree);
   const [showSpouses, setShowSpouses] = useState(initialShowSpouses);
+  const [nodeShape, setNodeShape] = useState(initialNodeShape);
   const [treeLanguage, setTreeLanguage] =
     useState<TreeViewerLanguage>(initialLanguage);
   const [treeControlsAnchorEl, setTreeControlsAnchorEl] =
@@ -168,6 +171,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       allowToolbar: features?.allowToolbar ?? true,
       allowShowFullTreeToggle: features?.allowShowFullTreeToggle ?? true,
       allowShowSpousesToggle: features?.allowShowSpousesToggle ?? true,
+      allowNodeShapeToggle: features?.allowNodeShapeToggle ?? true,
       allowLanguageToggle: features?.allowLanguageToggle ?? true,
       allowFitControl: features?.allowFitControl ?? true,
       allowCenterControl: features?.allowCenterControl ?? true,
@@ -199,6 +203,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
             context.isMobile,
             context.canEditNode ?? true,
             context.allowNameDetailsClick ?? true,
+            context.nodeShape ?? "horizontal",
           )),
       renderPlaceholderCardSvg:
         renderers?.renderPlaceholderCardSvg ?? renderPlaceholderCardSvg,
@@ -315,12 +320,17 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   const isTreeControlsOpen = Boolean(treeControlsAnchorEl);
 
   useEffect(() => {
+    setNodeShape(initialNodeShape);
+  }, [initialNodeShape]);
+
+  useEffect(() => {
     onPreferencesChange?.({
       showFullTree,
       showSpouses,
       language: treeLanguage,
+      nodeShape,
     });
-  }, [onPreferencesChange, showFullTree, showSpouses, treeLanguage]);
+  }, [onPreferencesChange, showFullTree, showSpouses, treeLanguage, nodeShape]);
 
   const getPreferredName = useCallback(
     (person?: Pick<TreeViewerNode, "name" | "alternateName"> | null) => {
@@ -1641,9 +1651,20 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
         margin: margin,
         // Must match the card the renderer actually draws — the mobile card is
         // a different size, not the desktop one with pieces hidden.
-        nodeWidth: getCardDim(isMobileRef.current).w,
-        nodeHeight: getCardDim(isMobileRef.current).h,
+        nodeWidth: getCardDim(isMobileRef.current, nodeShape).w,
+        nodeHeight: getCardDim(isMobileRef.current, nodeShape).h,
+        // Air around the heart between a couple. The slot scales with card
+        // width, so the wide card already has room at the library's default
+        // and only the compact card needs opening up — at 0.3 its two cards
+        // close to within about 5px of the heart.
+        marriageSeparation: nodeShape === "vertical" ? 0.33 : 0.3,
         callbacks: {
+          // Distance from one generation to the next: the card plus the white
+          // space under it. The library's default adds a flat 45px, which is
+          // right for the wide card; the compact card is built for density, so
+          // it takes less.
+          nodeHeightSeperation: (_nodeWidth: number, nodeMaxHeight: number) =>
+            nodeMaxHeight + (nodeShape === "vertical" ? 30 : 45),
           nodeClick: (
             name: string,
             extra: any,
@@ -1699,6 +1720,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                 id,
                 nodeClass,
                 isMobileRef.current,
+                nodeShape,
               );
             }
             const isMain = mainIdRef.current === extra?.id;
@@ -1717,6 +1739,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                 isMobile: isMobileRef.current,
                 canEditNode: isNodeEditable(extra?.id),
                 allowNameDetailsClick: effectiveFeatures.allowNameDetailsClick,
+                nodeShape,
               },
             );
           },
@@ -1832,6 +1855,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     showFullTree,
     showSpouses,
     treeLanguage,
+    nodeShape,
     highlightedPersonId,
     effectiveFeatures.allowExternalTreeNavigation,
     effectiveFeatures.allowNameDetailsClick,
@@ -1955,7 +1979,8 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
           </Button>
           )}
           {(effectiveFeatures.allowLanguageToggle ||
-            effectiveFeatures.allowShowSpousesToggle) && (
+            effectiveFeatures.allowShowSpousesToggle ||
+            effectiveFeatures.allowNodeShapeToggle) && (
           <IconButton
             size="small"
             onClick={(e) => {
@@ -2031,6 +2056,28 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
             <MenuItem value="english">English</MenuItem>
           </Select>
         </FormControl>
+        )}
+        {effectiveFeatures.allowNodeShapeToggle && (
+        <>
+        {/* Card layout. Horizontal spends the row's width on each card, which
+            leaves long gaps between siblings; portrait narrows the card so a
+            generation fits in far less width. Neither is right for every tree,
+            so it is the viewer's choice and it is remembered. */}
+        <FormControl size="small" fullWidth sx={{ px: 1, pb: 1, pt: 0.25 }}>
+          <InputLabel id="tree-node-shape-label">Node layout</InputLabel>
+          <Select
+            labelId="tree-node-shape-label"
+            value={nodeShape}
+            label="Node layout"
+            onChange={(event) => {
+              setNodeShape(event.target.value as TreeViewerNodeShape);
+            }}
+          >
+            <MenuItem value="horizontal">Wide cards</MenuItem>
+            <MenuItem value="vertical">Compact cards</MenuItem>
+          </Select>
+        </FormControl>
+        </>
         )}
         {effectiveFeatures.allowShowSpousesToggle && (
         <FormControlLabel

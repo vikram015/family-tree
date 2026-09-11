@@ -69,10 +69,22 @@ function groupByDate(photos: FamilyPhoto[]): Array<{ label: string; photos: Fami
   return groups;
 }
 
+/** Bytes as the short form the card footers use. */
+function formatSize(bytes: number): string {
+  if (!bytes) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 interface PhotoGridProps {
   photos: FamilyPhoto[];
   loading?: boolean;
   emptyMessage: string;
+  /**
+   * "detailed" gives each photo a labelled card with a metadata footer;
+   * "compact" is a tighter wall of thumbnails for scanning a large archive.
+   */
+  view?: "detailed" | "compact";
   /** Only the uploader can change visibility/delete — pass the viewer's id to know which cards get the menu. */
   currentUserId?: string | null;
   onChangeVisibility?: (photoId: string, visibility: PhotoVisibility) => Promise<void> | void;
@@ -83,10 +95,12 @@ export function PhotoGrid({
   photos,
   loading,
   emptyMessage,
+  view = "detailed",
   currentUserId,
   onChangeVisibility,
   onDelete,
 }: PhotoGridProps) {
+  const detailed = view === "detailed";
   const theme = useTheme();
   const fullScreenPreview = useMediaQuery(theme.breakpoints.down("sm"));
   const groups = useMemo(() => groupByDate(photos), [photos]);
@@ -259,23 +273,51 @@ export function PhotoGrid({
   return (
     <Box>
       {groups.map((group) => (
-        <Box key={group.label} sx={{ mb: 3 }}>
-          <Typography
-            variant="overline"
-            sx={{ color: "text.secondary", letterSpacing: 0.6, display: "block", mb: 1 }}
+        <Box key={group.label} sx={{ mb: 4 }}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+              mb: 1.5,
+            }}
           >
-            {group.label}
-          </Typography>
+            <Typography
+              sx={{
+                fontSize: 11.5,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: brand.slateMuted,
+                flexShrink: 0,
+              }}
+            >
+              {group.label}
+            </Typography>
+            <Box sx={{ flex: 1, height: "1px", bgcolor: brand.border }} />
+            <Typography sx={{ fontSize: 11.5, color: brand.slateMuted, flexShrink: 0 }}>
+              {group.photos.length} {group.photos.length === 1 ? "keepsake" : "keepsakes"}
+            </Typography>
+          </Box>
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: {
-                xs: "repeat(2, 1fr)",
-                sm: "repeat(3, 1fr)",
-                md: "repeat(4, 1fr)",
-                lg: "repeat(5, 1fr)",
-              },
-              gap: { xs: 1, sm: 1.5 },
+              gridTemplateColumns: detailed
+                ? {
+                    // Two up on phones rather than the design's single column:
+                    // one full-width square per photo is a very long scroll.
+                    xs: "repeat(2, 1fr)",
+                    sm: "repeat(2, 1fr)",
+                    md: "repeat(3, 1fr)",
+                    lg: "repeat(5, 1fr)",
+                  }
+                : {
+                    xs: "repeat(3, 1fr)",
+                    sm: "repeat(4, 1fr)",
+                    md: "repeat(6, 1fr)",
+                    lg: "repeat(8, 1fr)",
+                  },
+              gap: { xs: 1, sm: detailed ? 2 : 1.25 },
             }}
           >
             {group.photos.map((photo) => {
@@ -287,11 +329,21 @@ export function PhotoGrid({
                   sx={{
                     position: "relative",
                     aspectRatio: "1",
-                    borderRadius: 2,
+                    borderRadius: detailed ? 3 : 2,
                     overflow: "hidden",
                     bgcolor: brand.canvas,
                     border: `1px solid ${brand.border}`,
                     opacity: busyId === photo.id ? 0.5 : 1,
+                    boxShadow: detailed ? "0 1px 2px rgba(15, 23, 42, 0.04)" : "none",
+                    transition: "transform 200ms ease, box-shadow 200ms ease",
+                    "@media (hover: hover)": {
+                      "&:hover": {
+                        transform: detailed ? "translateY(-2px)" : "none",
+                        boxShadow: detailed
+                          ? "0 10px 25px -5px rgba(29, 78, 216, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.05)"
+                          : "none",
+                      },
+                    },
                   }}
                 >
                   <Box
@@ -308,41 +360,111 @@ export function PhotoGrid({
                       display: "block",
                     }}
                   />
-                  <Tooltip title={visMeta.label}>
+
+                  {/* Who can see it. A labelled pill in the detailed view; the
+                      compact wall has no room for words, so it keeps the icon. */}
+                  {detailed ? (
                     <Box
                       sx={{
                         position: "absolute",
-                        top: 6,
-                        left: 6,
-                        width: 22,
-                        height: 22,
-                        borderRadius: "50%",
-                        bgcolor: "rgba(15, 23, 42, 0.55)",
-                        color: "#fff",
-                        display: "flex",
+                        top: 8,
+                        left: 8,
+                        display: "inline-flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 13,
+                        gap: 0.5,
+                        px: 0.9,
+                        py: 0.4,
+                        borderRadius: 1.5,
+                        bgcolor: "rgba(255, 255, 255, 0.92)",
+                        border: "1px solid rgba(226, 232, 240, 0.9)",
+                        boxShadow: "0 1px 2px rgba(15, 23, 42, 0.08)",
+                        color: brand.slate,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        lineHeight: 1,
                       }}
                     >
                       {visMeta.icon}
+                      {visMeta.label}
                     </Box>
-                  </Tooltip>
+                  ) : (
+                    <Tooltip title={visMeta.label}>
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 6,
+                          left: 6,
+                          width: 22,
+                          height: 22,
+                          borderRadius: "50%",
+                          bgcolor: "rgba(15, 23, 42, 0.55)",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 13,
+                        }}
+                      >
+                        {visMeta.icon}
+                      </Box>
+                    </Tooltip>
+                  )}
+
                   {canManage && (
                     <IconButton
                       size="small"
                       onClick={(e) => setMenuAnchor({ el: e.currentTarget, photo })}
+                      aria-label="Photo options"
                       sx={{
                         position: "absolute",
-                        top: 2,
-                        right: 2,
-                        bgcolor: "rgba(15, 23, 42, 0.55)",
-                        color: "#fff",
-                        "&:hover": { bgcolor: "rgba(15, 23, 42, 0.75)" },
+                        top: detailed ? 6 : 2,
+                        right: detailed ? 6 : 2,
+                        bgcolor: detailed ? "rgba(255, 255, 255, 0.92)" : "rgba(15, 23, 42, 0.55)",
+                        color: detailed ? brand.slate : "#fff",
+                        boxShadow: detailed ? "0 1px 2px rgba(15, 23, 42, 0.08)" : "none",
+                        "&:hover": {
+                          bgcolor: detailed ? "#fff" : "rgba(15, 23, 42, 0.75)",
+                        },
                       }}
                     >
                       <MoreVertIcon fontSize="small" />
                     </IconButton>
+                  )}
+
+                  {/* Footer strip: who the photo is of, and who added it. */}
+                  {detailed && (photo.personName || photo.uploaderName) && (
+                    <Box
+                      className="photo-card-footer"
+                      sx={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        px: 1.25,
+                        py: 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 1,
+                        color: "#fff",
+                        background:
+                          "linear-gradient(to top, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0) 100%)",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      <Typography
+                        noWrap
+                        sx={{ fontSize: 11.5, fontWeight: 700, minWidth: 0 }}
+                        title={photo.personName || undefined}
+                      >
+                        {photo.personName || photo.uploaderName}
+                      </Typography>
+                      <Typography
+                        sx={{ fontSize: 10.5, opacity: 0.85, flexShrink: 0 }}
+                      >
+                        {formatSize(photo.fileSizeBytes)}
+                      </Typography>
+                    </Box>
                   )}
                 </Box>
               );

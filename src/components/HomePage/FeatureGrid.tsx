@@ -7,7 +7,7 @@ import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import { brand } from "../../theme/brand";
-import { eyebrowSx, sectionTitleSx, tileSx } from "./homeTheme";
+import { eyebrowSx, iconWellSx, sectionTitleSx, tileSx } from "./homeTheme";
 
 export interface FeatureGridProps {
   counts: { photos: number; pendingRequests: number };
@@ -20,6 +20,9 @@ type BadgeTone = "info" | "attention";
 
 interface FeatureTile {
   label: string;
+  /** One-line note under the label — says what the destination holds, so the
+   *  grid reads as five places rather than five words. */
+  hint: string;
   to: string;
   icon: React.ReactNode;
   badge?: number;
@@ -37,12 +40,35 @@ export const FeatureGrid: React.FC<FeatureGridProps> = ({ counts, loading = fals
   const pendingRequests = Number(counts?.pendingRequests) || 0;
 
   const tiles: FeatureTile[] = [
-    { label: "Family Tree", to: "/families", icon: <AccountTreeOutlinedIcon /> },
-    { label: "Photos", to: "/photos", icon: <PhotoLibraryOutlinedIcon />, badge: photos, tone: "info" },
-    { label: "Business", to: "/business", icon: <StorefrontOutlinedIcon /> },
-    { label: "My Profile", to: "/profile", icon: <PersonOutlineIcon /> },
+    {
+      label: "Family Tree",
+      hint: "Lineage graph",
+      to: "/families",
+      icon: <AccountTreeOutlinedIcon />,
+    },
+    {
+      label: "Photos",
+      hint: "Keepsakes & deeds",
+      to: "/photos",
+      icon: <PhotoLibraryOutlinedIcon />,
+      badge: photos,
+      tone: "info",
+    },
+    {
+      label: "Business",
+      hint: "Trade registries",
+      to: "/business",
+      icon: <StorefrontOutlinedIcon />,
+    },
+    {
+      label: "My Profile",
+      hint: "Profile settings",
+      to: "/profile",
+      icon: <PersonOutlineIcon />,
+    },
     {
       label: "Requests",
+      hint: "Kin verifications",
       to: "/requests",
       icon: <PendingActionsOutlinedIcon />,
       badge: pendingRequests,
@@ -96,34 +122,53 @@ export const FeatureGrid: React.FC<FeatureGridProps> = ({ counts, loading = fals
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 0.75,
+                gap: 0.25,
                 textAlign: "center",
                 // Comfortably past the 44px touch minimum on the smallest phone.
-                minHeight: { xs: 96, md: 104 },
+                minHeight: { xs: 108, md: 124 },
                 px: 1,
-                py: 1.5,
+                py: 2,
                 color: brand.ink,
                 textDecoration: "none",
+                // The icon well fills in on hover so the whole tile responds,
+                // not just its border.
+                "@media (hover: hover)": {
+                  "&:hover .tile-icon-well": {
+                    bgcolor: brand.primary,
+                    color: brand.surface,
+                  },
+                },
               }}
             >
               <Box
+                className="tile-icon-well"
                 sx={{
-                  color: brand.primary,
-                  display: "flex",
-                  "& .MuiSvgIcon-root": { fontSize: { xs: 24, md: 26 } },
+                  ...(iconWellSx("primary", 44) as object),
+                  mb: 1.25,
+                  transition: "background-color 140ms ease, color 140ms ease",
                 }}
               >
                 {tile.icon}
               </Box>
               <Typography
                 sx={{
-                  fontSize: { xs: 12.5, md: 13 },
-                  fontWeight: 600,
+                  fontSize: { xs: 13, md: 13.5 },
+                  fontWeight: 700,
                   lineHeight: 1.25,
                   color: brand.ink,
                 }}
               >
                 {tile.label}
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: 11.5,
+                  fontWeight: 500,
+                  lineHeight: 1.3,
+                  color: brand.slateMuted,
+                }}
+              >
+                {tile.hint}
               </Typography>
 
               {showBadge && (

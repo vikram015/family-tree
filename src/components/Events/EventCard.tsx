@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Avatar,
   Box,
+  Button,
   Card,
   CardActionArea,
   Chip,
@@ -26,6 +27,18 @@ import {
   shareEventNative,
 } from "../../utils/shareEvent";
 
+/**
+ * `compact` is the original card — avatar, chip, one line of context — used
+ * wherever events appear in a scrolling strip.
+ *
+ * `feature` is the dashboard's "Today in your family" card: the same event, the
+ * same actions, but laid out to carry them as labelled buttons rather than a
+ * lone icon. Both share every behaviour below (open the wish thread, native
+ * share with a copy-link fallback), so there is one place where an event card's
+ * actions are defined.
+ */
+export type EventCardVariant = "compact" | "feature";
+
 export interface EventCardProps {
   personId: string;
   eventType: WishEventType;
@@ -36,6 +49,13 @@ export interface EventCardProps {
   year: number;
   /** Optional navigation override; defaults to react-router useNavigate. */
   onNavigate?: (path: string) => void;
+  variant?: EventCardVariant;
+  /** Feature variant: the pill above the name, e.g. "56th remembrance". */
+  tag?: string;
+  /** Feature variant: lifespan or event date shown opposite the tag. */
+  dateLabel?: string;
+  /** Feature variant: enables the "Inspect in tree" link when known. */
+  treeId?: string | null;
 }
 
 type EventStyle = {
@@ -94,6 +114,47 @@ function buildShareMessage(
   }
 }
 
+/**
+ * Feature-variant accents, one per event type.
+ *
+ * Deliberately not `EVENT_STYLES`: in the compact card the chip sits on white,
+ * while here the whole card is tinted and needs a matching border and button
+ * ink. A remembrance reads as gold, a birthday as rose, an anniversary as blue.
+ */
+const FEATURE_TONES: Record<
+  WishEventType,
+  { ink: string; soft: string; border: string; surface: string; action: string }
+> = {
+  birthday: {
+    ink: "#be123c",
+    soft: "#ffe4e6",
+    border: "#fecdd3",
+    surface: "#ffffff",
+    action: "#e11d48",
+  },
+  anniversary: {
+    ink: "#1d4ed8",
+    soft: brand.primarySoft,
+    border: "#bfdbfe",
+    surface: "#ffffff",
+    action: brand.primary,
+  },
+  remembrance: {
+    ink: "#92400e",
+    soft: "#fef3c7",
+    border: "#fde68a",
+    surface: "#fffdf7",
+    action: "#b45309",
+  },
+};
+
+/** What the primary button says — all three post to the same wish thread. */
+const FEATURE_ACTION_LABEL: Record<WishEventType, string> = {
+  birthday: "Send wishes",
+  anniversary: "Send wishes",
+  remembrance: "Light candle",
+};
+
 const EventCard: React.FC<EventCardProps> = ({
   personId,
   eventType,
@@ -102,6 +163,10 @@ const EventCard: React.FC<EventCardProps> = ({
   subtitle,
   year,
   onNavigate,
+  variant = "compact",
+  tag,
+  dateLabel,
+  treeId,
 }) => {
   const navigate = useNavigate();
   const [snackbar, setSnackbar] = useState("");
@@ -140,6 +205,191 @@ const EventCard: React.FC<EventCardProps> = ({
     const copied = await copyShareLink(shareUrl);
     setSnackbar(copied ? "Link copied to clipboard" : "Couldn't copy the link");
   };
+
+  if (variant === "feature") {
+    const feature = FEATURE_TONES[eventType] ?? FEATURE_TONES.birthday;
+
+    const go = (path: string) => {
+      if (onNavigate) onNavigate(path);
+      else navigate(path);
+    };
+
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          p: { xs: 1.75, sm: 2 },
+          borderRadius: 3,
+          border: "1px solid",
+          borderColor: feature.border,
+          bgcolor: feature.surface,
+          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          spacing={1}
+          sx={{ mb: 1.25 }}
+        >
+          <Box
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 0.5,
+              px: 1,
+              py: 0.4,
+              borderRadius: 1,
+              bgcolor: feature.soft,
+              color: feature.ink,
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: 1.2,
+            }}
+          >
+            <Icon sx={{ fontSize: 13 }} />
+            {tag || `${style.label} ${style.emoji}`}
+          </Box>
+          {dateLabel && (
+            <Typography
+              noWrap
+              sx={{ fontSize: 11, fontWeight: 600, color: brand.slateMuted, flexShrink: 0 }}
+            >
+              {dateLabel}
+            </Typography>
+          )}
+        </Stack>
+
+        <Stack direction="row" spacing={1.5} sx={{ minWidth: 0 }}>
+          <Avatar
+            src={photoUrl || undefined}
+            alt={name}
+            sx={{
+              width: 44,
+              height: 44,
+              flexShrink: 0,
+              bgcolor: feature.soft,
+              color: feature.ink,
+              fontWeight: 700,
+            }}
+          >
+            {name ? name.charAt(0).toUpperCase() : <Icon />}
+          </Avatar>
+
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography
+              noWrap
+              title={name}
+              sx={{ fontWeight: 700, fontSize: 15, color: brand.ink, lineHeight: 1.3 }}
+            >
+              {name}
+            </Typography>
+            <Typography sx={{ fontSize: 12.5, color: brand.slate, lineHeight: 1.4 }}>
+              {subtitle}
+            </Typography>
+          </Box>
+        </Stack>
+
+        {/* Straight into the tree, where the event card's person sits in
+            context — the same destination the profile's "view in tree" uses. */}
+        <Box sx={{ mt: 1.25, mb: 1.75 }}>
+          <Typography
+            component="button"
+            type="button"
+            onClick={() =>
+              go(
+                treeId
+                  ? `/families?tree=${treeId}&personId=${personId}`
+                  : `/families?personId=${personId}`,
+              )
+            }
+            sx={{
+              border: 0,
+              p: 0,
+              bgcolor: "transparent",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+              color: feature.ink,
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+            }}
+          >
+            Inspect in tree
+          </Typography>
+        </Box>
+
+        <Stack direction="row" spacing={1} sx={{ mt: "auto" }}>
+          <Button
+            size="small"
+            variant="contained"
+            disableElevation
+            onClick={handleNavigate}
+            sx={{
+              // No leading icon: the tag above already carries it, and at two
+              // buttons to a 260px card the label needs every pixel.
+              flex: 1,
+              minWidth: 0,
+              px: 1,
+              minHeight: 36,
+              fontSize: 12.5,
+              fontWeight: 700,
+              borderRadius: 2,
+              // The theme uppercases buttons app-wide; these carry names and
+              // verbs that read as shouting in caps, and wrap to two lines in a
+              // 280px card.
+              textTransform: "none",
+              whiteSpace: "nowrap",
+              bgcolor: feature.action,
+              "&:hover": { bgcolor: feature.ink },
+            }}
+          >
+            {FEATURE_ACTION_LABEL[eventType]}
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleShare}
+            startIcon={
+              canNativeShare ? (
+                <ShareOutlinedIcon sx={{ fontSize: 16 }} />
+              ) : (
+                <ContentCopyIcon sx={{ fontSize: 16 }} />
+              )
+            }
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              px: 1,
+              minHeight: 36,
+              fontSize: 12.5,
+              fontWeight: 600,
+              borderRadius: 2,
+              textTransform: "none",
+              whiteSpace: "nowrap",
+              color: brand.slate,
+              borderColor: brand.border,
+              bgcolor: brand.surface,
+              "&:hover": { borderColor: "#cbd5e1", bgcolor: brand.canvas },
+            }}
+          >
+            {canNativeShare ? "Share" : "Copy link"}
+          </Button>
+        </Stack>
+
+        <Snackbar
+          open={Boolean(snackbar)}
+          autoHideDuration={2500}
+          onClose={() => setSnackbar("")}
+          message={snackbar}
+          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        />
+      </Box>
+    );
+  }
 
   return (
     <Card

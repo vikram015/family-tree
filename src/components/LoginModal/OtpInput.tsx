@@ -3,26 +3,32 @@ import { Box } from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { brand } from "../../theme/brand";
 
-const OtpCell = styled("input")({
+const OtpCell = styled("input", {
+  shouldForwardProp: (prop) => prop !== "cellSize" && prop !== "filled",
+})<{ cellSize: "medium" | "large"; filled: boolean }>(({ cellSize, filled }) => ({
   flex: 1,
   minWidth: 0,
   width: "100%",
-  height: 56,
+  height: cellSize === "large" ? 64 : 56,
   textAlign: "center",
-  fontSize: 22,
+  fontSize: cellSize === "large" ? 28 : 22,
   fontWeight: 700,
-  color: brand.ink,
+  // A filled digit turns primary, so progress through the code is visible at a
+  // glance rather than only by cursor position.
+  color: filled ? brand.primary : brand.ink,
   background: "#fbfdff",
   border: "1px solid rgba(15,23,42,0.12)",
   borderRadius: 12,
   outline: "none",
+  // Same reason as the phone field: no translucent tap wash over the box.
+  WebkitTapHighlightColor: "transparent",
   transition: "border-color 0.15s, box-shadow 0.15s",
   "&:focus": {
     borderColor: brand.primary,
     boxShadow: "0 0 0 3px rgba(13,110,253,0.15)",
   },
   "&:disabled": { opacity: 0.6 },
-});
+}));
 
 interface OtpInputProps {
   length: number;
@@ -31,6 +37,8 @@ interface OtpInputProps {
   onComplete?: (value: string) => void;
   disabled?: boolean;
   autoFocus?: boolean;
+  /** "large" is the login page's box size; "medium" fits the modal. */
+  size?: "medium" | "large";
 }
 
 export const OtpInput: React.FC<OtpInputProps> = ({
@@ -40,6 +48,7 @@ export const OtpInput: React.FC<OtpInputProps> = ({
   onComplete,
   disabled,
   autoFocus,
+  size = "medium",
 }) => {
   const inputsRef = useRef<Array<HTMLInputElement | null>>([]);
   const digits = Array.from({ length }, (_, i) => value[i] || "");
@@ -120,10 +129,12 @@ export const OtpInput: React.FC<OtpInputProps> = ({
   };
 
   return (
-    <Box sx={{ display: "flex", gap: 1.25, mb: 0.5 }}>
+    <Box sx={{ display: "flex", gap: { xs: 1, sm: 1.25 }, mb: 0.5 }}>
       {digits.map((digit, index) => (
         <OtpCell
           key={index}
+          cellSize={size}
+          filled={Boolean(digit)}
           ref={(el: HTMLInputElement | null) => {
             inputsRef.current[index] = el;
           }}

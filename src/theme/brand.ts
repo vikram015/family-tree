@@ -32,6 +32,19 @@ export const brand = {
   warm: "#f6efe3",
 } as const;
 
+/**
+ * Type stacks.
+ *
+ * Inter is the UI typeface the product design is drawn in; Newsreader is the
+ * single serif, used only for the short italic line under the dashboard
+ * greeting. Both are fetched in `index.html` — anything referencing these names
+ * without that <link> would silently fall back to the system sans.
+ */
+export const fontSans =
+  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif";
+
+export const fontSerif = "'Newsreader', Georgia, 'Times New Roman', serif";
+
 /** Primary call-to-action gradient (blue). */
 export const brandGradient = `linear-gradient(135deg, ${brand.primary} 0%, ${brand.primaryDark} 100%)`;
 

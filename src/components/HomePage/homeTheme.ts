@@ -152,3 +152,134 @@ export function initialsOf(name: string): string {
     .map((part) => part.charAt(0).toUpperCase())
     .join("");
 }
+
+/**
+ * Accent tones for stat cards and tile icons.
+ *
+ * The brand palette has one blue and one green; the dashboard's metric row
+ * needs four visually distinct icon wells so the cards read as four different
+ * things at a glance rather than one repeated card. `attention` is the only
+ * tone with meaning attached — it marks work waiting on the user and is the
+ * single warm surface on the page.
+ */
+export const tone = {
+  primary: { well: "#eff6ff", icon: "#1d4ed8" },
+  indigo: { well: "#eef2ff", icon: "#4338ca" },
+  emerald: { well: "#ecfdf5", icon: "#047857" },
+  attention: {
+    well: "#fef3c7",
+    icon: "#92400e",
+    surface: "#fffbeb",
+    border: "#fde68a",
+    borderStrong: "#fcd34d",
+    ink: "#451a03",
+    text: "#78350f",
+    chip: "rgba(252, 211, 77, 0.5)",
+  },
+} as const;
+
+/**
+ * The gold ground for the day's events, straight from the design.
+ *
+ * Warm ivory into amber — the one non-blue surface on the dashboard, so a
+ * remembrance is not announced in the same colour as a call to action.
+ */
+export const memorialSurface =
+  "linear-gradient(135deg, #fdfbf7 0%, #fff7eb 50%, #fef3c7 100%)";
+
+export type ToneName = "primary" | "indigo" | "emerald" | "attention";
+
+/**
+ * The rounded tinted square that holds a section or card icon.
+ *
+ * Used at 32px inside stat cards and 44px on the Explore tiles — one shape,
+ * two sizes, so an icon always sits on a surface instead of floating.
+ */
+export const iconWellSx = (name: ToneName, size = 32): SxProps<Theme> => ({
+  width: size,
+  height: size,
+  borderRadius: size >= 40 ? 2.5 : 2,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  bgcolor: tone[name].well,
+  color: tone[name].icon,
+  "& .MuiSvgIcon-root": { fontSize: size >= 40 ? 22 : 18 },
+});
+
+/**
+ * A metric card: icon well and micro-label on the top row, the figure beneath,
+ * and a two-part footer that splits the label from a secondary note.
+ *
+ * `attention` swaps the white surface for the warm one so the outstanding-work
+ * card carries its own weight without needing a bigger number.
+ */
+export const statCardSx = (attention = false): SxProps<Theme> => ({
+  ...(panelSx as object),
+  p: { xs: 2, sm: 2.5 },
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  minHeight: { xs: 108, sm: 124 },
+  textDecoration: "none",
+  color: "inherit",
+  transition: "border-color 140ms ease, box-shadow 140ms ease",
+  ...(attention
+    ? { bgcolor: tone.attention.surface, borderColor: tone.attention.border }
+    : {}),
+  "@media (hover: hover)": {
+    "&:hover": {
+      borderColor: attention ? tone.attention.borderStrong : "#cbd5e1",
+      boxShadow: "0 4px 14px rgba(15, 23, 42, 0.06)",
+    },
+  },
+});
+
+/** Uppercase micro-label sitting opposite an icon well inside a card. */
+export const microLabelSx: SxProps<Theme> = {
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: brand.slateMuted,
+};
+
+/** The figure in a metric card. */
+export const statValueSx: SxProps<Theme> = {
+  fontSize: { xs: 26, sm: 30 },
+  fontWeight: 800,
+  letterSpacing: "-0.02em",
+  lineHeight: 1.1,
+  color: brand.ink,
+};
+
+/**
+ * A white card holding hairline-divided rows — the shape used by both the
+ * worklist and the contributor ranking.
+ *
+ * The two lists used to sit unboxed directly on the page wash, which left a
+ * long dashboard with no structure between the metric row and the footer.
+ * `overflow: hidden` keeps the first and last row's hover fill inside the
+ * rounded corners.
+ */
+export const listPanelSx: SxProps<Theme> = {
+  ...(panelSx as object),
+  overflow: "hidden",
+  // Lighter than `brand.border`: an interior rule between rows should be
+  // quieter than the card's own outline, or the card reads as a table.
+  "& > *:not(:last-child)": { borderBottom: "1px solid #f1f5f9" },
+};
+
+/** One row inside `listPanelSx`. */
+export const listRowSx: SxProps<Theme> = {
+  display: "flex",
+  alignItems: "center",
+  gap: { xs: 1.25, sm: 1.75 },
+  width: "100%",
+  px: { xs: 2, sm: 3 },
+  py: { xs: 1.5, sm: 1.75 },
+  minHeight: 68,
+  textAlign: "left",
+  transition: "background-color 140ms ease",
+};
