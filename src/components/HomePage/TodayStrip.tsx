@@ -1,12 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
-  Avatar,
   Box,
   ButtonBase,
-  Card,
-  CardActionArea,
-  Chip,
   IconButton,
   Skeleton,
   Stack,
@@ -19,12 +14,10 @@ import EventCard from "../Events/EventCard";
 import type { FamilyEvents, UpcomingFamilyEvent } from "../../services/apiService";
 import { brand } from "../../theme/brand";
 import {
-  avatarTint,
-  initialsOf,
+  heroSurface,
   memorialSurface,
   panelSx,
   scrollStripSx,
-  tileSx,
   tone,
 } from "./homeTheme";
 
@@ -108,15 +101,29 @@ function daysAwayLabel(daysAway: number): string {
  * on the page, and the reason a remembrance doesn't get announced in the same
  * bright blue as everything else. Quiet days fall back to a plain panel.
  */
-const SectionShell: React.FC<{ gold?: boolean; children: React.ReactNode }> = ({
-  gold,
+/**
+ * Section shell.
+ *
+ * Three grounds, because the same layout carries three moods: the plain panel
+ * while loading, the cool page wash for birthdays and anniversaries, and the
+ * gold wash on a day that holds only remembrance — a memorial announced in the
+ * same bright blue as a birthday reads wrong.
+ */
+type ShellTone = "plain" | "celebration" | "memorial";
+
+const SectionShell: React.FC<{ tone?: ShellTone; children: React.ReactNode }> = ({
+  tone: shellTone = "plain",
   children,
 }) => (
   <Box
     component="section"
     sx={{
       ...(panelSx as object),
-      ...(gold ? { background: memorialSurface, borderColor: tone.attention.border } : {}),
+      ...(shellTone === "memorial"
+        ? { background: memorialSurface, borderColor: tone.attention.border }
+        : shellTone === "celebration"
+          ? { background: heroSurface }
+          : {}),
       p: { xs: 2, md: 2.5 },
       overflow: "hidden",
     }}
@@ -124,56 +131,6 @@ const SectionShell: React.FC<{ gold?: boolean; children: React.ReactNode }> = ({
     {children}
   </Box>
 );
-
-const UpcomingCard: React.FC<{ item: UpcomingFamilyEvent }> = ({ item }) => {
-  const navigate = useNavigate();
-  const tint = avatarTint(item.name || item.personId);
-
-  return (
-    <Card variant="outlined" sx={{ ...(tileSx as object), height: "100%" }}>
-      <CardActionArea
-        onClick={() => navigate(`/profile/person/${item.personId}`)}
-        sx={{ p: 1.75, borderRadius: 3, minHeight: 88, alignItems: "stretch" }}
-      >
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <Avatar
-            src={item.photoUrl || undefined}
-            alt={item.name}
-            sx={{ width: 48, height: 48, bgcolor: tint.bg, color: tint.fg, fontWeight: 700 }}
-          >
-            {initialsOf(item.name)}
-          </Avatar>
-
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography
-              variant="subtitle1"
-              noWrap
-              title={item.name}
-              sx={{ fontWeight: 700, color: brand.ink, lineHeight: 1.25 }}
-            >
-              {item.name}
-            </Typography>
-            <Typography variant="body2" noWrap sx={{ color: brand.slateMuted }}>
-              {upcomingSubtitle(item)}
-            </Typography>
-            <Chip
-              size="small"
-              label={daysAwayLabel(item.daysAway)}
-              sx={{
-                mt: 0.75,
-                height: 22,
-                bgcolor: item.type === "anniversary" ? brand.accentSoft : brand.primarySoft,
-                color: item.type === "anniversary" ? brand.accentDark : brand.primaryDark,
-                fontWeight: 600,
-                "& .MuiChip-label": { px: 0.9, fontSize: 12 },
-              }}
-            />
-          </Box>
-        </Stack>
-      </CardActionArea>
-    </Card>
-  );
-};
 
 /** One filter chip. Rendered as a button so keyboard users can tab the set. */
 const FilterChip: React.FC<{
@@ -321,8 +278,12 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
         : []),
     ];
 
+    // Gold only when the day holds nothing but remembrance; one birthday in
+    // the mix makes it a celebration again.
+    const memorial = deceased.length > 0 && birthdays.length + anniversaries.length === 0;
+
     return (
-      <SectionShell gold>
+      <SectionShell tone={memorial ? "memorial" : "celebration"}>
         <Stack
           direction={{ xs: "column", md: "row" }}
           alignItems={{ xs: "flex-start", md: "center" }}
@@ -425,8 +386,8 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
 
   if (upcomingItems.length > 0) {
     return (
-      <SectionShell>
-        <Stack spacing={0.5} sx={{ mb: 2 }}>
+      <SectionShell tone="celebration">
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
           <Typography
             sx={{
               fontSize: 11,
@@ -438,14 +399,41 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
           >
             Coming up
           </Typography>
+          <Box
+            aria-hidden
+            sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: brand.primary }}
+          />
+        </Stack>
+        <Stack spacing={0.5} sx={{ mb: 2 }}>
           <Typography component="h2" sx={{ fontWeight: 800, fontSize: 19, color: brand.ink }}>
             The days ahead
           </Typography>
         </Stack>
 
-        <Box sx={scrollStripSx}>
+        <Box
+          sx={{
+            ...(scrollStripSx as object),
+            gridAutoColumns: { xs: "minmax(268px, 86%)", sm: "minmax(300px, 48%)" },
+            gridTemplateColumns: { md: "repeat(3, minmax(0, 1fr))" },
+          }}
+        >
           {upcomingItems.map((item) => (
-            <UpcomingCard key={item.id} item={item} />
+            /* The same card as today's events: an upcoming birthday is the
+               same object with a different date, and it carries the same
+               actions — open the wish thread, share, inspect in the tree. */
+            <EventCard
+              key={item.id}
+              variant="feature"
+              eventType={item.type}
+              personId={item.personId}
+              name={item.name}
+              photoUrl={item.photoUrl}
+              subtitle={upcomingSubtitle(item)}
+              tag={daysAwayLabel(item.daysAway)}
+              dateLabel={formatDate(item.eventDate) || undefined}
+              treeId={treeId}
+              year={CURRENT_YEAR}
+            />
           ))}
         </Box>
       </SectionShell>

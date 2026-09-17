@@ -161,6 +161,14 @@ export function useTreeData({
               bloodGroup: person.bloodGroup || undefined,
               isAlive: person.isAlive !== false,
               deceasedDate: person.deceasedDate || undefined,
+              // Nodes are assembled field by field, so anything the API adds
+              // has to be copied here too — omitting these is what left the
+              // edit form's birth place empty even though the server sent it.
+              birthPlaceId: person.birthPlaceId || undefined,
+              birthPlaceName: person.birthPlaceName || undefined,
+              birthPlaceAddress: person.birthPlaceAddress || undefined,
+              birthPlaceLatitude: person.birthPlaceLatitude ?? undefined,
+              birthPlaceLongitude: person.birthPlaceLongitude ?? undefined,
             }) as FNode,
         );
 
@@ -370,6 +378,11 @@ export function useTreeData({
             bloodGroup: raw.bloodGroup || undefined,
             isAlive: raw.isAlive !== false,
             deceasedDate: raw.deceasedDate || undefined,
+            birthPlaceId: raw.birthPlaceId || undefined,
+            birthPlaceName: raw.birthPlaceName || undefined,
+            birthPlaceAddress: raw.birthPlaceAddress || undefined,
+            birthPlaceLatitude: raw.birthPlaceLatitude ?? undefined,
+            birthPlaceLongitude: raw.birthPlaceLongitude ?? undefined,
           } as FNode;
 
           nodeMap.set(raw.id, fnode);

@@ -46,8 +46,7 @@ import BusinessIcon from "@mui/icons-material/Business";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
-import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
-import { Dayjs } from "dayjs";
+import dayjs, { Dayjs } from "dayjs";
 import { FNode } from "../model/FNode";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
@@ -80,6 +79,17 @@ function titleCaseRelationType(value: string) {
   if (!value) return "";
   return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 }
+
+/**
+ * The youngest a father is assumed to be when a child is born, used only to
+ * bound a child's age when their own birth date is unknown.
+ *
+ * Deliberately lower than any realistic average. The number's job is to make
+ * the inference safe, not accurate: too low and we merely ask about a
+ * profession we could have skipped, too high and we skip the question for
+ * someone who is actually an adult.
+ */
+const MIN_FATHER_AGE_AT_BIRTH = 16;
 
 interface AddNodeProps {
   targetId?: string; // id of node in relation to which we add (e.g. parent/child/spouse)
@@ -172,8 +182,6 @@ export default function AddNode({
 
   // Profession Fields
   const [jobTitle, setJobTitle] = useState("");
-  const [jobContact, setJobContact] = useState("");
-  const [allProfessions, setAllProfessions] = useState<any[]>([]);
 
   // New person fields
   const [bloodGroup, setBloodGroup] = useState("");
@@ -237,6 +245,7 @@ const adornment = (icon: React.ReactNode) => (
 
   const effectiveTargetId = flowTargetId ?? targetId;
 
+
   const formatPickerDate = useCallback((value: Dayjs | null) => {
     if (!value || !value.isValid()) return undefined;
     return value.format("YYYY-MM-DD");
@@ -246,9 +255,6 @@ const adornment = (icon: React.ReactNode) => (
   useEffect(() => {
     ApiService.getLocations().then((data) => {
       setLocations(data || []);
-    });
-    ApiService.getAllProfessions().then((data) => {
-      setAllProfessions(data || []);
     });
   }, []);
 
@@ -308,6 +314,66 @@ const adornment = (icon: React.ReactNode) => (
     "male" | "female" | "other" | ""
   >("");
   const [newSpouseDob, setNewSpouseDob] = useState<Dayjs | null>(null);
+
+  /**
+   * Whether this person is a child, as far as we can tell.
+   *
+   * Two ways of knowing. Their own birth date settles it outright. Failing
+   * that, a father's birth date puts a floor under the child's age: nobody is
+   * born before their father is old enough to have them, so if the father is
+   * not yet old enough for an adult child, the child is not an adult.
+   *
+   * The inference only ever returns "certainly a child" — where the arithmetic
+   * leaves any chance of adulthood, we ask as usual. That asymmetry is on
+   * purpose: wrongly skipping the step loses a profession nobody was prompted
+   * for, while wrongly asking costs one dismissed screen.
+   */
+  const isMinor = useMemo(() => {
+    if (dob && dob.isValid()) return dayjs().diff(dob, "year") < 18;
+
+    // Only a child's age can be bounded this way — a new spouse or parent has
+    // no father in this flow.
+    if (relation !== "child") return false;
+
+    // The father is whichever of the two parents is male: the node being added
+    // to, or the other parent, whether that is an existing person or one being
+    // created alongside.
+    const parentIds = [effectiveTargetId, selectedOtherParentId].filter(Boolean);
+    const existingFather = (nodes || []).find(
+      (candidate) =>
+        parentIds.includes(candidate.id) &&
+        String(candidate.gender || "").toLowerCase() === "male",
+    );
+
+    let fatherDob = existingFather?.dob || "";
+    if (
+      !fatherDob &&
+      otherParentMode === "new" &&
+      String(newSpouseGender || "").toLowerCase() === "male" &&
+      newSpouseDob?.isValid()
+    ) {
+      fatherDob = newSpouseDob.format("YYYY-MM-DD");
+    }
+    if (!fatherDob) return false;
+
+    const born = dayjs(fatherDob);
+    if (!born.isValid()) return false;
+
+    // Earliest the child could have been born, and so the earliest they could
+    // possibly turn 18. Still in the future means they cannot be an adult yet.
+    return born
+      .add(MIN_FATHER_AGE_AT_BIRTH + 18, "year")
+      .isAfter(dayjs());
+  }, [
+    dob,
+    relation,
+    effectiveTargetId,
+    selectedOtherParentId,
+    otherParentMode,
+    newSpouseGender,
+    newSpouseDob,
+    nodes,
+  ]);
 
   /**
    * The sensible default for a child's other parent, derived from who the target
@@ -409,7 +475,6 @@ const adornment = (icon: React.ReactNode) => (
     setBusinessAdded(false);
     setBusinessDialogOpen(false);
     setJobTitle("");
-    setJobContact("");
     setOccupationType("business");
   }, [onCancel, applyDefaultOtherParent]);
 
@@ -447,7 +512,6 @@ const adornment = (icon: React.ReactNode) => (
     setBusinessAdded(false);
     setBusinessDialogOpen(false);
     setJobTitle("");
-    setJobContact("");
     setOccupationType("business");
 
     // Close the dialog — prefer onComplete, fallback to onCancel
@@ -489,7 +553,6 @@ const adornment = (icon: React.ReactNode) => (
     setBusinessAdded(false);
     setBusinessDialogOpen(false);
     setJobTitle("");
-    setJobContact("");
     setOccupationType("business");
   }, [targetId, applyDefaultOtherParent]);
 
@@ -504,23 +567,13 @@ const adornment = (icon: React.ReactNode) => (
 
     try {
       if (jobTitle.trim()) {
-        const existing = allProfessions.find(
-          (p) => p.name.toLowerCase() === jobTitle.trim().toLowerCase(),
-        );
-
-        let profId = existing?.id;
-
-        if (!profId) {
-          const newProf = await ApiService.createProfession({
-            name: jobTitle.trim(),
-            description: jobContact ? `Contact: ${jobContact}` : undefined,
-          });
-          profId = newProf?.id || (Array.isArray(newProf) && newProf[0]?.id);
-        }
-
-        if (profId) {
-          await ApiService.addProfessionToPerson(savedNodeId, profId);
-        }
+        // Starts the person's career profile — the same record the profession
+        // page and every edit form use. It used to create a row in the shared
+        // `professions` table instead, which put one person's details on a
+        // label everyone else shares.
+        await ApiService.saveProfessionProfile(savedNodeId, {
+          title: jobTitle.trim(),
+        });
       }
     } catch (error) {
       console.error("Error saving details:", error);
@@ -535,11 +588,9 @@ const adornment = (icon: React.ReactNode) => (
 
     handleFlowComplete();
   }, [
-    allProfessions,
     handleContinueWithSon,
     handleFlowComplete,
     isSavingDetails,
-    jobContact,
     jobTitle,
     savedNodeId,
   ]);
@@ -687,7 +738,14 @@ const adornment = (icon: React.ReactNode) => (
             }
           }
           setSavedNodeId(resultId);
-          setStep(2);
+          // Children are not asked for a business or a profession — the flow
+          // ends here for them. It can still be added later from their profile
+          // if they do have something to record.
+          if (isMinor) {
+            handleFlowComplete();
+          } else {
+            setStep(2);
+          }
         } else {
           handleCancel();
         }
@@ -735,6 +793,8 @@ const adornment = (icon: React.ReactNode) => (
     relationEndDate,
     photoBlob,
     isSaving,
+    isMinor,
+    handleFlowComplete,
   ]);
 
   useEffect(() => {
@@ -852,7 +912,7 @@ const adornment = (icon: React.ReactNode) => (
                       onClick={() => setBusinessDialogOpen(true)}
                       sx={{ ml: "auto" }}
                     >
-                      Add another
+                      Edit
                     </Button>
                   </Paper>
                 ) : (
@@ -890,19 +950,9 @@ const adornment = (icon: React.ReactNode) => (
                     }}
                   />
                   <Typography variant="caption" color="text.secondary">
-                    We will link this to the unified list of professions.
+                    This starts their career profile — they can add experience,
+                    qualifications and contact details to it later.
                   </Typography>
-                  <TextField
-                    label="Contact Number"
-                    fullWidth
-                    value={jobContact}
-                    onChange={(e) => setJobContact(e.target.value)}
-                    placeholder="Phone number (optional)"
-                    sx={inputWithIconSx}
-                    InputProps={{
-                      startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />),
-                    }}
-                  />
                 </Stack>
               </Box>
             </Stack>

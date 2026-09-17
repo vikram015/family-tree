@@ -18,6 +18,13 @@ export type FNode = ExtNode & {
   treeId?: string; // Tree ID this node belongs to
   locationId?: string; // Location ID this node belongs to
   locationName?: string; // Location name
+  /** Where this person was born, picked from Google Places. Separate from the
+   *  tree's location above, which says where the family is rooted. */
+  birthPlaceId?: string | null;
+  birthPlaceName?: string | null;
+  birthPlaceAddress?: string | null;
+  birthPlaceLatitude?: number | null;
+  birthPlaceLongitude?: number | null;
   name_lowercase?: string; // Lowercase name for case-insensitive search
   relationStartDate?: string; // Optional relation start date when creating/linking spouse
   relationEndDate?: string; // Optional relation end date when creating/linking spouse

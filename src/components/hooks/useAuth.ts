@@ -86,6 +86,25 @@ export function useAuth() {
     [userProfile],
   );
 
+  /**
+   * Who may edit a person's profession profile: that person, and nobody else.
+   *
+   * Narrower than the write access that governs the rest of a person's record.
+   * A tree's custodians may correct a relative's name, dates and relations; a
+   * career profile speaks in the first person and publishes an employer, a work
+   * email and a phone number, so it stays with its subject. The server enforces
+   * the same rule (see `canEditProfile` in professionProfileService) — this only
+   * decides whether the affordance is offered.
+   */
+  const canEditProfessionProfile = useCallback(
+    (personId?: string | null) => {
+      if (!userProfile || !personId) return false;
+      if (userProfile.role === "superadmin") return true;
+      return userProfile.peopleId === personId;
+    },
+    [userProfile],
+  );
+
   const canManageLocation = useCallback(
     (locationId: string) => {
       if (!userProfile) return false;
@@ -114,6 +133,7 @@ export function useAuth() {
       isApproved,
       needsNodeLink,
       canManageLocation,
+      canEditProfessionProfile,
       updateUserProfile,
     }),
     [
@@ -130,6 +150,7 @@ export function useAuth() {
       isApproved,
       needsNodeLink,
       canManageLocation,
+      canEditProfessionProfile,
       updateUserProfile,
     ],
   );

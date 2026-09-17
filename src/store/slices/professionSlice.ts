@@ -9,9 +9,27 @@ interface Profession {
   category?: string;
 }
 
+/** The listing-card slice of a career profile, as the backend redacted it. */
+export interface ProfessionProfileSummary {
+  peopleId: string;
+  title: string;
+  sector?: string | null;
+  subSpecialization?: string | null;
+  organization?: string | null;
+  totalExperienceYears?: number | null;
+  workLocation?: string | null;
+  /** Null unless the owner switched it on — the server decides, not the card. */
+  contactPhone?: string | null;
+  mentorshipAvailable?: boolean;
+  summary?: string | null;
+  visibility?: string;
+  canEdit?: boolean;
+}
+
 interface PersonWithProfessions {
   person: FNode;
   professions: Profession[];
+  profile: ProfessionProfileSummary | null;
 }
 
 interface ProfessionState {
@@ -91,6 +109,7 @@ export const fetchProfessionsData = createAsyncThunk(
                 hasSubTree: false,
               } as unknown as FNode,
               professions: [],
+              profile: person.professionProfile || null,
             });
           }
           peopleProfsMap.get(personKey)!.professions.push({

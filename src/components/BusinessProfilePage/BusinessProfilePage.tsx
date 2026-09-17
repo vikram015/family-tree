@@ -219,9 +219,18 @@ export const BusinessProfilePage: React.FC = () => {
 
   const categoryLabel = businessCategoryLabel(business?.category);
   const categoryColor = businessCategoryColor(business?.category);
-  const place = [business?.locationName, business?.districtName, business?.stateName]
-    .filter(Boolean)
-    .join(", ");
+  // Where the business actually is, as its owner picked it from Google.
+  //
+  // The village chain below is the owner's FAMILY location — where their tree
+  // is rooted — which was standing in for the shop's location and is frequently
+  // a different town entirely. It stays as the fallback for businesses that
+  // predate the place picker.
+  const place =
+    business?.placeAddress ||
+    business?.placeName ||
+    [business?.locationName, business?.districtName, business?.stateName]
+      .filter(Boolean)
+      .join(", ");
   const founded = formatFounded(business?.foundedOn);
 
   return (
@@ -602,6 +611,14 @@ export const BusinessProfilePage: React.FC = () => {
                 website: business.website,
                 address: business.address,
                 hours: business.hours,
+                // The dialog re-fetches the full record, but seeding the place
+                // means the picker shows the current one on first paint rather
+                // than flashing empty.
+                placeId: business.placeId,
+                placeName: business.placeName,
+                placeAddress: business.placeAddress,
+                latitude: business.latitude,
+                longitude: business.longitude,
                 logoUrl: business.logoUrl,
                 coverUrl: business.coverUrl,
               }}

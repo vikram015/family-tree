@@ -47,6 +47,7 @@ import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import BloodtypeOutlinedIcon from "@mui/icons-material/BloodtypeOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
 import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
@@ -54,6 +55,8 @@ import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { Link as RouterLink } from "react-router-dom";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
@@ -65,7 +68,7 @@ import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
-import { ProfessionFormDialog } from "../Profession/ProfessionFormDialog";
+import { ProfessionFormDialog } from "../ProfessionProfilePage/ProfessionFormDialog";
 import { businessCategoryLabel } from "../Business/businessCategories";
 import { phoneFromCustomFields } from "../Business/businessContact";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
@@ -75,6 +78,7 @@ import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import { ApiService, LocationCombinationOption, LinkRequest } from "../../services/apiService";
 import { namesLooselyMatch } from "../../utils/nameMatch";
 import { LocationPicker } from "../LocationPicker/LocationPicker";
+import { PlacePicker, PlaceValue } from "../PlacePicker/PlacePicker";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { brand } from "../../theme/brand";
 const DatePicker = React.lazy(() =>
@@ -305,6 +309,11 @@ export const NodeDetails = memo(function NodeDetails({
 
   // New fields state
   const [editedBloodGroup, setEditedBloodGroup] = useState("");
+  // Where this person was born. A Google place, so it carries coordinates
+  // rather than only a village name, and it is recorded per person because a
+  // family's members are frequently born somewhere other than the village the
+  // tree is rooted in.
+  const [editedPlace, setEditedPlace] = useState<PlaceValue | null>(null);
   const [editedIsAlive, setEditedIsAlive] = useState(true);
   const [editedDeceasedDate, setEditedDeceasedDate] = useState<Dayjs | null>(null);
 
@@ -402,6 +411,7 @@ export const NodeDetails = memo(function NodeDetails({
   const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
   const [professionDialogOpen, setProfessionDialogOpen] = useState(false);
+  const [professionProfile, setProfessionProfile] = useState<any | null>(null);
   const [requestingAccess, setRequestingAccess] = useState(false);
   const [mobileAddSaveAction, setMobileAddSaveAction] = useState<{
     onClick: () => void;
@@ -409,7 +419,8 @@ export const NodeDetails = memo(function NodeDetails({
     saving: boolean;
   } | null>(null);
 
-  const { currentUser, userProfile, isSuperAdmin } = useAuth() as any;
+  const { currentUser, userProfile, isSuperAdmin, canEditProfessionProfile } =
+    useAuth() as any;
   const { openLoginModal } = useLoginModal();
   const { offerNotifications } = useNotificationPrompt();
 
@@ -442,6 +453,17 @@ export const NodeDetails = memo(function NodeDetails({
       setEditedCustomFields(node.customFields || {});
       setDisplayCustomFields(node.customFields || {});
       setEditedBloodGroup(node.bloodGroup || "");
+      setEditedPlace(
+        node.birthPlaceId
+          ? {
+              placeId: node.birthPlaceId,
+              name: node.birthPlaceName || "",
+              address: node.birthPlaceAddress || node.birthPlaceName || "",
+              latitude: node.birthPlaceLatitude ?? null,
+              longitude: node.birthPlaceLongitude ?? null,
+            }
+          : null,
+      );
       setEditedIsAlive(node.isAlive !== false);
       setEditedDeceasedDate(parsePickerValue(node.deceasedDate));
       setEditedPhotoPreview(node.photo || undefined);
@@ -460,6 +482,9 @@ export const NodeDetails = memo(function NodeDetails({
       ApiService.getProfessionsByPerson(node.id)
         .then((profs) => setProfessions(profs || []))
         .catch(() => setProfessions([]));
+      ApiService.getProfessionProfile(node.id)
+        .then((profile) => setProfessionProfile(profile))
+        .catch(() => setProfessionProfile(null));
     }
   }, [node, initialView, parsePickerValue, currentUser]);
 
@@ -480,6 +505,11 @@ export const NodeDetails = memo(function NodeDetails({
       setProfessions(profs || []);
     } catch {
       setProfessions([]);
+    }
+    try {
+      setProfessionProfile(await ApiService.getProfessionProfile(node.id));
+    } catch {
+      setProfessionProfile(null);
     }
   }, [node]);
 
@@ -653,6 +683,13 @@ export const NodeDetails = memo(function NodeDetails({
           dob: formatPickerDate(editedDob),
           gender: editedGender,
           bloodGroup: editedBloodGroup,
+          // "" clears the birth place. All five move together so a cleared
+          // field never leaves coordinates pointing at the old one.
+          birthPlaceId: editedPlace?.placeId || "",
+          birthPlaceName: editedPlace?.name || "",
+          birthPlaceAddress: editedPlace?.address || "",
+          birthPlaceLatitude: editedPlace?.latitude ?? null,
+          birthPlaceLongitude: editedPlace?.longitude ?? null,
           isAlive: editedIsAlive,
           // Cleared, or the person is marked living again — either way the
           // stored date of death should go.
@@ -706,6 +743,7 @@ export const NodeDetails = memo(function NodeDetails({
     node,
     editedName,
     editedNameHindi,
+    editedPlace,
     editedDob,
     editedGender,
     editedCustomFields,
@@ -1096,6 +1134,15 @@ export const NodeDetails = memo(function NodeDetails({
           icon: <BloodtypeOutlinedIcon sx={{ fontSize: 16 }} />,
         }
       : null,
+    // The short name, not the full address: these are chips in a row, and
+    // "Gangwa, Haryana, India" would push the others off the line.
+    node.birthPlaceName || node.birthPlaceAddress
+      ? {
+          key: "birthplace",
+          label: `Born in ${node.birthPlaceName || node.birthPlaceAddress}`,
+          icon: <PlaceOutlinedIcon sx={{ fontSize: 16 }} />,
+        }
+      : null,
   ].filter(Boolean) as Array<{ key: string; label: string; icon?: React.ReactNode }>;
 
   return (
@@ -1457,7 +1504,7 @@ export const NodeDetails = memo(function NodeDetails({
                   {!currentUser ? (
                     <Box sx={{ textAlign: "center", py: 1.5 }}>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Log in to see this person's businesses and professions.
+                        Log in to see this person's business and profession.
                       </Typography>
                       <Button
                         size="small"
@@ -1485,20 +1532,26 @@ export const NodeDetails = memo(function NodeDetails({
                           <Stack direction="row" spacing={1} alignItems="center">
                             <BusinessOutlinedIcon fontSize="small" color="action" />
                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                              Businesses
+                              Business
                             </Typography>
                           </Stack>
-                          {canEditCurrentNode && (
-                            <Button
-                              size="small"
-                              startIcon={<AddIcon fontSize="small" />}
-                              onClick={() => {
-                                setEditingBusiness(null);
-                                setBusinessDialogOpen(true);
-                              }}
-                            >
-                              Add
-                            </Button>
+                          {/* One business per person: once there is one, the
+                              control on each card below is Edit, not another
+                              Add. People who already have several keep them —
+                              nothing is hidden, only the Add is. */}
+                          {canEditCurrentNode && businesses.length === 0 && (
+                            <Tooltip title="Add business">
+                              <IconButton
+                                size="small"
+                                aria-label="Add business"
+                                onClick={() => {
+                                  setEditingBusiness(null);
+                                  setBusinessDialogOpen(true);
+                                }}
+                              >
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
                           )}
                         </Stack>
 
@@ -1544,39 +1597,79 @@ export const NodeDetails = memo(function NodeDetails({
                           </Stack>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
-                            No businesses added yet.
+                            No business added yet.
                           </Typography>
                         )}
                       </Box>
 
                       <Divider />
 
-                      {/* Professions */}
+                      {/* Profession: one career profile per person, so the
+                          control is "edit the one you have", not "add another".
+                          Legacy profession tags still render underneath until
+                          they have been migrated into a profile. */}
                       <Box>
                         <Stack
                           direction="row"
                           alignItems="center"
                           justifyContent="space-between"
-                          sx={{ mb: professions.length > 0 ? 1.5 : 0.5 }}
+                          sx={{ mb: 1.5 }}
                         >
                           <Stack direction="row" spacing={1} alignItems="center">
                             <WorkOutlineOutlinedIcon fontSize="small" color="action" />
                             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                              Professions
+                              Profession
                             </Typography>
                           </Stack>
-                          {canEditCurrentNode && (
-                            <Button
-                              size="small"
-                              startIcon={<AddIcon fontSize="small" />}
-                              onClick={() => setProfessionDialogOpen(true)}
+                          {canEditProfessionProfile(node?.id) && (
+                            <Tooltip
+                              title={professionProfile ? "Edit profession" : "Add profession"}
                             >
-                              Add
-                            </Button>
+                              <IconButton
+                                size="small"
+                                aria-label={
+                                  professionProfile ? "Edit profession" : "Add profession"
+                                }
+                                onClick={() => setProfessionDialogOpen(true)}
+                              >
+                                {professionProfile ? (
+                                  <EditIcon fontSize="small" />
+                                ) : (
+                                  <AddIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </Tooltip>
                           )}
                         </Stack>
 
-                        {professions.length > 0 ? (
+                        {professionProfile ? (
+                          <Box
+                            sx={{
+                              p: 1.25,
+                              borderRadius: 2,
+                              bgcolor: "action.hover",
+                              minWidth: 0,
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                              {professionProfile.title}
+                            </Typography>
+                            {(professionProfile.organization ||
+                              professionProfile.sector) && (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {[professionProfile.organization, professionProfile.sector]
+                                  .filter(Boolean)
+                                  .join(" • ")}
+                              </Typography>
+                            )}
+                            {Number(professionProfile.totalExperienceYears) > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                {Number(professionProfile.totalExperienceYears)} years'
+                                experience
+                              </Typography>
+                            )}
+                          </Box>
+                        ) : professions.length > 0 ? (
                           <Stack spacing={1}>
                             {professions.map((prof) => (
                               <Box
@@ -1603,9 +1696,19 @@ export const NodeDetails = memo(function NodeDetails({
                           </Stack>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
-                            No professions added yet.
+                            No profession added yet.
                           </Typography>
                         )}
+
+                        <Button
+                          component={RouterLink}
+                          to={`/profession/${node.id}`}
+                          size="small"
+                          endIcon={<ChevronRightIcon fontSize="small" />}
+                          sx={{ mt: 1, px: 0 }}
+                        >
+                          View career profile
+                        </Button>
                       </Box>
                     </Stack>
                   )}
@@ -1836,6 +1939,19 @@ export const NodeDetails = memo(function NodeDetails({
                       />
                     ))}
                   </Stack>
+                </Box>
+
+                {/* Recorded per person: people in one tree are often born in
+                    different places, so this can't be inferred from the tree's
+                    own village. */}
+                <Box sx={spanBothColumnsSx}>
+                  <PlacePicker
+                    value={editedPlace}
+                    onChange={setEditedPlace}
+                    label="Birth place"
+                    placeholder="Search for a city, town, or village"
+                    sx={inputWithIconSx}
+                  />
                 </Box>
                 <Stack direction="row" spacing={1.5} alignItems="center">
                   <Typography
@@ -2707,8 +2823,12 @@ export const NodeDetails = memo(function NodeDetails({
         <ProfessionFormDialog
           open={professionDialogOpen}
           onClose={() => setProfessionDialogOpen(false)}
-          personId={node.id}
-          onSaved={() => void refreshProfessions()}
+          peopleId={node.id}
+          profile={professionProfile}
+          onSaved={() => {
+            setProfessionDialogOpen(false);
+            void refreshProfessions();
+          }}
         />
       )}
 

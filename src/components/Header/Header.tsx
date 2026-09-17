@@ -37,6 +37,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import { FeedbackDialog } from "../Feedback/FeedbackDialog";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useSkipOnboarding } from "../hooks/useSkipOnboarding";
 import { useAuth } from "../hooks/useAuth";
 import { ApiService } from "../../services/apiService";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
@@ -62,6 +63,16 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
+  /**
+   * Onboarding gets a stripped header.
+   *
+   * The flow's whole job is to get three answers before the app means anything;
+   * a full nav bar invites the user to wander off mid-way into pages that have
+   * nothing in them yet. Logo, an escape hatch, and their account — nothing
+   * else.
+   */
+  const isOnboarding = location.pathname.startsWith("/onboarding");
+  const { skip: skipOnboarding, skipping: skippingOnboarding } = useSkipOnboarding();
   const navigate = useNavigate();
   const { currentUser, userProfile, logout, isSuperAdmin, initialized, hadSession } = useAuth();
   // Match the homepage: don't paint a logged-out header for a returning user
@@ -169,13 +180,19 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
     // { label: "Contact", path: "/contact" },
   ];
 
-  // Add admin link for superadmin
-  const allNavLinks = isSuperAdmin()
-    ? [
-        ...navLinks,
-        { label: "Admin", path: "/admin", icon: <AdminPanelSettingsOutlinedIcon fontSize="small" /> },
-      ]
-    : navLinks;
+  // Add admin link for superadmin.
+  //
+  // Emptied during onboarding so the links disappear from the drawer as well as
+  // the bar — otherwise the mobile menu would still offer every destination the
+  // stripped header exists to withhold.
+  const allNavLinks = isOnboarding
+    ? []
+    : isSuperAdmin()
+      ? [
+          ...navLinks,
+          { label: "Admin", path: "/admin", icon: <AdminPanelSettingsOutlinedIcon fontSize="small" /> },
+        ]
+      : navLinks;
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -477,7 +494,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             </Box>
           </Box>
 
-          {!isMobile && (
+          {!isMobile && !isOnboarding && (
             <Box
               sx={{
                 flexGrow: 1,
@@ -541,6 +558,28 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             </Box>
           )}
 
+
+          {/* Onboarding's only exit, in the header where it stays out of the
+              form's way but remains findable on every step. */}
+          {isOnboarding && showAuthed && (
+            <Box sx={{ ml: "auto", mr: 1.5, flexShrink: 0 }}>
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => void skipOnboarding()}
+                disabled={skippingOnboarding}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: 13.5,
+                  color: brand.slateMuted,
+                  "&:hover": { color: brand.ink, bgcolor: "#f8fafc" },
+                }}
+              >
+                {skippingOnboarding ? "Skipping…" : "Skip for now"}
+              </Button>
+            </Box>
+          )}
 
           {/* Auth Buttons */}
           {!isMobile && (

@@ -8,7 +8,7 @@ const API_BASE_URL =
 type QueryValue = string | number | boolean | undefined | null;
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   query?: Record<string, QueryValue>;
   body?: unknown;
 };
@@ -95,6 +95,10 @@ export const backendApi = {
   },
   patch<T>(path: string, body?: unknown, query?: Record<string, QueryValue>) {
     return request<T>(path, { method: "PATCH", body, query });
+  },
+  /** Replace a resource wholesale — PATCH merges, PUT overwrites. */
+  put<T>(path: string, body?: unknown, query?: Record<string, QueryValue>) {
+    return request<T>(path, { method: "PUT", body, query });
   },
   delete<T>(path: string, query?: Record<string, QueryValue>) {
     return request<T>(path, { method: "DELETE", query });

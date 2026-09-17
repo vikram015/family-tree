@@ -21,6 +21,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
 import type { WishEventType } from "../../services/apiService";
 import { brand } from "../../theme/brand";
+import { memorialSurface } from "../HomePage/homeTheme";
 import {
   buildEventShareUrl,
   copyShareLink,
@@ -128,22 +129,33 @@ const FEATURE_TONES: Record<
   birthday: {
     ink: "#be123c",
     soft: "#ffe4e6",
-    border: "#fecdd3",
-    surface: "#ffffff",
+    // rose-200/80
+    border: "rgba(254, 205, 211, 0.8)",
+    // The design's `bg-gradient-to-br from-rose-50/70 via-white to-emerald-50/40`.
+    // The third stop really is emerald, not more rose — it keeps the card from
+    // reading as a warning and is why it looks alive rather than tinted.
+    surface:
+      "linear-gradient(135deg, rgba(255, 241, 242, 0.7) 0%, #ffffff 50%, rgba(236, 253, 245, 0.4) 100%)",
     action: "#e11d48",
   },
   anniversary: {
     ink: "#1d4ed8",
     soft: brand.primarySoft,
+    // blue-200
     border: "#bfdbfe",
-    surface: "#ffffff",
+    // `bg-gradient-to-br from-blue-50/70 via-white to-sky-50/50`
+    surface:
+      "linear-gradient(135deg, rgba(239, 246, 255, 0.7) 0%, #ffffff 50%, rgba(240, 249, 255, 0.5) 100%)",
     action: brand.primary,
   },
   remembrance: {
     ink: "#92400e",
     soft: "#fef3c7",
-    border: "#fde68a",
-    surface: "#fffdf7",
+    // amber-200/80
+    border: "rgba(253, 230, 138, 0.8)",
+    // The same gold the panel uses — in the design the remembrance card and its
+    // container share one gradient rather than two near-identical ones.
+    surface: memorialSurface,
     action: "#b45309",
   },
 };
@@ -224,7 +236,7 @@ const EventCard: React.FC<EventCardProps> = ({
           borderRadius: 3,
           border: "1px solid",
           borderColor: feature.border,
-          bgcolor: feature.surface,
+          background: feature.surface,
           boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
         }}
       >

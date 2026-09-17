@@ -36,6 +36,7 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { ApiService } from "../../services/apiService";
+import { PlacePicker, PlaceValue } from "../PlacePicker/PlacePicker";
 import {
   BUSINESS_CATEGORY_OPTIONS,
   isPresetCategory,
@@ -69,6 +70,12 @@ export interface BusinessFormValue {
   website?: string | null;
   address?: string | null;
   hours?: string | null;
+  /** The place the business sits at, from Google Places. */
+  placeId?: string | null;
+  placeName?: string | null;
+  placeAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   logoUrl?: string | null;
   coverUrl?: string | null;
 }
@@ -183,6 +190,10 @@ export function BusinessFormDialog({
   const [website, setWebsite] = useState("");
   const [address, setAddress] = useState("");
   const [hours, setHours] = useState("");
+  // Where the business actually is, picked from Google Places. Separate from
+  // the free-text address: this one carries coordinates, which is what
+  // "businesses near me" ranks on.
+  const [place, setPlace] = useState<PlaceValue | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [coverUrl, setCoverUrl] = useState<string | undefined>(undefined);
   const [imageBusy, setImageBusy] = useState(false);
@@ -234,6 +245,17 @@ export function BusinessFormDialog({
       setWebsite(b.website || "");
       setAddress(b.address || "");
       setHours(b.hours || "");
+      setPlace(
+        b.placeId
+          ? {
+              placeId: b.placeId,
+              name: b.placeName || "",
+              address: b.placeAddress || b.placeName || "",
+              latitude: b.latitude ?? null,
+              longitude: b.longitude ?? null,
+            }
+          : null,
+      );
       setLogoUrl(b.logoUrl || undefined);
       setCoverUrl(b.coverUrl || undefined);
 
@@ -337,6 +359,7 @@ export function BusinessFormDialog({
       website.trim(),
       address.trim(),
       hours.trim(),
+      place?.placeId || "",
       hasRichTextContent(story),
       contact.trim(),
       email.trim(),
@@ -354,6 +377,7 @@ export function BusinessFormDialog({
     website,
     address,
     hours,
+    place,
     story,
     contact,
     email,
@@ -424,6 +448,13 @@ export function BusinessFormDialog({
         website: website.trim() || null,
         address: address.trim() || null,
         hours: hours.trim() || null,
+        // The five move together: clearing the field must not leave stale
+        // coordinates pointing at the old place.
+        placeId: place?.placeId || null,
+        placeName: place?.name || null,
+        placeAddress: place?.address || null,
+        latitude: place?.latitude ?? null,
+        longitude: place?.longitude ?? null,
       };
       const result = business?.id
         ? await ApiService.updateBusiness(business.id, payload)
@@ -911,8 +942,21 @@ export function BusinessFormDialog({
                   sx={{ gridColumn: { md: "1 / -1" } }}
                 />
 
+                {/* The place first, then the street address within it: the
+                    place is what search ranks on, the address is what a
+                    customer navigates by. */}
+                <Box sx={{ gridColumn: { md: "1 / -1" } }}>
+                  <PlacePicker
+                    value={place}
+                    onChange={edited(setPlace)}
+                    label="Location"
+                    placeholder="Search for the town, area, or landmark"
+                    helperText="Used to show this business to people searching nearby."
+                  />
+                </Box>
+
                 <TextField
-                  label="Address"
+                  label="Street address"
                   value={address}
                   onChange={(e) => edited(setAddress)(e.target.value)}
                   fullWidth

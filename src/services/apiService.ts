@@ -36,6 +36,13 @@ export interface BusinessProfile {
   website?: string | null;
   address?: string | null;
   hours?: string | null;
+  /** The business's own place, picked from Google. Preferred over the owner's
+   *  village below, which only says where the family tree is rooted. */
+  placeId?: string | null;
+  placeName?: string | null;
+  placeAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   /** Short-lived signed URLs from Cloudflare R2 — display them, never store
    *  them. They expire, so a page kept open for a long time should re-fetch. */
   logoUrl?: string | null;
@@ -67,6 +74,83 @@ export interface FamilyPhoto {
   /** Short-lived signed URL — refetch the list rather than caching this long-term. */
   photoUrl: string;
   thumbUrl: string;
+}
+
+/** One Google Places suggestion, as returned by our proxy. */
+export interface PlaceSuggestion {
+  placeId: string;
+  name: string;
+  address: string;
+}
+
+/** A resolved place — the shape stored on a business or a person. */
+export interface PlaceDetails {
+  placeId: string;
+  name: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export type ProfessionVisibility = "public" | "family" | "private";
+
+export interface ProfessionMilestone {
+  id?: string;
+  title: string;
+  organization?: string | null;
+  location?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  description?: string | null;
+  sortOrder?: number;
+}
+
+export interface ProfessionSkill {
+  id?: string;
+  name: string;
+  category?: string | null;
+  sortOrder?: number;
+}
+
+/** A person's career profile. Fields the viewer may not see come back null. */
+export interface ProfessionProfile {
+  id: string;
+  peopleId: string;
+  professionId?: string | null;
+  title: string;
+  sector?: string | null;
+  subSpecialization?: string | null;
+  employmentMode?: string | null;
+  organization?: string | null;
+  totalExperienceYears?: number | null;
+  summary?: string | null;
+  highestDegree?: string | null;
+  university?: string | null;
+  certifications?: string | null;
+  workEmail?: string | null;
+  workLocation?: string | null;
+  contactPhone?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+  visibility: ProfessionVisibility;
+  /** Publishes `contactPhone`. Off means only the owner sees the number. */
+  showContact?: boolean;
+  showPhoneToCloseKin?: boolean;
+  allowMentorshipRequests?: boolean;
+  showEmployerPublicly?: boolean;
+  mentorshipAvailable?: boolean;
+  mentorshipAreas?: string[] | null;
+  mentorshipNote?: string | null;
+  milestones: ProfessionMilestone[];
+  skills: ProfessionSkill[];
+  personName?: string | null;
+  personNameHindi?: string | null;
+  personPhotoUrl?: string | null;
+  treeId?: string | null;
+  professionName?: string | null;
+  professionCategory?: string | null;
+  /** Whether this viewer may edit — decided server-side, not guessed here. */
+  canEdit?: boolean;
 }
 
 export interface StorageQuotaStatus {
@@ -339,6 +423,10 @@ interface PersonWithRelations {
   modifiedAt?: string;
   createdBy?: string | null;
   createdByName?: string | null;
+  /** Where this person was born, when recorded. */
+  birthPlaceId?: string | null;
+  birthPlaceName?: string | null;
+  birthPlaceAddress?: string | null;
   parents?: Array<{ id: string; type: RelationType }>;
   children?: Array<{ id: string; type: RelationType }>;
   spouses?: Array<{ id: string; type: RelationType }>;
@@ -624,6 +712,13 @@ export const ApiService = {
       isAlive: coreUpdates.isAlive,
       deceasedDate: normalizedDeceasedDate,
       photoUrl: coreUpdates.photo,
+      // "" / null clears the birth place; undefined leaves it alone. The five
+      // move together so a cleared place leaves no stale coordinates behind.
+      birthPlaceId: coreUpdates.birthPlaceId,
+      birthPlaceName: coreUpdates.birthPlaceName,
+      birthPlaceAddress: coreUpdates.birthPlaceAddress,
+      birthPlaceLatitude: coreUpdates.birthPlaceLatitude,
+      birthPlaceLongitude: coreUpdates.birthPlaceLongitude,
     };
     const response = await backendApi.patch<PersonWithRelations | UpdatePersonResponse>(
       `/api/people/${personId}`,
@@ -997,6 +1092,22 @@ export const ApiService = {
     return backendApi.get<any[]>('/api/lookup/locations', { districtId });
   },
 
+  /**
+   * The village closest to a point, or null when nothing is within range.
+   * Used to default a location-scoped page to where the caller is.
+   */
+  async getNearestLocation(
+    latitude: number,
+    longitude: number,
+  ): Promise<LocationCombinationOption | null> {
+    const result = await backendApi.get<LocationCombinationOption | null>(
+      "/api/lookup/nearest-location",
+      { lat: latitude, lng: longitude },
+    );
+    // 204 comes back as an empty body — "nothing near you", not an error.
+    return result && (result as any).locationId ? result : null;
+  },
+
   async searchLocationCombinations(params: {
     query?: string;
     locationId?: string;
@@ -1044,8 +1155,39 @@ export const ApiService = {
    * Global search across people, businesses, and professions.
    * Returns enriched context including tree/location and ancestor hierarchy.
    */
-  async globalSearch(searchTerm: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/search/global', { term: searchTerm });
+  /**
+   * Google Places suggestions for a partial query, proxied by our backend so
+   * the API key never reaches the browser. Returns [] when Places is
+   * unconfigured or unreachable — the caller should degrade, not error.
+   */
+  async searchPlaces(
+    query: string,
+    sessionToken?: string,
+  ): Promise<PlaceSuggestion[]> {
+    return backendApi.get<PlaceSuggestion[]>('/api/places/autocomplete', {
+      q: query,
+      sessionToken,
+    });
+  },
+
+  /** One place's name, address and coordinates — what gets stored on save. */
+  async getPlaceDetails(placeId: string, sessionToken?: string): Promise<PlaceDetails> {
+    return backendApi.get<PlaceDetails>(`/api/places/${encodeURIComponent(placeId)}`, {
+      sessionToken,
+    });
+  },
+
+  async globalSearch(
+    searchTerm: string,
+    coords?: { latitude: number; longitude: number } | null,
+  ): Promise<any[]> {
+    // Coordinates are optional and only affect business results, which come
+    // back nearest-first with a `distanceKm` when they are sent.
+    return backendApi.get<any[]>('/api/search/global', {
+      term: searchTerm,
+      lat: coords ? coords.latitude : undefined,
+      lng: coords ? coords.longitude : undefined,
+    });
   },
 
   /**
@@ -1080,6 +1222,92 @@ export const ApiService = {
   /**
    * Get businesses for a person
    */
+  /**
+   * Businesses near a point, nearest first. Each row carries `distanceKm`.
+   * A business is placed by the location its owner picked, falling back to the
+   * village its owner's tree is rooted in.
+   */
+  /**
+   * One person's profession profile, or null when there isn't one the viewer
+   * may see. A 404 covers both "no profile" and "not yours to see" — the server
+   * deliberately doesn't distinguish them.
+   */
+  async getProfessionProfile(peopleId: string): Promise<ProfessionProfile | null> {
+    try {
+      return await backendApi.get<ProfessionProfile>(
+        `/api/profession-profile/person/${peopleId}`,
+      );
+    } catch (error: any) {
+      if (error?.status === 404 || /not found/i.test(error?.message || "")) return null;
+      throw error;
+    }
+  },
+
+  /** Create or replace a person's profile, with its milestones and skills. */
+  async saveProfessionProfile(
+    peopleId: string,
+    payload: Partial<ProfessionProfile>,
+  ): Promise<{ success: boolean; profileId: string }> {
+    return backendApi.put<{ success: boolean; profileId: string }>(
+      `/api/profession-profile/person/${peopleId}`,
+      payload,
+    );
+  },
+
+  async deleteProfessionProfile(peopleId: string): Promise<{ success: boolean }> {
+    return backendApi.delete<{ success: boolean }>(
+      `/api/profession-profile/person/${peopleId}`,
+    );
+  },
+
+  async getBusinessesNearby(
+    latitude: number,
+    longitude: number,
+    radiusKm = 25,
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/business/nearby", {
+      lat: latitude,
+      lng: longitude,
+      radiusKm,
+    });
+  },
+
+  /**
+   * People with a profession near a point — the geographic twin of
+   * `getProfessionsByLocation`, already grouped per person by the server.
+   */
+  async getProfessionsNearby(
+    latitude: number,
+    longitude: number,
+    radiusKm = 25,
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/profession/nearby", {
+      lat: latitude,
+      lng: longitude,
+      radiusKm,
+    });
+  },
+
+  /**
+   * What place a pair of coordinates is in, so "use my location" can name
+   * itself. Resolves to null when the lookup is unavailable — the caller keeps
+   * whatever label it had.
+   */
+  async reverseGeocode(
+    latitude: number,
+    longitude: number,
+  ): Promise<{ name: string; address: string; latitude: number; longitude: number } | null> {
+    try {
+      return await backendApi.get<any>("/api/places/reverse", {
+        lat: latitude,
+        lng: longitude,
+      });
+    } catch (error) {
+      console.warn("Could not name the current position:", error);
+      return null;
+    }
+  },
+
   async getBusinessesByPerson(peopleId: string): Promise<any[]> {
     return backendApi.get<any[]>(`/api/business/person/${peopleId}`);
   },
@@ -1101,6 +1329,11 @@ export const ApiService = {
       website: business.website || null,
       address: business.address || null,
       hours: business.hours || null,
+      placeId: business.placeId || null,
+      placeName: business.placeName || null,
+      placeAddress: business.placeAddress || null,
+      latitude: business.latitude ?? null,
+      longitude: business.longitude ?? null,
     });
   },
 
@@ -1121,6 +1354,11 @@ export const ApiService = {
       website: updates.website,
       address: updates.address,
       hours: updates.hours,
+      placeId: updates.placeId,
+      placeName: updates.placeName,
+      placeAddress: updates.placeAddress,
+      latitude: updates.latitude,
+      longitude: updates.longitude,
       isDeleted: updates.isDeleted,
     });
   },
@@ -1574,6 +1812,9 @@ export const ApiService = {
           treeId: row.treeId,
           treeName: row.treeName,
           parentHierarchy: row.parentHierarchy || [],
+          // Card-sized career details, already redacted for this viewer by the
+          // backend. Null when there is no profile or it isn't shared.
+          professionProfile: row.professionProfile || null,
         });
       }
     });

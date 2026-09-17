@@ -36,6 +36,9 @@ import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
 import WcOutlinedIcon from "@mui/icons-material/WcOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import LightbulbOutlinedIcon from "@mui/icons-material/LightbulbOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -314,6 +317,53 @@ export const UserOnboardingPage: React.FC = () => {
     ],
   );
 
+  /**
+   * How many existing trees already match what the user has entered.
+   *
+   * A real count from the same search step 3 runs, minus the name — so the
+   * number on screen is exactly how many trees they are about to be offered.
+   * Null until a location is chosen (the search requires one) or while it is in
+   * flight; the callout only appears once there is something true to say.
+   */
+  const [matchPreviewCount, setMatchPreviewCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (displayStep !== "location" || !selectedLocationId) {
+      setMatchPreviewCount(null);
+      return;
+    }
+    let active = true;
+    // Debounced: caste and sub-caste are often changed in quick succession, and
+    // each change would otherwise fire its own search.
+    const timer = setTimeout(() => {
+      ApiService.searchUserOnboardingMatches({
+        locationId: selectedLocationId,
+        casteId: selectedCasteId || null,
+        subCasteId: selectedSubCasteId || null,
+      })
+        .then((matches) => {
+          if (active) setMatchPreviewCount(Array.isArray(matches) ? matches.length : 0);
+        })
+        .catch(() => {
+          // A failed preview is not worth an error: the count simply doesn't
+          // appear, and the step works exactly as before.
+          if (active) setMatchPreviewCount(null);
+        });
+    }, 400);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [displayStep, selectedLocationId, selectedCasteId, selectedSubCasteId]);
+
+  /** "Jain - Baid", or whichever of the two the user has filled in. */
+  const matchPreviewLabel = useMemo(() => {
+    const caste = castes.find((item: any) => item.id === selectedCasteId)?.name;
+    const subCaste = subCastes.find((item: any) => item.id === selectedSubCasteId)?.name;
+    return [caste, subCaste].filter(Boolean).join(" - ");
+  }, [castes, subCastes, selectedCasteId, selectedSubCasteId]);
+
   const filteredSubCastes = useMemo(
     () =>
       subCastes.filter(
@@ -462,16 +512,20 @@ export const UserOnboardingPage: React.FC = () => {
   const inputCardSx = {
     "& .MuiInputLabel-root": {
       left: 52,
-      top: 8,
+      top: 10,
       transform: "none",
-      color: brand.slate,
-      fontSize: 12,
-      fontWeight: 600,
+      // A micro-label, not a field label: it names the value sitting under it
+      // rather than competing with it.
+      color: "#94a3b8",
+      fontSize: 11,
+      fontWeight: 500,
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
       lineHeight: 1.2,
       pointerEvents: "none",
       zIndex: 1,
       "&.Mui-focused": {
-        color: brand.slate,
+        color: "#94a3b8",
       },
       "&.Mui-disabled": {
         color: brand.slateMuted,
@@ -481,35 +535,45 @@ export const UserOnboardingPage: React.FC = () => {
       },
     },
     "& .MuiOutlinedInput-root": {
-      minHeight: 64,
-      borderRadius: 2,
+      // Tall enough that the value clears its micro-label. At 62 the two were
+      // almost touching once a field had content in it.
+      minHeight: 68,
+      borderRadius: 1.5,
       bgcolor: "#ffffff",
-      boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
       alignItems: "flex-end",
+      transition: "box-shadow 140ms ease, border-color 140ms ease",
       "& fieldset": {
-        borderColor: "rgba(15,23,42,0.14)",
+        borderColor: "#e2e8f0",
         top: 0,
       },
       "& legend": {
         display: "none",
       },
       "&:hover fieldset": {
-        borderColor: "rgba(13,110,253,0.45)",
+        borderColor: "#cbd5e1",
+      },
+      // The focus accent from the design: the border takes the royal blue and a
+      // soft 3px ring sits outside it, rather than the border simply thickening.
+      "&.Mui-focused": {
+        boxShadow: "0 0 0 3px rgba(29, 78, 216, 0.12)",
       },
       "&.Mui-focused fieldset": {
         borderColor: onboardingBlue,
+        borderWidth: 1,
       },
     },
     "& .MuiOutlinedInput-input": {
-      pt: 3,
-      pb: 1.25,
+      // Clears the micro-label above it.
+      pt: 3.25,
+      pb: 1.5,
       fontWeight: 600,
       color: brand.ink,
     },
     "& .MuiInputAdornment-root": {
       mt: "0 !important",
       alignSelf: "center",
-      color: brand.ink,
+      // Icons sit behind the values they mark.
+      color: "#94a3b8",
     },
   };
   const primaryOnboardingButtonSx = {
@@ -550,7 +614,7 @@ export const UserOnboardingPage: React.FC = () => {
       {ONBOARDING_STEPS.map((step, index) => {
         const completed = index < activeStepIndex;
         const active = index === activeStepIndex;
-        const color = completed ? onboardingGreen : active ? onboardingBlue : "#cbd5e1";
+        const done = completed;
         return (
           <React.Fragment key={step.key}>
             <Stack alignItems="center" spacing={0.75} sx={{ minWidth: { xs: 76, sm: 120 } }}>
@@ -559,23 +623,38 @@ export const UserOnboardingPage: React.FC = () => {
                   width: 32,
                   height: 32,
                   borderRadius: "50%",
-                  bgcolor: color,
-                  color: "#fff",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontWeight: 800,
-                  fontSize: 14,
-                  boxShadow: active ? "0 8px 18px rgba(13,110,253,0.26)" : "none",
+                  fontWeight: 600,
+                  fontSize: 12,
+                  flexShrink: 0,
+                  // Filled for done and current, outlined for what's ahead —
+                  // and the current step wears a soft halo so it reads as
+                  // "you are here" rather than just another filled circle.
+                  ...(done
+                    ? { bgcolor: onboardingGreen, color: "#fff" }
+                    : active
+                      ? {
+                          bgcolor: onboardingBlue,
+                          color: "#fff",
+                          boxShadow: "0 0 0 4px rgba(219, 234, 254, 0.9)",
+                        }
+                      : {
+                          bgcolor: "#ffffff",
+                          color: "#64748b",
+                          border: "2px solid #cbd5e1",
+                        }),
                 }}
               >
-                {completed ? <CheckCircleIcon sx={{ fontSize: 18 }} /> : index + 1}
+                {done ? <CheckCircleIcon sx={{ fontSize: 18 }} /> : index + 1}
               </Box>
               <Typography
                 variant="caption"
                 sx={{
-                  color: active || completed ? brand.ink : brand.slateMuted,
-                  fontWeight: active ? 800 : 600,
+                  color: active ? onboardingBlue : done ? brand.ink : "#94a3b8",
+                  fontWeight: active ? 700 : 500,
+                  letterSpacing: "-0.01em",
                   textAlign: "center",
                 }}
               >
@@ -598,7 +677,7 @@ export const UserOnboardingPage: React.FC = () => {
                   sx={{
                     width: "100%",
                     height: 2,
-                    bgcolor: index < activeStepIndex ? onboardingGreen : brand.border,
+                    bgcolor: index < activeStepIndex ? onboardingGreen : "#e2e8f0",
                   }}
                 />
               </Box>
@@ -1206,6 +1285,29 @@ export const UserOnboardingPage: React.FC = () => {
     }
   };
 
+  /**
+   * Step 2 -> step 1.
+   *
+   * Mirrors `handleBackToLocation`: the server's `currentStep` and the history
+   * entry have to move with the view, or a refresh or a browser Back would put
+   * the user somewhere the app no longer thinks they are.
+   */
+  const handleBackToProfile = async () => {
+    setLocalError("");
+    setStepOverride("profile");
+    try {
+      await dispatch(
+        updateUserOnboarding({
+          currentStep: "profile",
+        }),
+      ).unwrap();
+      updateHistoryStep("profile", "push");
+    } catch (error: any) {
+      setStepOverride(null);
+      setLocalError(error?.message || "Failed to return to your details.");
+    }
+  };
+
   const handleBackToLocation = async () => {
     setLocalError("");
     setStepOverride("location");
@@ -1305,25 +1407,9 @@ export const UserOnboardingPage: React.FC = () => {
     setCreateTreeOpen(true);
   };
 
-  const [skipping, setSkipping] = useState(false);
 
   // "Skip for now" — mark onboarding skipped (progress is preserved so the user
   // can resume later from the homepage nudge) and let them into the app.
-  const handleSkipOnboarding = async () => {
-    setSkipping(true);
-    setLocalError("");
-    try {
-      await dispatch(
-        updateUserOnboarding({ status: "skipped" }),
-      ).unwrap();
-      await dispatch(fetchUserOnboarding()).unwrap();
-      navigate(consumePostLoginRedirect() || "/", { replace: true });
-    } catch (error: any) {
-      setLocalError(error?.message || "Failed to skip onboarding.");
-      setSkipping(false);
-    }
-  };
-
   const handleTreeCreated = async (treeId: string) => {
     setCreateTreeOpen(false);
     const resp = await dispatch(
@@ -1370,10 +1456,30 @@ export const UserOnboardingPage: React.FC = () => {
 
     // A reason-aware chip: highlighted (green + check) when it matches the
     // user's own detail, plain otherwise.
+    /**
+     * A matched criterion is stated, not decorated: emerald tint, emerald ink,
+     * and a tick. Unmatched ones stay neutral so the eye lands on what actually
+     * lines up with the user's answers.
+     */
     const reasonChipSx = (matched: boolean) =>
       matched
-        ? { bgcolor: brand.accentSoft, color: brand.accentDark, fontWeight: 700 }
-        : { bgcolor: brand.canvas };
+        ? {
+            height: 22,
+            borderRadius: 1,
+            bgcolor: "#ECFDF5",
+            color: "#047857",
+            fontWeight: 600,
+            "& .MuiChip-label": { px: 0.9, fontSize: 11.5 },
+            "& .MuiChip-icon": { color: "#047857", fontSize: 14, ml: 0.75 },
+          }
+        : {
+            height: 22,
+            borderRadius: 1,
+            bgcolor: "#f1f5f9",
+            color: brand.slateMuted,
+            fontWeight: 600,
+            "& .MuiChip-label": { px: 0.9, fontSize: 11.5 },
+          };
 
     return (
     <Accordion
@@ -1442,8 +1548,8 @@ export const UserOnboardingPage: React.FC = () => {
             >
               <Typography
                 className="tree-name-text"
-                variant="h6"
-                sx={{ fontWeight: 900, color: "inherit" }}
+                // 20px was heading-sized for what is one row in a list of five.
+                sx={{ fontWeight: 700, fontSize: 14.5, color: "inherit" }}
               >
                 {tree.treeName}
               </Typography>
@@ -1485,12 +1591,21 @@ export const UserOnboardingPage: React.FC = () => {
             </Stack>
           </Box>
           </Stack>
-          <Stack spacing={0.5} sx={{ minWidth: { sm: 170 } }}>
-            <Typography variant="body2" color="text.secondary">
-              Owner: {tree.ownerName}
+          <Stack
+            spacing={0.25}
+            sx={{ minWidth: { sm: 150 }, textAlign: { sm: "right" } }}
+          >
+            <Typography sx={{ fontSize: 12, color: brand.slateMuted }}>
+              Owner:{" "}
+              <Box component="span" sx={{ color: brand.slate, fontWeight: 600 }}>
+                {tree.ownerName}
+              </Box>
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Nodes: {tree.totalNodes}
+            <Typography sx={{ fontSize: 12, color: brand.slateMuted }}>
+              Nodes:{" "}
+              <Box component="span" sx={{ color: brand.ink, fontWeight: 700 }}>
+                {tree.totalNodes}
+              </Box>
             </Typography>
           </Stack>
         </Stack>
@@ -1639,50 +1754,36 @@ export const UserOnboardingPage: React.FC = () => {
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          background: "#ffffff",
+          // The card has to sit on something, or its border and shadow have
+          // nothing to read against — white on white showed no card at all.
+          background: "#f8fafc",
         }}
       >
         <Container
-          maxWidth="lg"
+          // The first two steps are a narrow form; the match step lists trees
+          // and needs the room.
+          maxWidth={displayStep === "match" ? "lg" : "sm"}
           sx={{
-            py: { xs: 2, sm: 3, md: 4 },
+            py: { xs: 3, sm: 4, md: 5 },
             px: { xs: 1.5, sm: 2.5, md: 3 },
           }}
         >
+          {/* Progress sits above the card, not inside it: it describes where
+              this card falls in the sequence rather than being part of it. */}
+          <Box sx={{ mb: { xs: 3, sm: 4 } }}>{renderOnboardingStepRail()}</Box>
+
           <Paper
             elevation={0}
             sx={{
-              borderRadius: 0,
-              border: 0,
+              borderRadius: 4,
+              border: "1px solid rgba(226, 232, 240, 0.9)",
+              bgcolor: "#ffffff",
+              boxShadow:
+                "0 10px 30px -4px rgba(23, 37, 84, 0.05), 0 4px 12px -2px rgba(23, 37, 84, 0.03)",
               overflow: "hidden",
-              bgcolor: "transparent",
+              p: { xs: 2.5, sm: 4 },
             }}
           >
-            <Box
-              sx={{
-                px: { xs: 0, sm: 2 },
-                pt: { xs: 1, sm: 2 },
-                pb: { xs: 2, sm: 3 },
-              }}
-            >
-              <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
-                {/* Basic details are mandatory: we need a name, an email and a
-                    recorded acceptance before any family data is created, so the
-                    skip only appears once step one is behind the user. */}
-                {displayStep !== "profile" && (
-                  <Button
-                    variant="text"
-                    size="small"
-                    onClick={handleSkipOnboarding}
-                    disabled={skipping || onboardingLoading || !onboardingLoaded}
-                    sx={{ color: brand.slateMuted, fontWeight: 700, textTransform: "none" }}
-                  >
-                    {skipping ? "Skipping…" : "Skip for now"}
-                  </Button>
-                )}
-              </Box>
-              {renderOnboardingStepRail()}
-            </Box>
             <Box sx={{ px: { xs: 0, sm: 2 }, py: { xs: 1, sm: 2 } }}>
               {(onboardingLoading || !onboardingLoaded) && (
                 <Box
@@ -1702,9 +1803,47 @@ export const UserOnboardingPage: React.FC = () => {
                   {displayStep === "profile" && (
                     <Stack spacing={2.25} alignItems="center">
                       <Box sx={{ textAlign: "center", maxWidth: 620 }}>
+                        {/* Repeats the rail's position in words, so the card
+                            stands on its own when the rail scrolls away. */}
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          spacing={0.75}
+                          sx={{
+                            display: "inline-flex",
+                            px: 1.25,
+                            py: 0.5,
+                            mb: 1.5,
+                            borderRadius: 999,
+                            bgcolor: brand.primarySoft,
+                            border: "1px solid #dbeafe",
+                            color: onboardingBlue,
+                          }}
+                        >
+                          <Box
+                            aria-hidden
+                            sx={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: "50%",
+                              bgcolor: onboardingBlue,
+                            }}
+                          />
+                          <Typography
+                            sx={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: "0.06em",
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            Step {activeStepIndex + 1} of {ONBOARDING_STEPS.length}
+                          </Typography>
+                        </Stack>
+
                         <Typography
                           variant={isMobile ? "h5" : "h4"}
-                          sx={{ fontWeight: 900, letterSpacing: 0, mb: 1 }}
+                          sx={{ fontWeight: 800, letterSpacing: "-0.02em", mb: 1 }}
                         >
                           Let's start with your basic information
                         </Typography>
@@ -1847,9 +1986,32 @@ export const UserOnboardingPage: React.FC = () => {
                   {displayStep === "location" && (
                     <Stack spacing={2.25} alignItems="center">
                       <Box sx={{ textAlign: "center", maxWidth: 620 }}>
+                        {/* Says why we're asking, right where we ask — this step
+                            requests the most sensitive answers in the flow. */}
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          spacing={0.75}
+                          sx={{
+                            display: "inline-flex",
+                            px: 1.25,
+                            py: 0.5,
+                            mb: 1.5,
+                            borderRadius: 999,
+                            bgcolor: brand.primarySoft,
+                            border: "1px solid #dbeafe",
+                            color: onboardingBlue,
+                          }}
+                        >
+                          <LockOutlinedIcon sx={{ fontSize: 13 }} />
+                          <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.04em" }}>
+                            Private &amp; encrypted lineage record
+                          </Typography>
+                        </Stack>
+
                         <Typography
                           variant={isMobile ? "h5" : "h4"}
-                          sx={{ fontWeight: 900, letterSpacing: 0, mb: 1 }}
+                          sx={{ fontWeight: 800, letterSpacing: "-0.02em", mb: 1 }}
                         >
                           Where is your family from?
                         </Typography>
@@ -2103,6 +2265,41 @@ export const UserOnboardingPage: React.FC = () => {
                         renderOption={renderLookupOption}
                       />
                       </Stack>
+
+                      {/* What these answers are already worth.
+                          The count is a real search — the same one step 3 runs,
+                          without the name — so it is exactly how many trees the
+                          user is about to be offered. Shown only when there is
+                          at least one, because "0 trees match" discourages the
+                          person whose branch we most want them to start. */}
+                      {matchPreviewCount !== null && matchPreviewCount > 0 && (
+                        <Stack
+                          direction="row"
+                          spacing={1.25}
+                          sx={{
+                            width: "100%",
+                            maxWidth: locationFormMaxWidth,
+                            p: 1.75,
+                            borderRadius: 2,
+                            bgcolor: brand.primarySoft,
+                            border: "1px solid #dbeafe",
+                          }}
+                        >
+                          <LightbulbOutlinedIcon
+                            sx={{ fontSize: 18, color: onboardingBlue, mt: "1px", flexShrink: 0 }}
+                          />
+                          <Typography sx={{ fontSize: 13.5, lineHeight: 1.6, color: brand.slate }}>
+                            <Box component="span" sx={{ fontWeight: 700, color: onboardingBlue }}>
+                              {matchPreviewCount} existing family{" "}
+                              {matchPreviewCount === 1 ? "tree" : "trees"}
+                            </Box>{" "}
+                            match{matchPreviewLabel ? ` "${matchPreviewLabel}"` : ""} in the{" "}
+                            {selectedLocationOption?.label || "selected"} records. Adding
+                            these details is what lets us take you straight to your branch.
+                          </Typography>
+                        </Stack>
+                      )}
+
                     </Stack>
                   )}
 
@@ -2122,14 +2319,18 @@ export const UserOnboardingPage: React.FC = () => {
                         </Typography>
                       </Box>
 
+                      {/* A quiet recap of what produced this list. It was a
+                          blue panel with a blue shadow, which competed with the
+                          results underneath — the results are the point. */}
                       <Paper
+                        elevation={0}
                         sx={{
-                          p: { xs: 1.5, sm: 2.25 },
+                          p: { xs: 1.75, sm: 2.5 },
                           borderRadius: 3,
-                          bgcolor: brand.primarySoft,
+                          bgcolor: "#F8FAFC",
                           color: brand.ink,
-                          border: "1px solid rgba(13,110,253,0.22)",
-                          boxShadow: "0 10px 24px rgba(13,110,253,0.06)",
+                          border: "1px solid #dbeafe",
+                          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
                         }}
                       >
                         <Stack spacing={1.5}>
@@ -2141,8 +2342,13 @@ export const UserOnboardingPage: React.FC = () => {
                           >
                             <Box>
                               <Typography
-                                variant="subtitle1"
-                                sx={{ color: brand.ink, fontWeight: 800 }}
+                                sx={{
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.08em",
+                                  textTransform: "uppercase",
+                                  color: brand.slate,
+                                }}
                               >
                                 Search criteria
                               </Typography>
@@ -2167,26 +2373,42 @@ export const UserOnboardingPage: React.FC = () => {
                           </Stack>
 
                           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                            <Chip
-                              icon={<PersonOutlineOutlinedIcon />}
-                              label={searchDisplayName || "Not set"}
-                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
-                            />
-                            <Chip
-                              icon={<LocationOnOutlinedIcon />}
-                              label={selectedLocationOption?.locationName || locationInputValue || "Not set"}
-                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
-                            />
-                            <Chip
-                              icon={<GroupsOutlinedIcon />}
-                              label={selectedCaste ? toTitleCase(selectedCaste.name) : "Not set"}
-                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
-                            />
-                            <Chip
-                              icon={<BadgeOutlinedIcon />}
-                              label={selectedSubCaste ? toTitleCase(selectedSubCaste.name) : "Not set"}
-                              sx={{ bgcolor: "#fff", fontWeight: 700 }}
-                            />
+                            {[
+                              { icon: <PersonOutlineOutlinedIcon />, label: searchDisplayName },
+                              {
+                                icon: <LocationOnOutlinedIcon />,
+                                label:
+                                  selectedLocationOption?.locationName || locationInputValue,
+                              },
+                              {
+                                icon: <GroupsOutlinedIcon />,
+                                label: selectedCaste ? toTitleCase(selectedCaste.name) : "",
+                              },
+                              {
+                                icon: <BadgeOutlinedIcon />,
+                                label: selectedSubCaste ? toTitleCase(selectedSubCaste.name) : "",
+                              },
+                            ].map((item) => (
+                              <Chip
+                                key={item.label || "unset"}
+                                icon={item.icon}
+                                label={item.label || "Not set"}
+                                sx={{
+                                  height: 30,
+                                  borderRadius: 1.5,
+                                  bgcolor: "#ffffff",
+                                  border: "1px solid #e2e8f0",
+                                  color: item.label ? brand.ink : brand.slateMuted,
+                                  fontWeight: 500,
+                                  "& .MuiChip-label": { px: 1, fontSize: 12.5 },
+                                  "& .MuiChip-icon": {
+                                    fontSize: 15,
+                                    ml: 1,
+                                    color: brand.slateMuted,
+                                  },
+                                }}
+                              />
+                            ))}
                           </Stack>
 
                           <Stack
@@ -2379,20 +2601,38 @@ export const UserOnboardingPage: React.FC = () => {
                           )}
 
                           {matchResults.length > 0 && (
-                            <Alert severity="info" icon={<VisibilityOutlinedIcon fontSize="inherit" />}>
-                              Click a tree or a matched person below to preview it. From
-                              the preview, you can request edit access to that person's
-                              branch if it looks like your family.
-                            </Alert>
+                            /* Explains the one interaction this step depends on.
+                               A plain MUI Alert reads as a system message; this
+                               is an instruction, so it sits in the sky tone the
+                               design uses for guidance. */
+                            <Stack
+                              direction="row"
+                              spacing={1.25}
+                              sx={{
+                                p: 1.75,
+                                borderRadius: 2,
+                                bgcolor: "rgba(240, 249, 255, 0.9)",
+                                border: "1px solid rgba(186, 230, 253, 0.7)",
+                              }}
+                            >
+                              <VisibilityOutlinedIcon
+                                sx={{ fontSize: 17, color: onboardingBlue, mt: "2px", flexShrink: 0 }}
+                              />
+                              <Typography sx={{ fontSize: 12.5, lineHeight: 1.6, color: "#0c4a6e" }}>
+                                Click a tree or a matched person below to preview it. From
+                                the preview, you can request edit access to that person&apos;s
+                                branch if it looks like your family.
+                              </Typography>
+                            </Stack>
                           )}
 
                           {matchedTrees.length > 0 && (
                             <Stack spacing={1.5}>
                               <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: 14, color: brand.ink }}>
                                   Trees matching your name
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography sx={{ fontSize: 12.5, color: brand.slateMuted, mt: 0.25 }}>
                                   These trees contain one or more people with the
                                   same name as your saved profile.
                                 </Typography>
@@ -2404,10 +2644,10 @@ export const UserOnboardingPage: React.FC = () => {
                           {otherTrees.length > 0 && (
                             <Stack spacing={1.5}>
                               <Box>
-                                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                                <Typography sx={{ fontWeight: 700, fontSize: 14, color: brand.ink }}>
                                   Other matching trees
                                 </Typography>
-                                <Typography variant="body2" color="text.secondary">
+                                <Typography sx={{ fontSize: 12.5, color: brand.slateMuted, mt: 0.25 }}>
                                   These trees match your selected location, caste,
                                   and sub-caste even though your name was not found
                                   inside them.
@@ -2514,7 +2754,26 @@ export const UserOnboardingPage: React.FC = () => {
                     width: "100%",
                   }}
                 >
-                  {onboardingSaving ? "Saving..." : "Continue"}
+                  {onboardingSaving ? "Saving..." : "Continue to Community"}
+                </Button>
+              )}
+
+              {/* A way back to step 1, paired with the step's own CTA so the
+                  two read as one decision rather than a dead end. */}
+              {displayStep === "location" && (
+                <Button
+                  variant="text"
+                  onClick={handleBackToProfile}
+                  disabled={onboardingSaving}
+                  startIcon={<Box component="span">←</Box>}
+                  sx={{
+                    textTransform: "none",
+                    fontWeight: 600,
+                    color: brand.slateMuted,
+                    "&:hover": { color: brand.ink, bgcolor: "transparent" },
+                  }}
+                >
+                  Back to personal info
                 </Button>
               )}
 
@@ -2539,6 +2798,25 @@ export const UserOnboardingPage: React.FC = () => {
               )}
             </Box>
           </Paper>
+
+          {/* Sits outside the card on purpose: it is about the product, not
+              about the step, and repeating it inside every step would turn it
+              into furniture people stop reading. */}
+          <Stack
+            direction="row"
+            alignItems="flex-start"
+            justifyContent="center"
+            spacing={1.25}
+            sx={{ mt: 3, px: 2, maxWidth: 560, mx: "auto" }}
+          >
+            <ShieldOutlinedIcon sx={{ fontSize: 17, color: onboardingBlue, mt: "1px" }} />
+            <Typography sx={{ fontSize: 12.5, color: brand.slateMuted, lineHeight: 1.5 }}>
+              <Box component="span" sx={{ fontWeight: 600, color: brand.slate }}>
+                Your privacy:
+              </Box>{" "}
+              your records are yours. We never sell them to data brokers.
+            </Typography>
+          </Stack>
         </Container>
       </Box>
 

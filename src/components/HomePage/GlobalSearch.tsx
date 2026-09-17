@@ -18,12 +18,14 @@ import {
 import { useNavigate } from "react-router-dom";
 import SearchIcon from "@mui/icons-material/Search";
 import StoreIcon from "@mui/icons-material/Store";
+import NearMeOutlinedIcon from "@mui/icons-material/NearMeOutlined";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import { ApiService } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
 import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
 import { brand } from "../../theme/brand";
 import { avatarTint, initialsOf } from "./homeTheme";
+import { useNearMe } from "./useNearMe";
 
 /**
  * Search across people, businesses and professions.
@@ -48,6 +50,9 @@ interface SearchResult {
   gotra?: string;
   extra?: string;
   locationName?: string;
+  /** Kilometres from the viewer. Business results only, and only when the
+   *  viewer shared their location and the business's village is geocoded. */
+  distanceKm?: number;
   casteName?: string;
   subCasteName?: string;
   parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
@@ -120,6 +125,11 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nearMe = useNearMe();
+  // Read inside the debounced search without making it a dependency, which
+  // would cancel and restart the in-flight search on every position update.
+  const nearMeCoordsRef = useRef(nearMe.coords);
+  nearMeCoordsRef.current = nearMe.coords;
 
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim() || query.trim().length < 2) {
@@ -130,7 +140,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
     setIsSearching(true);
     setShowResults(true);
     try {
-      const rows = await ApiService.globalSearch(query.trim());
+      const rows = await ApiService.globalSearch(query.trim(), nearMeCoordsRef.current);
 
       const results: SearchResult[] = (rows || []).map((row: any) => {
         const lineageText =
@@ -156,6 +166,10 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
           personPhotoUrl: row.personPhotoUrl || undefined,
           gotra: row.gotra || undefined,
           locationName: row.locationName || undefined,
+          distanceKm:
+            row.distanceKm === null || row.distanceKm === undefined
+              ? undefined
+              : Number(row.distanceKm),
           casteName: row.casteName || undefined,
           subCasteName: row.subCasteName || undefined,
           parentHierarchy: row.parentHierarchy || [],
@@ -186,10 +200,21 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
       // The business's own page — not its owner's profile, which answers a
       // different question and shows their personal details.
       navigate(`/business/${result.id}`);
+    } else if (result.type === "profession") {
+      // A profession result is a *person* who does that work — `result.id` is
+      // the vocabulary row, so the page to open is keyed by `personId`.
+      //
+      // This has to be tested before the `treeId` fallback below: every
+      // profession result carries its person's tree, so the fallback was
+      // catching all of them and opening the family tree instead. Without a
+      // person there is nothing to show, so the tree is still the best answer.
+      if (result.personId) {
+        navigate(`/profession/${result.personId}`);
+      } else if (result.treeId) {
+        navigate(`/families?tree=${result.treeId}`);
+      }
     } else if (result.treeId) {
       navigate(`/families?tree=${result.treeId}`);
-    } else if (result.type === "profession") {
-      navigate("/business");
     }
   };
 
@@ -224,6 +249,34 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
           pr: 0.5,
         }}
       >
+        {/* Proximity is a property of the search, not a category of result, so
+            it sits with the filters but reads as a toggle. Only shown where the
+            filters are — the header's narrow field has no room. */}
+        <Chip
+          icon={<NearMeOutlinedIcon sx={{ fontSize: 15 }} />}
+          label={nearMe.locating ? "Locating…" : "Near me"}
+          size="small"
+          onClick={nearMe.toggle}
+          title={
+            nearMe.error ||
+            "Sort business results by distance from you"
+          }
+          sx={{
+            fontWeight: 700,
+            fontSize: 12,
+            height: 28,
+            cursor: "pointer",
+            bgcolor: nearMe.enabled && nearMe.coords ? brand.primary : "#f1f5f9",
+            color: nearMe.enabled && nearMe.coords ? "#fff" : brand.slate,
+            "& .MuiChip-icon": {
+              color: nearMe.enabled && nearMe.coords ? "#fff" : brand.slateMuted,
+            },
+            "&:hover": {
+              bgcolor: nearMe.enabled && nearMe.coords ? brand.primaryDark : "#e2e8f0",
+            },
+          }}
+        />
+
         {filterOptions.map((option) => {
           const active = typeFilter === option.value;
           return (
@@ -326,6 +379,18 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({
                               sx={{ flexWrap: "wrap", rowGap: 0.75 }}
                             >
                               <MetaPill value={result.locationName} accent="brand" />
+                              {/* Distance leads the pills for a business:
+                                  it's the reason this result is where it is. */}
+                              <MetaPill
+                                value={
+                                  result.distanceKm === undefined
+                                    ? undefined
+                                    : result.distanceKm < 1
+                                      ? "Under 1 km away"
+                                      : `${Math.round(result.distanceKm)} km away`
+                                }
+                                accent="brand"
+                              />
                               <MetaPill value={result.casteName} accent="slate" />
                               <MetaPill value={result.gotra} accent="slate" />
                             </Stack>

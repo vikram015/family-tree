@@ -35,7 +35,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useLocations } from "../hooks/useLocations";
@@ -67,6 +67,7 @@ import {
   WishEventType,
 } from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { ProfessionFormDialog } from "../ProfessionProfilePage/ProfessionFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
 import { RichText } from "../common/RichText";
 import { formatDisplayDate } from "../../utils/dateFormatter";
@@ -104,7 +105,8 @@ export const ProfilePage: React.FC = () => {
   const { personId: routePersonId } = useParams<{ personId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
-  const { userProfile, currentUser, updateUserProfile } = useAuth();
+  const { userProfile, currentUser, updateUserProfile, canEditProfessionProfile } =
+    useAuth();
   const { openLoginModal } = useLoginModal();
   const { offerNotifications } = useNotificationPrompt();
   const { locations, selectedLocation, setSelectedLocation } = useLocations();
@@ -131,9 +133,9 @@ export const ProfilePage: React.FC = () => {
   const [personCustomFields, setPersonCustomFields] = useState<
     Record<string, string>
   >({});
-  const [allProfessions, setAllProfessions] = useState<any[]>([]);
   // Dialog State
   const [openProfessionDialog, setOpenProfessionDialog] = useState(false);
+  const [professionProfile, setProfessionProfile] = useState<any | null>(null);
   const [openBusinessDialog, setOpenBusinessDialog] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
   const [businessToDelete, setBusinessToDelete] = useState<any | null>(null);
@@ -167,9 +169,6 @@ export const ProfilePage: React.FC = () => {
   const [personNotFound, setPersonNotFound] = useState(false);
 
   // Form State
-  const [selectedProfessionId, setSelectedProfessionId] = useState<string>("");
-  const [newProfessionName, setNewProfessionName] = useState("");
-  const [newProfessionContact, setNewProfessionContact] = useState("");
   const [editProfileData, setEditProfileData] = useState({
     name: "",
     phone: "",
@@ -384,6 +383,11 @@ export const ProfilePage: React.FC = () => {
   const refreshProfessions = useCallback(async (personId: string) => {
     const updatedProfs = await ApiService.getProfessionsByPerson(personId);
     setProfessions(updatedProfs || []);
+    try {
+      setProfessionProfile(await ApiService.getProfessionProfile(personId));
+    } catch {
+      setProfessionProfile(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -427,20 +431,18 @@ export const ProfilePage: React.FC = () => {
         setLinkedPersonDetails(personWithTree);
         setProfilePhotoUrl((personWithTree as any)?.photoUrl || undefined);
 
-        const [profs, biz, allProfs, customFields] = await Promise.all([
+        const [profs, biz, customFields, careerProfile] = await Promise.all([
           // Fetched so we know whether the person has any to reveal; the actual
           // details stay hidden behind the login prompt for guests.
           ApiService.getProfessionsByPerson(effectivePersonId),
           ApiService.getBusinessesByPerson(effectivePersonId),
-          canManagePerson ? ApiService.getAllProfessions() : Promise.resolve([]),
           ApiService.getPersonCustomFields(effectivePersonId).catch(() => ({})),
+          ApiService.getProfessionProfile(effectivePersonId).catch(() => null),
         ]);
         setProfessions(profs || []);
         setBusinesses(biz || []);
+        setProfessionProfile(careerProfile);
         setPersonCustomFields(customFields || {});
-        if (canManagePerson) {
-          setAllProfessions(allProfs || []);
-        }
       } catch (err) {
         console.error("Error fetching details:", err);
         setError("Failed to load profile details.");
@@ -570,41 +572,6 @@ export const ProfilePage: React.FC = () => {
       setError(err?.message || "Failed to remove profile image.");
     } finally {
       setProfilePhotoUploading(false);
-    }
-  };
-
-  const handleAddProfession = async () => {
-    if (!effectivePersonId || !canManagePerson) return;
-
-    try {
-      let profId = selectedProfessionId;
-
-      // If "Other" or new profession is entered (simplified logic: if ID is empty but name is provided, create new)
-      if (!profId && newProfessionName) {
-        const newProf = await ApiService.createProfession({
-          name: newProfessionName,
-          category: "Other",
-          description: newProfessionContact
-            ? `Contact: ${newProfessionContact}`
-            : undefined,
-        });
-        profId = newProf.id;
-        // Refresh all professions
-        const updatedAll = await ApiService.getAllProfessions();
-        setAllProfessions(updatedAll);
-      }
-
-      if (profId) {
-        await ApiService.addProfessionToPerson(effectivePersonId, profId);
-        await refreshProfessions(effectivePersonId);
-        setOpenProfessionDialog(false);
-        setSelectedProfessionId("");
-        setNewProfessionName("");
-        setNewProfessionContact("");
-      }
-    } catch (err) {
-      console.error("Error adding profession:", err);
-      // specific error handling if needed
     }
   };
 
@@ -1328,7 +1295,10 @@ export const ProfilePage: React.FC = () => {
                 </Box>
               ) : (
               <Grid container spacing={4}>
-                {/* Professions Column */}
+                {/* Profession Column — one career profile per person, so the
+                    header control edits the existing one rather than adding
+                    another. Legacy profession tags still show underneath until
+                    they are migrated into a profile. */}
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Box
                     sx={{
@@ -1341,29 +1311,50 @@ export const ProfilePage: React.FC = () => {
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <WorkIcon color="action" />
                       <Typography variant="subtitle1" fontWeight="bold">
-                        Professions
+                        Profession
                       </Typography>
                     </Box>
-                    {canManagePerson && (
-                      <IconButton
-                        size="small"
-                        onClick={() => setOpenProfessionDialog(true)}
-                        color="primary"
-                      >
-                        <AddIcon />
-                      </IconButton>
+                    {canEditProfessionProfile(effectivePersonId) && (
+                      <Tooltip title={professionProfile ? "Edit profession" : "Add profession"}>
+                        <IconButton
+                          size="small"
+                          aria-label={professionProfile ? "Edit profession" : "Add profession"}
+                          onClick={() => setOpenProfessionDialog(true)}
+                          color="primary"
+                        >
+                          {professionProfile ? <EditIcon /> : <AddIcon />}
+                        </IconButton>
+                      </Tooltip>
                     )}
                   </Box>
 
-                  {professions.length === 0 ? (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ fontStyle: "italic" }}
-                    >
-                      No professions added yet.
-                    </Typography>
-                  ) : (
+                  {professionProfile ? (
+                    <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2 }}>
+                      <Typography variant="subtitle2" fontWeight={800}>
+                        {professionProfile.title}
+                      </Typography>
+                      {(professionProfile.organization || professionProfile.sector) && (
+                        <Typography variant="body2" color="text.secondary">
+                          {[professionProfile.organization, professionProfile.sector]
+                            .filter(Boolean)
+                            .join(" • ")}
+                        </Typography>
+                      )}
+                      {Number(professionProfile.totalExperienceYears) > 0 && (
+                        <Typography variant="body2" color="text.secondary">
+                          {Number(professionProfile.totalExperienceYears)} years' experience
+                        </Typography>
+                      )}
+                      <Button
+                        component={RouterLink}
+                        to={`/profession/${effectivePersonId}`}
+                        size="small"
+                        sx={{ mt: 1, px: 0 }}
+                      >
+                        View career profile
+                      </Button>
+                    </Paper>
+                  ) : professions.length > 0 ? (
                     <Stack spacing={1}>
                       {professions.map((prof: any) => (
                         <Paper
@@ -1406,6 +1397,14 @@ export const ProfilePage: React.FC = () => {
                         </Paper>
                       ))}
                     </Stack>
+                  ) : (
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontStyle: "italic" }}
+                    >
+                      No profession added yet.
+                    </Typography>
                   )}
                 </Grid>
 
@@ -1422,17 +1421,22 @@ export const ProfilePage: React.FC = () => {
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <BusinessIcon color="action" />
                       <Typography variant="subtitle1" fontWeight="bold">
-                        Businesses
+                        Business
                       </Typography>
                     </Box>
-                    {canManagePerson && (
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenBusinessDialog()}
-                        color="primary"
-                      >
-                        <AddIcon />
-                      </IconButton>
+                    {/* One business per person: the Add disappears once there
+                        is one, and each card carries its own Edit. */}
+                    {canManagePerson && businesses.length === 0 && (
+                      <Tooltip title="Add business">
+                        <IconButton
+                          size="small"
+                          aria-label="Add business"
+                          onClick={() => handleOpenBusinessDialog()}
+                          color="primary"
+                        >
+                          <AddIcon />
+                        </IconButton>
+                      </Tooltip>
                     )}
                   </Box>
 
@@ -1442,7 +1446,7 @@ export const ProfilePage: React.FC = () => {
                       color="text.secondary"
                       sx={{ fontStyle: "italic" }}
                     >
-                      No businesses added yet.
+                      No business added yet.
                     </Typography>
                   ) : (
                     <Stack spacing={1.5}>
@@ -1849,63 +1853,23 @@ export const ProfilePage: React.FC = () => {
       )}
 
       {/* Dialogs */}
-      <Dialog
-        open={openProfessionDialog}
-        onClose={() => setOpenProfessionDialog(false)}
-      >
-        <DialogTitle>Add Profession</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 1, minWidth: 300 }}>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel id="prof-select-label">Select Profession</InputLabel>
-              <Select
-                labelId="prof-select-label"
-                value={selectedProfessionId}
-                label="Select Profession"
-                onChange={(e) => setSelectedProfessionId(e.target.value)}
-              >
-                <MenuItem value="">
-                  <em>None (Create New)</em>
-                </MenuItem>
-                {allProfessions.map((p) => (
-                  <MenuItem key={p.id} value={p.id}>
-                    {p.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {!selectedProfessionId && (
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <TextField
-                  fullWidth
-                  label="New Profession Name"
-                  value={newProfessionName}
-                  onChange={(e) => setNewProfessionName(e.target.value)}
-                  helperText="Enter a new profession name if not in list"
-                />
-                <TextField
-                  fullWidth
-                  label="Contact Number"
-                  value={newProfessionContact}
-                  onChange={(e) => setNewProfessionContact(e.target.value)}
-                  placeholder="Enter phone number (optional)"
-                />
-              </Box>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenProfessionDialog(false)}>Cancel</Button>
-          <Button
-            onClick={handleAddProfession}
-            variant="contained"
-            disabled={!selectedProfessionId && !newProfessionName}
-          >
-            Add
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {effectivePersonId && (
+        <ProfessionFormDialog
+          open={openProfessionDialog}
+          onClose={() => setOpenProfessionDialog(false)}
+          peopleId={effectivePersonId}
+          profile={professionProfile}
+          onSaved={() => {
+            setOpenProfessionDialog(false);
+            setSuccess(
+              professionProfile
+                ? "Profession updated successfully."
+                : "Profession added successfully.",
+            );
+            void refreshProfessions(effectivePersonId);
+          }}
+        />
+      )}
 
       <BusinessFormDialog
         open={openBusinessDialog}
