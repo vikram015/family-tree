@@ -50,6 +50,18 @@ export interface EventCardProps {
   year: number;
   /** Optional navigation override; defaults to react-router useNavigate. */
   onNavigate?: (path: string) => void;
+  /**
+   * Handle the wish in place instead of navigating to the profile thread.
+   * Supplied by the dashboard, which opens a compose dialog; everywhere else
+   * the card keeps its normal navigation.
+   */
+  onSendWish?: (target: {
+    personId: string;
+    name: string;
+    photoUrl?: string | null;
+    eventType: WishEventType;
+    year: number;
+  }) => void;
   variant?: EventCardVariant;
   /** Feature variant: the pill above the name, e.g. "56th remembrance". */
   tag?: string;
@@ -179,6 +191,7 @@ const EventCard: React.FC<EventCardProps> = ({
   tag,
   dateLabel,
   treeId,
+  onSendWish,
 }) => {
   const navigate = useNavigate();
   const [snackbar, setSnackbar] = useState("");
@@ -199,7 +212,19 @@ const EventCard: React.FC<EventCardProps> = ({
   const canNativeShare =
     typeof navigator !== "undefined" && typeof navigator.share === "function";
 
+  /**
+   * The card's primary action: open the wish thread.
+   *
+   * `onSendWish`, when a surface supplies it, handles the wish in place instead
+   * — the dashboard opens a compose dialog rather than sending the user to the
+   * profile page for one sentence. Every other surface keeps the navigation, so
+   * the thread on the profile remains the canonical place a wish lives.
+   */
   const handleNavigate = () => {
+    if (onSendWish) {
+      onSendWish({ personId, name, photoUrl, eventType, year });
+      return;
+    }
     const path = `/profile/person/${personId}?event=${eventType}&year=${year}`;
     if (onNavigate) {
       onNavigate(path);

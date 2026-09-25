@@ -7,6 +7,7 @@ import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
 import { TreeGap, TreeGapType } from "../../services/apiService";
+import { AddDobDialog } from "./AddDobDialog";
 import { brand } from "../../theme/brand";
 import {
   avatarTint,
@@ -65,8 +66,20 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
   totalIncomplete,
 }) => {
   const navigate = useNavigate();
+  /** The person whose birth date is being entered, if any. */
+  const [dobTarget, setDobTarget] = React.useState<TreeGap | null>(null);
+  /**
+   * Rows filled in during this visit.
+   *
+   * The dashboard's gap list came from one fetch on load, so a row stayed on
+   * the worklist after its date was saved until the whole page reloaded — which
+   * reads as the save having failed. Dropping it locally is the honest result
+   * of what just happened, without re-fetching the page.
+   */
+  const [resolved, setResolved] = React.useState<Set<string>>(new Set());
 
-  const isEmpty = !loading && gaps.length === 0;
+  const visibleGaps = gaps.filter((gap) => !resolved.has(`${gap.personId}-${gap.gap}`));
+  const isEmpty = !loading && visibleGaps.length === 0;
   const total = Number(totalIncomplete) || 0;
 
   return (
@@ -119,7 +132,7 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
         )}
 
         {!loading &&
-          gaps.map((gap) => {
+          visibleGaps.map((gap) => {
             const meta = GAP_META[gap.gap] || GAP_META.dob;
             const { Icon } = meta;
             const tint = avatarTint(gap.name || gap.personId);
@@ -130,7 +143,14 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
               // the pill on the right is purely visual so nothing nests.
               <ButtonBase
                 key={`${gap.personId}-${gap.gap}`}
-                onClick={() => navigate(`/profile/person/${gap.personId}`)}
+                onClick={() =>
+                  // A date is one field, so it is filled here rather than by
+                  // sending the user to the full profile page and losing their
+                  // place in the list. A photo or a job still needs that page.
+                  gap.gap === "dob"
+                    ? setDobTarget(gap)
+                    : navigate(`/profile/person/${gap.personId}`)
+                }
                 aria-label={`${meta.action} for ${gap.name}`}
                 sx={{
                   ...(listRowSx as object),
@@ -225,6 +245,19 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
             );
           })}
       </Box>
+
+      {dobTarget && (
+        <AddDobDialog
+          open
+          onClose={() => setDobTarget(null)}
+          personId={dobTarget.personId}
+          name={dobTarget.name}
+          photoUrl={dobTarget.photoUrl}
+          onSaved={(personId) =>
+            setResolved((current) => new Set(current).add(`${personId}-dob`))
+          }
+        />
+      )}
     </Box>
   );
 };

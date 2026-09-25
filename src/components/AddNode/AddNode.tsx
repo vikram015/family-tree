@@ -1242,7 +1242,7 @@ const adornment = (icon: React.ReactNode) => (
                   onPersonSelect={setSelectedPerson}
 	                  selectedPerson={selectedPerson}
 	                  label="Search Person"
-	                  placeholder="Type name to search..."
+	                  placeholder="Start typing a name"
 	                  startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
 	                />
               ) : (

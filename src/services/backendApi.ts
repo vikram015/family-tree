@@ -1,9 +1,18 @@
 import { firebaseAuth } from "../firebase";
 
+/**
+ * Where the API lives.
+ *
+ * Falls back to the origin the app is being served from, not a hardcoded
+ * localhost — that default was only ever right on the machine running Vite, and
+ * was wrong from a phone on the LAN or through a tunnel. With the dev proxy in
+ * vite.config.ts, an empty base means "/api/..." is same-origin and works from
+ * whatever host the page was opened on.
+ */
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_BACKEND_URL ||
-  "http://localhost:3000";
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
 
 type QueryValue = string | number | boolean | undefined | null;
 

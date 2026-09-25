@@ -129,6 +129,12 @@ export interface ProfessionProfile {
   certifications?: string | null;
   workEmail?: string | null;
   workLocation?: string | null;
+  /** The searchable place behind `workLocation`, so proximity search can find them. */
+  workPlaceId?: string | null;
+  workPlaceName?: string | null;
+  workPlaceAddress?: string | null;
+  workLatitude?: number | null;
+  workLongitude?: number | null;
   contactPhone?: string | null;
   linkedinUrl?: string | null;
   portfolioUrl?: string | null;
@@ -143,6 +149,14 @@ export interface ProfessionProfile {
   mentorshipNote?: string | null;
   milestones: ProfessionMilestone[];
   skills: ProfessionSkill[];
+  /**
+   * False when the person has no career profile and this was assembled from
+   * their profession tags instead. The page says so rather than presenting
+   * tags as something they wrote.
+   */
+  hasProfile?: boolean;
+  /** Vocabulary tags, present whether or not a profile was written. */
+  professions?: Array<{ id: string; name: string; category?: string | null }>;
   personName?: string | null;
   personNameHindi?: string | null;
   personPhotoUrl?: string | null;
@@ -384,6 +398,13 @@ export interface Wish {
   authorUserId: string | null;
   authorName: string | null;
   createdAt: string;
+}
+
+/** A wish as the dashboard wall shows it: the note plus both faces. */
+export interface RecentWish extends Wish {
+  personName: string | null;
+  personPhotoUrl: string | null;
+  authorPhotoUrl: string | null;
 }
 
 export interface LinkRequest {
@@ -1885,6 +1906,14 @@ export const ApiService = {
     message: string;
   }): Promise<Wish> {
     return backendApi.post<Wish>('/api/wishes', payload);
+  },
+
+  /**
+   * Recent wishes across the viewer's family — the dashboard wall. Empty for a
+   * signed-out visitor, which the server decides.
+   */
+  async getRecentWishes(limit = 12): Promise<RecentWish[]> {
+    return backendApi.get<RecentWish[]>('/api/wishes/recent', { limit });
   },
 
   /**

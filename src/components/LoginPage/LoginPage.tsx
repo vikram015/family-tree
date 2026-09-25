@@ -46,7 +46,6 @@ import { brand } from "../../theme/brand";
  */
 
 /** Design palette for this screen (DESIGN.md), kept local to it. */
-const CANVAS = "#FAFAF7";
 const PANEL_GRADIENT = "linear-gradient(to bottom, #eff4ff 0%, #e5eeff 55%, #cbdbf5 100%)";
 const GREEN_SOFT = "#E8F5EE";
 const GREEN_INK = "#006c4a";
@@ -152,7 +151,7 @@ export const LoginPage: React.FC = () => {
         <meta name="description" content="Sign in to Kinvia to open your family tree." />
       </Helmet>
 
-      <Box sx={{ bgcolor: CANVAS, minHeight: "100vh", py: { xs: 3, md: 6 } }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh", py: { xs: 3, md: 6 } }}>
         <Container maxWidth={false} sx={{ maxWidth: 1280, px: { xs: 2, md: 4 } }}>
           <Box
             component={Link}

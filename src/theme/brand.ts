@@ -26,6 +26,19 @@ export const brand = {
   surface: "#ffffff",
   canvas: "#f8fafc",
 
+  /**
+   * The ground every full page sits on.
+   *
+   * Distinct from `canvas`, which is the inset tone used *inside* cards — chip
+   * fills, hover states, definition rows. Pages each used to carry their own
+   * constant (#FAFAF7 warm on business and login, #f8faff cool on photos and
+   * profession, #fafbfd on the dashboard), so moving between them shifted the
+   * background from warm to cool. This is the dashboard's value, applied
+   * everywhere; it is also the theme's `background.default`, so a page that
+   * paints nothing inherits it.
+   */
+  pageCanvas: "#fafbfd",
+
   // Warm (cream) — heritage tones. Currently unused: the home hero moved to the
   // cool wash in homeTheme's `heroSurface`. Kept for warm surfaces elsewhere.
   warmSoft: "#fdfbf7",

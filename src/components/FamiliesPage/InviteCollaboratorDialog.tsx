@@ -336,7 +336,7 @@ export function InviteCollaboratorDialog({
               {!lockBranchPerson && (
                 <PersonSearchField
                   label="Branch Person"
-                  placeholder="Search people in this tree"
+                  placeholder="Start typing a name"
                   searchValue={invitePersonSearch}
                   startIcon={<PersonSearchOutlinedIcon fontSize="small" color="action" />}
                   onSearchValueChange={(value, meta) => {
@@ -354,9 +354,6 @@ export function InviteCollaboratorDialog({
                   selectedPerson={invitePersonId ? { id: invitePersonId } : null}
                   treeId={treeId}
                   disabled={!treeId}
-                  autoSearch
-                  minSearchLength={2}
-                  hideSearchButton
                   noResultsText={
                     invitePersonSearch.trim().length < 2
                       ? "Type at least 2 characters"

@@ -340,7 +340,7 @@ export const LinkNodeDialog: React.FC = () => {
 
             <PersonSearchField
               label="Search Your Name"
-              placeholder="Type your name and press Enter or click Search"
+              placeholder="Start typing your name"
               searchValue={searchValue}
               onSearchValueChange={(value) => {
                 setSearchValue(value);

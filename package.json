@@ -75,7 +75,9 @@
     "generate:messaging-config": "node scripts/generate-messaging-config.cjs",
     "dev": "node scripts/generate-messaging-config.cjs && vite",
     "preview": "vite preview",
-    "lint": "eslint src --ext .ts,.tsx"
+    "lint": "eslint src --ext .ts,.tsx",
+    "dev:tunnel": "KINVIA_TUNNEL=1 node scripts/generate-messaging-config.cjs && KINVIA_TUNNEL=1 vite",
+    "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "eslintConfig": {
     "extends": "react-app"

@@ -2,14 +2,15 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Box,
   TextField,
-  Button,
   Paper,
   Typography,
   Stack,
   Avatar,
+  IconButton,
   InputAdornment,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 import { ApiService } from "../../services/apiService";
 import { brand } from "../../theme/brand";
 
@@ -85,9 +86,14 @@ interface PersonSearchFieldProps {
   /** When set, only candidates of this gender are shown in the results. */
   filterGender?: string;
   disabled?: boolean;
-  autoSearch?: boolean;
+  /**
+   * How many characters before the field starts looking.
+   *
+   * Two by default: the field searches as you type now, and firing on a single
+   * letter means a query per keystroke against the whole people table for a
+   * result set nobody can use.
+   */
   minSearchLength?: number;
-  hideSearchButton?: boolean;
   noResultsText?: string;
   startIcon?: React.ReactNode;
   /** When true, only return people the logged-in user can write to (superadmin
@@ -114,9 +120,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   treeId,
   filterGender,
   disabled = false,
-  autoSearch = false,
-  minSearchLength = 1,
-  hideSearchButton = false,
+  minSearchLength = 2,
   noResultsText = "No results found",
   startIcon,
   writableOnly = false,
@@ -223,10 +227,6 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   };
 
   useEffect(() => {
-    if (!autoSearch) {
-      return;
-    }
-
     if (skipNextAutoSearchRef.current) {
       skipNextAutoSearchRef.current = false;
       return;
@@ -237,7 +237,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [autoSearch, handleSearch]);
+  }, [handleSearch]);
 
   return (
     <Box sx={{ position: "relative", width: "100%", mb: 2 }}>
@@ -258,33 +258,30 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           size="medium"
           autoComplete="off"
           disabled={disabled}
-          InputProps={
-            startIcon
-              ? {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      {startIcon}
-                    </InputAdornment>
-                  ),
-                }
-              : undefined
-          }
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                {startIcon ?? <SearchIcon fontSize="small" />}
+              </InputAdornment>
+            ),
+            // Clearing reports itself as an edit, not a selection, so a form
+            // holding the chosen person's id knows the choice is off.
+            endAdornment: searchValue && !disabled && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Clear"
+                  onClick={() => {
+                    setSearchResults([]);
+                    onSearchValueChange("", { source: "input" });
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
         />
-        {!hideSearchButton && (
-          <Button
-            variant="contained"
-            onClick={handleSearch}
-            disabled={disabled}
-            startIcon={<SearchIcon />}
-            sx={{
-              height: 56,
-              minWidth: 100,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Search
-          </Button>
-        )}
       </Stack>
 
       {/* Search Results Dropdown */}

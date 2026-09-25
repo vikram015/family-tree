@@ -70,6 +70,34 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: true, // keeps LAN access working, as CRA's HOST=0.0.0.0 did
+      /**
+       * Hosts the dev server will answer to.
+       *
+       * Vite refuses requests whose Host header it does not recognise, which
+       * means a tunnel domain gets a blank 403 rather than the app. The
+       * trycloudflare subdomain is different on every run, so the wildcard is
+       * the only workable form.
+       */
+      allowedHosts: [".trycloudflare.com", ".ngrok-free.app", ".loca.lt"],
+      /**
+       * The API, served from this same origin during development.
+       *
+       * Without this the browser has to reach the API on its own host, which is
+       * fine on this machine and impossible from a phone on another network: a
+       * LAN IP is unroutable and an http:// API called from an https:// tunnel
+       * is blocked as mixed content. Proxying means one tunnel carries both.
+       */
+      proxy: {
+        "/api": { target: "http://localhost:8080", changeOrigin: true },
+        "/share": { target: "http://localhost:8080", changeOrigin: true },
+      },
+      /**
+       * Through a tunnel the page is https on 443, so the HMR socket has to be
+       * told that — otherwise it tries ws://<tunnel-host>:3000 and fails.
+       */
+      ...(process.env.KINVIA_TUNNEL === "1"
+        ? { hmr: { protocol: "wss", clientPort: 443 } }
+        : {}),
     },
     preview: {
       port: 3000,
@@ -93,6 +121,12 @@ export default defineConfig(({ mode }) => {
       },
     },
     define: {
+      // Tunnel runs talk to the API through the proxy above, so the absolute
+      // base in .env.local (a LAN IP) has to be taken out of the picture for
+      // that run without editing the file.
+      ...(process.env.KINVIA_TUNNEL === "1"
+        ? { "import.meta.env.VITE_API_BASE_URL": '""' }
+        : {}),
       // A few libraries still reference process.env at runtime; give them an
       // object rather than letting the reference throw in the browser.
       "process.env.NODE_ENV": JSON.stringify(

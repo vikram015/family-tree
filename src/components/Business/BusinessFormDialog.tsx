@@ -421,12 +421,52 @@ export function BusinessFormDialog({
       return;
     }
     const resolvedPersonId = enableOwnerSelect ? ownerId || null : personId || null;
-    if (enableOwnerSelect && !resolvedPersonId) {
-      setError("Please select an owner for this business.");
+    // Every business belongs to somebody. This used to be checked only when the
+    // dialog showed an owner picker, so the flows that pass an owner in could
+    // save one with `peopleId: null` — an ownerless listing that no profile
+    // links to and nobody can edit.
+    if (!resolvedPersonId) {
+      setError(
+        enableOwnerSelect
+          ? "Search for the owner and pick them from the list."
+          : "This business has no owner. Open it from the owner's profile, or add the owner first.",
+      );
+      scrollToSection(enableOwnerSelect ? "owner" : "details");
+      return;
+    }
+    // Typing a name is not choosing a person: the field keeps whatever was
+    // typed, so a name with no id behind it means nothing was selected.
+    if (enableOwnerSelect && owner.trim() && !ownerId) {
+      setError("Pick the owner from the search results so we know who they are.");
       scrollToSection("owner");
       return;
     }
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    // A business with no place cannot be found by anyone searching nearby,
+    // which is the main way the directory is used.
+    if (!place?.placeId || place.latitude == null || place.longitude == null) {
+      setError("Choose the business location from the suggestions.");
+      scrollToSection("contact");
+      return;
+    }
+    // A directory listing nobody can ring is not a listing. Matches the app's
+    // existing rule for a phone number (10 digits, as the sign-in flow uses),
+    // while allowing a country code in front of it.
+    if (!contact.trim()) {
+      setError("A contact number is required.");
+      scrollToSection("contact");
+      return;
+    }
+    if (contact.replace(/\D/g, "").length < 10) {
+      setError("Enter a 10-digit contact number.");
+      scrollToSection("contact");
+      return;
+    }
+    if (!email.trim()) {
+      setError("An email address is required.");
+      scrollToSection("contact");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError("Please enter a valid email address.");
       scrollToSection("contact");
       return;
@@ -950,8 +990,9 @@ export function BusinessFormDialog({
                     value={place}
                     onChange={edited(setPlace)}
                     label="Location"
+                    required
                     placeholder="Search for the town, area, or landmark"
-                    helperText="Used to show this business to people searching nearby."
+                    helperText="Required — this is how people searching nearby find the business."
                   />
                 </Box>
 
@@ -967,6 +1008,7 @@ export function BusinessFormDialog({
 
                 <TextField
                   label="Contact number"
+                  required
                   value={contact}
                   onChange={(e) => edited(setContact)(e.target.value)}
                   fullWidth
@@ -977,6 +1019,7 @@ export function BusinessFormDialog({
                 <TextField
                   label="Email"
                   type="email"
+                  required
                   value={email}
                   onChange={(e) => edited(setEmail)(e.target.value)}
                   fullWidth
@@ -1008,9 +1051,16 @@ export function BusinessFormDialog({
                 {enableOwnerSelect ? (
                   <PersonSearchField
                     label="Owner name"
-                    placeholder="Enter owner name and search"
+                    placeholder="Start typing the owner's name"
                     searchValue={owner}
-                    onSearchValueChange={(value) => edited(setOwner)(value)}
+                    onSearchValueChange={(value, meta) => {
+                      edited(setOwner)(value);
+                      // Editing or clearing the name un-chooses the person.
+                      // What gets saved is `ownerId`, and leaving it behind
+                      // meant removing the owner still saved the old one — the
+                      // form looked empty and the record kept the id.
+                      if (meta?.source !== "select") setOwnerId("");
+                    }}
                     onPersonSelect={async (person) => {
                       dirtyRef.current = true;
                       setOwner(person?.name || "");

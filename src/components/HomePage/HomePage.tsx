@@ -40,6 +40,7 @@ import { NetworkStrip } from "./NetworkStrip";
 import { RecentPhotos } from "./RecentPhotos";
 import { QuickActions } from "./QuickActions";
 import { ContributorList, Contributor } from "./ContributorList";
+import { WishWall } from "./WishWall";
 import { eyebrowSx, panelSx } from "./homeTheme";
 
 /**
@@ -49,7 +50,6 @@ import { eyebrowSx, panelSx } from "./homeTheme";
  * white cards, and a gradient behind them made the cards read as floating on a
  * second, differently-coloured page.
  */
-const DASHBOARD_SURFACE = "#fafbfd";
 
 /** The small separator between eyebrow items. */
 const Dot: React.FC = () => (
@@ -92,6 +92,8 @@ export const HomePage: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   // From `xl` the page has room for the design's right rail.
   const isWide = useMediaQuery(theme.breakpoints.up("xl"));
+  /** Bumped when a wish is sent, so the wall re-reads itself. */
+  const [wallVersion, setWallVersion] = useState(0);
   const { currentUser, userProfile, loading: authLoading, initialized, hadSession } = useAuth();
   const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
   const statistics = useAppSelector(selectStatistics);
@@ -334,7 +336,7 @@ export const HomePage: React.FC = () => {
         the page, so the wash runs the whole way and the sections themselves
         provide the structure.
       */}
-      <Box sx={{ bgcolor: DASHBOARD_SURFACE, minHeight: "100vh" }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh" }}>
         <Container
           maxWidth={false}
           sx={{ maxWidth: 1440, px: { xs: 2, sm: 3, lg: 4 }, py: { xs: 3, md: 4 } }}
@@ -558,6 +560,10 @@ export const HomePage: React.FC = () => {
                   upcoming={upcoming}
                   loading={eventsLoading || authPending}
                   treeId={insights?.tree?.id}
+                  // A wish sent from a card up here belongs on the wall below
+                  // immediately — they are on the same screen, so not showing it
+                  // reads as the send having failed.
+                  onWishSent={() => setWallVersion((version) => version + 1)}
                 />
 
                 <PersonalStats
@@ -567,6 +573,8 @@ export const HomePage: React.FC = () => {
                   loading={insightsLoading || authPending}
                 />
 
+                {!isWide && <WishWall refreshKey={wallVersion} />}
+
                 <TreeGaps
                   gaps={insights?.gaps || []}
                   loading={insightsLoading || authPending}
@@ -575,10 +583,6 @@ export const HomePage: React.FC = () => {
                 />
 
                 <FeatureGrid counts={counts} loading={insightsLoading || authPending} />
-
-                {!isWide && (
-                  <ContributorList contributors={topContributors} loading={loadingStats} />
-                )}
 
                 <NetworkStrip
                   totalPeople={totalPeople}
@@ -591,16 +595,29 @@ export const HomePage: React.FC = () => {
 
               {isWide && (
                 <Stack spacing={3} sx={{ minWidth: 0, position: "sticky", top: 88 }}>
-                  <RecentPhotos />
-                  <ContributorList
-                    contributors={topContributors}
-                    loading={loadingStats}
-                    compact
-                  />
+                  {/* What the family is saying sits where the photo archive
+                      used to: it changes daily and invites a reply, while the
+                      archive is a browse-when-you-feel-like-it surface that
+                      reads just as well further down. */}
+                  <WishWall refreshKey={wallVersion} />
                   <QuickActions pendingRequests={Number(counts?.pendingRequests) || 0} />
                 </Stack>
               )}
             </Box>
+
+            {/*
+              The wall and the ranking close the page, below the two-column
+              grid so they span its full width at every breakpoint.
+
+              They belong together: the ranking is a maintenance statistic —
+              who edits the tree most — and on its own at the top of a rail it
+              read as a leaderboard the dashboard was built around. Next to what
+              people actually wrote to each other, it reads as what it is.
+            */}
+            <Stack spacing={{ xs: 3, md: 4 }} sx={{ minWidth: 0 }}>
+              <RecentPhotos />
+              <ContributorList contributors={topContributors} loading={loadingStats} />
+            </Stack>
           </Stack>
         </Container>
       </Box>

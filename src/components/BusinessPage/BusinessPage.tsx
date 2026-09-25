@@ -113,7 +113,6 @@ const slateText = brand.ink;
 const mutedText = brand.slateMuted;
 
 /** The design's warm archival canvas, and its hairline card border. */
-const CANVAS = "#FAFAF7";
 const BORDER_SUBTLE = "#E2E8F0";
 /** The tinted strip at the foot of a business card. */
 const CARD_FOOTER_BG = "#F6F8FD";
@@ -408,7 +407,8 @@ export const BusinessPage: React.FC = () => {
     // A live position supersedes a previously searched place.
     writeStoredPlace(null);
     void nameTheCentre(position);
-  }, []);
+    // nameTheCentre is a stable useCallback; listed so the linter can verify it.
+  }, [nameTheCentre]);
 
   /**
    * Where the directory is centred, resolved once on load:
@@ -437,7 +437,7 @@ export const BusinessPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [nameTheCentre]);
 
   /**
    * Load the people around that point.
@@ -470,29 +470,42 @@ export const BusinessPage: React.FC = () => {
     };
   }, [centre?.latitude, centre?.longitude, radiusKm]);
 
+  /**
+   * Re-read the businesses around the centre.
+   *
+   * Callable, not just an effect, because saving or deleting a business has to
+   * refresh whatever list is on screen. The page shows the radius result
+   * whenever there is a centre, so refreshing only the village-scoped redux
+   * list left a business the user had just added invisible until they reloaded
+   * the page — it had been saved, but the grid was reading the other source.
+   */
+  const refreshNearbyBusinesses = useCallback(async () => {
+    if (centre?.latitude == null || centre?.longitude == null) return;
+    setNearbyLoading(true);
+    try {
+      const rows = await ApiService.getBusinessesNearby(
+        centre.latitude,
+        centre.longitude,
+        radiusKm,
+      );
+      setNearbyBusinesses(rows || []);
+    } catch (error) {
+      console.warn("Could not load nearby businesses:", error);
+      setNearbyBusinesses([]);
+    } finally {
+      setNearbyLoading(false);
+    }
+  }, [centre?.latitude, centre?.longitude, radiusKm]);
+
   /** Load the businesses around that point. */
   useEffect(() => {
     if (centre?.latitude == null || centre?.longitude == null) {
       setNearbyBusinesses(null);
       return;
     }
-    let active = true;
-    setNearbyLoading(true);
-    ApiService.getBusinessesNearby(centre.latitude, centre.longitude, radiusKm)
-      .then((rows) => {
-        if (active) setNearbyBusinesses(rows || []);
-      })
-      .catch((error) => {
-        console.warn("Could not load nearby businesses:", error);
-        if (active) setNearbyBusinesses([]);
-      })
-      .finally(() => {
-        if (active) setNearbyLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [centre?.latitude, centre?.longitude, radiusKm]);
+    void refreshNearbyBusinesses();
+    return () => {};
+  }, [centre?.latitude, centre?.longitude, refreshNearbyBusinesses]);
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const defaultLocationAppliedForUserRef = useRef<string | null>(null);
 
@@ -731,10 +744,13 @@ export const BusinessPage: React.FC = () => {
   };
 
   const handleBusinessSaved = () => {
-    // Refresh businesses list by dispatching Redux action
+    // Both sources: the village-scoped list in redux, and the radius result the
+    // grid actually renders when a place is chosen. Refreshing one of the two
+    // is why a newly added business needed a page reload to appear.
     if (selectedLocation) {
       dispatch(fetchBusinessesByLocation(selectedLocation));
     }
+    void refreshNearbyBusinesses();
   };
 
   const handleDeleteBusiness = async () => {
@@ -746,6 +762,7 @@ export const BusinessPage: React.FC = () => {
       if (selectedLocation) {
         dispatch(fetchBusinessesByLocation(selectedLocation));
       }
+      void refreshNearbyBusinesses();
     } catch (error) {
       alert(
         `Failed to delete business: ${
@@ -1038,7 +1055,7 @@ export const BusinessPage: React.FC = () => {
       {/* Page header.
           One continuous surface with the rest of the page: the design treats
           the title as the first section, not a tinted band bolted above it. */}
-      <Box sx={{ bgcolor: CANVAS, color: slateText, pt: { xs: 3, md: 5 }, pb: { xs: 2, md: 3 } }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, color: slateText, pt: { xs: 3, md: 5 }, pb: { xs: 2, md: 3 } }}>
         <Container maxWidth="lg">
           <Stack
             direction={{ xs: "column", md: "row" }}
@@ -1092,7 +1109,7 @@ export const BusinessPage: React.FC = () => {
         </Container>
       </Box>
 
-      <Box sx={{ bgcolor: CANVAS, minHeight: "100vh" }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh" }}>
         <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
         {loading ? (
           <Box sx={{ textAlign: "center", py: 8 }}>
@@ -2421,7 +2438,7 @@ export const BusinessPage: React.FC = () => {
 
           <PersonSearchField
             label="Select Person"
-            placeholder="Search person by name"
+            placeholder="Start typing a name"
             searchValue={professionSearchInput}
             onSearchValueChange={(value) => {
               setProfessionSearchInput(value);

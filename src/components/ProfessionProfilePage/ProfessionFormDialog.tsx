@@ -35,6 +35,7 @@ import {
   ProfessionProfile,
   ProfessionVisibility,
 } from "../../services/apiService";
+import { PlacePicker, PlaceValue } from "../PlacePicker/PlacePicker";
 import { brand } from "../../theme/brand";
 
 const RichTextEditor = React.lazy(() =>
@@ -133,6 +134,14 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
   const [certifications, setCertifications] = useState("");
   const [workEmail, setWorkEmail] = useState("");
   const [workLocation, setWorkLocation] = useState("");
+  /**
+   * The work place, as a real point rather than typed text.
+   *
+   * `workLocation` stays as the label the profile and the directory card
+   * display; it is filled from whatever place is chosen, so the two never
+   * disagree and old profiles keep the text their owner typed.
+   */
+  const [workPlace, setWorkPlace] = useState<PlaceValue | null>(null);
   const [contactPhone, setContactPhone] = useState("");
   const [showContact, setShowContact] = useState(false);
   const [linkedinUrl, setLinkedinUrl] = useState("");
@@ -175,6 +184,17 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
     setCertifications(profile?.certifications || "");
     setWorkEmail(profile?.workEmail || "");
     setWorkLocation(profile?.workLocation || "");
+    setWorkPlace(
+      profile?.workPlaceId && profile?.workLatitude != null && profile?.workLongitude != null
+        ? {
+            placeId: profile.workPlaceId,
+            name: profile.workPlaceName || profile.workLocation || "",
+            address: profile.workPlaceAddress || profile.workLocation || "",
+            latitude: Number(profile.workLatitude),
+            longitude: Number(profile.workLongitude),
+          }
+        : null,
+    );
     setContactPhone(profile?.contactPhone || "");
     setShowContact(Boolean(profile?.showContact));
     setLinkedinUrl(profile?.linkedinUrl || "");
@@ -224,8 +244,8 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
   }, [open, peopleId, applyProfile]);
 
   const canSave = useMemo(
-    () => title.trim().length > 0 && !saving && !loadingProfile,
-    [title, saving, loadingProfile],
+    () => title.trim().length > 0 && Boolean(workPlace?.placeId) && !saving && !loadingProfile,
+    [title, workPlace, saving, loadingProfile],
   );
 
   const updateMilestone = (index: number, patch: Partial<ProfessionMilestone>) => {
@@ -252,6 +272,13 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
       setError("A profession title is required.");
       return;
     }
+    // Same rule as a business listing, and for the same reason: the directory
+    // is browsed by place. Typed text could not answer "who works near here",
+    // so this has to be a chosen place with coordinates behind it.
+    if (!workPlace?.placeId || workPlace.latitude == null || workPlace.longitude == null) {
+      setError("Choose where you work from the suggestions — it's how people find you.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -268,7 +295,13 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
         university: university.trim() || null,
         certifications: certifications.trim() || null,
         workEmail: workEmail.trim() || null,
-        workLocation: workLocation.trim() || null,
+        // The label mirrors the chosen place, so the card and the point agree.
+        workLocation: workPlace.name || workPlace.address || workLocation.trim() || null,
+        workPlaceId: workPlace.placeId,
+        workPlaceName: workPlace.name || null,
+        workPlaceAddress: workPlace.address || null,
+        workLatitude: workPlace.latitude,
+        workLongitude: workPlace.longitude,
         contactPhone: contactPhone.trim() || null,
         // Kept in step with the number: clearing the field also retires the
         // switch, so a re-added number is never silently published.
@@ -559,7 +592,19 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
             />
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
               <TextField label="Work email" type="email" value={workEmail} onChange={(e) => setWorkEmail(e.target.value)} fullWidth />
-              <TextField label="Work city" value={workLocation} onChange={(e) => setWorkLocation(e.target.value)} fullWidth />
+              <Box sx={{ gridColumn: { sm: "1 / -1" } }}>
+                <PlacePicker
+                  value={workPlace}
+                  onChange={(place) => {
+                    setWorkPlace(place);
+                    setWorkLocation(place?.name || place?.address || "");
+                  }}
+                  label="Where you work"
+                  required
+                  placeholder="Search for the city, town, or area"
+                  helperText="Required — this is how people searching nearby find you."
+                />
+              </Box>
               <TextField
                 label="Contact number"
                 type="tel"

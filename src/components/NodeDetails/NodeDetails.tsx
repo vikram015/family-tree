@@ -2267,13 +2267,13 @@ export const NodeDetails = memo(function NodeDetails({
                 excludeTreeId={node.treeId}
                 filterGender={node.gender}
                 disabled={!linkExternalLocationId}
-                placeholder={`Search for a ${
+                placeholder={`Start typing a ${
                   node.gender === Gender.female
                     ? "woman"
                     : node.gender === Gender.male
                       ? "man"
                       : "person"
-                }...`}
+                }'s name`}
                 label="Select Real Person"
                 startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
               />

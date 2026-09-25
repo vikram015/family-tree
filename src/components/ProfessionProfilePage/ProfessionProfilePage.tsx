@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useParams, Link as RouterLink } from "react-router-dom";
 import {
+  Alert,
   Avatar,
   Box,
   Button,
@@ -40,7 +41,6 @@ import { useAuth } from "../hooks/useAuth";
  * a redacted field arrives as null and simply doesn't appear.
  */
 
-const CANVAS = "#f8faff";
 const BORDER = "#e2e8f0";
 
 const VISIBILITY_LABEL: Record<string, string> = {
@@ -179,7 +179,7 @@ export const ProfessionProfilePage: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ bgcolor: CANVAS, minHeight: "100vh", py: 8, textAlign: "center" }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh", py: 8, textAlign: "center" }}>
         <CircularProgress />
       </Box>
     );
@@ -187,7 +187,7 @@ export const ProfessionProfilePage: React.FC = () => {
 
   if (!profile) {
     return (
-      <Box sx={{ bgcolor: CANVAS, minHeight: "100vh", py: { xs: 6, md: 10 } }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh", py: { xs: 6, md: 10 } }}>
         <Container maxWidth="sm">
           <Panel>
             <Typography sx={{ fontWeight: 800, fontSize: 19, color: brand.ink, mb: 1 }}>
@@ -269,8 +269,44 @@ export const ProfessionProfilePage: React.FC = () => {
         </title>
       </Helmet>
 
-      <Box sx={{ bgcolor: CANVAS, minHeight: "100vh", py: { xs: 3, md: 5 } }}>
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh", py: { xs: 3, md: 5 } }}>
         <Container maxWidth={false} sx={{ maxWidth: 1200, px: { xs: 2, md: 4 } }}>
+          {/* This page is assembled from the person's profession tags because
+              they have not written a career profile. Said plainly, so the
+              headline is not mistaken for something they wrote about
+              themselves — and so the owner is told how to replace it. */}
+          {profile.hasProfile === false && (
+            <Alert
+              severity="info"
+              variant="outlined"
+              sx={{ mb: 2.5, borderRadius: 3, alignItems: "center" }}
+              action={
+                profile.canEdit ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<EditOutlinedIcon />}
+                    onClick={() => setEditOpen(true)}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 800,
+                      borderRadius: 2,
+                      whiteSpace: "nowrap",
+                      bgcolor: brand.primaryDark,
+                      "&:hover": { bgcolor: "#1e40af" },
+                    }}
+                  >
+                    Add profile
+                  </Button>
+                ) : undefined
+              }
+            >
+              {profile.canEdit
+                ? "This is from your recorded profession. Add a profile to say what you actually do, where you studied, and what you can help younger relatives with."
+                : "This is from their recorded profession. They haven't written a career profile yet."}
+            </Alert>
+          )}
+
           {/* ---- Hero ------------------------------------------------------ */}
           <Panel>
             <Stack
@@ -600,7 +636,10 @@ export const ProfessionProfilePage: React.FC = () => {
           open={editOpen}
           onClose={() => setEditOpen(false)}
           peopleId={peopleId}
-          profile={profile}
+          // A tag-derived page is not a profile yet, so the dialog opens as
+          // "Add" rather than "Edit". It still prefills the title from the tags,
+          // because it re-reads the record on open.
+          profile={profile.hasProfile === false ? null : profile}
           onSaved={() => {
             setEditOpen(false);
             void load();

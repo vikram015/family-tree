@@ -1195,7 +1195,7 @@ export const ProfilePage: React.FC = () => {
 
                     <PersonSearchField
                       label="Search Your Name"
-                      placeholder="Type your name..."
+                      placeholder="Start typing your name"
                       searchValue={searchValue}
                       onSearchValueChange={(value) => {
                         setSearchValue(value);

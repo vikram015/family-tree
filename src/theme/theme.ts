@@ -36,7 +36,7 @@ export const theme = createTheme({
       secondary: brand.slateMuted,
     },
     background: {
-      default: brand.canvas,
+      default: brand.pageCanvas,
       paper: brand.surface,
     },
     divider: brand.border,

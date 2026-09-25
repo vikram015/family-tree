@@ -52,7 +52,17 @@ export const PwaUpdatePrompt: React.FC = () => {
     <Snackbar
       open={open}
       anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      sx={{ left: { xs: 16 }, right: { xs: 16 } }}
+      sx={(theme) => ({
+        // Wider gutters than MUI's 8px default, but only on phones.
+        //
+        // This has to stay inside the breakpoint: from `sm` up MUI centres a
+        // bottom-center Snackbar with `left: 50%` and `transform:
+        // translateX(-50%)`. Setting `left` at every width (which `{ xs: 16 }`
+        // does — xs is min-width 0) replaced the offset but left the transform,
+        // so on desktop the bar stretched nearly full width and was then shifted
+        // left by half of that, hanging off the edge of the screen.
+        [theme.breakpoints.down("sm")]: { left: 16, right: 16 },
+      })}
     >
       <Alert
         severity="info"
@@ -62,7 +72,9 @@ export const PwaUpdatePrompt: React.FC = () => {
             Reload
           </Button>
         }
-        sx={{ width: "100%" }}
+        // Full width on a phone; on desktop MUI's centred container is about
+        // half the viewport, which is far too wide for one short sentence.
+        sx={{ width: "100%", maxWidth: 420 }}
       >
         A new version is available.
       </Alert>

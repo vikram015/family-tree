@@ -38,7 +38,6 @@ type TabValue = "mine" | "shared";
 type ViewMode = "detailed" | "compact";
 
 /** The page background from the design — a hair cooler than the app canvas. */
-const PAGE_SURFACE = "#f8faff";
 
 /**
  * Search, type and year filters run over the photos already in memory.
@@ -212,7 +211,7 @@ export function PhotosPage() {
           content: '""',
           position: "fixed",
           inset: 0,
-          bgcolor: PAGE_SURFACE,
+          bgcolor: brand.pageCanvas,
           zIndex: -1,
         },
       }}

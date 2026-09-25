@@ -11,6 +11,8 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 
 import EventCard from "../Events/EventCard";
+import { Carousel } from "./Carousel";
+import { SendWishDialog, SendWishTarget } from "./SendWishDialog";
 import type { FamilyEvents, UpcomingFamilyEvent } from "../../services/apiService";
 import { brand } from "../../theme/brand";
 import {
@@ -27,11 +29,18 @@ export interface TodayStripProps {
   loading: boolean;
   /** Lets the event cards link into the right tree. */
   treeId?: string | null;
+  /** Called after a wish is sent, so the wall lower down can pick it up. */
+  onWishSent?: () => void;
 }
 
-/** Most days are quiet, so only the first 6 upcoming items are worth a card —
- *  beyond that the strip becomes a list nobody swipes to the end of. */
-const MAX_UPCOMING = 6;
+/** A ceiling, not a layout constraint.
+ *
+ *  This was 6 because the strip reflowed into rows and more than six either
+ *  wrapped or vanished. The carousel holds whatever it is given, so the cap is
+ *  now only here to stop one crowded week rendering an unbounded number of
+ *  cards — a large family can easily have more than six birthdays in a week,
+ *  and hiding them was the reason the section looked incomplete. */
+const MAX_UPCOMING = 15;
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -164,6 +173,7 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
   upcoming,
   loading,
   treeId,
+  onWishSent,
 }) => {
   const [filter, setFilter] = useState<EventFilter>("all");
   const stripRef = useRef<HTMLDivElement | null>(null);
@@ -173,6 +183,24 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
   const deceased = events?.deceased ?? [];
   const hasToday = birthdays.length + anniversaries.length + deceased.length > 0;
   const upcomingItems = (upcoming ?? []).slice(0, MAX_UPCOMING);
+
+  /**
+   * The card whose wish is being written, if any.
+   *
+   * Held here rather than inside EventCard so both strips share one dialog —
+   * and so a wish sent from today's row and one from the week ahead behave
+   * identically.
+   */
+  const [wishTarget, setWishTarget] = useState<SendWishTarget | null>(null);
+
+  // Renders null until a target is set, so it is safe in any branch.
+  const wishDialog = (
+    <SendWishDialog
+      target={wishTarget}
+      onClose={() => setWishTarget(null)}
+      onSent={onWishSent}
+    />
+  );
 
   const items: TodayItem[] = useMemo(() => {
     const list: TodayItem[] = [];
@@ -377,9 +405,11 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
               dateLabel={item.dateLabel}
               treeId={treeId}
               year={CURRENT_YEAR}
+              onSendWish={setWishTarget}
             />
           ))}
         </Box>
+        {wishDialog}
       </SectionShell>
     );
   }
@@ -410,13 +440,12 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
           </Typography>
         </Stack>
 
-        <Box
-          sx={{
-            ...(scrollStripSx as object),
-            gridAutoColumns: { xs: "minmax(268px, 86%)", sm: "minmax(300px, 48%)" },
-            gridTemplateColumns: { md: "repeat(3, minmax(0, 1fr))" },
-          }}
-        >
+        {/* A carousel rather than a grid. The week ahead is a variable number
+            of cards, and reflowing them into fixed rows either wrapped onto a
+            second line that unbalanced the section or cut the tail off at three.
+            The track always scrolls; the arrows appear only when the cards
+            genuinely overflow their box. */}
+        <Carousel aria-label="Upcoming birthdays and anniversaries">
           {upcomingItems.map((item) => (
             /* The same card as today's events: an upcoming birthday is the
                same object with a different date, and it carries the same
@@ -433,9 +462,11 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
               dateLabel={formatDate(item.eventDate) || undefined}
               treeId={treeId}
               year={CURRENT_YEAR}
+              onSendWish={setWishTarget}
             />
           ))}
-        </Box>
+        </Carousel>
+        {wishDialog}
       </SectionShell>
     );
   }
