@@ -1,43 +1,85 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   AppBar,
-  Autocomplete,
   Avatar,
+  Badge,
   Toolbar,
   Typography,
   IconButton,
   Button,
   Box,
+  Menu,
+  MenuItem,
   Drawer,
   List,
   ListItem,
   useTheme,
   useMediaQuery,
-  Dialog,
   ListItemButton,
   ListItemText,
-  TextField,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import LoginIcon from "@mui/icons-material/Login";
+import MenuIcon from "@mui/icons-material/Menu";
 import LogoutIcon from "@mui/icons-material/Logout";
+import NotificationsOutlinedIcon from "@mui/icons-material/NotificationsOutlined";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import FeedbackOutlinedIcon from "@mui/icons-material/FeedbackOutlined";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
+import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
+import { FeedbackDialog } from "../Feedback/FeedbackDialog";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useVillage } from "../hooks/useVillage";
+import { useSkipOnboarding } from "../hooks/useSkipOnboarding";
 import { useAuth } from "../hooks/useAuth";
 import { ApiService } from "../../services/apiService";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
+import { setPostLoginRedirect } from "../../utils/postLoginRedirect";
+import { brand, brandGradient } from "../../theme/brand";
 
-export const Header: React.FC = () => {
+// Nav destinations that require an authenticated user.
+const AUTH_REQUIRED_PATHS = new Set<string>(["/business"]);
+
+interface HeaderProps {
+  /** Locked mode: show only the brand (no nav, location picker, or account menu). */
+  locked?: boolean;
+}
+
+export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [villagePickerOpen, setVillagePickerOpen] = useState(false);
-  const [villageSearch, setVillageSearch] = useState("");
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
+  const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [actionableRequestCount, setActionableRequestCount] = useState(0);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackSnackbarOpen, setFeedbackSnackbarOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const location = useLocation();
+  /**
+   * Onboarding gets a stripped header.
+   *
+   * The flow's whole job is to get three answers before the app means anything;
+   * a full nav bar invites the user to wander off mid-way into pages that have
+   * nothing in them yet. Logo, an escape hatch, and their account — nothing
+   * else.
+   */
+  const isOnboarding = location.pathname.startsWith("/onboarding");
+  const { skip: skipOnboarding, skipping: skippingOnboarding } = useSkipOnboarding();
   const navigate = useNavigate();
-  const { selectedVillage, setSelectedVillage, villages } = useVillage();
-  const { currentUser, userProfile, logout, isSuperAdmin } = useAuth();
+  const { currentUser, userProfile, logout, isSuperAdmin, initialized, hadSession } = useAuth();
+  // Match the homepage: don't paint a logged-out header for a returning user
+  // and swap it for their avatar once Firebase restores the session. Only the
+  // rendered shell uses this hint — actions still key off the real `currentUser`.
+  const showAuthed = initialized ? !!currentUser : hadSession;
+  // Full hierarchy option for the selected location (village, district, state).
 
   useEffect(() => {
     let active = true;
@@ -65,6 +107,58 @@ export const Header: React.FC = () => {
     };
   }, [userProfile?.peopleId]);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadActionableRequests = async () => {
+      if (!currentUser) {
+        setActionableRequestCount(0);
+        return;
+      }
+
+      try {
+        const rows = await ApiService.getActionableLinkRequests();
+        if (!active) return;
+        setActionableRequestCount((rows || []).length);
+      } catch (error) {
+        if (!active) return;
+        console.warn("Failed to load actionable requests:", error);
+        setActionableRequestCount(0);
+      }
+    };
+
+    void loadActionableRequests();
+    window.addEventListener("link-requests-updated", loadActionableRequests);
+
+    return () => {
+      active = false;
+      window.removeEventListener("link-requests-updated", loadActionableRequests);
+    };
+  }, [currentUser, location.pathname]);
+
+  const hasPendingActionRequests = actionableRequestCount > 0;
+  const isAvatarMenuOpen = Boolean(avatarMenuAnchorEl);
+
+  const handleOpenAvatarMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAvatarMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseAvatarMenu = () => {
+    setAvatarMenuAnchorEl(null);
+  };
+
+  // Feedback is visible to everyone, but only authenticated users can submit.
+  // Guests are routed to login first.
+  const handleFeedbackClick = () => {
+    handleCloseAvatarMenu();
+    setDrawerOpen(false);
+    if (currentUser) {
+      setFeedbackOpen(true);
+    } else {
+      navigate("/login");
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -75,32 +169,56 @@ export const Header: React.FC = () => {
   };
 
   const navLinks = [
-    { label: "Home", path: "/" },
-    { label: "Business", path: "/business" },
+    { label: "Home", path: "/", icon: <HomeOutlinedIcon fontSize="small" /> },
+    { label: "Business", path: "/business", icon: <BusinessOutlinedIcon fontSize="small" /> },
     // { label: "Heritage", path: "/heritage" },
-    { label: "Families", path: "/families" },
-    { label: "Contact", path: "/contact" },
+    { label: "Families", path: "/families", icon: <GroupsOutlinedIcon fontSize="small" /> },
+    { label: "Explore", path: "/locations", icon: <PlaceOutlinedIcon fontSize="small" /> },
+    { label: "Photos", path: "/photos", icon: <PhotoLibraryOutlinedIcon fontSize="small" /> },
+    { label: "About", path: "/about", icon: <InfoOutlinedIcon fontSize="small" /> },
+    // Contact page hidden for now (kept in code, just not linked).
+    // { label: "Contact", path: "/contact" },
   ];
 
-  // Add admin link for superadmin
-  const allNavLinks = isSuperAdmin()
-    ? [...navLinks, { label: "Admin", path: "/admin" }]
-    : navLinks;
+  // Add admin link for superadmin.
+  //
+  // Emptied during onboarding so the links disappear from the drawer as well as
+  // the bar — otherwise the mobile menu would still offer every destination the
+  // stripped header exists to withhold.
+  const allNavLinks = isOnboarding
+    ? []
+    : isSuperAdmin()
+      ? [
+          ...navLinks,
+          { label: "Admin", path: "/admin", icon: <AdminPanelSettingsOutlinedIcon fontSize="small" /> },
+        ]
+      : navLinks;
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
     return location.pathname.startsWith(path);
   };
 
-  const selectedVillageOption =
-    villages.find((village) => village.id === selectedVillage) || null;
-  const filteredVillages = useMemo(() => {
-    const search = villageSearch.trim().toLowerCase();
-    if (!search) return villages;
-    return villages.filter((village) =>
-      village.name.toLowerCase().includes(search),
-    );
-  }, [villageSearch, villages]);
+  const handleNavLinkClick = useCallback(
+    async (path: string) => {
+      // Auth-gated destinations: send guests to login and remember where they
+      // were headed so they land back here after login (and onboarding).
+      if (AUTH_REQUIRED_PATHS.has(path) && !currentUser) {
+        setPostLoginRedirect(path);
+        navigate("/login", { state: { from: { pathname: path } } });
+        return;
+      }
+
+      if (path === "/families" && currentUser) {
+        navigate(await resolveDefaultFamilyTreePath());
+        return;
+      }
+
+      navigate(path);
+    },
+    [currentUser, navigate],
+  );
+
 
   const drawerContent = (
     <Box sx={{ width: 300, p: 2 }}>
@@ -110,28 +228,18 @@ export const Header: React.FC = () => {
         </IconButton>
       </Box>
 
-      {/* Village Selector for Mobile */}
-      <Box sx={{ mb: 2, px: 2 }}>
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={() => setVillagePickerOpen(true)}
-          sx={{ justifyContent: "flex-start", textTransform: "none" }}
-        >
-          {selectedVillageOption?.name ||
-            (villages.length === 0 ? "Loading villages..." : "Select Village")}
-        </Button>
-      </Box>
-
       <List>
         {allNavLinks.map((link) => (
           <ListItem key={link.path}>
             <Button
-              component={Link}
-              to={link.path}
               fullWidth
               variant={isActive(link.path) ? "contained" : "outlined"}
-              onClick={() => setDrawerOpen(false)}
+              startIcon={link.icon}
+              sx={{ justifyContent: "flex-start" }}
+              onClick={() => {
+                setDrawerOpen(false);
+                void handleNavLinkClick(link.path);
+              }}
             >
               {link.label}
             </Button>
@@ -141,22 +249,14 @@ export const Header: React.FC = () => {
 
       {/* Auth Section for Mobile */}
       <Box sx={{ px: 2, pt: 2, borderTop: 1, borderColor: "divider", mt: 2 }}>
-        {currentUser ? (
+        {showAuthed ? (
           <>
             <Box
-              component={Link}
-              to="/profile"
-              onClick={() => setDrawerOpen(false)}
               sx={{
                 display: "flex",
                 alignItems: "center",
                 gap: 1,
                 mb: 2,
-                textDecoration: "none",
-                color: "inherit",
-                "&:hover": {
-                  textDecoration: "underline",
-                },
               }}
             >
               <Avatar
@@ -183,45 +283,184 @@ export const Header: React.FC = () => {
                 )}
               </Box>
             </Box>
+            <List disablePadding sx={{ mb: 2 }}>
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/requests"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        Requests
+                        {hasPendingActionRequests && (
+                          <Box
+                            sx={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: "50%",
+                              bgcolor: "error.main",
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                      </Box>
+                    }
+                    secondary={
+                      hasPendingActionRequests
+                        ? `${actionableRequestCount} pending request${actionableRequestCount === 1 ? "" : "s"}`
+                        : "No pending requests"
+                    }
+                  />
+                </ListItemButton>
+              </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton
+                  component={Link}
+                  to="/profile"
+                  onClick={() => setDrawerOpen(false)}
+                >
+                  <ListItemText primary="Profile" />
+                </ListItemButton>
+              </ListItem>
+              <ListItem disablePadding>
+                <ListItemButton onClick={handleFeedbackClick}>
+                  <ListItemText primary="Feedback" />
+                </ListItemButton>
+              </ListItem>
+            </List>
             <Button
               fullWidth
               variant="outlined"
+              color="error"
               startIcon={<LogoutIcon />}
               onClick={() => {
                 handleLogout();
                 setDrawerOpen(false);
               }}
+              sx={{ textTransform: "none", fontWeight: 700, borderRadius: 2 }}
             >
               Logout
             </Button>
           </>
         ) : (
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<LoginIcon />}
-            component={Link}
-            to="/login"
-            onClick={() => setDrawerOpen(false)}
-          >
-            Login
-          </Button>
+          <>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<FeedbackOutlinedIcon />}
+              onClick={handleFeedbackClick}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderRadius: 2,
+                py: 1,
+                mb: 1.5,
+              }}
+            >
+              Feedback
+            </Button>
+            <Button
+              fullWidth
+              variant="contained"
+              disableElevation
+              startIcon={<LoginIcon />}
+              component={Link}
+              to="/login"
+              onClick={() => setDrawerOpen(false)}
+              sx={{
+                textTransform: "none",
+                fontWeight: 700,
+                borderRadius: 2,
+                py: 1,
+                color: "#fff",
+                background: brandGradient,
+                "&:hover": { background: brandGradient },
+              }}
+            >
+              Login
+            </Button>
+          </>
         )}
       </Box>
     </Box>
   );
 
+  // Locked mode (e.g. blocked account): brand only, no links or functionality.
+  if (locked) {
+    return (
+      <AppBar
+        position="static"
+        color="default"
+        elevation={0}
+        sx={{
+          bgcolor: "#ffffff",
+          color: "#0f172a",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Toolbar>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: { xs: 38, md: 42 },
+                height: { xs: 38, md: 42 },
+                p: "5px",
+                borderRadius: 2.5,
+                overflow: "hidden",
+                backgroundColor: "#ffffff",
+              }}
+            >
+              <img
+                src="/favic_no_background.png"
+                alt="Kinvia"
+                style={{ width: "100%", height: "100%", display: "block" }}
+              />
+            </Box>
+            <Typography variant="h6" component="h1" sx={{ m: 0, fontWeight: 700 }}>
+              Kinvia
+            </Typography>
+          </Box>
+        </Toolbar>
+      </AppBar>
+    );
+  }
+
   return (
     <>
-      <AppBar position="static" color="primary">
-        <Toolbar>
+      <AppBar
+        position="static"
+        color="default"
+        elevation={0}
+        sx={{
+          bgcolor: "#ffffff",
+          color: "#0f172a",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Toolbar sx={{ px: { xs: 2, md: 2.5 }, gap: 1 }}>
           <Box
+            component={Link}
+            to="/"
             sx={{
               flexGrow: 0,
-              mr: 2,
+              flexShrink: 0,
+              mr: 1,
               display: "flex",
               alignItems: "center",
               gap: 1.25,
+              textDecoration: "none",
+              color: "inherit",
+              borderRadius: 1,
+              "&:hover": {
+                opacity: 0.85,
+              },
             }}
           >
             <Box
@@ -234,12 +473,12 @@ export const Header: React.FC = () => {
                 p: "5px",
                 borderRadius: 2.5,
                 overflow: "hidden",
-                boxShadow: "0 10px 24px rgba(7, 28, 68, 0.22)",
+                boxShadow: "none",
                 backgroundColor: "#ffffff",
               }}
             >
               <img
-                src="/favicon.png"
+                src="/favic_no_background.png"
                 alt="Kinvia"
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
@@ -255,197 +494,306 @@ export const Header: React.FC = () => {
             </Box>
           </Box>
 
-          {!isMobile && (
+          {!isMobile && !isOnboarding && (
             <Box
               sx={{
                 flexGrow: 1,
                 display: "flex",
-                gap: 1,
+                gap: 0.5,
                 alignItems: "center",
+                justifyContent: "center",
               }}
             >
-              {allNavLinks.map((link) => (
-                <Button
-                  key={link.path}
-                  component={Link}
-                  to={link.path}
-                  color="inherit"
-                  sx={{
-                    fontWeight: isActive(link.path) ? "bold" : "normal",
-                    borderBottom: isActive(link.path)
-                      ? "2px solid white"
-                      : "none",
-                  }}
-                >
-                  {link.label}
-                </Button>
-              ))}
+              {allNavLinks.map((link) => {
+                const active = isActive(link.path);
+                return (
+                  <Button
+                    key={link.path}
+                    color="inherit"
+                    startIcon={link.icon}
+                    onClick={() => {
+                      void handleNavLinkClick(link.path);
+                    }}
+                    sx={{
+                      px: 1.5,
+                      py: 0.75,
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontSize: 14,
+                      fontWeight: active ? 600 : 500,
+                      whiteSpace: "nowrap",
+                      // The current page is a filled pill rather than an
+                      // underline: with seven items the underline was the only
+                      // thing separating "here" from "not here", and it read as
+                      // a hairline rather than a state.
+                      color: active ? brand.primaryDark : brand.slate,
+                      bgcolor: active ? brand.primarySoft : "transparent",
+                      border: "1px solid",
+                      borderColor: active ? "rgba(191, 219, 254, 0.9)" : "transparent",
+                      transition: "background-color 140ms ease, color 140ms ease",
+                      // Icons sit behind the labels: at the same weight and size
+                      // as the text, seven of them turned the bar into a row of
+                      // competing glyphs. Muted and smaller, they read as
+                      // markers for the word next to them.
+                      "& .MuiButton-startIcon": {
+                        mr: 0.75,
+                        ml: 0,
+                        color: active ? brand.primary : "#94a3b8",
+                        transition: "color 140ms ease",
+                      },
+                      "& .MuiButton-startIcon .MuiSvgIcon-root": { fontSize: 18 },
+                      "&:hover": {
+                        color: active ? brand.primaryDark : brand.ink,
+                        bgcolor: active ? brand.primarySoft : "#f8fafc",
+                        "& .MuiButton-startIcon": {
+                          color: active ? brand.primary : brand.slate,
+                        },
+                      },
+                    }}
+                  >
+                    {link.label}
+                  </Button>
+                );
+              })}
             </Box>
           )}
 
-          {/* Village Selector */}
-          {!isMobile && (
-            <Autocomplete
-              options={villages}
-              value={selectedVillageOption}
-              onChange={(_event, value) => setSelectedVillage(value?.id || "")}
-              getOptionLabel={(option) => option.name}
-              isOptionEqualToValue={(option, value) => option.id === value.id}
-              noOptionsText={
-                villages.length === 0 ? "Loading villages..." : "No villages found"
-              }
-              sx={{
-                minWidth: 240,
-                ml: 2,
-                "& .MuiOutlinedInput-root": {
-                  color: "white",
-                  "& fieldset": {
-                    borderColor: "rgba(255, 255, 255, 0.5)",
-                  },
-                  "&:hover fieldset": {
-                    borderColor: "rgba(255, 255, 255, 0.8)",
-                  },
-                  "&.Mui-focused fieldset": {
-                    borderColor: "white",
-                  },
-                },
-                "& .MuiInputLabel-root": {
-                  color: "rgba(255,255,255,0.8)",
-                },
-                "& .MuiSvgIcon-root": {
-                  color: "white",
-                },
-                "& .MuiAutocomplete-input::placeholder": {
-                  color: "rgba(255,255,255,0.8)",
-                  opacity: 1,
-                },
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  placeholder={villages.length === 0 ? "Loading..." : "Search village"}
-                />
-              )}
-            />
+
+          {/* Onboarding's only exit, in the header where it stays out of the
+              form's way but remains findable on every step. */}
+          {isOnboarding && showAuthed && (
+            <Box sx={{ ml: "auto", mr: 1.5, flexShrink: 0 }}>
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => void skipOnboarding()}
+                disabled={skippingOnboarding}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 600,
+                  fontSize: 13.5,
+                  color: brand.slateMuted,
+                  "&:hover": { color: brand.ink, bgcolor: "#f8fafc" },
+                }}
+              >
+                {skippingOnboarding ? "Skipping…" : "Skip for now"}
+              </Button>
+            </Box>
           )}
 
           {/* Auth Buttons */}
           {!isMobile && (
-            <Box sx={{ ml: 2 }}>
-              {currentUser ? (
+            <Box sx={{ ml: 1, flexShrink: 0 }}>
+              {showAuthed ? (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <Button
-                    component={Link}
-                    to="/profile"
                     color="inherit"
+                    onClick={handleOpenAvatarMenu}
                     sx={{
                       textTransform: "none",
                       display: "flex",
                       alignItems: "center",
                       gap: 1,
-                      mr: 1,
+                      pl: 0.75,
+                      pr: 1.25,
+                      py: 0.5,
+                      borderRadius: 999,
+                      border: "1px solid",
+                      borderColor: brand.border,
+                      bgcolor: "#fff",
+                      transition: "border-color 160ms ease, box-shadow 160ms ease",
+                      "&:hover": {
+                        borderColor: brand.primary,
+                        bgcolor: brand.primarySoft,
+                        boxShadow: "0 2px 10px rgba(15,118,110,0.12)",
+                      },
                     }}
                   >
-                    <Avatar
-                      src={linkedPersonPhoto || undefined}
-                      sx={{ width: 30, height: 30 }}
+                    <Badge
+                      color="error"
+                      overlap="circular"
+                      badgeContent={hasPendingActionRequests ? actionableRequestCount : 0}
                     >
-                      {userProfile?.displayName?.charAt(0) || "U"}
-                    </Avatar>
-                    <Box sx={{ textAlign: "left" }}>
-                      <Typography variant="body2" fontWeight={600}>
-                        {userProfile?.displayName || "User"}
-                      </Typography>
-                      {userProfile?.role && (
-                        <Typography
-                          variant="caption"
-                          color="rgba(255, 255, 255, 0.7)"
-                          display="block"
-                          sx={{ fontWeight: 600, mt: 0.25 }}
-                        >
-                          {userProfile.role === "superadmin"
-                            ? "Super Admin"
-                            : "Admin"}
-                        </Typography>
-                      )}
-                    </Box>
+                      <Avatar
+                        src={linkedPersonPhoto || undefined}
+                        sx={{ width: 30, height: 30 }}
+                      >
+                        {userProfile?.displayName?.charAt(0) || "U"}
+                      </Avatar>
+                    </Badge>
+                    <Typography variant="body2" fontWeight={600} sx={{ textAlign: "left" }}>
+                      {userProfile?.displayName || "User"}
+                    </Typography>
+                    <ArrowDropDownIcon
+                      sx={{
+                        fontSize: 22,
+                        color: "text.secondary",
+                        transition: "transform 0.2s",
+                        transform: isAvatarMenuOpen ? "rotate(180deg)" : "none",
+                      }}
+                    />
                   </Button>
-                  <Button
-                    color="inherit"
-                    startIcon={<LogoutIcon />}
-                    onClick={handleLogout}
-                    variant="outlined"
-                    size="small"
+                  <Menu
+                    anchorEl={avatarMenuAnchorEl}
+                    open={isAvatarMenuOpen}
+                    onClose={handleCloseAvatarMenu}
+                    anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                    transformOrigin={{ vertical: "top", horizontal: "right" }}
                   >
-                    Logout
-                  </Button>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        navigate("/requests");
+                      }}
+                    >
+                      <NotificationsOutlinedIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Requests
+                      {hasPendingActionRequests ? ` (${actionableRequestCount})` : ""}
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        navigate("/profile");
+                      }}
+                    >
+                      <PersonOutlineIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Profile
+                    </MenuItem>
+                    <MenuItem onClick={handleFeedbackClick}>
+                      <FeedbackOutlinedIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Feedback
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        handleCloseAvatarMenu();
+                        handleLogout();
+                      }}
+                      sx={{ color: "error.main", fontWeight: 600 }}
+                    >
+                      <LogoutIcon fontSize="small" sx={{ mr: 1.25 }} />
+                      Logout
+                    </MenuItem>
+                  </Menu>
                 </Box>
               ) : (
-                <Button
-                  color="inherit"
-                  startIcon={<LoginIcon />}
-                  component={Link}
-                  to="/login"
-                  variant="outlined"
-                  size="small"
-                >
-                  Login
-                </Button>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Button
+                    color="inherit"
+                    startIcon={<FeedbackOutlinedIcon />}
+                    onClick={handleFeedbackClick}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 600,
+                      borderRadius: 999,
+                      px: 1.5,
+                      color: brand.slate,
+                      "&:hover": {
+                        color: brand.primary,
+                        bgcolor: brand.primarySoft,
+                      },
+                    }}
+                  >
+                    Feedback
+                  </Button>
+                  <Button
+                    startIcon={<LoginIcon />}
+                    component={Link}
+                    to="/login"
+                    variant="contained"
+                    disableElevation
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      px: 2.25,
+                      py: 0.75,
+                      color: "#fff",
+                      background: brandGradient,
+                      boxShadow: "0 4px 14px rgba(15,118,110,0.28)",
+                      transition: "transform 160ms ease, box-shadow 160ms ease",
+                      "&:hover": {
+                        background: brandGradient,
+                        boxShadow: "0 6px 18px rgba(15,118,110,0.38)",
+                        transform: "translateY(-1px)",
+                      },
+                    }}
+                  >
+                    Login
+                  </Button>
+                </Box>
               )}
             </Box>
           )}
 
           {isMobile && (
             <>
-              <Box sx={{ flexGrow: 1, px: 1, minWidth: 0, display: "flex", justifyContent: "flex-end" }}>
-                <Button
+<Box sx={{ flexGrow: 1, minWidth: 0 }} />
+              {showAuthed ? (
+                <IconButton
                   color="inherit"
-                  variant="outlined"
-                  onClick={() => setVillagePickerOpen(true)}
-                  sx={{
-                    textTransform: "none",
-                    borderColor: "rgba(255,255,255,0.55)",
-                    color: "white",
-                    minWidth: 150,
-                    maxWidth: 220,
-                    justifyContent: "flex-start",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    "&:hover": {
-                      borderColor: "white",
-                      backgroundColor: "rgba(255,255,255,0.08)",
-                    },
-                  }}
+                  edge="end"
+                  onClick={() => setDrawerOpen(!drawerOpen)}
+                  sx={{ p: 0.25, ml: 1 }}
                 >
-                  {villages.find((v) => v.id === selectedVillage)?.name ||
-                    (villages.length === 0 ? "Loading..." : "Select Village")}
-                </Button>
-              </Box>
-              <IconButton
-                color="inherit"
-                edge="end"
-                onClick={() => setDrawerOpen(!drawerOpen)}
-                sx={{ p: 0.25, ml: 1 }}
-              >
-                <Avatar
-                  src={linkedPersonPhoto || undefined}
-                  sx={{
-                    width: 34,
-                    height: 34,
-                    border: "2px solid rgba(255,255,255,0.55)",
-                    bgcolor: "rgba(255,255,255,0.18)",
-                    color: "white",
-                    fontSize: 14,
-                    fontWeight: 700,
-                  }}
-                >
-                  {(userProfile?.displayName || currentUser?.email || "U")
-                    .charAt(0)
-                    .toUpperCase()}
-                </Avatar>
-              </IconButton>
+                  <Badge
+                    color="error"
+                    overlap="circular"
+                    variant={hasPendingActionRequests ? "dot" : undefined}
+                  >
+                    <Avatar
+                      src={linkedPersonPhoto || undefined}
+                      sx={{
+                        width: 34,
+                        height: 34,
+                        border: "1px solid rgba(15,23,42,0.12)",
+                        bgcolor: "#f8fafc",
+                        color: "#0f172a",
+                        fontSize: 14,
+                        fontWeight: 700,
+                      }}
+                    >
+                      {(userProfile?.displayName || currentUser?.email || "U")
+                        .charAt(0)
+                        .toUpperCase()}
+                    </Avatar>
+                  </Badge>
+                </IconButton>
+              ) : (
+                <>
+                  {/* Guests: an explicit Login CTA (so it's discoverable without
+                      opening the menu) plus a clear menu button for nav. */}
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disableElevation
+                    startIcon={<LoginIcon fontSize="small" />}
+                    component={Link}
+                    to="/login"
+                    sx={{
+                      ml: 1,
+                      textTransform: "none",
+                      fontWeight: 700,
+                      borderRadius: 999,
+                      px: 1.5,
+                      whiteSpace: "nowrap",
+                      color: "#fff",
+                      background: brandGradient,
+                      "&:hover": { background: brandGradient },
+                    }}
+                  >
+                    Login
+                  </Button>
+                  <IconButton
+                    color="inherit"
+                    edge="end"
+                    aria-label="Open menu"
+                    onClick={() => setDrawerOpen(!drawerOpen)}
+                    sx={{ p: 0.5, ml: 0.5 }}
+                  >
+                    <MenuIcon />
+                  </IconButton>
+                </>
+              )}
             </>
           )}
         </Toolbar>
@@ -459,66 +807,28 @@ export const Header: React.FC = () => {
         {drawerContent}
       </Drawer>
 
-      <Dialog
-        fullScreen
-        open={villagePickerOpen}
-        onClose={() => {
-          setVillageSearch("");
-          setVillagePickerOpen(false);
-        }}
+
+      <FeedbackDialog
+        open={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        onSubmitted={() => setFeedbackSnackbarOpen(true)}
+      />
+
+      <Snackbar
+        open={feedbackSnackbarOpen}
+        autoHideDuration={5000}
+        onClose={() => setFeedbackSnackbarOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <AppBar position="static" color="primary">
-          <Toolbar>
-            <Typography sx={{ flexGrow: 1 }} variant="h6">
-              Select Village
-            </Typography>
-            <IconButton
-              color="inherit"
-              onClick={() => {
-                setVillageSearch("");
-                setVillagePickerOpen(false);
-              }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Toolbar>
-        </AppBar>
-        <Box sx={{ p: 2 }}>
-          <TextField
-            fullWidth
-            placeholder="Search village"
-            value={villageSearch}
-            onChange={(e) => setVillageSearch(e.target.value)}
-            sx={{ mb: 2 }}
-          />
-          <List>
-            {villages.length === 0 && (
-              <ListItem>
-                <ListItemText primary="Loading villages..." />
-              </ListItem>
-            )}
-            {villages.length > 0 && filteredVillages.length === 0 && (
-              <ListItem>
-                <ListItemText primary="No villages found" />
-              </ListItem>
-            )}
-            {filteredVillages.map((village) => (
-              <ListItem key={village.id} disablePadding>
-                <ListItemButton
-                  selected={selectedVillage === village.id}
-                  onClick={() => {
-                    setSelectedVillage(village.id);
-                    setVillageSearch("");
-                    setVillagePickerOpen(false);
-                  }}
-                >
-                  <ListItemText primary={village.name} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </Dialog>
+        <Alert
+          onClose={() => setFeedbackSnackbarOpen(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          Thanks for your feedback!
+        </Alert>
+      </Snackbar>
     </>
   );
 };

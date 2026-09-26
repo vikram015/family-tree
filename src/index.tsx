@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { Provider } from "react-redux";
 import { store } from "./store";
 import App from "./components/App/App";
+import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
 
 console.log("Index.tsx: App starting to render");
 
@@ -23,3 +24,13 @@ createRoot(document.getElementById("root")!).render(
 );
 
 console.log("Index.tsx: App rendered");
+
+// Register the service worker (production only). On a new version, notify the
+// app so it can prompt the user to reload rather than silently swapping.
+serviceWorkerRegistration.register({
+  onUpdate: (registration) => {
+    window.dispatchEvent(
+      new CustomEvent("sw-update-available", { detail: registration }),
+    );
+  },
+});

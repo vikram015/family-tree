@@ -53,12 +53,12 @@ export const buildHierarchy = async (
 /**
  * Populate hierarchy field for all nodes in a tree
  * This function walks through all nodes and builds their parent chain
- * Also populates villageId, villageName, and name_lowercase fields
+ * Also populates locationId, locationName, and name_lowercase fields
  * 
  * NOTE: This was used for Firebase to Supabase migration.
  * Data is now in Supabase. Use Supabase functions for any hierarchy updates.
  */
-export const populateHierarchyForAllNodes = async (treeId: string, villageId?: string): Promise<void> => {
+export const populateHierarchyForAllNodes = async (treeId: string, locationId?: string): Promise<void> => {
   console.warn('populateHierarchyForAllNodes is deprecated - Firebase migration is complete. Use Supabase directly.');
   return Promise.resolve();
 };

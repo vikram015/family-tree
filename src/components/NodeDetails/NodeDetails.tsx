@@ -1,20 +1,19 @@
-import React, { memo, useCallback, useState, useEffect, Suspense } from "react";
+import React, { memo, useCallback, useState, useEffect, useMemo, Suspense } from "react";
 import {
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Drawer,
   Box,
+  Divider,
   Typography,
   IconButton,
+  Tooltip,
   TextField,
   Button,
   CircularProgress,
   FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Stack,
   useTheme,
   useMediaQuery,
@@ -26,6 +25,16 @@ import {
   Switch,
   Paper,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  InputAdornment,
+  FormControlLabel,
+  Alert,
+  Snackbar,
+  Radio,
+  RadioGroup,
+  FormLabel,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import dayjs, { Dayjs } from "dayjs";
@@ -38,22 +47,90 @@ import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import BloodtypeOutlinedIcon from "@mui/icons-material/BloodtypeOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import MaleOutlinedIcon from "@mui/icons-material/MaleOutlined";
+import FemaleOutlinedIcon from "@mui/icons-material/FemaleOutlined";
+import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import { RelType, Gender } from "relatives-tree/lib/types";
 import AddNode from "../AddNode/AddNode";
 import { FNode } from "../model/FNode";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { Link as RouterLink } from "react-router-dom";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
+import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
+import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
+import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
+import HowToRegOutlinedIcon from "@mui/icons-material/HowToRegOutlined";
+import HourglassTopOutlinedIcon from "@mui/icons-material/HourglassTopOutlined";
+import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
+import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { ProfessionFormDialog } from "../ProfessionProfilePage/ProfessionFormDialog";
+import { businessCategoryLabel } from "../Business/businessCategories";
+import { phoneFromCustomFields } from "../Business/businessContact";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
-import { ApiService } from "../../services/apiService";
+import { useNotificationPrompt } from "../context/NotificationPromptContext";
+import { ApiService, LocationCombinationOption, LinkRequest } from "../../services/apiService";
+import { namesLooselyMatch } from "../../utils/nameMatch";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
+import { PlacePicker, PlaceValue } from "../PlacePicker/PlacePicker";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
+import { brand } from "../../theme/brand";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
     default: m.DatePicker,
   })),
 );
+
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
+
+const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const GENDER_OPTIONS = [
+  { value: Gender.male, label: "Male", icon: <MaleOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: Gender.female, label: "Female", icon: <FemaleOutlinedIcon sx={{ fontSize: 18 }} /> },
+  { value: "other" as Gender, label: "Other", icon: <PersonOutlineOutlinedIcon sx={{ fontSize: 18 }} /> },
+] as const;
+
+const inputWithIconSx = {
+  "& .MuiInputAdornment-root": {
+    color: "text.secondary",
+  },
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 2,
+  },
+} as const;
+
+/**
+ * Two fields per row once the drawer is wide enough, one per row on phones.
+ *
+ * The edit form used to be a single column of full-width inputs, which on a
+ * desktop meant scrolling past a lot of empty space to reach the save button.
+ * Fields that need the full width (a photo header, a chip row, a free-text
+ * note) opt out with `spanBothColumnsSx`.
+ */
+const fieldGridSx = {
+  display: "grid",
+  gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+  columnGap: 2,
+  rowGap: 2,
+  alignItems: "start",
+} as const;
+
+const spanBothColumnsSx = { gridColumn: { md: "1 / -1" } } as const;
+
+const adornment = (icon: React.ReactNode) => (
+  <InputAdornment position="start">{icon}</InputAdornment>
+);
+
+function titleCaseRelationType(value: string) {
+  if (!value) return "";
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
 
 interface NodeDetailsProps {
   node: Readonly<FNode> | null;
@@ -66,11 +143,34 @@ interface NodeDetailsProps {
     targetId?: string,
     type?: RelType,
     otherParentId?: string,
+    childOptions?: {
+      otherParentMode?: "existing" | "new" | "unknown";
+      newSpouse?: {
+        name?: string;
+        nameHindi?: string;
+        gender?: string;
+        dob?: string;
+      };
+    },
   ) => Promise<string | undefined> | Promise<void> | void;
   onUpdate?: (nodeId: string, updates: Partial<FNode>) => void;
+  onChangeOtherParent?: (
+    personId: string,
+    anchorParentId: string,
+    otherParentMode: "existing" | "new" | "unknown",
+    otherParentId?: string,
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
+  ) => Promise<void> | void;
   onDelete?: (nodeId: string) => void;
   canEditNode?: (nodeId: string) => boolean;
   treeId?: string;
+  /** Open the invite-collaborator dialog scoped to this person's branch. */
+  onInviteCollaborator?: (personId: string) => void;
   /** Open directly in a specific view (e.g. "add" when clicking a placeholder) */
   initialView?: "details" | "edit" | "add";
   /** Pre-selected relation info when opening in "add" view from a placeholder */
@@ -79,6 +179,27 @@ interface NodeDetailsProps {
     gender?: string;
   };
 }
+
+/**
+ * Action bars inside the drawer.
+ *
+ * MUI's DialogActions has no background of its own — inside a Dialog it simply
+ * shows the Paper behind it. In this drawer the content scrolls underneath, so
+ * it needs to be opaque in its own right, with a divider and a lift to separate
+ * it from what is passing behind. The safe-area padding keeps the buttons clear
+ * of the home indicator on phones.
+ */
+const drawerActionsSx = {
+  flexShrink: 0,
+  px: { xs: 2, sm: 3 },
+  py: 1.5,
+  gap: 1,
+  bgcolor: "background.paper",
+  borderTop: 1,
+  borderColor: "divider",
+  boxShadow: "0 -4px 16px rgba(15, 23, 42, 0.06)",
+  pb: { xs: "calc(12px + env(safe-area-inset-bottom))", sm: 1.5 },
+} as const;
 
 export const NodeDetails = memo(function NodeDetails({
   node,
@@ -92,22 +213,34 @@ export const NodeDetails = memo(function NodeDetails({
     onSelect,
     onAdd,
     onUpdate,
+    onChangeOtherParent,
     onDelete,
     canEditNode,
     treeId,
+    onInviteCollaborator,
   } = props;
   const formatDisplayDate = (value?: string) => {
     if (!value) return "";
     const parsed = dayjs(value);
     return parsed.isValid() ? parsed.format("DD/MM/YYYY") : value;
   };
+  const formatDisplayDateTime = (value?: string) => {
+    if (!value) return "";
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format("DD/MM/YYYY hh:mm A") : value;
+  };
+  const createdByLabel =
+    node?.createdByName?.trim() || node?.createdBy?.trim() || "";
   const parsePickerValue = useCallback((value?: string) => {
     if (!value) return null;
     const parsed = dayjs(value);
     return parsed;
   }, []);
   const formatPickerDate = useCallback((value: Dayjs | null) => {
-    if (!value || !value.isValid()) return undefined;
+    // Empty string, not undefined: an emptied date has to reach the server as a
+    // value. `undefined` is stripped by JSON.stringify, so clearing a date
+    // silently sent nothing and the old date stayed in the database.
+    if (!value || !value.isValid()) return "";
     return value.format("YYYY-MM-DD");
   }, []);
   const theme = useTheme();
@@ -117,8 +250,10 @@ export const NodeDetails = memo(function NodeDetails({
   >(initialView || "details");
 
   // Link External State
-  const [villages, setVillages] = useState<any[]>([]);
-  const [linkExternalVillageId, setLinkExternalVillageId] = useState("");
+  const [locations, setLocations] = useState<any[]>([]);
+  const [linkExternalLocationId, setLinkExternalLocationId] = useState("");
+  const [linkExternalLocationOption, setLinkExternalLocationOption] =
+    useState<LocationCombinationOption | null>(null);
   const [selectedExternalPerson, setSelectedExternalPerson] =
     useState<any>(null);
   const [externalSearchValue, setExternalSearchValue] = useState("");
@@ -129,6 +264,29 @@ export const NodeDetails = memo(function NodeDetails({
   );
   const [linkExternalEndDate, setLinkExternalEndDate] = useState<Dayjs | null>(
     null,
+  );
+  const [linkExternalSubmitting, setLinkExternalSubmitting] = useState(false);
+  // Full profile of the selected external person, used to warn about an
+  // existing spouse and to render the before/after replacement preview.
+  const [externalPersonDetails, setExternalPersonDetails] = useState<any>(null);
+  const [loadingExternalDetails, setLoadingExternalDetails] = useState(false);
+  // When the selected person already has spouse(s): decide whether this is a
+  // separate/additional marriage ("new") or the same person as the tree-A
+  // spouse to be merged ("merge", picking which existing spouse via mergeSpouseId).
+  const [linkMode, setLinkMode] = useState<"" | "new" | "merge">("");
+  const [mergeSpouseId, setMergeSpouseId] = useState("");
+  const [linkExternalConfirmOpen, setLinkExternalConfirmOpen] = useState(false);
+  // Transient feedback (replaces native alert()).
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error" | "info" | "warning";
+  }>({ open: false, message: "", severity: "info" });
+  const showSnackbar = useCallback(
+    (message: string, severity: "success" | "error" | "info" | "warning" = "info") => {
+      setSnackbar({ open: true, message, severity });
+    },
+    [],
   );
   const [editSpouseDatesOpen, setEditSpouseDatesOpen] = useState(false);
   const [editSpouseId, setEditSpouseId] = useState("");
@@ -151,8 +309,88 @@ export const NodeDetails = memo(function NodeDetails({
 
   // New fields state
   const [editedBloodGroup, setEditedBloodGroup] = useState("");
+  // Where this person was born. A Google place, so it carries coordinates
+  // rather than only a village name, and it is recorded per person because a
+  // family's members are frequently born somewhere other than the village the
+  // tree is rooted in.
+  const [editedPlace, setEditedPlace] = useState<PlaceValue | null>(null);
   const [editedIsAlive, setEditedIsAlive] = useState(true);
   const [editedDeceasedDate, setEditedDeceasedDate] = useState<Dayjs | null>(null);
+
+  // Other-parent edit state
+  const [editOtherParentMode, setEditOtherParentMode] = useState<
+    "existing" | "new" | "unknown"
+  >("unknown");
+  const [editSelectedOtherParentId, setEditSelectedOtherParentId] = useState("");
+  const [editNewOtherParentName, setEditNewOtherParentName] = useState("");
+  const [editNewOtherParentNameHindi, setEditNewOtherParentNameHindi] = useState("");
+  const [editNewOtherParentGender, setEditNewOtherParentGender] = useState<
+    "male" | "female" | "other" | ""
+  >("");
+  const [editNewOtherParentDob, setEditNewOtherParentDob] = useState<Dayjs | null>(
+    null,
+  );
+
+  // The node's parents resolved to full nodes.
+  const nodeParentNodes = useMemo(() => {
+    if (!node?.parents) return [] as FNode[];
+    return node.parents
+      .map((p) => nodes.find((n) => n.id === p.id))
+      .filter(Boolean) as FNode[];
+  }, [node, nodes]);
+
+  // The "anchor" parent stays fixed; we offer its spouses as the other-parent choices.
+  // Per product decision, the male parent is the anchor (falling back to the first parent).
+  const anchorParent = useMemo(() => {
+    if (nodeParentNodes.length === 0) return null;
+    return (
+      nodeParentNodes.find((p) => p.gender === Gender.male) || nodeParentNodes[0]
+    );
+  }, [nodeParentNodes]);
+
+  // The parent that is currently recorded as the "other parent" (not the anchor).
+  const currentOtherParent = useMemo(() => {
+    if (!anchorParent) return null;
+    return nodeParentNodes.find((p) => p.id !== anchorParent.id) || null;
+  }, [nodeParentNodes, anchorParent]);
+
+  // Candidate other parents = the anchor's spouses (plus the current other parent,
+  // defensively, in case the spouse link is missing).
+  const otherParentOptions = useMemo(() => {
+    if (!anchorParent) return [] as FNode[];
+    const byId = new Map<string, FNode>();
+    (anchorParent.spouses || []).forEach((s) => {
+      const spouseNode = nodes.find((n) => n.id === s.id);
+      if (spouseNode) byId.set(spouseNode.id, spouseNode);
+    });
+    if (currentOtherParent) byId.set(currentOtherParent.id, currentOtherParent);
+    return Array.from(byId.values());
+  }, [anchorParent, currentOtherParent, nodes]);
+
+  // Seed the other-parent selection:
+  // - a current other parent -> preselect it
+  // - exactly one candidate -> preselect it
+  // - multiple candidates -> require the user to pick
+  // - none -> default to "no other parent"
+  useEffect(() => {
+    if (currentOtherParent) {
+      setEditOtherParentMode("existing");
+      setEditSelectedOtherParentId(currentOtherParent.id);
+    } else if (otherParentOptions.length === 1) {
+      setEditOtherParentMode("existing");
+      setEditSelectedOtherParentId(otherParentOptions[0].id);
+    } else if (otherParentOptions.length > 1) {
+      setEditOtherParentMode("existing");
+      setEditSelectedOtherParentId("");
+    } else {
+      setEditOtherParentMode("unknown");
+      setEditSelectedOtherParentId("");
+    }
+    setEditNewOtherParentName("");
+    setEditNewOtherParentNameHindi("");
+    setEditNewOtherParentGender("");
+    setEditNewOtherParentDob(null);
+  }, [node?.id, currentOtherParent, otherParentOptions]);
 
   // Photo edit state
   const [editedPhotoPreview, setEditedPhotoPreview] = useState<
@@ -168,25 +406,53 @@ export const NodeDetails = memo(function NodeDetails({
   const [displayCustomFields, setDisplayCustomFields] = useState<
     Record<string, string>
   >({});
+  const [businesses, setBusinesses] = useState<any[]>([]);
+  const [professions, setProfessions] = useState<any[]>([]);
+  const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
+  const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
+  const [professionDialogOpen, setProfessionDialogOpen] = useState(false);
+  const [professionProfile, setProfessionProfile] = useState<any | null>(null);
+  const [requestingAccess, setRequestingAccess] = useState(false);
   const [mobileAddSaveAction, setMobileAddSaveAction] = useState<{
     onClick: () => void;
     disabled: boolean;
     saving: boolean;
   } | null>(null);
 
-  const { currentUser } = useAuth() as any;
+  const { currentUser, userProfile, isSuperAdmin, canEditProfessionProfile } =
+    useAuth() as any;
   const { openLoginModal } = useLoginModal();
+  const { offerNotifications } = useNotificationPrompt();
+
+  // Self-link ("This is me"): a logged-in user not yet linked to any person node
+  // can request the tree owner to link their account to this profile.
+  const isUnlinkedUser = Boolean(currentUser && !userProfile?.peopleId);
+  const [selfLinkConfirmOpen, setSelfLinkConfirmOpen] = useState(false);
+  const [selfLinkRequesting, setSelfLinkRequesting] = useState(false);
+  // The signed-in user's own pending link requests (self-link + branch-access),
+  // used to reflect already-requested state on the relevant buttons.
+  const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
+  const myPendingSelfLinkRequest =
+    myPendingRequests.find((r) => r.requestType === "user_to_tree_node") || null;
 
   useEffect(() => {
-    if (view === "link-external" && villages.length === 0) {
-      ApiService.getVillages().then((data) => setVillages(data));
+    if (view === "link-external" && locations.length === 0) {
+      ApiService.getLocations().then((data) => setLocations(data));
     }
-  }, [view, villages.length]);
+  }, [view, locations.length]);
 
-  // Reset view and values when node changes
+  // Reset the view only when a different person is opened. Keyed on the id, not
+  // the object: adding a relative merges a fresh copy of this node into the tree,
+  // and resetting on that would unmount AddNode just as it moves to its
+  // "add business or profession" step.
+  const nodeId = node?.id;
+  useEffect(() => {
+    if (nodeId) setView(initialView || "details");
+  }, [nodeId, initialView]);
+
+  // Keep the edit fields in sync with the latest copy of the node.
   useEffect(() => {
     if (node) {
-      setView(initialView || "details");
       setEditedName(node.name || "");
       setEditedNameHindi(node.nameHindi || "");
       setEditedDob(parsePickerValue(node.dob));
@@ -195,6 +461,17 @@ export const NodeDetails = memo(function NodeDetails({
       setEditedCustomFields(node.customFields || {});
       setDisplayCustomFields(node.customFields || {});
       setEditedBloodGroup(node.bloodGroup || "");
+      setEditedPlace(
+        node.birthPlaceId
+          ? {
+              placeId: node.birthPlaceId,
+              name: node.birthPlaceName || "",
+              address: node.birthPlaceAddress || node.birthPlaceName || "",
+              latitude: node.birthPlaceLatitude ?? null,
+              longitude: node.birthPlaceLongitude ?? null,
+            }
+          : null,
+      );
       setEditedIsAlive(node.isAlive !== false);
       setEditedDeceasedDate(parsePickerValue(node.deceasedDate));
       setEditedPhotoPreview(node.photo || undefined);
@@ -204,8 +481,147 @@ export const NodeDetails = memo(function NodeDetails({
         setEditedCustomFields(fields);
         setDisplayCustomFields(fields);
       });
+
+      // Fetch businesses & professions so we know whether the person has any to
+      // reveal; the details themselves stay behind the login prompt for guests.
+      ApiService.getBusinessesByPerson(node.id)
+        .then((biz) => setBusinesses(biz || []))
+        .catch(() => setBusinesses([]));
+      ApiService.getProfessionsByPerson(node.id)
+        .then((profs) => setProfessions(profs || []))
+        .catch(() => setProfessions([]));
+      ApiService.getProfessionProfile(node.id)
+        .then((profile) => setProfessionProfile(profile))
+        .catch(() => setProfessionProfile(null));
     }
-  }, [node, initialView, parsePickerValue]);
+  }, [node, initialView, parsePickerValue, currentUser]);
+
+  const refreshBusinesses = useCallback(async () => {
+    if (!node) return;
+    try {
+      const biz = await ApiService.getBusinessesByPerson(node.id);
+      setBusinesses(biz || []);
+    } catch {
+      setBusinesses([]);
+    }
+  }, [node]);
+
+  const refreshProfessions = useCallback(async () => {
+    if (!node) return;
+    try {
+      const profs = await ApiService.getProfessionsByPerson(node.id);
+      setProfessions(profs || []);
+    } catch {
+      setProfessions([]);
+    }
+    try {
+      setProfessionProfile(await ApiService.getProfessionProfile(node.id));
+    } catch {
+      setProfessionProfile(null);
+    }
+  }, [node]);
+
+  const handleShareNode = useCallback(async () => {
+    if (!node) return;
+    const base = window.location.origin;
+    const linkTreeId = treeId || node.treeId || "";
+    const url = `${base}/families?tree=${encodeURIComponent(linkTreeId)}&personId=${encodeURIComponent(node.id)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: node.name || "Family member",
+          text: `View ${node.name || "this profile"} on the family tree:`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        showSnackbar("Profile link copied to clipboard.", "success");
+      }
+    } catch {
+      // Share was cancelled or clipboard failed — nothing to do.
+    }
+  }, [node, treeId, showSnackbar]);
+
+  const handleRequestBranchAccess = useCallback(async () => {
+    if (!node || !treeId) return;
+    setRequestingAccess(true);
+    try {
+      const created = await ApiService.createBranchAccessRequest({
+        targetTreeId: treeId,
+        targetPersonId: node.id,
+      });
+      setMyPendingRequests((prev) => [...prev, created]);
+      offerNotifications(
+        "We'll let you know as soon as your branch access request is reviewed.",
+      );
+      showSnackbar(`Branch access request sent for ${node.name || "this"} branch.`, "success");
+    } catch (error: any) {
+      showSnackbar(error?.message || "Failed to request branch access.", "error");
+    } finally {
+      setRequestingAccess(false);
+    }
+  }, [node, treeId, showSnackbar, offerNotifications]);
+
+  // Load the user's pending link requests so the self-link icon and the
+  // "Request Branch Access" button can reflect an already-requested state (both
+  // survive a reload, not just an in-session click).
+  useEffect(() => {
+    if (!node || !currentUser) {
+      setMyPendingRequests([]);
+      return;
+    }
+    let cancelled = false;
+    ApiService.getMyLinkRequests()
+      .then((rows) => {
+        if (cancelled) return;
+        setMyPendingRequests((rows || []).filter((r) => r.status === "pending"));
+      })
+      .catch(() => {
+        if (!cancelled) setMyPendingRequests([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // node.id keeps this fresh when navigating between nodes in the open dialog.
+    // Depending on the whole `node` object would refetch on every re-render that
+    // gives it a new identity, which is why only the id is listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node?.id, currentUser]);
+
+  const handleSelfLinkClick = useCallback(() => {
+    if (!node) return;
+    if (!currentUser) {
+      openLoginModal(() => setSelfLinkConfirmOpen(true));
+      return;
+    }
+    setSelfLinkConfirmOpen(true);
+  }, [node, currentUser, openLoginModal]);
+
+  const handleConfirmSelfLink = useCallback(async () => {
+    if (!node) return;
+    setSelfLinkRequesting(true);
+    try {
+      const created = await ApiService.createUserNodeLinkRequest({
+        targetPersonId: node.id,
+      });
+      setMyPendingRequests((prev) => [...prev, created]);
+      setSelfLinkConfirmOpen(false);
+      offerNotifications(
+        "We'll let you know as soon as your profile link request is reviewed.",
+      );
+      showSnackbar(
+        "Profile link request sent. It's pending owner approval.",
+        "success",
+      );
+    } catch (error: any) {
+      showSnackbar(
+        error?.message || "Failed to send profile link request.",
+        "error",
+      );
+    } finally {
+      setSelfLinkRequesting(false);
+    }
+  }, [node, showSnackbar, offerNotifications]);
 
   const isOpen = !!node;
   useEffect(() => {
@@ -274,14 +690,54 @@ export const NodeDetails = memo(function NodeDetails({
           nameHindi: editedNameHindi.trim(),
           dob: formatPickerDate(editedDob),
           gender: editedGender,
-          bloodGroup: editedBloodGroup || undefined,
+          bloodGroup: editedBloodGroup,
+          // "" clears the birth place. All five move together so a cleared
+          // field never leaves coordinates pointing at the old one.
+          birthPlaceId: editedPlace?.placeId || "",
+          birthPlaceName: editedPlace?.name || "",
+          birthPlaceAddress: editedPlace?.address || "",
+          birthPlaceLatitude: editedPlace?.latitude ?? null,
+          birthPlaceLongitude: editedPlace?.longitude ?? null,
           isAlive: editedIsAlive,
+          // Cleared, or the person is marked living again — either way the
+          // stored date of death should go.
           deceasedDate:
             !editedIsAlive && editedDeceasedDate
               ? formatPickerDate(editedDeceasedDate)
-              : undefined,
+              : "",
           customFields: editedCustomFields,
         };
+
+        // Persist a change to the "other parent" (co-parent of the anchor), if any.
+        if (anchorParent && onChangeOtherParent) {
+          const originalOtherParentId = currentOtherParent?.id || "";
+          const otherParentChanged =
+            (editOtherParentMode === "existing" &&
+              !!editSelectedOtherParentId &&
+              editSelectedOtherParentId !== originalOtherParentId) ||
+            editOtherParentMode === "new" ||
+            (editOtherParentMode === "unknown" && !!originalOtherParentId);
+
+          if (otherParentChanged) {
+            await onChangeOtherParent(
+              node.id,
+              anchorParent.id,
+              editOtherParentMode,
+              editOtherParentMode === "existing"
+                ? editSelectedOtherParentId
+                : undefined,
+              editOtherParentMode === "new"
+                ? {
+                    name: editNewOtherParentName.trim(),
+                    nameHindi: editNewOtherParentNameHindi.trim() || undefined,
+                    gender: editNewOtherParentGender || undefined,
+                    dob: formatPickerDate(editNewOtherParentDob),
+                  }
+                : undefined,
+            );
+          }
+        }
+
         await onUpdate(node.id, updates);
         setView("details");
       } catch (err) {
@@ -295,12 +751,22 @@ export const NodeDetails = memo(function NodeDetails({
     node,
     editedName,
     editedNameHindi,
+    editedPlace,
     editedDob,
     editedGender,
     editedCustomFields,
     editedBloodGroup,
     editedIsAlive,
     editedDeceasedDate,
+    anchorParent,
+    currentOtherParent,
+    onChangeOtherParent,
+    editOtherParentMode,
+    editSelectedOtherParentId,
+    editNewOtherParentName,
+    editNewOtherParentNameHindi,
+    editNewOtherParentGender,
+    editNewOtherParentDob,
     formatPickerDate,
     onUpdate,
   ]);
@@ -319,11 +785,20 @@ export const NodeDetails = memo(function NodeDetails({
       t?: string,
       type?: RelType,
       op?: string,
+      childOptions?: {
+        otherParentMode?: "existing" | "new" | "unknown";
+        newSpouse?: {
+          name?: string;
+          nameHindi?: string;
+          gender?: string;
+          dob?: string;
+        };
+      },
     ): Promise<string | undefined> => {
       if (!onAdd) {
         return undefined;
       }
-      const result = await onAdd(n, r, t, type, op);
+      const result = await onAdd(n, r, t, type, op, childOptions);
       return typeof result === "string" ? result : undefined;
     },
     [onAdd],
@@ -333,30 +808,59 @@ export const NodeDetails = memo(function NodeDetails({
     onSelect(undefined);
   }, [onSelect]);
 
-  const handleLinkExternalClick = useCallback(() => {
-    if (!currentUser) {
-      openLoginModal(() => {
-        setLinkExternalRelationSubtype(RelType.married);
-        setLinkExternalStartDate(null);
-        setLinkExternalEndDate(null);
-        setView("link-external");
-      });
-      return;
-    }
+  const openLinkExternalDialog = useCallback(() => {
     setLinkExternalRelationSubtype(RelType.married);
     setLinkExternalStartDate(null);
     setLinkExternalEndDate(null);
+    setSelectedExternalPerson(null);
+    setExternalSearchValue("");
+    setExternalPersonDetails(null);
+    setLinkExternalLocationId("");
+    setLinkExternalLocationOption(null);
+    setLinkMode("");
+    setMergeSpouseId("");
+    setLinkExternalConfirmOpen(false);
     setView("link-external");
-  }, [currentUser, openLoginModal]);
+  }, []);
 
-  const handleConfirmLinkExternal = async () => {
+  const handleLinkExternalClick = useCallback(() => {
+    if (!currentUser) {
+      openLoginModal(() => {
+        openLinkExternalDialog();
+      });
+      return;
+    }
+    openLinkExternalDialog();
+  }, [currentUser, openLoginModal, openLinkExternalDialog]);
+
+  // Fetch the full profile of the chosen external person so we can detect an
+  // existing spouse and show the replacement preview before submitting.
+  const handleSelectExternalPerson = useCallback(async (person: any) => {
+    setSelectedExternalPerson(person);
+    setLinkMode("");
+    setMergeSpouseId("");
+    setExternalPersonDetails(null);
+    if (!person?.id) return;
+    try {
+      setLoadingExternalDetails(true);
+      const spouses = await ApiService.getPersonSpouses(person.id);
+      setExternalPersonDetails({ spouses: spouses || [] });
+    } catch (error) {
+      console.error("Failed to load external person details:", error);
+      setExternalPersonDetails(null);
+    } finally {
+      setLoadingExternalDetails(false);
+    }
+  }, []);
+
+  const handleConfirmLinkExternal = () => {
     if (!node || !selectedExternalPerson) return;
     if (
       linkExternalStartDate &&
       linkExternalEndDate &&
       linkExternalEndDate.isBefore(linkExternalStartDate, "day")
     ) {
-      alert("Marriage end date cannot be before marriage start date.");
+      showSnackbar("Marriage end date cannot be before marriage start date.", "warning");
       return;
     }
 
@@ -365,43 +869,99 @@ export const NodeDetails = memo(function NodeDetails({
       node.spouses && node.spouses.length > 0 ? node.spouses[0] : null;
 
     if (!spouse) {
-      alert(
+      showSnackbar(
         "This person must have a spouse in the current tree to use this replacement feature.",
+        "warning",
       );
       return;
     }
+
+    // Defer the destructive action to an explicit confirmation dialog.
+    setLinkExternalConfirmOpen(true);
+  };
+
+  const performLinkExternal = async () => {
+    if (!node || !selectedExternalPerson) return;
 
     // Logic: Node (Placeholder) <-> Spouse (Target)
     // We want: New Person <-> Spouse (Target)
     // And delete Node (Placeholder)
+    const spouse =
+      node.spouses && node.spouses.length > 0 ? node.spouses[0] : null;
+    if (!spouse) return;
 
-    if (
-      !window.confirm(
-        `Are you sure you want to replace "${node.name}" with "${selectedExternalPerson.name}" from the other tree? This will delete "${node.name}" and transfer children.`,
-      )
-    ) {
-      return;
-    }
+    // Existing-spouse decision: choosing a mode is itself the acknowledgement.
+    const hasExistingSpouses = Boolean(externalPersonDetails?.spouses?.length);
+    const effectiveMergeSpouseId =
+      hasExistingSpouses && linkMode === "merge" ? mergeSpouseId || undefined : undefined;
+    const effectiveConfirm = hasExistingSpouses || undefined;
 
     try {
-      // addSpouse(targetId, spouseId, placeholderId)
-      // targetId = spouse.id (The person staying in the tree)
-      // spouseId = selectedExternalPerson.id (The new person coming in)
-      // placeholderId = node.id (The person leaving)
-      await ApiService.addSpouse(
-        spouse.id,
-        selectedExternalPerson.id,
-        linkExternalRelationSubtype,
-        formatPickerDate(linkExternalStartDate),
-        formatPickerDate(linkExternalEndDate),
-        node.id,
-      );
+      setLinkExternalSubmitting(true);
+      const relationStartDate = formatPickerDate(linkExternalStartDate);
+      const relationEndDate = formatPickerDate(linkExternalEndDate);
+      const canLinkDirectly =
+        typeof isSuperAdmin === "function"
+          ? isSuperAdmin()
+          : userProfile?.role === "superadmin";
 
-      alert("Successfully linked. The page will reload to reflect changes.");
-      window.location.reload();
+      if (canLinkDirectly) {
+        // addSpouse(targetId, spouseId, placeholderId)
+        // targetId = spouse.id (The person staying in the tree)
+        // spouseId = selectedExternalPerson.id (The new person coming in)
+        // placeholderId = node.id (The person leaving)
+        await ApiService.addSpouse(
+          spouse.id,
+          selectedExternalPerson.id,
+          linkExternalRelationSubtype,
+          relationStartDate,
+          relationEndDate,
+          node.id,
+          effectiveConfirm,
+          effectiveMergeSpouseId,
+        );
+
+        setLinkExternalConfirmOpen(false);
+        showSnackbar(
+          effectiveMergeSpouseId ? "Merged successfully. Refreshing…" : "Successfully linked. Refreshing…",
+          "success",
+        );
+        window.setTimeout(() => window.location.reload(), 900);
+        return;
+      }
+
+      await ApiService.createSpouseLinkRequest({
+        personId1: spouse.id,
+        personId2: selectedExternalPerson.id,
+        relationSubtype: linkExternalRelationSubtype,
+        relationStartDate,
+        relationEndDate,
+        replacePersonId: node.id,
+        confirmExistingSpouse: effectiveConfirm,
+        mergeSpouseId: effectiveMergeSpouseId,
+        requestMessage: `Request to replace ${node.name} with ${selectedExternalPerson.name} as spouse of ${
+          nodes.find((candidate) => candidate.id === spouse.id)?.name || "the selected person"
+        }.`,
+      });
+
+      window.dispatchEvent(new Event("link-requests-updated"));
+      offerNotifications(
+        "We'll let you know as soon as your request is approved or declined.",
+      );
+      showSnackbar(
+        "Spouse link request raised. The other tree owner or a superadmin can approve it.",
+        "success",
+      );
+      setLinkExternalConfirmOpen(false);
+      setView("details");
     } catch (error: any) {
       console.error("Link external error:", error);
-      alert("Failed to link: " + (error.message || error));
+      // Return to the link dialog (where the "additional marriage" checkbox
+      // lives) so the user can adjust rather than being stuck on the confirm.
+      setLinkExternalConfirmOpen(false);
+      showSnackbar("Failed to link: " + (error?.message || error), "error");
+    } finally {
+      setLinkExternalSubmitting(false);
     }
   };
 
@@ -452,7 +1012,7 @@ export const NodeDetails = memo(function NodeDetails({
       editSpouseEndDate &&
       editSpouseEndDate.isBefore(editSpouseStartDate, "day")
     ) {
-      alert("Marriage end date cannot be before marriage start date.");
+      showSnackbar("Marriage end date cannot be before marriage start date.", "warning");
       return;
     }
 
@@ -468,7 +1028,7 @@ export const NodeDetails = memo(function NodeDetails({
       setEditSpouseDatesOpen(false);
       window.location.reload();
     } catch (error: any) {
-      alert("Failed to update spouse dates: " + (error?.message || error));
+      showSnackbar("Failed to update spouse dates: " + (error?.message || error), "error");
     } finally {
       setIsSavingSpouseDates(false);
     }
@@ -478,7 +1038,9 @@ export const NodeDetails = memo(function NodeDetails({
     editSpouseRelationSubtype,
     editSpouseStartDate,
     editSpouseEndDate,
+    formatPickerDate,
     isSavingSpouseDates,
+    showSnackbar,
   ]);
 
   const relNodeMapper = useCallback(
@@ -502,7 +1064,50 @@ export const NodeDetails = memo(function NodeDetails({
   const children = node.children?.map(relNodeMapper).filter(Boolean) || [];
   const siblings = node.siblings?.map(relNodeMapper).filter(Boolean) || [];
   const spouses = node.spouses?.map(relNodeMapper).filter(Boolean) || [];
+  // The tree-A person the placeholder is married to — the "surviving" spouse in
+  // a Link Real Profile / merge. Used for wording in the link-external dialog.
+  const anchorSpouseName =
+    (spouses[0] as any)?.name ||
+    nodes.find((n) => n.id === (node.spouses?.[0] as any)?.id)?.name ||
+    "the current spouse";
   const canEditCurrentNode = canEditNode ? canEditNode(node.id) : true;
+  const isSuperAdminUser = typeof isSuperAdmin === "function" ? isSuperAdmin() : Boolean(isSuperAdmin);
+  // If the user already has a pending self-link request for this node (or an
+  // ancestor of it, meaning this node is within that pending branch), hide the
+  // "Request Branch Access" button — approving the link already grants that
+  // branch. `node.hierarchy` is the male-parent chain, matching how branch
+  // access is scoped. The button returns once the link request is rejected.
+  const pendingSelfLinkTargetId = myPendingSelfLinkRequest?.targetPersonId;
+  const isNodeInPendingLinkBranch = Boolean(
+    pendingSelfLinkTargetId &&
+      (node.id === pendingSelfLinkTargetId ||
+        (node.hierarchy || []).some((h) => h.id === pendingSelfLinkTargetId)),
+  );
+  // Whether a branch-access request already covers this node — either it targets
+  // this node directly or it targets an ancestor (so this node is within that
+  // pending branch). `node.hierarchy` is the male-parent chain, matching how
+  // branch access is scoped. The button stays visible but disabled with a tooltip.
+  const pendingBranchAccessTargetIds = new Set(
+    myPendingRequests
+      .filter((r) => r.requestType === "branch_access_request" && r.targetPersonId)
+      .map((r) => r.targetPersonId as string),
+  );
+  const hasPendingBranchAccessForNode =
+    pendingBranchAccessTargetIds.has(node.id) ||
+    (node.hierarchy || []).some((h) => pendingBranchAccessTargetIds.has(h.id));
+  // Superadmins already have full access, so they never need to request branch access.
+  // A user who already has (edit) access to this node or its descendants also
+  // never sees it, via `!canEditCurrentNode`.
+  const canRequestBranchAccess = Boolean(
+    currentUser &&
+      !isSuperAdminUser &&
+      !canEditCurrentNode &&
+      treeId &&
+      !isNodeInPendingLinkBranch,
+  );
+  // When the profile being claimed doesn't match the signed-in user's name, the
+  // self-link confirm dialog becomes a warning instead of a plain confirmation.
+  const selfLinkNameMismatch = !namesLooselyMatch(node.name, userProfile?.name);
   const summaryItems = [
     {
       key: "gender",
@@ -537,20 +1142,36 @@ export const NodeDetails = memo(function NodeDetails({
           icon: <BloodtypeOutlinedIcon sx={{ fontSize: 16 }} />,
         }
       : null,
+    // The short name, not the full address: these are chips in a row, and
+    // "Gangwa, Haryana, India" would push the others off the line.
+    node.birthPlaceName || node.birthPlaceAddress
+      ? {
+          key: "birthplace",
+          label: `Born in ${node.birthPlaceName || node.birthPlaceAddress}`,
+          icon: <PlaceOutlinedIcon sx={{ fontSize: 16 }} />,
+        }
+      : null,
   ].filter(Boolean) as Array<{ key: string; label: string; icon?: React.ReactNode }>;
 
   return (
     <>
-      <Dialog
+      {/*
+        A side panel rather than a centred dialog: on desktop the old `maxWidth="sm"`
+        dialog wasted the screen and forced every field into one long scrolling
+        column. A right-anchored drawer uses the width that's actually there, so
+        the edit form can lay out two fields per row and fit on one screen.
+        On phones it takes the full viewport, which is what the dialog's
+        `fullScreen` did before.
+      */}
+      <Drawer
+        anchor="right"
         open={!!node}
         onClose={closeHandler}
-        fullScreen={isMobile}
-        maxWidth="sm"
-        fullWidth
         PaperProps={{
           sx: {
-            height: isMobile ? "100%" : "auto",
-            maxHeight: isMobile ? "100%" : "90vh",
+            width: { xs: "100%", sm: 520, md: 720, lg: 840 },
+            maxWidth: "100vw",
+            height: "100%",
             display: "flex",
             flexDirection: "column",
           },
@@ -620,9 +1241,85 @@ export const NodeDetails = memo(function NodeDetails({
                       {node.name}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
-                      Family profile
+                      {node.nameHindi || "Family profile"}
                     </Typography>
                   </Box>
+
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    useFlexGap
+                    justifyContent="center"
+                  >
+                    {canEditCurrentNode && onInviteCollaborator && (
+                      <Tooltip title="Invite collaborator">
+                        <IconButton
+                          size="large"
+                          color="primary"
+                          onClick={() => onInviteCollaborator(node.id)}
+                          sx={{
+                            border: 1,
+                            borderColor: "divider",
+                            width: 48,
+                            height: 48,
+                          }}
+                        >
+                          <PersonAddAlt1OutlinedIcon />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Share">
+                      <IconButton
+                        size="large"
+                        color="primary"
+                        onClick={handleShareNode}
+                        sx={{
+                          border: 1,
+                          borderColor: "divider",
+                          width: 48,
+                          height: 48,
+                        }}
+                      >
+                        <ShareOutlinedIcon />
+                      </IconButton>
+                    </Tooltip>
+                    {isUnlinkedUser && (
+                      <Tooltip
+                        title={
+                          myPendingSelfLinkRequest
+                            ? myPendingSelfLinkRequest.targetPersonId === node.id
+                              ? "Your request to link this profile is pending owner approval."
+                              : "You already have a profile link request pending owner approval."
+                            : "This is me — request to link this profile to my account"
+                        }
+                      >
+                        {/* span wrapper lets the tooltip show while the button is disabled */}
+                        <span>
+                          <IconButton
+                            size="large"
+                            color="primary"
+                            onClick={handleSelfLinkClick}
+                            disabled={
+                              Boolean(myPendingSelfLinkRequest) ||
+                              selfLinkRequesting
+                            }
+                            sx={{
+                              border: 1,
+                              borderColor: "divider",
+                              width: 48,
+                              height: 48,
+                            }}
+                          >
+                            {myPendingSelfLinkRequest ? (
+                              <HourglassTopOutlinedIcon />
+                            ) : (
+                              <HowToRegOutlinedIcon />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                    )}
+                  </Stack>
                   <Stack
                     direction="row"
                     spacing={1}
@@ -640,23 +1337,6 @@ export const NodeDetails = memo(function NodeDetails({
                       />
                     ))}
                   </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {node.gender === Gender.male
-                      ? "Male"
-                      : node.gender === Gender.female
-                        ? "Female"
-                        : "Other"}
-                    {node.dob && ` • Born ${formatDisplayDate(node.dob)}`}
-                    {node.isAlive === false && ` • Deceased`}
-                    {node.isAlive === false &&
-                      node.deceasedDate &&
-                      ` (${formatDisplayDate(node.deceasedDate)})`}
-                  </Typography>
-                  {node.bloodGroup && (
-                    <Typography variant="body2" color="text.secondary">
-                      🩸 Blood Group: <strong>{node.bloodGroup}</strong>
-                    </Typography>
-                  )}
                   </Stack>
                 </Paper>
 
@@ -716,7 +1396,7 @@ export const NodeDetails = memo(function NodeDetails({
                             onClick={handleLinkExternalClick}
                             disabled={!canEditCurrentNode}
                           >
-                            Link & Replace
+                            Link Real Profile
                           </Button>
                         )}
                       {node.spouses && node.spouses.length > 0 && (
@@ -728,6 +1408,34 @@ export const NodeDetails = memo(function NodeDetails({
                           Edit Marriage Dates
                         </Button>
                       )}
+                      {canRequestBranchAccess && (
+                        <Tooltip
+                          title={
+                            hasPendingBranchAccessForNode
+                              ? "Your branch access request is pending owner approval."
+                              : ""
+                          }
+                        >
+                          {/* span wrapper lets the tooltip show while the button is disabled */}
+                          <span>
+                            <Button
+                              variant="outlined"
+                              color="secondary"
+                              startIcon={<LockOpenOutlinedIcon />}
+                              onClick={handleRequestBranchAccess}
+                              disabled={
+                                requestingAccess || hasPendingBranchAccessForNode
+                              }
+                            >
+                              {hasPendingBranchAccessForNode
+                                ? "Access Requested"
+                                : requestingAccess
+                                  ? "Requesting…"
+                                  : "Request Branch Access"}
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      )}
                     </Box>
                   </Stack>
                 </Paper>
@@ -737,6 +1445,16 @@ export const NodeDetails = memo(function NodeDetails({
                     Profile details
                   </Typography>
                   <Stack spacing={1.25}>
+                    {node.createdAt && (
+                      <Typography variant="body2">
+                        <strong>Created on:</strong> {formatDisplayDateTime(node.createdAt)}
+                      </Typography>
+                    )}
+                    {createdByLabel && (
+                      <Typography variant="body2">
+                        <strong>Created by:</strong> {createdByLabel}
+                      </Typography>
+                    )}
                     {node.dod && (
                       <Typography variant="body2">
                         <strong>Died:</strong> {node.dod}
@@ -789,15 +1507,233 @@ export const NodeDetails = memo(function NodeDetails({
                   </Stack>
                 </Paper>
 
-                {/* Ancestry */}
-                {node.hierarchy && node.hierarchy.length > 0 && (
-                  <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{ mb: 1, color: "primary.main" }}
-                    >
+                {(currentUser || businesses.length > 0 || professions.length > 0) && (
+                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                  {!currentUser ? (
+                    <Box sx={{ textAlign: "center", py: 1.5 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        Log in to see this person's business and profession.
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() =>
+                          openLoginModal(() => {
+                            void refreshBusinesses();
+                            void refreshProfessions();
+                          })
+                        }
+                      >
+                        Log in
+                      </Button>
+                    </Box>
+                  ) : (
+                    <Stack spacing={2.5}>
+                      {/* Businesses */}
+                      <Box>
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          sx={{ mb: businesses.length > 0 ? 1.5 : 0.5 }}
+                        >
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <BusinessOutlinedIcon fontSize="small" color="action" />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              Business
+                            </Typography>
+                          </Stack>
+                          {/* One business per person: once there is one, the
+                              control on each card below is Edit, not another
+                              Add. People who already have several keep them —
+                              nothing is hidden, only the Add is. */}
+                          {canEditCurrentNode && businesses.length === 0 && (
+                            <Tooltip title="Add business">
+                              <IconButton
+                                size="small"
+                                aria-label="Add business"
+                                onClick={() => {
+                                  setEditingBusiness(null);
+                                  setBusinessDialogOpen(true);
+                                }}
+                              >
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Stack>
+
+                        {businesses.length > 0 ? (
+                          <Stack spacing={1}>
+                            {businesses.map((biz) => (
+                              <Box
+                                key={biz.id}
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 1,
+                                  p: 1,
+                                  borderRadius: 2,
+                                  bgcolor: "action.hover",
+                                }}
+                              >
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                                    {biz.name}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {[businessCategoryLabel(biz.category), biz.contact]
+                                      .filter(Boolean)
+                                      .join(" • ")}
+                                  </Typography>
+                                </Box>
+                                {canEditCurrentNode && (
+                                  <IconButton
+                                    size="small"
+                                    aria-label="Edit business"
+                                    onClick={() => {
+                                      setEditingBusiness(biz);
+                                      setBusinessDialogOpen(true);
+                                    }}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                )}
+                              </Box>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No business added yet.
+                          </Typography>
+                        )}
+                      </Box>
+
+                      <Divider />
+
+                      {/* Profession: one career profile per person, so the
+                          control is "edit the one you have", not "add another".
+                          Legacy profession tags still render underneath until
+                          they have been migrated into a profile. */}
+                      <Box>
+                        <Stack
+                          direction="row"
+                          alignItems="center"
+                          justifyContent="space-between"
+                          sx={{ mb: 1.5 }}
+                        >
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <WorkOutlineOutlinedIcon fontSize="small" color="action" />
+                            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                              Profession
+                            </Typography>
+                          </Stack>
+                          {canEditProfessionProfile(node?.id) && (
+                            <Tooltip
+                              title={professionProfile ? "Edit profession" : "Add profession"}
+                            >
+                              <IconButton
+                                size="small"
+                                aria-label={
+                                  professionProfile ? "Edit profession" : "Add profession"
+                                }
+                                onClick={() => setProfessionDialogOpen(true)}
+                              >
+                                {professionProfile ? (
+                                  <EditIcon fontSize="small" />
+                                ) : (
+                                  <AddIcon fontSize="small" />
+                                )}
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Stack>
+
+                        {professionProfile ? (
+                          <Box
+                            sx={{
+                              p: 1.25,
+                              borderRadius: 2,
+                              bgcolor: "action.hover",
+                              minWidth: 0,
+                            }}
+                          >
+                            <Typography variant="body2" sx={{ fontWeight: 700 }} noWrap>
+                              {professionProfile.title}
+                            </Typography>
+                            {(professionProfile.organization ||
+                              professionProfile.sector) && (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {[professionProfile.organization, professionProfile.sector]
+                                  .filter(Boolean)
+                                  .join(" • ")}
+                              </Typography>
+                            )}
+                            {Number(professionProfile.totalExperienceYears) > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                {Number(professionProfile.totalExperienceYears)} years'
+                                experience
+                              </Typography>
+                            )}
+                          </Box>
+                        ) : professions.length > 0 ? (
+                          <Stack spacing={1}>
+                            {professions.map((prof) => (
+                              <Box
+                                key={prof.id}
+                                sx={{
+                                  p: 1,
+                                  borderRadius: 2,
+                                  bgcolor: "action.hover",
+                                  minWidth: 0,
+                                }}
+                              >
+                                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                                  {prof.name}
+                                </Typography>
+                                {(prof.category || prof.description) && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {[prof.category, prof.description]
+                                      .filter(Boolean)
+                                      .join(" • ")}
+                                  </Typography>
+                                )}
+                              </Box>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            No profession added yet.
+                          </Typography>
+                        )}
+
+                        <Button
+                          component={RouterLink}
+                          to={`/profession/${node.id}`}
+                          size="small"
+                          endIcon={<ChevronRightIcon fontSize="small" />}
+                          sx={{ mt: 1, px: 0 }}
+                        >
+                          View career profile
+                        </Button>
+                      </Box>
+                    </Stack>
+                  )}
+                </Paper>
+                )}
+
+                <Accordion defaultExpanded={true} sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    aria-controls="ancestry-content"
+                    id="ancestry-header"
+                  >
+                    <Typography>
                       Ancestry
                     </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
                     <Box sx={{ pl: 1.5, borderLeft: 2, borderColor: "divider" }}>
                       {node.hierarchy.map((ancestor, i) => (
                         <Typography
@@ -810,8 +1746,8 @@ export const NodeDetails = memo(function NodeDetails({
                         </Typography>
                       ))}
                     </Box>
-                  </Paper>
-                )}
+                  </AccordionDetails>
+                </Accordion>
 
                 <Typography variant="subtitle2" color="text.secondary" sx={{ px: 0.5 }}>
                   Family connections
@@ -857,9 +1793,10 @@ export const NodeDetails = memo(function NodeDetails({
                   <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
                     Identity
                   </Typography>
-                  <Stack spacing={2}>
+                  <Box sx={fieldGridSx}>
                     <Box
                       sx={{
+                        ...spanBothColumnsSx,
                         p: { xs: 1.5, sm: 2 },
                         borderRadius: 3,
                         textAlign: "center",
@@ -883,12 +1820,13 @@ export const NodeDetails = memo(function NodeDetails({
                                 setEditedPhotoPreview(url);
                               } catch (err) {
                                 console.error("Photo upload failed:", err);
-                                alert(
+                                showSnackbar(
                                   `Failed to upload photo: ${
                                     err instanceof Error
                                       ? err.message
                                       : String(err)
                                   }`,
+                                  "error",
                                 );
                               } finally {
                                 setPhotoUploading(false);
@@ -907,7 +1845,7 @@ export const NodeDetails = memo(function NodeDetails({
                               }
                             }}
                             uploading={photoUploading}
-                            previewSize={112}
+                            previewSize={isMobile ? 112 : 160}
                           />
                         </Suspense>
                         <Box>
@@ -921,119 +1859,322 @@ export const NodeDetails = memo(function NodeDetails({
                       </Stack>
                     </Box>
 
-                    <TextField
-                      label="Name"
-                      value={editedName}
-                      onChange={(e) => setEditedName(e.target.value)}
-                      fullWidth
-                      required
-                    />
-                    <HindiNameInput
-                      sourceText={editedName}
-                      value={editedNameHindi}
-                      onChange={setEditedNameHindi}
-                    />
+	                    <TextField
+	                      label="Name"
+	                      value={editedName}
+	                      onChange={(e) => setEditedName(e.target.value)}
+	                      fullWidth
+	                      required
+	                      sx={inputWithIconSx}
+	                      InputProps={{
+	                        startAdornment: adornment(
+	                          <PersonOutlineOutlinedIcon fontSize="small" />,
+	                        ),
+	                      }}
+	                    />
+	                    <HindiNameInput
+	                      sourceText={editedName}
+	                      value={editedNameHindi}
+	                      onChange={setEditedNameHindi}
+	                    />
                     <Suspense fallback={<TextField fullWidth label="Date of Birth" />}>
                       <DatePicker
-                        label="Date of Birth"
-                        value={editedDob}
-                        onChange={(value) => setEditedDob(value)}
-                        slotProps={{ textField: { fullWidth: true } }}
-                        format="DD/MM/YYYY"
-                      />
+	                        label="Date of Birth"
+	                        value={editedDob}
+	                        onChange={(value) => setEditedDob(value)}
+	                        slotProps={{
+	                          field: { clearable: true },
+	                          textField: {
+	                            fullWidth: true,
+	                            sx: inputWithIconSx,
+	                            InputProps: {
+	                              startAdornment: adornment(<CakeOutlinedIcon fontSize="small" />),
+	                            },
+	                          },
+	                        }}
+	                        format="DD/MM/YYYY"
+	                      />
                     </Suspense>
-                    <FormControl sx={{ m: 0 }}>
-                      <FormLabel sx={{ mb: 0.5 }}>Gender</FormLabel>
-                      <RadioGroup
-                        row
-                        sx={{ gap: 1.5 }}
-                        value={editedGender}
-                        onChange={(e) => setEditedGender(e.target.value as Gender)}
-                      >
-                        <FormControlLabel
-                          value={Gender.male}
-                          control={<Radio />}
-                          label="Male"
-                        />
-                        <FormControlLabel
-                          value={Gender.female}
-                          control={<Radio />}
-                          label="Female"
-                        />
-                        <FormControlLabel
-                          value={"other" as Gender}
-                          control={<Radio />}
-                          label="Other"
-                        />
-                      </RadioGroup>
-                    </FormControl>
-                  </Stack>
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                        Gender
+                      </Typography>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        {GENDER_OPTIONS.map((option) => (
+                          <Chip
+                            key={String(option.value)}
+                            icon={option.icon}
+                            label={option.label}
+                            clickable
+                            color={editedGender === option.value ? "primary" : "default"}
+                            variant={editedGender === option.value ? "filled" : "outlined"}
+                            onClick={() => setEditedGender(option.value)}
+                            sx={{ height: 36, px: 0.75 }}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                  </Box>
                 </Paper>
 
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                   <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
                     Life details
                   </Typography>
-                  <Stack spacing={2}>
-                <FormControl fullWidth>
-                  <InputLabel>Blood Group</InputLabel>
-                  <Select
-                    value={editedBloodGroup}
-                    onChange={(e) => setEditedBloodGroup(e.target.value)}
-                    label="Blood Group"
-                  >
-                    <MenuItem value="">Unknown</MenuItem>
-                    <MenuItem value="A+">A+</MenuItem>
-                    <MenuItem value="A-">A−</MenuItem>
-                    <MenuItem value="B+">B+</MenuItem>
-                    <MenuItem value="B-">B−</MenuItem>
-                    <MenuItem value="AB+">AB+</MenuItem>
-                    <MenuItem value="AB-">AB−</MenuItem>
-                    <MenuItem value="O+">O+</MenuItem>
-                    <MenuItem value="O-">O−</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControlLabel
-                  sx={{ m: 0 }}
-                  control={
-                    <Switch
-                      checked={editedIsAlive}
-                      onChange={(e) => {
-                        setEditedIsAlive(e.target.checked);
-                        if (e.target.checked) setEditedDeceasedDate(null);
-                      }}
+                  <Box sx={fieldGridSx}>
+                {/* Blood group is a wide chip row, so it takes the full width
+                    and lets the switch and deceased date pair up below it. */}
+                <Box sx={spanBothColumnsSx}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    Blood Group
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Chip
+                      label="Unknown"
+                      clickable
+                      color={!editedBloodGroup ? "primary" : "default"}
+                      variant={!editedBloodGroup ? "filled" : "outlined"}
+                      onClick={() => setEditedBloodGroup("")}
                     />
-                  }
-                  label="Is Alive"
-                />
+                    {BLOOD_GROUP_OPTIONS.map((option) => (
+                      <Chip
+                        key={option}
+                        label={option}
+                        clickable
+                        color={editedBloodGroup === option ? "primary" : "default"}
+                        variant={editedBloodGroup === option ? "filled" : "outlined"}
+                        onClick={() => setEditedBloodGroup(option)}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+
+                {/* Recorded per person: people in one tree are often born in
+                    different places, so this can't be inferred from the tree's
+                    own village. */}
+                <Box sx={spanBothColumnsSx}>
+                  <PlacePicker
+                    value={editedPlace}
+                    onChange={setEditedPlace}
+                    label="Birth place"
+                    placeholder="Search for a city, town, or village"
+                    sx={inputWithIconSx}
+                  />
+                </Box>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Typography
+                    variant="body2"
+                    color={editedIsAlive ? "text.secondary" : "text.primary"}
+                    sx={{ fontWeight: editedIsAlive ? 500 : 800 }}
+                  >
+                    Dead
+                  </Typography>
+                  <Switch
+                    checked={editedIsAlive}
+                    onChange={(e) => {
+                      setEditedIsAlive(e.target.checked);
+                      if (e.target.checked) setEditedDeceasedDate(null);
+                    }}
+                  />
+                  <Typography
+                    variant="body2"
+                    color={editedIsAlive ? "text.primary" : "text.secondary"}
+                    sx={{ fontWeight: editedIsAlive ? 800 : 500 }}
+                  >
+                    Alive
+                  </Typography>
+                </Stack>
                 {!editedIsAlive && (
                   <Suspense
                     fallback={<TextField fullWidth label="Deceased Date" />}
                   >
                     <DatePicker
-                      label="Deceased Date"
-                      value={editedDeceasedDate}
-                      onChange={(value) => setEditedDeceasedDate(value)}
-                      slotProps={{ textField: { fullWidth: true } }}
-                      format="DD/MM/YYYY"
-                    />
+	                      label="Deceased Date"
+	                      value={editedDeceasedDate}
+	                      onChange={(value) => setEditedDeceasedDate(value)}
+	                      slotProps={{
+	                        field: { clearable: true },
+	                        textField: {
+	                          fullWidth: true,
+	                          sx: inputWithIconSx,
+	                          InputProps: {
+	                            startAdornment: adornment(<CakeOutlinedIcon fontSize="small" />),
+	                          },
+	                        },
+	                      }}
+	                      format="DD/MM/YYYY"
+	                    />
                   </Suspense>
                 )}
-                  </Stack>
+                  </Box>
                 </Paper>
-                <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700 }}>
-                    Additional details
-                  </Typography>
-                  <AdditionalDetails
-                    value={editedCustomFields}
-                    onChange={setEditedCustomFields}
-                    showUpfrontFields={false}
-                  />
-                </Paper>
+                {anchorParent && (
+                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                    <Stack spacing={1.5}>
+                      <Box>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Other parent
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Co-parent with {anchorParent.name || "this parent"}.
+                        </Typography>
+                      </Box>
+
+                      {otherParentOptions.length > 0 && (
+                        <FormControl fullWidth size="small">
+                          <InputLabel id="other-parent-select-label">
+                            Other parent
+                          </InputLabel>
+                          <Select
+                            labelId="other-parent-select-label"
+                            label="Other parent"
+                            value={
+                              editOtherParentMode === "existing"
+                                ? editSelectedOtherParentId
+                                : ""
+                            }
+                            onChange={(e) => {
+                              setEditOtherParentMode("existing");
+                              setEditSelectedOtherParentId(
+                                e.target.value as string,
+                              );
+                            }}
+                          >
+                            {otherParentOptions.map((opt) => (
+                              <MenuItem key={opt.id} value={opt.id}>
+                                {opt.name || "Unnamed"}
+                                {opt.gender ? ` (${opt.gender})` : ""}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )}
+
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Chip
+                          label="Add new other parent"
+                          clickable
+                          color={
+                            editOtherParentMode === "new" ? "primary" : "default"
+                          }
+                          variant={
+                            editOtherParentMode === "new" ? "filled" : "outlined"
+                          }
+                          onClick={() => setEditOtherParentMode("new")}
+                        />
+                        <Chip
+                          label="No other parent"
+                          clickable
+                          color={
+                            editOtherParentMode === "unknown"
+                              ? "primary"
+                              : "default"
+                          }
+                          variant={
+                            editOtherParentMode === "unknown"
+                              ? "filled"
+                              : "outlined"
+                          }
+                          onClick={() => {
+                            setEditOtherParentMode("unknown");
+                            setEditSelectedOtherParentId("");
+                          }}
+                        />
+                      </Stack>
+
+                      {editOtherParentMode === "new" && (
+                        <Box sx={fieldGridSx}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Name"
+                            value={editNewOtherParentName}
+                            onChange={(e) =>
+                              setEditNewOtherParentName(e.target.value)
+                            }
+                          />
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Name (Hindi)"
+                            value={editNewOtherParentNameHindi}
+                            onChange={(e) =>
+                              setEditNewOtherParentNameHindi(e.target.value)
+                            }
+                          />
+                          <FormControl fullWidth size="small">
+                            <InputLabel id="new-other-parent-gender-label">
+                              Gender
+                            </InputLabel>
+                            <Select
+                              labelId="new-other-parent-gender-label"
+                              label="Gender"
+                              value={editNewOtherParentGender}
+                              onChange={(e) =>
+                                setEditNewOtherParentGender(
+                                  e.target.value as
+                                    | "male"
+                                    | "female"
+                                    | "other"
+                                    | "",
+                                )
+                              }
+                            >
+                              <MenuItem value="">
+                                Auto (
+                                {anchorParent.gender === Gender.male
+                                  ? "female"
+                                  : "male"}
+                                )
+                              </MenuItem>
+                              <MenuItem value="male">Male</MenuItem>
+                              <MenuItem value="female">Female</MenuItem>
+                              <MenuItem value="other">Other</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <Suspense
+                            fallback={
+                              <TextField
+                                fullWidth
+                                size="small"
+                                label="Date of birth"
+                              />
+                            }
+                          >
+                            <DatePicker
+                              label="Date of birth"
+                              value={editNewOtherParentDob}
+                              onChange={(value) =>
+                                setEditNewOtherParentDob(value)
+                              }
+                              slotProps={{
+                                textField: { fullWidth: true, size: "small" },
+                              }}
+                              format="DD/MM/YYYY"
+                            />
+                          </Suspense>
+                        </Box>
+                      )}
+                    </Stack>
+                  </Paper>
+                )}
+                <Accordion defaultExpanded variant="outlined" sx={{ borderRadius: 3, "&:before": { display: "none" } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      Additional details
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <AdditionalDetails
+                      value={editedCustomFields}
+                      onChange={setEditedCustomFields}
+                      showUpfrontFields={false}
+                    />
+                  </AccordionDetails>
+                </Accordion>
               </Stack>
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={drawerActionsSx}>
               <Button onClick={() => setView("details")}>Cancel</Button>
               <Button
                 onClick={handleSaveEdit}
@@ -1097,7 +2238,7 @@ export const NodeDetails = memo(function NodeDetails({
           <>
             <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                Link {node.name} to External Tree
+                Link {node.name} to a Real Profile
               </Typography>
               <IconButton onClick={closeHandler} size="small">
                 <CloseIcon />
@@ -1110,33 +2251,48 @@ export const NodeDetails = memo(function NodeDetails({
                 child reassignment automatically.
               </Typography>
 
-              <FormControl fullWidth margin="normal">
-                <InputLabel>Village</InputLabel>
-                <Select
-                  value={linkExternalVillageId}
-                  onChange={(e) => setLinkExternalVillageId(e.target.value)}
-                  label="Village"
-                >
-                  {villages.map((v) => (
-                    <MenuItem key={v.id} value={v.id}>
-                      {v.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Box sx={{ my: 2 }}>
+                <LocationPicker
+                  value={linkExternalLocationOption}
+                  onChange={(option) => {
+                    setLinkExternalLocationOption(option);
+                    setLinkExternalLocationId(option?.locationId || "");
+                  }}
+                  label="Location"
+                />
+              </Box>
 
               <PersonSearchField
                 searchValue={externalSearchValue}
                 onSearchValueChange={setExternalSearchValue}
-                onPersonSelect={(p) => setSelectedExternalPerson(p)}
+                onPersonSelect={handleSelectExternalPerson}
                 selectedPerson={selectedExternalPerson}
-                villageId={linkExternalVillageId}
-                disabled={!linkExternalVillageId}
-                placeholder="Search for waiting spouse..."
+                locationId={linkExternalLocationId}
+                // This is the cross-tree marriage lookup, so it deliberately
+                // reaches beyond the trees this user can see — via the narrow
+                // candidate endpoint rather than the general people search.
+                marriageCandidates
+                excludeTreeId={node.treeId}
+                filterGender={node.gender}
+                disabled={!linkExternalLocationId}
+                placeholder={`Start typing a ${
+                  node.gender === Gender.female
+                    ? "woman"
+                    : node.gender === Gender.male
+                      ? "man"
+                      : "person"
+                }'s name`}
                 label="Select Real Person"
+                startIcon={<PersonOutlineOutlinedIcon fontSize="small" />}
               />
+              {node.gender && (
+                <Typography variant="caption" sx={{ display: "block", mb: 1, color: brand.slateMuted }}>
+                  Only {node.gender === Gender.female ? "female" : node.gender === Gender.male ? "male" : node.gender}{" "}
+                  profiles are shown, matching the placeholder being replaced.
+                </Typography>
+              )}
 
-              <FormControl fullWidth sx={{ mt: 2 }}>
+              <FormControl fullWidth sx={{ ...inputWithIconSx, mt: 2 }}>
                 <InputLabel>Relation Type</InputLabel>
                 <Select
                   value={linkExternalRelationSubtype}
@@ -1148,47 +2304,248 @@ export const NodeDetails = memo(function NodeDetails({
                     }
                   }}
                   label="Relation Type"
+                  startAdornment={adornment(<FavoriteBorderOutlinedIcon fontSize="small" />)}
                 >
-                  <MenuItem value={RelType.married}>married</MenuItem>
-                  <MenuItem value={RelType.divorced}>divorced</MenuItem>
+                  <MenuItem value={RelType.married}>
+                    {titleCaseRelationType(RelType.married)}
+                  </MenuItem>
+                  <MenuItem value={RelType.divorced}>
+                    {titleCaseRelationType(RelType.divorced)}
+                  </MenuItem>
                 </Select>
               </FormControl>
 
               <Suspense fallback={<TextField fullWidth label="Marriage Start Date" sx={{ mt: 2 }} />}>
                 <DatePicker
-                  label="Marriage Start Date (optional)"
-                  value={linkExternalStartDate}
-                  onChange={(value) => setLinkExternalStartDate(value)}
-                  slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
-                  format="DD/MM/YYYY"
-                />
+	                  label="Marriage Start Date (optional)"
+	                  value={linkExternalStartDate}
+	                  onChange={(value) => setLinkExternalStartDate(value)}
+	                  slotProps={{
+	                    textField: {
+	                      fullWidth: true,
+	                      sx: { ...inputWithIconSx, mt: 2 },
+	                      InputProps: {
+	                        startAdornment: adornment(
+	                          <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                        ),
+	                      },
+	                    },
+	                  }}
+	                  format="DD/MM/YYYY"
+	                />
               </Suspense>
 
               {linkExternalRelationSubtype === RelType.divorced && (
                 <Suspense fallback={<TextField fullWidth label="Marriage End Date" sx={{ mt: 2 }} />}>
                   <DatePicker
-                    label="Marriage End Date (optional)"
-                    value={linkExternalEndDate}
-                    onChange={(value) => setLinkExternalEndDate(value)}
-                    slotProps={{ textField: { fullWidth: true, sx: { mt: 2 } } }}
-                    format="DD/MM/YYYY"
-                  />
+	                    label="Marriage End Date (optional)"
+	                    value={linkExternalEndDate}
+	                    onChange={(value) => setLinkExternalEndDate(value)}
+	                    slotProps={{
+	                      textField: {
+	                        fullWidth: true,
+	                        sx: { ...inputWithIconSx, mt: 2 },
+	                        InputProps: {
+	                          startAdornment: adornment(
+	                            <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                          ),
+	                        },
+	                      },
+	                    }}
+	                    format="DD/MM/YYYY"
+	                  />
                 </Suspense>
               )}
+
+              {selectedExternalPerson && (
+                <Box
+                  sx={{
+                    mt: 2.5,
+                    p: 1.75,
+                    borderRadius: 2,
+                    border: `1px solid ${brand.border}`,
+                    bgcolor: brand.canvas,
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ mb: 1, color: brand.slate }}>
+                    Review this change
+                  </Typography>
+                  {loadingExternalDetails ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <CircularProgress size={16} />
+                      <Typography variant="body2" color="textSecondary">
+                        Loading profile…
+                      </Typography>
+                    </Stack>
+                  ) : (
+                    <Typography variant="body2" sx={{ color: brand.slate }}>
+                      Replacing placeholder <strong>{node.name}</strong> with{" "}
+                      <strong>{selectedExternalPerson.name}</strong>
+                      {selectedExternalPerson?.locationName
+                        ? ` from ${selectedExternalPerson.locationName}`
+                        : ""}
+                      . This deletes <strong>{node.name}</strong>, connects{" "}
+                      {selectedExternalPerson.name} as spouse
+                      {node.children && node.children.length > 0
+                        ? `, and moves ${node.children.length} child${
+                            node.children.length === 1 ? "" : "ren"
+                          } to them`
+                        : ""}
+                      .
+                    </Typography>
+                  )}
+
+                  {!loadingExternalDetails &&
+                    externalPersonDetails?.spouses &&
+                    externalPersonDetails.spouses.length > 0 && (
+                      <Box sx={{ mt: 1.5 }}>
+                        <Alert severity="warning" sx={{ mb: 1 }}>
+                          {selectedExternalPerson.name} already has a spouse in the
+                          other tree:{" "}
+                          <strong>
+                            {externalPersonDetails.spouses
+                              .map((s: any) => s.name)
+                              .filter(Boolean)
+                              .join(", ")}
+                          </strong>
+                          . How should we handle this?
+                        </Alert>
+                        <FormControl>
+                          <RadioGroup
+                            value={linkMode}
+                            onChange={(e) => {
+                              setLinkMode(e.target.value as "new" | "merge");
+                              setMergeSpouseId("");
+                            }}
+                          >
+                            <FormControlLabel
+                              value="new"
+                              control={<Radio size="small" />}
+                              label={`Separate marriage — add ${selectedExternalPerson.name} as an additional spouse of ${anchorSpouseName}`}
+                            />
+                            <FormControlLabel
+                              value="merge"
+                              control={<Radio size="small" />}
+                              label={`Same person — one of these is actually ${anchorSpouseName}; merge them`}
+                            />
+                          </RadioGroup>
+                        </FormControl>
+
+                        {linkMode === "merge" && (
+                          <FormControl sx={{ mt: 1, ml: 3.5 }}>
+                            <FormLabel sx={{ fontSize: 13 }}>
+                              Which one is {anchorSpouseName}?
+                            </FormLabel>
+                            <RadioGroup
+                              value={mergeSpouseId}
+                              onChange={(e) => setMergeSpouseId(e.target.value)}
+                            >
+                              {externalPersonDetails.spouses.map((s: any) => (
+                                <FormControlLabel
+                                  key={s.id}
+                                  value={s.id}
+                                  control={<Radio size="small" />}
+                                  label={`${s.name || "Unnamed"}${
+                                    s.gender ? ` (${s.gender})` : ""
+                                  }`}
+                                />
+                              ))}
+                            </RadioGroup>
+                            <Typography variant="caption" sx={{ color: "warning.main", mt: 0.5 }}>
+                              Merging removes the selected person from the other
+                              tree and moves their children/parents onto{" "}
+                              {anchorSpouseName}.
+                            </Typography>
+                          </FormControl>
+                        )}
+                      </Box>
+                    )}
+                </Box>
+              )}
             </DialogContent>
-            <DialogActions>
+            <DialogActions sx={drawerActionsSx}>
               <Button onClick={() => setView("details")}>Cancel</Button>
               <Button
                 onClick={handleConfirmLinkExternal}
-                disabled={!selectedExternalPerson}
+                disabled={
+                  !selectedExternalPerson ||
+                  linkExternalSubmitting ||
+                  loadingExternalDetails ||
+                  (externalPersonDetails?.spouses?.length > 0 &&
+                    (linkMode === "" ||
+                      (linkMode === "merge" && !mergeSpouseId)))
+                }
                 variant="contained"
                 color="primary"
               >
-                Link & Replace
+                {linkExternalSubmitting ? "Submitting..." : "Link Real Profile"}
               </Button>
             </DialogActions>
           </>
         )}
+      </Drawer>
+
+      <Dialog
+        open={linkExternalConfirmOpen}
+        onClose={() =>
+          !linkExternalSubmitting && setLinkExternalConfirmOpen(false)
+        }
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Confirm link</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">
+            This will delete the placeholder{" "}
+            <strong>{node?.name}</strong> and replace it with{" "}
+            <strong>{selectedExternalPerson?.name}</strong> from the other tree
+            {node?.children && node.children.length > 0
+              ? `, transferring ${node.children.length} child${
+                  node.children.length === 1 ? "" : "ren"
+                }`
+              : ""}
+            . This can’t be undone.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, color: brand.slateMuted }}>
+            {anchorSpouseName} and {selectedExternalPerson?.name}’s shared children
+            (and their father’s-line descendants) will be moved into{" "}
+            {anchorSpouseName}’s tree. Children from any other marriage stay where
+            they are.
+          </Typography>
+          {externalPersonDetails?.spouses?.length > 0 && linkMode === "merge" && (
+            <Alert severity="warning" sx={{ mt: 1.5 }}>
+              <strong>
+                {externalPersonDetails.spouses.find((s: any) => s.id === mergeSpouseId)
+                  ?.name || "The selected spouse"}
+              </strong>{" "}
+              will be merged into <strong>{anchorSpouseName}</strong> and removed
+              from the other tree — their children and parents move to{" "}
+              {anchorSpouseName}, and any other marriages they have are removed.
+            </Alert>
+          )}
+          {externalPersonDetails?.spouses?.length > 0 && linkMode === "new" && (
+            <Alert severity="info" sx={{ mt: 1.5 }}>
+              {selectedExternalPerson?.name} will be recorded as an additional
+              spouse of {anchorSpouseName} (their existing marriage is kept).
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setLinkExternalConfirmOpen(false)}
+            disabled={linkExternalSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={performLinkExternal}
+            disabled={linkExternalSubmitting}
+            variant="contained"
+            color="error"
+          >
+            {linkExternalSubmitting ? "Replacing..." : "Replace"}
+          </Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog
@@ -1206,12 +2563,13 @@ export const NodeDetails = memo(function NodeDetails({
           </IconButton>
         </DialogTitle>
         <DialogContent dividers>
-          <FormControl fullWidth sx={{ mb: 2 }}>
+          <FormControl fullWidth sx={{ ...inputWithIconSx, mb: 2 }}>
             <InputLabel>Spouse</InputLabel>
             <Select
               value={editSpouseId}
               onChange={(e) => handleChangeEditSpouse(e.target.value)}
               label="Spouse"
+              startAdornment={adornment(<PersonOutlineOutlinedIcon fontSize="small" />)}
             >
               {(node?.spouses || []).map((rel: any) => {
                 const spouseNode = nodes.find((n) => n.id === rel.id);
@@ -1224,7 +2582,7 @@ export const NodeDetails = memo(function NodeDetails({
             </Select>
           </FormControl>
 
-          <FormControl fullWidth sx={{ mb: 2 }}>
+          <FormControl fullWidth sx={{ ...inputWithIconSx, mb: 2 }}>
             <InputLabel>Relation Type</InputLabel>
             <Select
               value={editSpouseRelationSubtype}
@@ -1236,31 +2594,56 @@ export const NodeDetails = memo(function NodeDetails({
                 }
               }}
               label="Relation Type"
+              startAdornment={adornment(<FavoriteBorderOutlinedIcon fontSize="small" />)}
             >
-              <MenuItem value={RelType.married}>married</MenuItem>
-              <MenuItem value={RelType.divorced}>divorced</MenuItem>
+              <MenuItem value={RelType.married}>
+                {titleCaseRelationType(RelType.married)}
+              </MenuItem>
+              <MenuItem value={RelType.divorced}>
+                {titleCaseRelationType(RelType.divorced)}
+              </MenuItem>
             </Select>
           </FormControl>
 
           <Suspense fallback={<TextField fullWidth label="Marriage Start Date" />}>
             <DatePicker
-              label="Marriage Start Date (optional)"
-              value={editSpouseStartDate}
-              onChange={(value) => setEditSpouseStartDate(value)}
-              slotProps={{ textField: { fullWidth: true, sx: { mb: 2 } } }}
-              format="DD/MM/YYYY"
-            />
+	              label="Marriage Start Date (optional)"
+	              value={editSpouseStartDate}
+	              onChange={(value) => setEditSpouseStartDate(value)}
+	              slotProps={{
+	                textField: {
+	                  fullWidth: true,
+	                  sx: { ...inputWithIconSx, mb: 2 },
+	                  InputProps: {
+	                    startAdornment: adornment(
+	                      <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                    ),
+	                  },
+	                },
+	              }}
+	              format="DD/MM/YYYY"
+	            />
           </Suspense>
 
           {editSpouseRelationSubtype === RelType.divorced && (
             <Suspense fallback={<TextField fullWidth label="Marriage End Date" />}>
               <DatePicker
-                label="Marriage End Date (optional)"
-                value={editSpouseEndDate}
-                onChange={(value) => setEditSpouseEndDate(value)}
-                slotProps={{ textField: { fullWidth: true } }}
-                format="DD/MM/YYYY"
-              />
+	                label="Marriage End Date (optional)"
+	                value={editSpouseEndDate}
+	                onChange={(value) => setEditSpouseEndDate(value)}
+	                slotProps={{
+	                  textField: {
+	                    fullWidth: true,
+	                    sx: inputWithIconSx,
+	                    InputProps: {
+	                      startAdornment: adornment(
+	                        <FavoriteBorderOutlinedIcon fontSize="small" />,
+	                      ),
+	                    },
+	                  },
+	                }}
+	                format="DD/MM/YYYY"
+	              />
             </Suspense>
           )}
         </DialogContent>
@@ -1321,11 +2704,26 @@ export const NodeDetails = memo(function NodeDetails({
                 : "Hierarchy: (Root Node)"}
             </Typography>
           </Box>
-          <Typography>Are you sure you want to delete this person?</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            This action cannot be undone. All relationships to this person will
-            be removed.
-          </Typography>
+          {(node.children?.length || 0) > 0 ? (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              {node.name || "This person"} has{" "}
+              <strong>
+                {node.children!.length} child
+                {node.children!.length === 1 ? "" : "ren"}
+              </strong>{" "}
+              and can’t be deleted. Only people with no children can be removed —
+              remove or reattach the {node.children!.length === 1 ? "child" : "children"} first.
+            </Alert>
+          ) : (
+            <>
+              <Typography>Are you sure you want to delete this person?</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                This action cannot be undone. All relationships, custom details,
+                business/profession links, and account linking for this person
+                will be removed.
+              </Typography>
+            </>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
@@ -1333,11 +2731,132 @@ export const NodeDetails = memo(function NodeDetails({
             onClick={handleConfirmDelete}
             color="error"
             variant="contained"
+            disabled={(node.children?.length || 0) > 0}
           >
             Delete
           </Button>
         </DialogActions>
       </Dialog>
+
+      {node && (
+        <Dialog
+          open={selfLinkConfirmOpen}
+          onClose={() => !selfLinkRequesting && setSelfLinkConfirmOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            {selfLinkNameMismatch && (
+              <WarningAmberRoundedIcon fontSize="small" color="warning" />
+            )}
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{ flexGrow: 1, color: selfLinkNameMismatch ? "warning.main" : undefined }}
+            >
+              {selfLinkNameMismatch ? "Name doesn't match" : "Link this profile?"}
+            </Typography>
+            <IconButton
+              onClick={() => setSelfLinkConfirmOpen(false)}
+              size="small"
+              disabled={selfLinkRequesting}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 1, mb: 2 }}>
+              <Typography variant="h6" color="text.primary">
+                {node.name}
+              </Typography>
+            </Box>
+            {selfLinkNameMismatch && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <strong>{node.name}</strong> doesn't match your name
+                {userProfile?.name ? (
+                  <>
+                    {" "}
+                    (<strong>{userProfile.name}</strong>)
+                  </>
+                ) : null}
+                .
+              </Alert>
+            )}
+            <Typography>Are you sure this is you?</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              We'll send a request to the tree owner to link your account to this
+              profile. You'll be able to manage your branch once it's approved.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setSelfLinkConfirmOpen(false)}
+              disabled={selfLinkRequesting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmSelfLink}
+              variant="contained"
+              color={selfLinkNameMismatch ? "warning" : "primary"}
+              disabled={selfLinkRequesting}
+              startIcon={
+                selfLinkRequesting ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : undefined
+              }
+            >
+              {selfLinkRequesting
+                ? "Sending…"
+                : selfLinkNameMismatch
+                  ? "Yes, link anyway"
+                  : "Yes, this is me"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {node && (
+        <BusinessFormDialog
+          open={businessDialogOpen}
+          onClose={() => setBusinessDialogOpen(false)}
+          business={editingBusiness}
+          personId={node.id}
+          ownerName={node.name}
+          defaultContact={phoneFromCustomFields(displayCustomFields)}
+          onSaved={() => void refreshBusinesses()}
+        />
+      )}
+
+      {node && (
+        <ProfessionFormDialog
+          open={professionDialogOpen}
+          onClose={() => setProfessionDialogOpen(false)}
+          peopleId={node.id}
+          ownerName={node.name}
+          profile={professionProfile}
+          onSaved={() => {
+            setProfessionDialogOpen(false);
+            void refreshProfessions();
+          }}
+        />
+      )}
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={5000}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 });

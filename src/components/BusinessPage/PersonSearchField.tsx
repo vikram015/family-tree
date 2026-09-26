@@ -1,7 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, TextField, Button, Paper, Typography, Stack, Avatar } from "@mui/material";
+import {
+  Box,
+  TextField,
+  Paper,
+  Typography,
+  Stack,
+  Avatar,
+  IconButton,
+  InputAdornment,
+} from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
+import CloseIcon from "@mui/icons-material/Close";
 import { ApiService } from "../../services/apiService";
+import { brand } from "../../theme/brand";
 
 interface PersonSearchResult {
   id: string;
@@ -13,7 +24,7 @@ interface PersonSearchResult {
   treeName?: string;
   hierarchy: any[];
   gotra?: string;
-  villageName?: string;
+  locationName?: string;
   casteName?: string;
   subCasteName?: string;
 }
@@ -33,10 +44,10 @@ function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber"
 
   const styles =
     accent === "teal"
-      ? { bg: "#ecfeff", color: "#0f766e" }
+      ? { bg: brand.primarySoft, color: brand.primary }
       : accent === "amber"
-        ? { bg: "#fff7ed", color: "#b45309" }
-        : { bg: "#f1f5f9", color: "#475569" };
+        ? { bg: brand.accentSoft, color: brand.accent }
+        : { bg: brand.canvas, color: brand.slate };
 
   return (
     <Box
@@ -58,20 +69,44 @@ function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber"
   );
 }
 
+export type PersonSearchValueChangeSource = "input" | "select";
+
 interface PersonSearchFieldProps {
   label?: string;
   placeholder?: string;
   searchValue: string;
-  onSearchValueChange: (value: string) => void;
+  onSearchValueChange: (
+    value: string,
+    meta?: { source: PersonSearchValueChangeSource },
+  ) => void;
   onPersonSelect: (person: PersonSearchResult) => void;
   selectedPerson?: PersonSearchResult | any | null;
-  villageId?: string;
+  locationId?: string;
   treeId?: string;
+  /** When set, only candidates of this gender are shown in the results. */
+  filterGender?: string;
   disabled?: boolean;
-  autoSearch?: boolean;
+  /**
+   * How many characters before the field starts looking.
+   *
+   * Two by default: the field searches as you type now, and firing on a single
+   * letter means a query per keystroke against the whole people table for a
+   * result set nobody can use.
+   */
   minSearchLength?: number;
-  hideSearchButton?: boolean;
   noResultsText?: string;
+  startIcon?: React.ReactNode;
+  /** When true, only return people the logged-in user can write to (superadmin
+   *  still sees everyone). Used when picking an owner you're allowed to manage. */
+  writableOnly?: boolean;
+  /**
+   * Look in OTHER trees for someone to marry into this one. Uses the narrow
+   * marriage-candidate lookup rather than the general people search, so this
+   * keeps working once reads are scoped to the trees a user can see.
+   */
+  marriageCandidates?: boolean;
+  /** With `marriageCandidates`, drops results from the tree being linked from. */
+  excludeTreeId?: string;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -81,13 +116,16 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   onSearchValueChange,
   onPersonSelect,
   selectedPerson,
-  villageId,
+  locationId,
   treeId,
+  filterGender,
   disabled = false,
-  autoSearch = false,
-  minSearchLength = 1,
-  hideSearchButton = false,
+  minSearchLength = 2,
   noResultsText = "No results found",
+  startIcon,
+  writableOnly = false,
+  marriageCandidates = false,
+  excludeTreeId,
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -96,7 +134,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
 
   const handleSearch = useCallback(async () => {
     const trimmedSearch = searchValue.trim();
-    const hasScope = Boolean(treeId || villageId);
+    const hasScope = marriageCandidates ? Boolean(locationId) : Boolean(treeId || locationId);
 
     if (!hasScope || trimmedSearch.length < minSearchLength) {
       setSearchResults([]);
@@ -108,17 +146,41 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     const searchId = ++latestSearchRef.current;
 
     try {
-      const results = await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
-        treeId,
-        villageId,
-      });
+      const results = marriageCandidates
+        ? (
+            await ApiService.getMarriageCandidates({
+              name: trimmedSearch,
+              locationId: locationId || "",
+              excludeTreeId,
+            })
+          ).map((row) => ({
+            // Re-shape to the field names the mapper below expects.
+            personId: row.personId,
+            personName: row.name,
+            personNameHindi: row.nameHindi,
+            gender: row.gender,
+            treeId: row.treeId,
+            treeName: row.treeName,
+            locationName: row.locationName,
+            parentHierarchy: row.parentHierarchy,
+          }))
+        : writableOnly
+          ? await ApiService.searchWritablePeopleWithHierarchy(trimmedSearch, {
+              treeId,
+              locationId,
+            })
+          : await ApiService.searchPeopleWithHierarchy(trimmedSearch, {
+              treeId,
+              locationId,
+            });
 
       if (searchId !== latestSearchRef.current) {
         return;
       }
 
-      const peopleSearchResults: PersonSearchResult[] = results.map(
-        (person: any) => ({
+      const normalizedFilterGender = (filterGender || "").toLowerCase();
+      const peopleSearchResults: PersonSearchResult[] = results
+        .map((person: any) => ({
           id: person.personId,
           name: person.personName,
           gender: person.gender,
@@ -128,11 +190,18 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           treeName: person.treeName,
           hierarchy: person.parentHierarchy || [],
           gotra: person.gotra,
-          villageName: person.villageName,
+          locationName: person.locationName,
           casteName: person.casteName,
           subCasteName: person.subCasteName,
-        }),
-      );
+        }))
+        // When a gender filter is active, only show candidates of that gender
+        // (keep those with unknown gender so incomplete records aren't hidden).
+        .filter(
+          (person) =>
+            !normalizedFilterGender ||
+            !person.gender ||
+            person.gender.toLowerCase() === normalizedFilterGender,
+        );
 
       setSearchResults(peopleSearchResults);
     } catch (error) {
@@ -141,14 +210,14 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         setSearchResults([]);
       }
     }
-  }, [minSearchLength, searchValue, treeId, villageId]);
+  }, [minSearchLength, searchValue, treeId, locationId, filterGender, writableOnly, marriageCandidates, excludeTreeId]);
 
   const handlePersonClick = (person: PersonSearchResult) => {
-    onPersonSelect(person);
     setSearchResults([]);
     setShowResults(false);
     skipNextAutoSearchRef.current = true;
-    onSearchValueChange(person.name);
+    onSearchValueChange(person.name, { source: "select" });
+    onPersonSelect(person);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -158,10 +227,6 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   };
 
   useEffect(() => {
-    if (!autoSearch) {
-      return;
-    }
-
     if (skipNextAutoSearchRef.current) {
       skipNextAutoSearchRef.current = false;
       return;
@@ -172,7 +237,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [autoSearch, handleSearch]);
+  }, [handleSearch]);
 
   return (
     <Box sx={{ position: "relative", width: "100%", mb: 2 }}>
@@ -184,29 +249,39 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
         <TextField
           label={label}
           value={searchValue}
-          onChange={(e) => onSearchValueChange(e.target.value)}
+          onChange={(e) =>
+            onSearchValueChange(e.target.value, { source: "input" })
+          }
           onKeyPress={handleKeyPress}
           fullWidth
           placeholder={placeholder}
           size="medium"
           autoComplete="off"
           disabled={disabled}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                {startIcon ?? <SearchIcon fontSize="small" />}
+              </InputAdornment>
+            ),
+            // Clearing reports itself as an edit, not a selection, so a form
+            // holding the chosen person's id knows the choice is off.
+            endAdornment: searchValue && !disabled && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Clear"
+                  onClick={() => {
+                    setSearchResults([]);
+                    onSearchValueChange("", { source: "input" });
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
         />
-        {!hideSearchButton && (
-          <Button
-            variant="contained"
-            onClick={handleSearch}
-            disabled={disabled}
-            startIcon={<SearchIcon />}
-            sx={{
-              height: 56,
-              minWidth: 100,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Search
-          </Button>
-        )}
       </Stack>
 
       {/* Search Results Dropdown */}
@@ -216,7 +291,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
             mt: 1,
             maxHeight: 300,
             overflow: "auto",
-            border: "1px solid #ddd",
+            border: `1px solid ${brand.border}`,
             boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
             position: "absolute",
             width: "100%",
@@ -238,7 +313,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
                 p: 2,
                 borderBottom: "1px solid #eee",
                 cursor: "pointer",
-                backgroundColor: "#fff",
+                backgroundColor: brand.surface,
                 transition: "backgroundColor 0.2s",
                 "&:hover": { backgroundColor: "#f5f5f5" },
                 "&:last-child": { borderBottom: "none" },
@@ -268,7 +343,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
                     spacing={0.75}
                     sx={{ flexWrap: "wrap", rowGap: 0.75, mb: 0.75 }}
                   >
-                    {renderMetaPill("Village", person.villageName, "teal")}
+                    {renderMetaPill("Location", person.locationName, "teal")}
                     {renderMetaPill("Caste", person.casteName, "slate")}
                     {renderMetaPill("Sub caste", person.gotra || person.subCasteName, "slate")}
                   </Stack>
@@ -293,7 +368,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           sx={{
             mt: 1,
             p: 2,
-            border: "1px solid #ddd",
+            border: `1px solid ${brand.border}`,
             textAlign: "center",
             position: "absolute",
             width: "100%",

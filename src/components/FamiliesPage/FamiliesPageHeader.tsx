@@ -5,10 +5,18 @@ import {
   Chip,
   Paper,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
+import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
 import { alpha } from "@mui/material/styles";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
+import { TreePersonSearch } from "./TreePersonSearch";
+import type { FNode } from "../model/FNode";
+import { pageGradient } from "../../theme/brand";
 
 export type TreeStatus = {
   label: string;
@@ -40,6 +48,12 @@ interface FamiliesPageHeaderProps {
   hasStats: boolean;
   statCards: StatCard[];
   onSourceChange: (value: string, nodes: readonly any[]) => void;
+  viewMode: "tree" | "timeline";
+  onViewModeChange: (mode: "tree" | "timeline") => void;
+  nodes: FNode[];
+  onSearchSelect: (personId: string) => void;
+  pendingRequestsCount?: number;
+  onPendingRequestsClick?: () => void;
 }
 
 export function FamiliesPageHeader({
@@ -50,6 +64,12 @@ export function FamiliesPageHeader({
   hasStats,
   statCards,
   onSourceChange,
+  viewMode,
+  onViewModeChange,
+  nodes,
+  onSearchSelect,
+  pendingRequestsCount = 0,
+  onPendingRequestsClick,
 }: FamiliesPageHeaderProps) {
   return (
     <Box
@@ -59,8 +79,7 @@ export function FamiliesPageHeader({
         pb: { xs: 0.75, sm: 1.5 },
         borderBottom: "1px solid",
         borderColor: "divider",
-        background: (theme) =>
-          `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.08)} 0%, ${alpha(theme.palette.background.paper, 0.98)} 100%)`,
+        background: pageGradient,
       }}
     >
       <Stack spacing={{ xs: 0.875, sm: 1.25 }}>
@@ -77,7 +96,7 @@ export function FamiliesPageHeader({
               direction="row"
               spacing={1}
               alignItems="center"
-              sx={{ mb: { xs: 0.25, sm: 0.75 }, flexWrap: "wrap" }}
+              sx={{ flexWrap: "wrap", width: "100%", mb: { xs: 0.25, sm: 0.75 } }}
             >
               <Typography variant={isMobile ? "h6" : "h4"} sx={{ fontWeight: 800 }}>
                 Family Tree
@@ -89,6 +108,33 @@ export function FamiliesPageHeader({
                 variant={treeStatus.color === "default" ? "outlined" : "filled"}
                 size="small"
               />
+              {pendingRequestsCount > 0 && (
+                <Chip
+                  icon={<PendingActionsOutlinedIcon />}
+                  label={`${pendingRequestsCount} pending`}
+                  color="warning"
+                  size="small"
+                  clickable
+                  onClick={onPendingRequestsClick}
+                />
+              )}
+              {/* View toggle — sits next to the chip on desktop; pinned right (icon-only) on mobile. */}
+              <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                size="small"
+                onChange={(_e, value) => value && onViewModeChange(value)}
+                sx={{ ml: { xs: "auto", md: 0 }, flexShrink: 0 }}
+              >
+                <ToggleButton value="tree" sx={{ textTransform: "none", px: { xs: 1, sm: 1.5 } }}>
+                  <AccountTreeOutlinedIcon fontSize="small" sx={{ mr: { xs: 0, sm: 0.5 } }} />
+                  {!isMobile && "Tree"}
+                </ToggleButton>
+                <ToggleButton value="timeline" sx={{ textTransform: "none", px: { xs: 1, sm: 1.5 } }}>
+                  <TimelineOutlinedIcon fontSize="small" sx={{ mr: { xs: 0, sm: 0.5 } }} />
+                  {!isMobile && "Timeline"}
+                </ToggleButton>
+              </ToggleButtonGroup>
             </Stack>
             {!isMobile && (
               <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 780 }}>
@@ -157,7 +203,12 @@ export function FamiliesPageHeader({
               justifySelf: { xs: "stretch", md: "end" },
             }}
           >
-            <SourceSelect onChange={onSourceChange} />
+            <Stack spacing={{ xs: 0.75, sm: 1 }}>
+              <SourceSelect onChange={onSourceChange} />
+              {nodes.length > 0 && (
+                <TreePersonSearch nodes={nodes} onSelect={onSearchSelect} />
+              )}
+            </Stack>
           </Box>
         </Box>
 

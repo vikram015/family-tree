@@ -9,9 +9,27 @@ interface Profession {
   category?: string;
 }
 
+/** The listing-card slice of a career profile, as the backend redacted it. */
+export interface ProfessionProfileSummary {
+  peopleId: string;
+  title: string;
+  sector?: string | null;
+  subSpecialization?: string | null;
+  organization?: string | null;
+  totalExperienceYears?: number | null;
+  workLocation?: string | null;
+  /** Null unless the owner switched it on — the server decides, not the card. */
+  contactPhone?: string | null;
+  mentorshipAvailable?: boolean;
+  summary?: string | null;
+  visibility?: string;
+  canEdit?: boolean;
+}
+
 interface PersonWithProfessions {
   person: FNode;
   professions: Profession[];
+  profile: ProfessionProfileSummary | null;
 }
 
 interface ProfessionState {
@@ -33,13 +51,13 @@ const initialState: ProfessionState = {
 // Async thunks
 export const fetchProfessionsData = createAsyncThunk(
   'profession/fetchData',
-  async (villageId: string, { rejectWithValue }) => {
+  async (locationId: string, { rejectWithValue }) => {
     try {
       // Fetch all professions for the select dropdown
       const allProfessions = await ApiService.getAllProfessions();
 
-      // Fetch professions with people and hierarchy for the village
-      const profsWithPeopleData = await ApiService.getProfessionsByVillage(villageId);
+      // Fetch professions with people and hierarchy for the location
+      const profsWithPeopleData = await ApiService.getProfessionsByLocation(locationId);
 
       // Extract all people from the professions data
       const uniquePeople = new Map<string, FNode>();
@@ -77,6 +95,11 @@ export const fetchProfessionsData = createAsyncThunk(
                 gender: person.gender,
                 dob: person.personDob || '',
                 treeId: person.treeId,
+                // Carry identity context so the profession card can show the
+                // same hierarchy/caste tooltip as the business card.
+                casteName: person.casteName,
+                subCasteName: person.subCasteName,
+                parentHierarchy: person.parentHierarchy,
                 parents: [] as any,
                 children: [] as any,
                 siblings: [] as any,
@@ -86,6 +109,7 @@ export const fetchProfessionsData = createAsyncThunk(
                 hasSubTree: false,
               } as unknown as FNode,
               professions: [],
+              profile: person.professionProfile || null,
             });
           }
           peopleProfsMap.get(personKey)!.professions.push({

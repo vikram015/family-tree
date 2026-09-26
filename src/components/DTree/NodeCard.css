@@ -1,0 +1,94 @@
+.node-name-hover-icon {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.node-name-group:hover .node-name-hover-icon {
+  opacity: 1;
+}
+
+.node-name-group:hover .node-name-click-target {
+  fill: #1976d2;
+  text-decoration: underline;
+}
+
+/* iOS Safari and Chrome fixes for Devanagari text rendering */
+svg text[lang="hi"],
+svg tspan[lang="hi"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "liga" 1,
+    "clig" 1,
+    "calt" 1,
+    "akhn" 1,
+    "blwf" 1,
+    "half" 1,
+    "pstf" 1,
+    "vatu" 1,
+    "cjct" 1;
+}
+
+/* foreignObject Hindi text styling */
+svg foreignObject span[lang="hi"] {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings:
+    "liga" 1,
+    "clig" 1,
+    "calt" 1,
+    "akhn" 1,
+    "blwf" 1,
+    "half" 1,
+    "pstf" 1,
+    "vatu" 1,
+    "cjct" 1;
+}
+
+/* iOS Safari specific: ensure complex script shaping works */
+@supports (-webkit-touch-callout: none) {
+  svg text[lang="hi"],
+  svg tspan[lang="hi"],
+  svg foreignObject span[lang="hi"] {
+    -webkit-text-size-adjust: 100%;
+    font-variant-ligatures: common-ligatures;
+    -webkit-locale: "hi";
+  }
+}
+
+/* Action icons appear on hover, not permanently.
+ *
+ * Edit and add sat on every card at all times, so a tree of two hundred people
+ * carried four hundred controls nobody was looking at — visual noise that also
+ * competed with the names for the card's width. They are desktop-only (a phone
+ * opens the node sheet on tap instead), so hover is a safe trigger: there is no
+ * touch device that renders them and cannot hover.
+ *
+ * pointer-events follow the opacity, or an invisible icon would still swallow
+ * clicks meant for the card underneath it.
+ */
+g.node .node-action-icon {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+g.node:hover .node-action-icon,
+g.node:focus-within .node-action-icon {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* A keyboard or assistive-tech user gets no hover, so anything focused inside
+   the card stays visible on its own. */
+g.node .node-action-icon:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  g.node .node-action-icon {
+    transition: none;
+  }
+}

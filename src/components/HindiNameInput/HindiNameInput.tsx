@@ -1,6 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Autocomplete, CircularProgress, TextField, Typography } from "@mui/material";
+import {
+  CircularProgress,
+  InputAdornment,
+  TextField,
+  Typography,
+} from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import { FullScreenMobileAutocomplete } from "../FullScreenMobilePicker";
 
 interface HindiNameInputProps {
   sourceText: string;
@@ -8,6 +14,7 @@ interface HindiNameInputProps {
   onChange: (value: string) => void;
   label?: string;
   disabled?: boolean;
+  startIcon?: React.ReactNode;
 }
 
 function parseHindiSuggestions(payload: unknown): string[] {
@@ -32,7 +39,19 @@ export function HindiNameInput({
   onChange,
   label = "Hindi Name",
   disabled = false,
+  startIcon,
 }: HindiNameInputProps) {
+  // Default to a Devanagari glyph so the field reads as "Hindi" rather than the
+  // generic translate icon (whose 文 glyph looks like a Chinese character).
+  const leadingAdornment = startIcon ?? (
+    <Typography
+      component="span"
+      aria-hidden
+      sx={{ fontWeight: 700, fontSize: 18, lineHeight: 1, color: "text.secondary" }}
+    >
+      अ
+    </Typography>
+  );
   const [options, setOptions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const trimmedSourceText = sourceText.trim();
@@ -90,7 +109,9 @@ export function HindiNameInput({
   }, [options, value]);
 
   return (
-    <Autocomplete
+    <FullScreenMobileAutocomplete<string, false, false, true>
+      pickerTitle={label}
+      closeLabel={`Close ${label}`}
       freeSolo
       options={mergedOptions}
       value={value}
@@ -125,6 +146,10 @@ export function HindiNameInput({
         "& .MuiAutocomplete-popupIndicator": {
           transform: "none",
         },
+        // Match the rounded radius used by the other form fields (inputWithIconSx).
+        "& .MuiOutlinedInput-root": {
+          borderRadius: 2,
+        },
       }}
       renderInput={(params) => (
         <TextField
@@ -135,6 +160,12 @@ export function HindiNameInput({
           helperText="Select a Hindi transliteration or type your own"
           InputProps={{
             ...params.InputProps,
+            startAdornment: (
+              <>
+                <InputAdornment position="start">{leadingAdornment}</InputAdornment>
+                {params.InputProps.startAdornment}
+              </>
+            ),
             endAdornment: (
               <>
                 {loading ? <CircularProgress color="inherit" size={18} /> : null}

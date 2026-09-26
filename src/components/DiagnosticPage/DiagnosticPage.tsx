@@ -20,7 +20,7 @@ import WarningIcon from "@mui/icons-material/Warning";
 import ErrorIcon from "@mui/icons-material/Error";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { FNode } from "../model/FNode";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import { backendApi } from "../../services/backendApi";
 
@@ -39,7 +39,6 @@ interface DiagnosticResult {
 
 export const DiagnosticPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const treeId = searchParams.get("tree");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DiagnosticResult | null>(null);

@@ -2,13 +2,23 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { signOut } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
 import { backendApi } from "../../services/backendApi";
+import { pushNotifications } from "../../services/pushNotifications";
 import { AppUser, UserRole } from "../../components/model/User";
+import { readSessionHint, writeSessionHint } from "../../utils/authSessionHint";
 
 interface AuthState {
   currentUser: any;
   userProfile: AppUser | null;
   loading: boolean;
   error: string | null;
+  /**
+   * True once Firebase has reported whether a session exists. Until then
+   * `currentUser === null` means "not known yet", not "signed out" — views that
+   * branch on sign-in state must wait for this instead of assuming logged out.
+   */
+  initialized: boolean;
+  /** Whether the last visit on this browser ended signed in. See authSessionHint. */
+  hadSession: boolean;
 }
 
 const initialState: AuthState = {
@@ -16,17 +26,25 @@ const initialState: AuthState = {
   userProfile: null,
   loading: true,
   error: null,
+  initialized: false,
+  hadSession: readSessionHint(),
 };
 
 type BackendUserProfile = {
   id: string;
   email?: string | null;
   role?: UserRole;
-  villages?: string[] | null;
+  locations?: string[] | null;
   peopleId?: string | null;
   name?: string | null;
+  /** Linked person node's name when the profile is linked, else the users row. */
+  displayName?: string | null;
   phone?: string | null;
+  gender?: string | null;
+  dob?: string | null;
   isVerified?: boolean | null;
+  isBlocked?: boolean | null;
+  blockedReason?: string | null;
   privacyPolicyAccepted?: boolean | null;
   createdAt?: string;
   modifiedAt?: string;
@@ -37,12 +55,18 @@ function mapBackendUserToAppUser(row: BackendUserProfile): AppUser {
     id: row.id,
     email: row.email || "",
     role: (row.role || "admin") as UserRole,
-    villages: row.villages || [],
+    locations: row.locations || [],
     peopleId: row.peopleId || undefined,
-    displayName: row.name || undefined,
+    // Backend resolves this from the linked person node when there is one;
+    // `name` stays the users-table value the profile editor writes to.
+    displayName: row.displayName || row.name || undefined,
     name: row.name || undefined,
     phone: row.phone || undefined,
+    gender: row.gender || undefined,
+    dob: row.dob || undefined,
     isVerified: row.isVerified ?? undefined,
+    isBlocked: row.isBlocked ?? undefined,
+    blockedReason: row.blockedReason ?? null,
     privacyPolicyAccepted: row.privacyPolicyAccepted ?? undefined,
     createdAt: row.createdAt || new Date().toISOString(),
     updatedAt: row.modifiedAt || new Date().toISOString(),
@@ -71,7 +95,16 @@ export const updateAuthState = createAsyncThunk(
 
 export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValue }) => {
   try {
+    // Drop this device's push token first — the request needs a valid auth
+    // token, which signOut() below invalidates. Otherwise the next person to
+    // sign in on this browser would keep receiving the previous user's pushes.
+    try {
+      await pushNotifications.unregister();
+    } catch {
+      // Best-effort: never block sign-out on push cleanup.
+    }
     await signOut(firebaseAuth);
+    writeSessionHint(false);
     return null;
   } catch (error: any) {
     return rejectWithValue(error?.message || "Failed to logout");
@@ -98,11 +131,15 @@ export const updateUserProfile = createAsyncThunk(
       phone,
       email,
       privacyPolicyAccepted,
+      gender,
+      dob,
     }: {
       name: string;
       phone: string;
       email?: string;
       privacyPolicyAccepted?: boolean;
+      gender?: string;
+      dob?: string;
     },
     { rejectWithValue },
   ) => {
@@ -112,6 +149,8 @@ export const updateUserProfile = createAsyncThunk(
         phone,
         email,
         privacyPolicyAccepted,
+        gender,
+        dob,
       });
       return mapBackendUserToAppUser(row);
     } catch (error: any) {
@@ -133,16 +172,23 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      .addCase(updateAuthState.pending, (state) => {
+      .addCase(updateAuthState.pending, (state, action) => {
+        // Firebase has already answered by the time this fires, so publish the
+        // user immediately — the profile fetch below is a separate, slower
+        // round trip and the UI shouldn't look signed out while it runs.
+        state.currentUser = action.meta.arg?.user ?? null;
+        state.initialized = true;
         state.loading = true;
       })
       .addCase(updateAuthState.fulfilled, (state, action) => {
+        state.initialized = true;
         state.currentUser = action.payload.currentUser;
         state.userProfile = action.payload.userProfile;
         state.loading = false;
         state.error = null;
       })
       .addCase(updateAuthState.rejected, (state, action) => {
+        state.initialized = true;
         state.currentUser = null;
         state.userProfile = null;
         state.loading = false;
@@ -169,6 +215,8 @@ export const { setCurrentUser, clearError } = authSlice.actions;
 export const selectCurrentUser = (state: any) => state.auth.currentUser;
 export const selectUserProfile = (state: any) => state.auth.userProfile;
 export const selectAuthLoading = (state: any) => state.auth.loading;
+export const selectAuthInitialized = (state: any) => state.auth.initialized;
+export const selectHadSession = (state: any) => state.auth.hadSession;
 export const selectAuthError = (state: any) => state.auth.error;
 
 export const selectIsSuperAdmin = (state: any) =>
@@ -178,16 +226,16 @@ export const selectIsAdmin = (state: any) =>
   state.auth.userProfile?.role === "admin" ||
   state.auth.userProfile?.role === "superadmin";
 
-export const selectCanManageVillage = (villageId: string) => (state: any) => {
+export const selectCanManageLocation = (locationId: string) => (state: any) => {
   const profile = state.auth.userProfile;
   if (!profile) return false;
   if (profile.role === "superadmin") return true;
-  if (profile.role === "admin" && profile.villages.includes(villageId)) return true;
+  if (profile.role === "admin" && profile.locations.includes(locationId)) return true;
   return false;
 };
 
 export const selectHasPermission =
-  (requiredRole?: UserRole, villageId?: string) => (state: any) => {
+  (requiredRole?: UserRole, locationId?: string) => (state: any) => {
     const profile = state.auth.userProfile;
     if (!profile) return false;
 
@@ -201,8 +249,8 @@ export const selectHasPermission =
       return false;
     }
 
-    if (villageId && profile.role !== "superadmin") {
-      return profile.villages.includes(villageId);
+    if (locationId && profile.role !== "superadmin") {
+      return profile.locations.includes(locationId);
     }
 
     return true;

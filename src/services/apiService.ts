@@ -8,6 +8,555 @@ import { backendApi } from './backendApi';
 
 type RelationType = 'parent' | 'child' | 'spouse' | 'sibling';
 
+// "public" (visible to any signed-in user, not just this tree's collaborators)
+// was removed for now — only two tiers exist today.
+export type PhotoVisibility = 'private' | 'family';
+
+/**
+ * One business as shown on its public profile page.
+ *
+ * Mirrors `businessService.getBusinessProfile` on the backend. The owner is
+ * represented by name and ids only — deliberately no date of birth, gender or
+ * photo, since this page needs no account to open.
+ */
+export interface BusinessProfile {
+  id: string;
+  name: string;
+  /**
+   * True when the viewer is signed out and the server withheld the contact
+   * details, address and hours. Lets the page say they are protected rather
+   * than absent.
+   */
+  isLimited?: boolean;
+  category?: string | null;
+  /** Short blurb, also used on directory cards. */
+  description?: string | null;
+  contact?: string | null;
+  email?: string | null;
+  /** One line under the name. */
+  tagline?: string | null;
+  /** Long-form history. */
+  story?: string | null;
+  /** ISO date; year-only knowledge is stored as January 1st. */
+  foundedOn?: string | null;
+  website?: string | null;
+  address?: string | null;
+  hours?: string | null;
+  /** The business's own place, picked from Google. Preferred over the owner's
+   *  village below, which only says where the family tree is rooted. */
+  placeId?: string | null;
+  placeName?: string | null;
+  placeAddress?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Short-lived signed URLs from Cloudflare R2 — display them, never store
+   *  them. They expire, so a page kept open for a long time should re-fetch. */
+  logoUrl?: string | null;
+  coverUrl?: string | null;
+  createdAt?: string | null;
+  ownerId?: string | null;
+  ownerName?: string | null;
+  treeId?: string | null;
+  treeName?: string | null;
+  locationId?: string | null;
+  locationName?: string | null;
+  districtName?: string | null;
+  stateName?: string | null;
+}
+
+export interface FamilyPhoto {
+  id: string;
+  personId: string;
+  treeId: string;
+  contentType: string;
+  fileSizeBytes: number;
+  visibility: PhotoVisibility;
+  createdBy: string;
+  createdAt: string;
+  /** Whose photo this is. Null if the person record is gone. */
+  personName?: string | null;
+  /** Who added it — the contributor shown on shared photos. */
+  uploaderName?: string | null;
+  /** Short-lived signed URL — refetch the list rather than caching this long-term. */
+  photoUrl: string;
+  thumbUrl: string;
+}
+
+/** One Google Places suggestion, as returned by our proxy. */
+export interface PlaceSuggestion {
+  placeId: string;
+  name: string;
+  address: string;
+}
+
+/** A resolved place — the shape stored on a business or a person. */
+export interface PlaceDetails {
+  placeId: string;
+  name: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export type ProfessionVisibility = "public" | "family" | "private";
+
+export interface ProfessionMilestone {
+  id?: string;
+  title: string;
+  organization?: string | null;
+  location?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  description?: string | null;
+  sortOrder?: number;
+}
+
+export interface ProfessionSkill {
+  id?: string;
+  name: string;
+  category?: string | null;
+  sortOrder?: number;
+}
+
+/** A person's career profile. Fields the viewer may not see come back null. */
+export interface ProfessionProfile {
+  id: string;
+  peopleId: string;
+  professionId?: string | null;
+  title: string;
+  sector?: string | null;
+  subSpecialization?: string | null;
+  employmentMode?: string | null;
+  organization?: string | null;
+  totalExperienceYears?: number | null;
+  summary?: string | null;
+  highestDegree?: string | null;
+  university?: string | null;
+  certifications?: string | null;
+  workEmail?: string | null;
+  workLocation?: string | null;
+  /** The searchable place behind `workLocation`, so proximity search can find them. */
+  workPlaceId?: string | null;
+  workPlaceName?: string | null;
+  workPlaceAddress?: string | null;
+  workLatitude?: number | null;
+  workLongitude?: number | null;
+  contactPhone?: string | null;
+  linkedinUrl?: string | null;
+  portfolioUrl?: string | null;
+  visibility: ProfessionVisibility;
+  /** Publishes `contactPhone`. Off means only the owner sees the number. */
+  showContact?: boolean;
+  showPhoneToCloseKin?: boolean;
+  allowMentorshipRequests?: boolean;
+  showEmployerPublicly?: boolean;
+  mentorshipAvailable?: boolean;
+  mentorshipAreas?: string[] | null;
+  mentorshipNote?: string | null;
+  milestones: ProfessionMilestone[];
+  skills: ProfessionSkill[];
+  /**
+   * False when the person has no career profile and this was assembled from
+   * their profession tags instead. The page says so rather than presenting
+   * tags as something they wrote.
+   */
+  hasProfile?: boolean;
+  /**
+   * A profile exists but is not shared with this viewer. The page says so,
+   * rather than implying nothing was written.
+   */
+  isRestricted?: boolean;
+  /** Vocabulary tags, present whether or not a profile was written. */
+  professions?: Array<{ id: string; name: string; category?: string | null }>;
+  personName?: string | null;
+  personNameHindi?: string | null;
+  personPhotoUrl?: string | null;
+  treeId?: string | null;
+  professionName?: string | null;
+  professionCategory?: string | null;
+  /** Whether this viewer may edit — decided server-side, not guessed here. */
+  canEdit?: boolean;
+}
+
+export interface StorageQuotaStatus {
+  usedBytes: number;
+  limitBytes: number;
+  maxBytes: number;
+  baseBytes: number;
+  bonusPerActionBytes: number;
+  maxFileSizeBytes: number;
+}
+
+export interface UserPreference {
+  showFullTree: boolean;
+  showSpouse: boolean;
+  language: string;
+}
+
+export interface UserPreferenceResponse {
+  id: string;
+  userId: string;
+  preference: UserPreference;
+  createdAt: string;
+  modifiedAt: string;
+  createdBy: string | null;
+  modifiedBy: string | null;
+}
+
+export type OnboardingStatus = "in_progress" | "completed" | "skipped";
+export type OnboardingCurrentStep =
+  | "profile"
+  | "location"
+  | "match"
+  | "complete";
+
+export interface UserOnboardingData {
+  status: OnboardingStatus;
+  currentStep: OnboardingCurrentStep;
+  profile: {
+    name: string;
+    email: string;
+    completedAt: string | null;
+  };
+  location: {
+    stateId: string | null;
+    districtId: string | null;
+    locationId: string | null;
+    casteId: string | null;
+    subCasteId: string | null;
+    completedAt: string | null;
+  };
+  match: {
+    searchName: string;
+    searchedAt: string | null;
+    selectedTreeId: string | null;
+    selectedPersonId: string | null;
+    action: "link" | "create_tree" | "branch_access" | null;
+  };
+  completion: {
+    completedAt: string | null;
+    result:
+      | "linked"
+      | "created_tree"
+      | "branch_access_requested"
+      | "invite_accepted"
+      | null;
+  };
+}
+
+export interface UserOnboardingDataUpdate {
+  status?: OnboardingStatus;
+  currentStep?: OnboardingCurrentStep;
+  profile?: Partial<UserOnboardingData["profile"]>;
+  location?: Partial<UserOnboardingData["location"]>;
+  match?: Partial<UserOnboardingData["match"]>;
+  completion?: Partial<UserOnboardingData["completion"]>;
+}
+
+export interface UserOnboardingResponse {
+  id: string;
+  userId: string;
+  onboardingData: UserOnboardingData | null;
+  effectiveOnboardingData: UserOnboardingData;
+  createdAt: string;
+  modifiedAt: string;
+  createdBy: string | null;
+  modifiedBy: string | null;
+}
+
+export interface UserOnboardingMatchedPerson {
+  personId: string;
+  name: string;
+  nameHindi: string | null;
+  gender: string | null;
+  dob: string | null;
+  photoUrl: string | null;
+  parentHierarchy: Array<{
+    id: string;
+    name: string;
+    generation: number;
+  }>;
+}
+
+export interface UserOnboardingTreeMatch {
+  treeId: string;
+  treeName: string;
+  locationId: string;
+  locationName: string;
+  casteId: string | null;
+  casteName: string | null;
+  subCasteId: string | null;
+  subCasteName: string | null;
+  totalNodes: number;
+  ownerUserId: string | null;
+  ownerName: string;
+  matchedPeople: UserOnboardingMatchedPerson[];
+}
+
+export interface LocationCombinationOption {
+  stateId: string;
+  stateName: string;
+  districtId: string;
+  districtName: string;
+  locationId: string;
+  locationName: string;
+  label: string;
+}
+
+export type LinkRequestType =
+  | "user_to_tree_node"
+  | "branch_access_request"
+  | "spouse_link_request"
+  | "user_add_to_tree";
+export type LinkRequestStatus = "pending" | "approved" | "rejected";
+
+export interface FamilyBirthday {
+  id: string;
+  name: string;
+  nameHindi?: string | null;
+  gender?: string | null;
+  photoUrl?: string | null;
+  dob: string;
+  age: number;
+}
+
+export interface FamilyDeceased {
+  id: string;
+  name: string;
+  nameHindi?: string | null;
+  gender?: string | null;
+  photoUrl?: string | null;
+  deceasedDate: string;
+  /** Birth date, when recorded — lets a remembrance card show a full lifespan. */
+  dob?: string | null;
+  yearsAgo: number;
+}
+
+export interface FamilyAnniversary {
+  person1Id: string;
+  person1Name: string;
+  person1PhotoUrl?: string | null;
+  person2Id: string;
+  person2Name: string;
+  person2PhotoUrl?: string | null;
+  startDate: string;
+  years: number;
+}
+
+export interface FamilyEvents {
+  birthdays: FamilyBirthday[];
+  deceased: FamilyDeceased[];
+  anniversaries: FamilyAnniversary[];
+}
+
+/** A celebration in the days just ahead, normalized across birthdays and
+ *  anniversaries so one card renders both. */
+export interface UpcomingFamilyEvent {
+  id: string;
+  type: 'birthday' | 'anniversary';
+  personId: string;
+  name: string;
+  photoUrl: string | null;
+  /** Always >= 1 — today's events come from getTodaysFamilyEvents. */
+  daysAway: number;
+  eventDate: string;
+  /** Age they'll turn / years married on the day. */
+  years: number;
+}
+
+/** A fillable hole in the user's tree — one row of the homepage worklist. */
+export type TreeGapType = 'dob' | 'photo' | 'profession';
+
+export interface TreeGap {
+  personId: string;
+  name: string;
+  nameHindi: string | null;
+  photoUrl: string | null;
+  gender: string | null;
+  treeId: string;
+  gap: TreeGapType;
+  /** Ready-to-render copy, e.g. "No birth date". */
+  label: string;
+  /** Ready-to-render placement in the tree, e.g. "Son of Ram Kumar". Null when
+   *  no parent is recorded. */
+  relation?: string | null;
+}
+
+/** Everything the personalized homepage needs, in one round trip. */
+export interface DashboardInsights {
+  tree: { id: string; name: string } | null;
+  stats: {
+    peopleInTree: number;
+    generations: number;
+    addedThisMonth: number;
+    incompleteProfiles: number;
+  };
+  gaps: TreeGap[];
+  counts: {
+    photos: number;
+    pendingRequests: number;
+  };
+}
+
+export type WishEventType = 'birthday' | 'anniversary' | 'remembrance';
+
+export interface Wish {
+  id: string;
+  peopleId: string;
+  eventType: WishEventType;
+  eventYear: number;
+  message: string;
+  authorUserId: string | null;
+  authorName: string | null;
+  createdAt: string;
+  /** The celebration it belongs to. Null on wishes written before events. */
+  eventId?: string | null;
+}
+
+/** A wish as the dashboard wall shows it: the note plus both faces. */
+export interface RecentWish extends Wish {
+  personName: string | null;
+  personPhotoUrl: string | null;
+  authorPhotoUrl: string | null;
+}
+
+// =====================================================
+// CELEBRATIONS
+// =====================================================
+
+export type CelebrationEventType = 'birthday' | 'anniversary' | 'remembrance';
+
+/** A celebration as a thing with an identity, not a derived date. */
+export interface CelebrationEvent {
+  id: string;
+  eventType: CelebrationEventType;
+  eventYear: number;
+  eventDate: string | null;
+  /** "68th birthday", "40th anniversary". */
+  occurrenceNumber: number | null;
+  treeId: string | null;
+
+  primaryPersonId: string;
+  primaryName: string | null;
+  primaryNameHindi: string | null;
+  primaryGender: string | null;
+  primaryPhotoUrl: string | null;
+
+  secondaryPersonId: string | null;
+  secondaryName: string | null;
+  secondaryPhotoUrl: string | null;
+
+  wishCount: number;
+}
+
+/** The kinds of reaction a message can carry. Keys, not glyphs. */
+export type ReactionKind = 'heart' | 'pranam' | 'warmth';
+
+export interface ReactionTally {
+  kind: ReactionKind;
+  count: number;
+  /** Whether the signed-in viewer is one of the people counted. */
+  reacted: boolean;
+}
+
+export interface CelebrationWish {
+  id: string;
+  message: string;
+  createdAt: string;
+  authorUserId: string | null;
+  authorName: string | null;
+  authorPhotoUrl: string | null;
+  authorPeopleId: string | null;
+  /** Set when this is a reply to another message. */
+  parentWishId: string | null;
+  /** How the author described themselves when they wrote. */
+  authorRelation: string | null;
+  /** How the tree says they are related, which may differ. */
+  resolvedRelation: string | null;
+  resolvedRelationHindi: string | null;
+  canDelete: boolean;
+  /** The author only, within an hour — narrower than canDelete, which a
+   *  superadmin also gets and which never expires for them. */
+  canEdit: boolean;
+  /**
+   * When this viewer's edit/delete window closes, so an open page can expire
+   * the buttons itself. Null when the permission is not time-limited.
+   */
+  permissionExpiresAt: string | null;
+  /** Null until the author changes what they wrote. */
+  editedAt: string | null;
+  reactions: ReactionTally[];
+  /** Present on top-level messages only; threads are one level deep. */
+  replies?: CelebrationWish[];
+}
+
+/** How one person connects to another, as a walk through the tree. */
+export interface RelationshipResult {
+  found: boolean;
+  degrees: number;
+  label: string;
+  labelHindi: string | null;
+  path: {
+    id: string;
+    name: string | null;
+    gender: string | null;
+    photoUrl: string | null;
+    dob: string | null;
+  }[];
+  steps: ('up' | 'down' | 'spouse')[];
+}
+
+export interface CelebrationPedigree {
+  parents: { id: string; name: string | null; gender: string | null }[];
+  spouse: { id: string; name: string | null; startDate: string | null } | null;
+  childCount: number;
+  grandchildCount: number;
+}
+
+/**
+ * Everything the celebration page renders.
+ *
+ * `viewerTier` is the server's answer to "is this person family?", and the
+ * family-only blocks are simply absent for a visitor rather than present and
+ * empty — so there is nothing for the client to accidentally reveal.
+ */
+export interface CelebrationPayload {
+  event: CelebrationEvent;
+  viewerTier: 'family' | 'visitor';
+  wishes: CelebrationWish[];
+  canPost: boolean;
+  pedigree?: CelebrationPedigree;
+  otherMilestones?: CelebrationEvent[];
+  history?: CelebrationEvent[];
+  viewerRelation?: RelationshipResult;
+}
+
+export interface LinkRequest {
+  id: string;
+  requestType: LinkRequestType;
+  status: LinkRequestStatus;
+  requesterUserId: string;
+  requesterName: string | null;
+  requesterEmail: string | null;
+  sourceUserId: string | null;
+  sourcePersonId: string | null;
+  sourceTreeId: string | null;
+  targetUserId: string | null;
+  targetPersonId: string | null;
+  targetPersonName: string | null;
+  targetTreeId: string | null;
+  targetTreeName: string | null;
+  requestMessage: string | null;
+  requesterPhone: string | null;
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  modifiedAt: string;
+  payload: Record<string, any> | null;
+}
+
 interface PersonWithRelations {
   id: string;
   name: string;
@@ -17,6 +566,12 @@ interface PersonWithRelations {
   treeId: string;
   createdAt?: string;
   modifiedAt?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  /** Where this person was born, when recorded. */
+  birthPlaceId?: string | null;
+  birthPlaceName?: string | null;
+  birthPlaceAddress?: string | null;
   parents?: Array<{ id: string; type: RelationType }>;
   children?: Array<{ id: string; type: RelationType }>;
   spouses?: Array<{ id: string; type: RelationType }>;
@@ -46,6 +601,8 @@ interface CompleteTreeNode {
   gender: string;
   dob?: string;
   createdAt: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents: PersonWithRelations[];
   children: PersonWithRelations[];
   spouses: PersonWithRelations[];
@@ -61,6 +618,8 @@ interface AffectedNode {
   dob?: string;
   treeId: string;
   createdAt?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
   parents: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
   children: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
   spouses: Array<{ id: string; name?: string; gender?: string; dob?: string }>;
@@ -94,7 +653,7 @@ interface CompleteTreeResponse {
     caste?: string;
     subCaste?: string;
     createdAt: string;
-    village?: {
+    location?: {
       id: string;
       name: string;
       district?: {
@@ -138,6 +697,12 @@ export interface TreeWriteScope {
   rootPersonIds: string[];
 }
 
+export interface DefaultUserTreeTarget {
+  treeId: string;
+  personId: string | null;
+  locationId?: string | null;
+}
+
 export interface TreeInvite {
   id: string;
   treeId: string;
@@ -150,6 +715,10 @@ export interface TreeInvite {
   createdAt: string;
   inviteToken?: string;
   inviteLink?: string;
+  /** True when the invitee already had an account and was granted access immediately. */
+  granted?: boolean;
+  /** Present when granted === true: the existing user who received access. */
+  user?: { id: string; name: string | null; phone: string | null };
 }
 
 export const ApiService = {
@@ -159,6 +728,24 @@ export const ApiService = {
     return trimmed ? trimmed : undefined;
   },
   /**
+   * Same as `normalizeDateValue`, but for PATCHes rather than creates.
+   *
+   * On an update, an emptied field has to survive the request: `undefined` is
+   * dropped by JSON.stringify, so the server sees no key and leaves the old
+   * date in place — the user clears the field, saves, and it comes back. `null`
+   * travels, and the server reads it as "clear this".
+   */
+  normalizeDateUpdate(value?: string | null): string | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const trimmed = String(value).trim();
+    return trimmed ? trimmed : null;
+  },
+  /** Record a login event for the current user (call once on successful sign-in). */
+  async recordLoginEvent(): Promise<void> {
+    await backendApi.post("/api/auth/login-event", {});
+  },
+  /**
    * Fetch all people for a specific tree with their relationships
    */
   async getPeopleByTree(treeId: string): Promise<PersonWithRelations[]> {
@@ -166,23 +753,6 @@ export const ApiService = {
     return (tree?.members || []) as PersonWithRelations[];
   },
 
-  /**
-   * Fetch all people for a specific village across all trees
-   */
-  async getPeopleByVillage(villageId: string): Promise<PersonWithRelations[]> {
-    const trees = await backendApi.get<any[]>("/api/tree", { villageId });
-    const treeIds = (trees || []).map((tree: any) => tree.id).filter(Boolean);
-    if (treeIds.length === 0) return [];
-
-    const allMembers = await Promise.all(
-      treeIds.map(async (id: string) => {
-        const complete = await backendApi.get<any>(`/api/tree/${id}/complete`);
-        return complete?.members || [];
-      }),
-    );
-
-    return allMembers.flat() as PersonWithRelations[];
-  },
 
   /**
    * Get relationships for a person from people_relations table
@@ -211,6 +781,33 @@ export const ApiService = {
   },
 
   /**
+   * Public, aggregate-only facts about a tree: name, place, and how many people
+   * are in it. Carries no members, so it is what the Families page falls back to
+   * when the viewer has no access and only needs to size the locked placeholder.
+   *
+   * Same endpoint as `getTreeWithDetails`, typed down to the fields that view
+   * needs — the call sites read very differently, and this one must stay
+   * aggregate-only.
+   */
+  async getTreeSummary(treeId: string): Promise<{
+    id: string;
+    name: string;
+    peopleCount: number;
+    location?: { id: string; name: string } | null;
+  }> {
+    return backendApi.get(`/api/tree/${treeId}`);
+  },
+
+  /**
+   * Structure-only view of a tree you may not have access to, for deciding
+   * whether it is your family. Same shape as getCompleteTreeById, but living
+   * members come back without birth date, photo or blood group.
+   */
+  async getTreePreviewById(treeId: string): Promise<CompleteTreeResponse> {
+    return backendApi.get<CompleteTreeResponse>(`/api/tree/${treeId}/preview`);
+  },
+
+  /**
    * Fetch person by ID with relationships
    */
   async getPersonById(personId: string): Promise<PersonWithRelations | null> {
@@ -232,24 +829,41 @@ export const ApiService = {
     return backendApi.get<Record<string, string>>(`/api/people/${personId}/custom-fields`);
   },
 
+  /** Fetch a single person's spouses (both relation directions). */
+  async getPersonSpouses(
+    personId: string,
+  ): Promise<Array<{ id: string; name?: string; nameHindi?: string; gender?: string; dob?: string }>> {
+    return backendApi.get(`/api/people/${personId}/spouses`);
+  },
+
   /**
    * Update a person with core properties and additional fields
    * Handles both regular updates and additional details in one procedure call
    */
   async updatePerson(personId: string, updates: Partial<FNode>): Promise<PersonWithRelations> {
     const { customFields, ...coreUpdates } = updates;
-    const normalizedDob = this.normalizeDateValue(coreUpdates.dob);
-    const normalizedDeceasedDate = this.normalizeDateValue(coreUpdates.deceasedDate);
+    const normalizedDob = this.normalizeDateUpdate(coreUpdates.dob);
+    const normalizedDeceasedDate = this.normalizeDateUpdate(coreUpdates.deceasedDate);
     const payload = {
       name: coreUpdates.name,
       nameHindi: coreUpdates.nameHindi,
       gender: coreUpdates.gender,
       dob: normalizedDob,
       additionalFields: customFields && Object.keys(customFields).length > 0 ? customFields : undefined,
-      bloodGroup: coreUpdates.bloodGroup,
+      bloodGroup:
+        coreUpdates.bloodGroup === undefined
+          ? undefined
+          : coreUpdates.bloodGroup || null,
       isAlive: coreUpdates.isAlive,
       deceasedDate: normalizedDeceasedDate,
       photoUrl: coreUpdates.photo,
+      // "" / null clears the birth place; undefined leaves it alone. The five
+      // move together so a cleared place leaves no stale coordinates behind.
+      birthPlaceId: coreUpdates.birthPlaceId,
+      birthPlaceName: coreUpdates.birthPlaceName,
+      birthPlaceAddress: coreUpdates.birthPlaceAddress,
+      birthPlaceLatitude: coreUpdates.birthPlaceLatitude,
+      birthPlaceLongitude: coreUpdates.birthPlaceLongitude,
     };
     const response = await backendApi.patch<PersonWithRelations | UpdatePersonResponse>(
       `/api/people/${personId}`,
@@ -288,13 +902,6 @@ export const ApiService = {
   },
 
   /**
-   * Add a parent relationship
-   */
-  async addParent(childId: string, parentId: string): Promise<void> {
-    throw new Error("addParent is not supported in Node API yet. Use addPersonToTree workflow.");
-  },
-
-  /**
    * Add a spouse relationship (bidirectional) and link children
    */
   async addSpouse(
@@ -304,18 +911,31 @@ export const ApiService = {
     relationStartDate?: string,
     relationEndDate?: string,
     placeholderId?: string,
+    confirmExistingSpouse?: boolean,
+    mergeSpouseId?: string,
   ): Promise<void> {
     const normalizedStartDate = this.normalizeDateValue(relationStartDate);
     const normalizedEndDate = this.normalizeDateValue(relationEndDate);
 
-    await backendApi.post(`/api/people/spouse-link`, {
-      personId1: personId,
-      personId2: spouseId,
-      relationSubtype: relationSubtype || undefined,
-      relationStartDate: normalizedStartDate,
-      relationEndDate: normalizedEndDate,
-      replacePersonId: placeholderId || undefined,
-    });
+    const result = await backendApi.post<{ success?: boolean; error?: string } | void>(
+      `/api/people/spouse-link`,
+      {
+        personId1: personId,
+        personId2: spouseId,
+        relationSubtype: relationSubtype || undefined,
+        relationStartDate: normalizedStartDate,
+        relationEndDate: normalizedEndDate,
+        replacePersonId: placeholderId || undefined,
+        confirmExistingSpouse: confirmExistingSpouse || undefined,
+        mergeSpouseId: mergeSpouseId || undefined,
+      },
+    );
+
+    // The direct link path returns { success: false, error } with a 200 status,
+    // so surface backend validation failures (gender/existing-spouse) as errors.
+    if (result && (result as any).success === false) {
+      throw new Error((result as any).error || "Failed to link spouse");
+    }
   },
 
   async updateSpouseRelationDates(
@@ -375,6 +995,13 @@ export const ApiService = {
     photoUrl?: string,
     relationStartDate?: string,
     relationEndDate?: string,
+    otherParentMode?: "existing" | "new" | "unknown",
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
   ): Promise<AddPersonResult> {
     const normalizedDob = this.normalizeDateValue(dob);
     const normalizedDeceasedDate = this.normalizeDateValue(deceasedDate);
@@ -399,6 +1026,38 @@ export const ApiService = {
       photoUrl,
       relationStartDate: normalizedRelationStartDate,
       relationEndDate: normalizedRelationEndDate,
+      otherParentMode,
+      newSpouse: newSpouse
+        ? { ...newSpouse, dob: this.normalizeDateValue(newSpouse.dob) }
+        : undefined,
+    });
+  },
+
+  /**
+   * Change a person's "other parent" while keeping the anchor parent fixed.
+   * The other parent can be an existing spouse of the anchor ("existing"), a newly
+   * created spouse ("new"), or removed entirely ("unknown").
+   * Returns affected_nodes for efficient UI merge.
+   */
+  async changeOtherParent(
+    personId: string,
+    anchorParentId: string,
+    otherParentMode: "existing" | "new" | "unknown",
+    otherParentId?: string,
+    newSpouse?: {
+      name?: string;
+      nameHindi?: string;
+      gender?: string;
+      dob?: string;
+    },
+  ): Promise<AddPersonResult> {
+    return backendApi.patch<AddPersonResult>(`/api/people/${personId}/other-parent`, {
+      anchorParentId,
+      otherParentMode,
+      otherParentId,
+      newSpouse: newSpouse
+        ? { ...newSpouse, dob: this.normalizeDateValue(newSpouse.dob) }
+        : undefined,
     });
   },
 
@@ -461,19 +1120,41 @@ export const ApiService = {
   /**
    * Get all trees
    */
-  async getTrees(villageId?: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/tree', { villageId });
+  async getTrees(locationId?: string): Promise<any[]> {
+    return backendApi.get<any[]>('/api/tree', { locationId });
   },
 
   /**
-   * Get tree with village details
+   * Get tree with location details
    */
   async getTreeWithDetails(treeId: string): Promise<any> {
     return backendApi.get<any>(`/api/tree/${treeId}`);
   },
 
+  /**
+   * Whether the signed-in caller may read this tree. For surfaces that link
+   * into a tree and should not offer a door that will not open. Signed out is
+   * simply a `false`.
+   */
+  async canReadTree(treeId: string): Promise<boolean> {
+    try {
+      const result = await backendApi.get<{ canRead: boolean }>(
+        `/api/tree/${treeId}/access`,
+      );
+      return Boolean(result?.canRead);
+    } catch {
+      // Treat an unavailable answer as "no": hiding a link the viewer could
+      // have used is better than showing one that dead-ends in a locked tree.
+      return false;
+    }
+  },
+
   async getTreeWriteScope(treeId: string): Promise<TreeWriteScope> {
     return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
+  },
+
+  async getDefaultUserTree(): Promise<DefaultUserTreeTarget> {
+    return backendApi.get<DefaultUserTreeTarget>("/api/tree/my/default");
   },
 
   async getTreeInvites(treeId: string): Promise<TreeInvite[]> {
@@ -490,6 +1171,18 @@ export const ApiService = {
     },
   ): Promise<TreeInvite> {
     return backendApi.post<TreeInvite>(`/api/tree/${treeId}/invites`, payload);
+  },
+
+  /** Checks whether a phone number already belongs to a user in the system. */
+  async lookupTreeInviteUser(
+    treeId: string,
+    phone: string,
+    personId?: string | null,
+  ): Promise<{ exists: boolean; name: string | null }> {
+    return backendApi.post<{ exists: boolean; name: string | null }>(
+      `/api/tree/${treeId}/invites/lookup`,
+      { phone, personId: personId || null },
+    );
   },
 
   async revokeTreeInvite(treeId: string, inviteId: string): Promise<{ success: boolean }> {
@@ -510,17 +1203,17 @@ export const ApiService = {
     return backendApi.post<any>('/api/tree', {
       name: tree.name,
       description: tree.description || null,
-      villageId: tree.villageId || null,
+      locationId: tree.locationId || null,
       caste: tree.caste || null,
       subCaste: tree.subCaste || null,
     });
   },
 
   /**
-   * Get all villages with hierarchy
+   * Get all locations with hierarchy
    */
-  async getVillages(): Promise<any[]> {
-    return backendApi.get<any[]>('/api/lookup/villages');
+  async getLocations(): Promise<any[]> {
+    return backendApi.get<any[]>('/api/lookup/locations');
   },
 
   /**
@@ -538,10 +1231,43 @@ export const ApiService = {
   },
 
   /**
-   * Get all villages for a district
+   * Get all locations for a district
    */
-  async getVillagesForDistrict(districtId: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/lookup/villages', { districtId });
+  async getLocationsForDistrict(districtId: string): Promise<any[]> {
+    return backendApi.get<any[]>('/api/lookup/locations', { districtId });
+  },
+
+  /**
+   * The village closest to a point, or null when nothing is within range.
+   * Used to default a location-scoped page to where the caller is.
+   */
+  async getNearestLocation(
+    latitude: number,
+    longitude: number,
+  ): Promise<LocationCombinationOption | null> {
+    const result = await backendApi.get<LocationCombinationOption | null>(
+      "/api/lookup/nearest-location",
+      { lat: latitude, lng: longitude },
+    );
+    // 204 comes back as an empty body — "nothing near you", not an error.
+    return result && (result as any).locationId ? result : null;
+  },
+
+  async searchLocationCombinations(params: {
+    query?: string;
+    locationId?: string;
+    limit?: number;
+    withTreesOnly?: boolean;
+  }): Promise<LocationCombinationOption[]> {
+    return backendApi.get<LocationCombinationOption[]>(
+      "/api/lookup/location-combinations",
+      {
+        query: params.query,
+        locationId: params.locationId,
+        limit: params.limit,
+        withTreesOnly: params.withTreesOnly ? "true" : undefined,
+      },
+    );
   },
 
   /**
@@ -572,15 +1298,161 @@ export const ApiService = {
 
   /**
    * Global search across people, businesses, and professions.
-   * Returns enriched context including tree/village and ancestor hierarchy.
+   * Returns enriched context including tree/location and ancestor hierarchy.
    */
-  async globalSearch(searchTerm: string): Promise<any[]> {
-    return backendApi.get<any[]>('/api/search/global', { term: searchTerm });
+  /**
+   * Google Places suggestions for a partial query, proxied by our backend so
+   * the API key never reaches the browser. Returns [] when Places is
+   * unconfigured or unreachable — the caller should degrade, not error.
+   */
+  async searchPlaces(
+    query: string,
+    sessionToken?: string,
+  ): Promise<PlaceSuggestion[]> {
+    return backendApi.get<PlaceSuggestion[]>('/api/places/autocomplete', {
+      q: query,
+      sessionToken,
+    });
+  },
+
+  /** One place's name, address and coordinates — what gets stored on save. */
+  async getPlaceDetails(placeId: string, sessionToken?: string): Promise<PlaceDetails> {
+    return backendApi.get<PlaceDetails>(`/api/places/${encodeURIComponent(placeId)}`, {
+      sessionToken,
+    });
+  },
+
+  async globalSearch(
+    searchTerm: string,
+    coords?: { latitude: number; longitude: number } | null,
+  ): Promise<any[]> {
+    // Coordinates are optional and only affect business results, which come
+    // back nearest-first with a `distanceKm` when they are sent.
+    return backendApi.get<any[]>('/api/search/global', {
+      term: searchTerm,
+      lat: coords ? coords.latitude : undefined,
+      lng: coords ? coords.longitude : undefined,
+    });
+  },
+
+  /**
+   * One business's public listing: what it is, how to reach it, where it is,
+   * and the owner's name. Carries nothing else about the owner — the profile
+   * page is public, and their date of birth and gender are not the business's
+   * to publish.
+   */
+  async getBusinessProfile(businessId: string): Promise<BusinessProfile> {
+    return backendApi.get<BusinessProfile>(`/api/business/${businessId}`);
+  },
+
+  /** Store a business logo or cover image; returns its public URL. */
+  async uploadBusinessImage(
+    businessId: string,
+    kind: "logo" | "cover",
+    blob: Blob,
+  ): Promise<string> {
+    const formData = new FormData();
+    formData.append("image", blob, `${businessId}-${kind}.jpg`);
+    const result = await backendApi.upload<{ url: string }>(
+      `/api/business/${businessId}/image/${kind}`,
+      formData,
+    );
+    return result.url;
+  },
+
+  async removeBusinessImage(businessId: string, kind: "logo" | "cover"): Promise<void> {
+    await backendApi.delete(`/api/business/${businessId}/image/${kind}`);
   },
 
   /**
    * Get businesses for a person
    */
+  /**
+   * Businesses near a point, nearest first. Each row carries `distanceKm`.
+   * A business is placed by the location its owner picked, falling back to the
+   * village its owner's tree is rooted in.
+   */
+  /**
+   * One person's profession profile, or null when there isn't one the viewer
+   * may see. A 404 covers both "no profile" and "not yours to see" — the server
+   * deliberately doesn't distinguish them.
+   */
+  async getProfessionProfile(peopleId: string): Promise<ProfessionProfile | null> {
+    try {
+      return await backendApi.get<ProfessionProfile>(
+        `/api/profession-profile/person/${peopleId}`,
+      );
+    } catch (error: any) {
+      if (error?.status === 404 || /not found/i.test(error?.message || "")) return null;
+      throw error;
+    }
+  },
+
+  /** Create or replace a person's profile, with its milestones and skills. */
+  async saveProfessionProfile(
+    peopleId: string,
+    payload: Partial<ProfessionProfile>,
+  ): Promise<{ success: boolean; profileId: string }> {
+    return backendApi.put<{ success: boolean; profileId: string }>(
+      `/api/profession-profile/person/${peopleId}`,
+      payload,
+    );
+  },
+
+  async deleteProfessionProfile(peopleId: string): Promise<{ success: boolean }> {
+    return backendApi.delete<{ success: boolean }>(
+      `/api/profession-profile/person/${peopleId}`,
+    );
+  },
+
+  async getBusinessesNearby(
+    latitude: number,
+    longitude: number,
+    radiusKm = 25,
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/business/nearby", {
+      lat: latitude,
+      lng: longitude,
+      radiusKm,
+    });
+  },
+
+  /**
+   * People with a profession near a point — the geographic twin of
+   * `getProfessionsByLocation`, already grouped per person by the server.
+   */
+  async getProfessionsNearby(
+    latitude: number,
+    longitude: number,
+    radiusKm = 25,
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/profession/nearby", {
+      lat: latitude,
+      lng: longitude,
+      radiusKm,
+    });
+  },
+
+  /**
+   * What place a pair of coordinates is in, so "use my location" can name
+   * itself. Resolves to null when the lookup is unavailable — the caller keeps
+   * whatever label it had.
+   */
+  async reverseGeocode(
+    latitude: number,
+    longitude: number,
+  ): Promise<{ name: string; address: string; latitude: number; longitude: number } | null> {
+    try {
+      return await backendApi.get<any>("/api/places/reverse", {
+        lat: latitude,
+        lng: longitude,
+      });
+    } catch (error) {
+      console.warn("Could not name the current position:", error);
+      return null;
+    }
+  },
+
   async getBusinessesByPerson(peopleId: string): Promise<any[]> {
     return backendApi.get<any[]>(`/api/business/person/${peopleId}`);
   },
@@ -594,7 +1466,19 @@ export const ApiService = {
       category: business.category || null,
       description: business.description || null,
       contact: business.contact || null,
+      email: business.email || null,
       peopleId: business.peopleId || null,
+      tagline: business.tagline || null,
+      story: business.story || null,
+      foundedOn: business.foundedOn || null,
+      website: business.website || null,
+      address: business.address || null,
+      hours: business.hours || null,
+      placeId: business.placeId || null,
+      placeName: business.placeName || null,
+      placeAddress: business.placeAddress || null,
+      latitude: business.latitude ?? null,
+      longitude: business.longitude ?? null,
     });
   },
 
@@ -608,6 +1492,18 @@ export const ApiService = {
       description: updates.description,
       peopleId: updates.peopleId,
       contact: updates.contact,
+      email: updates.email,
+      tagline: updates.tagline,
+      story: updates.story,
+      foundedOn: updates.foundedOn,
+      website: updates.website,
+      address: updates.address,
+      hours: updates.hours,
+      placeId: updates.placeId,
+      placeName: updates.placeName,
+      placeAddress: updates.placeAddress,
+      latitude: updates.latitude,
+      longitude: updates.longitude,
       isDeleted: updates.isDeleted,
     });
   },
@@ -627,12 +1523,12 @@ export const ApiService = {
   },
 
   /**
-   * Get businesses by village with person hierarchy
+   * Get businesses by location with person hierarchy
    */
-  async getBusinessesByVillageWithHierarchy(
-    villageId: string
+  async getBusinessesByLocationWithHierarchy(
+    locationId: string
   ): Promise<any[]> {
-    return backendApi.get<any[]>('/api/business', { villageId });
+    return backendApi.get<any[]>('/api/business', { locationId });
   },
 
   /**
@@ -666,12 +1562,12 @@ export const ApiService = {
   },
 
   /**
-   * Create village
+   * Create location
    */
-  async createVillage(village: { name: string; districtId?: string }): Promise<any> {
-    return backendApi.post<any>('/api/lookup/villages', {
-      name: village.name,
-      districtId: village.districtId,
+  async createLocation(location: { name: string; districtId?: string }): Promise<any> {
+    return backendApi.post<any>('/api/lookup/locations', {
+      name: location.name,
+      districtId: location.districtId,
     });
   },
 
@@ -694,6 +1590,25 @@ export const ApiService = {
    */
   async createProfession(profession: { name: string; description?: string; category?: string }): Promise<any> {
     return backendApi.post<any>('/api/profession', profession);
+  },
+
+  /**
+   * Submit user feedback (bug / suggestion / other).
+   */
+  async submitFeedback(payload: {
+    message: string;
+    category?: string;
+    rating?: number | null;
+    context?: string | null;
+  }): Promise<any> {
+    return backendApi.post<any>('/api/feedback', payload);
+  },
+
+  /**
+   * Superadmin: list all feedback submitted by all users.
+   */
+  async getAllFeedback(): Promise<any[]> {
+    return backendApi.get<any[]>('/api/feedback');
   },
 
   /**
@@ -734,40 +1649,259 @@ export const ApiService = {
     });
   },
 
+  async getUserPreference(): Promise<UserPreferenceResponse> {
+    return backendApi.get<UserPreferenceResponse>('/api/user/preference');
+  },
+
+  async updateUserPreference(
+    preference: Partial<UserPreference>,
+  ): Promise<UserPreferenceResponse> {
+    return backendApi.patch<UserPreferenceResponse>('/api/user/preference', {
+      preference,
+    });
+  },
+
+  async getUserOnboarding(): Promise<UserOnboardingResponse> {
+    return backendApi.get<UserOnboardingResponse>("/api/user/onboarding");
+  },
+
+  async updateUserOnboarding(
+    onboardingData: UserOnboardingDataUpdate,
+  ): Promise<UserOnboardingResponse> {
+    return backendApi.patch<UserOnboardingResponse>("/api/user/onboarding", {
+      onboardingData,
+    });
+  },
+
+  async searchUserOnboardingMatches(payload: {
+    searchName?: string | null;
+    locationId: string;
+    casteId?: string | null;
+    subCasteId?: string | null;
+  }): Promise<UserOnboardingTreeMatch[]> {
+    return backendApi.post<UserOnboardingTreeMatch[]>(
+      "/api/user/onboarding/matches/search",
+      payload,
+    );
+  },
+
+  /** Stores this device's FCM token so the backend can push notifications to it. */
+  async registerDeviceToken(token: string): Promise<{ success: boolean }> {
+    return backendApi.post<{ success: boolean }>("/api/notifications/device-token", {
+      token,
+      platform: "web",
+    });
+  },
+
+  /** Removes this device's FCM token (sign-out, or notifications turned off). */
+  async unregisterDeviceToken(token: string): Promise<{ success: boolean }> {
+    return backendApi.delete<{ success: boolean }>("/api/notifications/device-token", {
+      token,
+    });
+  },
+
+  async getMyLinkRequests(requestType?: LinkRequestType): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>("/api/link-requests/my", {
+      requestType,
+    });
+  },
+
+  async createUserNodeLinkRequest(payload: {
+    targetPersonId: string;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/user-node", payload);
+  },
+
+  async createBranchAccessRequest(payload: {
+    targetTreeId: string;
+    targetPersonId?: string | null;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/branch-access", payload);
+  },
+
+  async createAddToTreeRequest(payload: {
+    targetTreeId: string;
+    relativePersonId?: string | null;
+    requestMessage?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/link-requests/add-to-tree", payload);
+  },
+
+  async createSpouseLinkRequest(payload: {
+    personId1: string;
+    personId2: string;
+    relationSubtype?: string | null;
+    relationStartDate?: string | null;
+    relationEndDate?: string | null;
+    replacePersonId?: string | null;
+    requestMessage?: string | null;
+    confirmExistingSpouse?: boolean;
+    mergeSpouseId?: string | null;
+  }): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>("/api/people/spouse-link", {
+      ...payload,
+      requestOnly: true,
+    });
+  },
+
+  async getPendingTreeLinkRequests(treeId: string): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>(`/api/link-requests/tree/${treeId}/pending`);
+  },
+
+  async getActionableLinkRequests(): Promise<LinkRequest[]> {
+    return backendApi.get<LinkRequest[]>("/api/link-requests/actionable");
+  },
+
+  async reviewLinkRequest(
+    requestId: string,
+    payload: {
+      action: "approved" | "rejected";
+      reviewNote?: string | null;
+    },
+  ): Promise<LinkRequest> {
+    return backendApi.post<LinkRequest>(
+      `/api/link-requests/${requestId}/review`,
+      payload,
+    );
+  },
+
   /**
    * Search people by name with parent hierarchy.
-   * Supports village-scoped and tree-scoped search.
+   * Supports location-scoped and tree-scoped search.
    */
   async searchPeopleWithHierarchy(
     searchTerm: string,
     options: {
-      villageId?: string;
+      locationId?: string;
       treeId?: string;
     },
   ): Promise<any[]> {
-    return backendApi.get<any[]>("/api/people/search/by-village", {
+    return backendApi.get<any[]>("/api/people/search/by-location", {
       searchTerm,
-      villageId: options.villageId,
+      locationId: options.locationId,
       treeId: options.treeId,
     });
   },
 
   /**
-   * Search people by name in a village with parent hierarchy.
-   * Kept as a compatibility wrapper for existing callers.
+   * Public location directory — every location that has trees, with counts.
+   * Aggregate only, so it works signed-out.
    */
-  async searchPeopleByVillageWithHierarchy(
-    searchTerm: string,
-    villageId: string
-  ): Promise<any[]> {
-    return this.searchPeopleWithHierarchy(searchTerm, { villageId });
+  async getLocationDirectory(params: { stateId?: string; query?: string } = {}): Promise<
+    Array<{
+      stateId: string;
+      stateName: string;
+      districtId: string;
+      districtName: string;
+      locationId: string;
+      locationName: string;
+      treeCount: number;
+      peopleCount: number;
+    }>
+  > {
+    return backendApi.get("/api/lookup/directory", {
+      stateId: params.stateId,
+      query: params.query,
+    });
+  },
+
+  /** The trees in one location, as public cards (no people). */
+  async getTreesForDirectory(locationId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      casteName: string | null;
+      subCasteName: string | null;
+      locationName: string | null;
+      districtName: string | null;
+      stateName: string | null;
+      peopleCount: number;
+    }>
+  > {
+    return backendApi.get(`/api/lookup/directory/${locationId}`);
   },
 
   /**
-   * Get all people with their professions for a village
+   * Nodes the signed-in user could claim as their own profile, restricted to the
+   * trees they can see. Called with no `query` it matches on their account name,
+   * so likely candidates are on screen before they type.
    */
-  async getPeopleWithProfessionsByVillage(villageId: string): Promise<any[]> {
-    const professions = await this.getProfessionsByVillage(villageId);
+  async getProfileLinkCandidates(options: {
+    query?: string;
+    locationId?: string;
+  } = {}): Promise<any[]> {
+    return backendApi.get<any[]>("/api/people/link-candidates", {
+      query: options.query,
+      locationId: options.locationId,
+    });
+  },
+
+  /**
+   * People in OTHER trees who could be the spouse being linked. Requires both a
+   * location and a name — it is a targeted lookup, not a browsable listing — and
+   * returns only enough to recognise someone.
+   */
+  async getMarriageCandidates(options: {
+    name: string;
+    locationId: string;
+    excludeTreeId?: string;
+  }): Promise<Array<{
+    personId: string;
+    name: string;
+    nameHindi: string | null;
+    gender: string | null;
+    treeId: string | null;
+    treeName: string | null;
+    locationName: string | null;
+    parentHierarchy: Array<{ id: string; name: string; generation: number }>;
+  }>> {
+    return backendApi.get("/api/people/marriage-candidates", {
+      name: options.name,
+      locationId: options.locationId,
+      excludeTreeId: options.excludeTreeId,
+    });
+  },
+
+  /**
+   * Same as searchPeopleWithHierarchy, but restricted to people the logged-in
+   * user has write access to (a superadmin gets everyone). Used to pick an owner
+   * you're actually allowed to manage.
+   */
+  async searchWritablePeopleWithHierarchy(
+    searchTerm: string,
+    options: {
+      locationId?: string;
+      treeId?: string;
+    },
+  ): Promise<any[]> {
+    return backendApi.get<any[]>("/api/people/search/by-location/writable", {
+      searchTerm,
+      locationId: options.locationId,
+      treeId: options.treeId,
+    });
+  },
+
+  /**
+   * Of the given person ids, returns those the logged-in user may manage
+   * (edit/delete a business or professions): superadmin gets all; otherwise a
+   * node they've claimed, or an unclaimed node they have write access to.
+   */
+  async getManageablePeople(personIds: string[]): Promise<string[]> {
+    if (!personIds || personIds.length === 0) return [];
+    const res = await backendApi.post<{ manageableIds: string[] }>(
+      "/api/people/manageable",
+      { personIds },
+    );
+    return res?.manageableIds || [];
+  },
+
+  /**
+   * Get all people with their professions for a location
+   */
+  async getPeopleWithProfessionsByLocation(locationId: string): Promise<any[]> {
+    const professions = await this.getProfessionsByLocation(locationId);
     const peopleMap = new Map<string, any>();
 
     (professions || []).forEach((profession: any) => {
@@ -791,10 +1925,10 @@ export const ApiService = {
   },
 
   /**
-   * Get professions by village with people and hierarchy
+   * Get professions by location with people and hierarchy
    */
-  async getProfessionsByVillage(villageId: string): Promise<any[]> {
-    const data = await backendApi.get<any[]>(`/api/profession/by-village/${villageId}`);
+  async getProfessionsByLocation(locationId: string): Promise<any[]> {
+    const data = await backendApi.get<any[]>(`/api/profession/by-location/${locationId}`);
 
     // Transform the data to group people by profession
     const professionsMap = new Map<string, any>();
@@ -816,13 +1950,16 @@ export const ApiService = {
           personName: row.personName,
           gender: row.personGender,
           personDob: row.personDob,
-          villageId: row.villageId,
-          villageName: row.villageName,
+          locationId: row.locationId,
+          locationName: row.locationName,
           casteName: row.casteName,
           subCasteName: row.subCasteName,
           treeId: row.treeId,
           treeName: row.treeName,
           parentHierarchy: row.parentHierarchy || [],
+          // Card-sized career details, already redacted for this viewer by the
+          // backend. Null when there is no profile or it isn't shared.
+          professionProfile: row.professionProfile || null,
         });
       }
     });
@@ -831,10 +1968,172 @@ export const ApiService = {
   },
 
   /**
-   * Get dashboard statistics (global, all villages)
+   * Get dashboard statistics (global, all locations)
    */
   async getDashboardStatistics(): Promise<any> {
     return backendApi.get<any>('/api/dashboard/statistics');
+  },
+
+  /**
+   * Today's family events (birthdays, death anniversaries, wedding
+   * anniversaries) scoped to the logged-in user's tree.
+   */
+  async getTodaysFamilyEvents(): Promise<FamilyEvents> {
+    return backendApi.get<FamilyEvents>('/api/family-events/today');
+  },
+
+  /**
+   * Birthdays and anniversaries in the next `days` days (today excluded), so a
+   * quiet day still has something to show.
+   */
+  async getUpcomingFamilyEvents(days = 7): Promise<UpcomingFamilyEvent[]> {
+    return backendApi.get<UpcomingFamilyEvent[]>('/api/family-events/upcoming', {
+      days,
+    });
+  },
+
+  /**
+   * The logged-in user's own tree stats, the gaps worth filling, and nav badge
+   * counts — the data behind the personalized homepage.
+   */
+  async getMyDashboardInsights(): Promise<DashboardInsights> {
+    return backendApi.get<DashboardInsights>('/api/dashboard/my-insights');
+  },
+
+  // =====================================================
+  // EVENT WISHES (birthday / anniversary / remembrance wall)
+  // =====================================================
+
+  /**
+   * List non-deleted wishes for a person, optionally scoped to a single
+   * (eventType, eventYear) thread. Newest-first. Public read.
+   */
+  async getWishes(params: {
+    peopleId: string;
+    eventType?: WishEventType;
+    eventYear?: number;
+  }): Promise<Wish[]> {
+    return backendApi.get<Wish[]>('/api/wishes', {
+      peopleId: params.peopleId,
+      eventType: params.eventType,
+      eventYear: params.eventYear,
+    });
+  },
+
+  /**
+   * Post a wish to a person's event thread. Author is resolved server-side.
+   */
+  async postWish(payload: {
+    peopleId: string;
+    eventType: WishEventType;
+    eventYear: number;
+    message: string;
+  }): Promise<Wish> {
+    return backendApi.post<Wish>('/api/wishes', payload);
+  },
+
+  // =====================================================
+  // CELEBRATIONS
+  // =====================================================
+
+  /** Open a celebration by id. */
+  async getCelebration(eventId: string): Promise<CelebrationPayload> {
+    return backendApi.get<CelebrationPayload>(`/api/celebration/${eventId}`);
+  },
+
+  /**
+   * Open the celebration for a person and occasion, creating it if this is the
+   * first time anyone has looked. The server validates that the event is real
+   * before minting anything.
+   */
+  async resolveCelebration(
+    personId: string,
+    eventType: CelebrationEventType,
+    eventYear: number,
+  ): Promise<CelebrationPayload> {
+    return backendApi.get<CelebrationPayload>('/api/celebration/resolve', {
+      personId,
+      eventType,
+      eventYear,
+    });
+  },
+
+  /**
+   * Post a wish. Returns the whole refreshed page, so the new entry arrives
+   * with its author relation already resolved rather than the client guessing
+   * at it and correcting on the next load.
+   */
+  async postCelebrationWish(
+    eventId: string,
+    message: string,
+    authorRelation?: string | null,
+    parentWishId?: string | null,
+  ): Promise<CelebrationPayload> {
+    return backendApi.post<CelebrationPayload>(`/api/celebration/${eventId}/wishes`, {
+      message,
+      authorRelation: authorRelation || null,
+      parentWishId: parentWishId || null,
+    });
+  },
+
+  /**
+   * Toggle one reaction on one message.
+   *
+   * Returns just that message's tallies, not the whole page — reacting is a
+   * tap, and re-rendering the page for it would be conspicuous.
+   */
+  async toggleWishReaction(
+    eventId: string,
+    wishId: string,
+    kind: ReactionKind,
+  ): Promise<{ wishId: string; reactions: ReactionTally[] }> {
+    return backendApi.post<{ wishId: string; reactions: ReactionTally[] }>(
+      `/api/celebration/${eventId}/wishes/${wishId}/reactions`,
+      { kind },
+    );
+  },
+
+  /**
+   * Change what a message says. Returns the refreshed page, because an edit can
+   * land on a reply nested under another message and the server re-groups.
+   */
+  async editCelebrationWish(
+    eventId: string,
+    wishId: string,
+    message: string,
+  ): Promise<CelebrationPayload> {
+    return backendApi.patch<CelebrationPayload>(
+      `/api/celebration/${eventId}/wishes/${wishId}`,
+      { message },
+    );
+  },
+
+  /** Removes the message and any replies to it. */
+  async deleteCelebrationWish(eventId: string, wishId: string): Promise<void> {
+    await backendApi.delete(`/api/celebration/${eventId}/wishes/${wishId}`);
+  },
+
+  /** Past celebrations for one person. Empty unless the viewer is family. */
+  async getCelebrationHistory(personId: string, limit = 12): Promise<CelebrationEvent[]> {
+    return backendApi.get<CelebrationEvent[]>(
+      `/api/celebration/person/${personId}/history`,
+      { limit },
+    );
+  },
+
+  /**
+   * Recent wishes across the viewer's family — the dashboard wall. Empty for a
+   * signed-out visitor, which the server decides.
+   */
+  async getRecentWishes(limit = 12): Promise<RecentWish[]> {
+    return backendApi.get<RecentWish[]>('/api/wishes/recent', { limit });
+  },
+
+  /**
+   * Soft-delete a wish (author or superadmin only, enforced server-side).
+   */
+  async deleteWish(id: string): Promise<void> {
+    await backendApi.delete(`/api/wishes/${id}`);
   },
 
   // =====================================================
@@ -857,5 +2156,49 @@ export const ApiService = {
    */
   async removePersonPhoto(personId: string): Promise<void> {
     await backendApi.delete(`/api/people/${personId}/photo`);
+  },
+
+  // =====================================================
+  // FAMILY PHOTOS (Cloudflare R2) — separate from the single profile photo above
+  // =====================================================
+
+  /** Upload a family photo for a person, with an explicit visibility scope. */
+  async uploadFamilyPhoto(
+    personId: string,
+    file: File,
+    visibility: PhotoVisibility,
+  ): Promise<FamilyPhoto> {
+    const formData = new FormData();
+    formData.append('photo', file);
+    formData.append('visibility', visibility);
+    return backendApi.upload<FamilyPhoto>(`/api/photos/people/${personId}`, formData);
+  },
+
+  /** The current user's own uploads, newest first. */
+  async getMyFamilyPhotos(): Promise<FamilyPhoto[]> {
+    return backendApi.get<FamilyPhoto[]>('/api/photos/mine');
+  },
+
+  /** Photos uploaded by others, visible to the current user (public, or family-scoped within a shared tree). */
+  async getSharedFamilyPhotos(): Promise<FamilyPhoto[]> {
+    return backendApi.get<FamilyPhoto[]>('/api/photos/shared');
+  },
+
+  /** All photos of one person the current user is allowed to see. */
+  async getPersonFamilyPhotos(personId: string): Promise<FamilyPhoto[]> {
+    return backendApi.get<FamilyPhoto[]>(`/api/photos/people/${personId}`);
+  },
+
+  async updateFamilyPhotoVisibility(photoId: string, visibility: PhotoVisibility): Promise<void> {
+    await backendApi.patch(`/api/photos/${photoId}/visibility`, { visibility });
+  },
+
+  async deleteFamilyPhoto(photoId: string): Promise<void> {
+    await backendApi.delete(`/api/photos/${photoId}`);
+  },
+
+  /** Storage quota: how much of the earned allowance the user has used. */
+  async getStorageStatus(): Promise<StorageQuotaStatus> {
+    return backendApi.get<StorageQuotaStatus>('/api/storage/status');
   },
 };

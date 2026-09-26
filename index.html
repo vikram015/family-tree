@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="hi">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no"
+    />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kinvia" />
+
+    <!-- Primary Meta Tags -->
+    <title>
+      Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online
+    </title>
+    <meta
+      name="title"
+      content="Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online"
+    />
+    <meta
+      name="description"
+      content="Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details. Free online genealogy tool for Indian families."
+    />
+    <meta
+      name="keywords"
+      content="family tree, genealogy, family history, family tree maker, Indian family tree, वंशावली, परिवार वृक्ष, family heritage, ancestry, lineage, family tree builder, online family tree, free family tree"
+    />
+    <meta name="author" content="Kinvia" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://kinvia.in/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kinvia.in/" />
+    <meta
+      property="og:title"
+      content="Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online"
+    />
+    <meta
+      property="og:description"
+      content="Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details. Free online genealogy tool for Indian families."
+    />
+    <!-- Must be a file that actually exists in public/: the SPA catch-all rewrite
+         answers missing paths with index.html (200 text/html), so a wrong path
+         here silently gives Facebook an HTML body instead of an image. -->
+    <meta property="og:image" content="https://kinvia.in/logo512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:locale" content="hi_IN" />
+    <meta property="og:site_name" content="Kinvia" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://kinvia.in/" />
+    <meta
+      name="twitter:title"
+      content="Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online"
+    />
+    <meta
+      name="twitter:description"
+      content="Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details. Free online genealogy tool for Indian families."
+    />
+    <meta name="twitter:image" content="https://kinvia.in/logo512.png" />
+
+    <!-- Additional SEO Tags -->
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kinvia" />
+
+    <!-- One stylesheet request for every family the app uses:
+         - Inter: the UI typeface, from the product design.
+         - Newsreader: the one serif, used for the dashboard's italic line.
+         - Manrope: tree node cards, which draw their own SVG text.
+         - Noto Sans Devanagari: Hindi names.
+         Kept as a single <link> so the extra families cost no extra round trip,
+         and `display=swap` so text paints immediately in the fallback. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@1,6..72,400&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Structured Data / JSON-LD -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Kinvia",
+        "description": "Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details.",
+        "url": "https://kinvia.in/",
+        "applicationCategory": "LifestyleApplication",
+        "operatingSystem": "Any",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "INR"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.8",
+          "ratingCount": "150"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

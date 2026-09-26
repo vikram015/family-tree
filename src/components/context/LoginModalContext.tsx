@@ -32,9 +32,13 @@ export const LoginModalProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const handleSuccess = useCallback(() => {
+    // Login succeeded — close the modal (otherwise it resets to the phone step
+    // and re-prompts for the mobile number) before running the caller's action.
+    setIsOpen(false);
     if (onSuccessCallback) {
       onSuccessCallback();
     }
+    setOnSuccessCallback(undefined);
   }, [onSuccessCallback]);
 
   return (

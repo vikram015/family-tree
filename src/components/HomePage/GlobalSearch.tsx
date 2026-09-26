@@ -1,0 +1,525 @@
+import React, { useCallback, useRef, useState } from "react";
+import {
+  Avatar,
+  Box,
+  Chip,
+  CircularProgress,
+  ClickAwayListener,
+  InputAdornment,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useNavigate } from "react-router-dom";
+import SearchIcon from "@mui/icons-material/Search";
+import StoreIcon from "@mui/icons-material/Store";
+import NearMeOutlinedIcon from "@mui/icons-material/NearMeOutlined";
+import TimelineIcon from "@mui/icons-material/Timeline";
+import { ApiService } from "../../services/apiService";
+import { useAuth } from "../hooks/useAuth";
+import { FullScreenMobilePicker } from "../FullScreenMobilePicker";
+import { brand } from "../../theme/brand";
+import { avatarTint, initialsOf } from "./homeTheme";
+import { useNearMe } from "./useNearMe";
+
+/**
+ * Search across people, businesses and professions.
+ *
+ * Lifted out of HomePage so the signed-in dashboard and the signed-out landing
+ * page share one implementation — it's the app's only global search (the header
+ * search covers locations only).
+ *
+ * On phones the field opens a full-screen picker; on desktop results drop below
+ * the input. That split is what `FullScreenMobilePicker` exists for.
+ */
+
+interface SearchResult {
+  id: string;
+  name: string;
+  type: "person" | "business" | "profession";
+  /** For business/profession results, the associated (owner) person id. */
+  personId?: string;
+  treeId?: string;
+  treeName?: string;
+  personPhotoUrl?: string;
+  gotra?: string;
+  extra?: string;
+  locationName?: string;
+  /** Kilometres from the viewer. Business results only, and only when the
+   *  viewer shared their location and the business's village is geocoded. */
+  distanceKm?: number;
+  casteName?: string;
+  subCasteName?: string;
+  parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
+}
+
+function MetaPill({ value, accent }: { value?: string; accent?: "brand" | "slate" }) {
+  if (!value) return null;
+  const styles =
+    accent === "brand"
+      ? { bg: brand.primarySoft, color: brand.primary }
+      : { bg: "#f1f5f9", color: brand.slate };
+
+  return (
+    <Box
+      sx={{
+        px: 0.9,
+        py: 0.45,
+        borderRadius: 999,
+        bgcolor: styles.bg,
+        color: styles.color,
+        fontSize: 11,
+        fontWeight: 600,
+        lineHeight: 1.2,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {value}
+    </Box>
+  );
+}
+
+export interface GlobalSearchProps {
+  placeholder?: string;
+  /** Caps the field on wide screens; the hero and landing use different widths. */
+  maxWidth?: number | string;
+  /**
+   * Show the entity-type filters inside the field. Off by default: the header's
+   * search is a narrow control with no room for them.
+   */
+  showTypeFilter?: boolean;
+  /** Pill-shaped field, for the landing hero. */
+  rounded?: boolean;
+}
+
+/** The entity kinds the global search can return, as filter chips. */
+type ResultType = SearchResult["type"];
+
+export const GlobalSearch: React.FC<GlobalSearchProps> = ({
+  placeholder,
+  maxWidth = 640,
+  showTypeFilter = false,
+  rounded = false,
+}) => {
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
+
+  // People results are limited to trees the viewer can see, so a signed-out
+  // visitor gets businesses and professions only. Promising "family members"
+  // to someone who cannot receive them just produces an empty result list.
+  const effectivePlaceholder =
+    placeholder ??
+    (currentUser
+      ? "Search family members, businesses..."
+      : "Search businesses and professions...");
+  // No chip selected means "everything". A filter narrows what is already on
+  // screen — it never changes the request, so switching chips costs nothing.
+  const [typeFilter, setTypeFilter] = useState<ResultType | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nearMe = useNearMe();
+  // Read inside the debounced search without making it a dependency, which
+  // would cancel and restart the in-flight search on every position update.
+  const nearMeCoordsRef = useRef(nearMe.coords);
+  nearMeCoordsRef.current = nearMe.coords;
+
+  const performSearch = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 2) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+    setIsSearching(true);
+    setShowResults(true);
+    try {
+      const rows = await ApiService.globalSearch(query.trim(), nearMeCoordsRef.current);
+
+      const results: SearchResult[] = (rows || []).map((row: any) => {
+        const lineageText =
+          row.entityType === "person" && Array.isArray(row.parentHierarchy)
+            ? row.parentHierarchy
+                .slice(-5)
+                .map((a: any) => a?.name)
+                .filter(Boolean)
+                .join(" -> ")
+            : "";
+
+        return {
+          id: row.entityId,
+          name: row.title || "Unknown",
+          type: row.entityType,
+          personId: row.personId || undefined,
+          treeId: row.treeId,
+          extra:
+            row.entityType === "person"
+              ? lineageText || "Lineage: N/A"
+              : row.subtitle || undefined,
+          treeName: row.treeName || undefined,
+          personPhotoUrl: row.personPhotoUrl || undefined,
+          gotra: row.gotra || undefined,
+          locationName: row.locationName || undefined,
+          distanceKm:
+            row.distanceKm === null || row.distanceKm === undefined
+              ? undefined
+              : Number(row.distanceKm),
+          casteName: row.casteName || undefined,
+          subCasteName: row.subCasteName || undefined,
+          parentHierarchy: row.parentHierarchy || [],
+        };
+      });
+
+      setSearchResults(results);
+    } catch (err) {
+      console.error("Search error:", err);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => performSearch(value), 300);
+  };
+
+  const handleResultClick = (result: SearchResult) => {
+    setShowResults(false);
+    setSearchQuery("");
+    if (result.type === "person" && result.id) {
+      navigate(`/profile/person/${result.id}`);
+    } else if (result.type === "business" && result.id) {
+      // The business's own page — not its owner's profile, which answers a
+      // different question and shows their personal details.
+      navigate(`/business/${result.id}`);
+    } else if (result.type === "profession") {
+      // A profession result is a *person* who does that work — `result.id` is
+      // the vocabulary row, so the page to open is keyed by `personId`.
+      //
+      // This has to be tested before the `treeId` fallback below: every
+      // profession result carries its person's tree, so the fallback was
+      // catching all of them and opening the family tree instead. Without a
+      // person there is nothing to show, so the tree is still the best answer.
+      if (result.personId) {
+        navigate(`/profession/${result.personId}`);
+      } else if (result.treeId) {
+        navigate(`/families?tree=${result.treeId}`);
+      }
+    } else if (result.treeId) {
+      navigate(`/families?tree=${result.treeId}`);
+    }
+  };
+
+  // A signed-out visitor gets no people back from the API at all, so offering
+  // to filter by them would just be an always-empty chip.
+  const filterOptions: Array<{ value: ResultType; label: string }> = currentUser
+    ? [
+        { value: "person", label: "Family" },
+        { value: "business", label: "Businesses" },
+        { value: "profession", label: "Professions" },
+      ]
+    : [
+        { value: "business", label: "Businesses" },
+        { value: "profession", label: "Professions" },
+      ];
+
+  const visibleResults = typeFilter
+    ? searchResults.filter((result) => result.type === typeFilter)
+    : searchResults;
+
+  const renderFilters = () => {
+    if (!showTypeFilter) return null;
+    return (
+      <Stack
+        direction="row"
+        spacing={0.5}
+        sx={{
+          // Chips inside the field need room; below sm the field is barely wider
+          // than the placeholder, so they move out of the way entirely.
+          display: { xs: "none", sm: "flex" },
+          flexShrink: 0,
+          pr: 0.5,
+        }}
+      >
+        {/* Proximity is a property of the search, not a category of result, so
+            it sits with the filters but reads as a toggle. Only shown where the
+            filters are — the header's narrow field has no room. */}
+        <Chip
+          icon={<NearMeOutlinedIcon sx={{ fontSize: 15 }} />}
+          label={nearMe.locating ? "Locating…" : "Near me"}
+          size="small"
+          onClick={nearMe.toggle}
+          title={
+            nearMe.error ||
+            "Sort business results by distance from you"
+          }
+          sx={{
+            fontWeight: 700,
+            fontSize: 12,
+            height: 28,
+            cursor: "pointer",
+            bgcolor: nearMe.enabled && nearMe.coords ? brand.primary : "#f1f5f9",
+            color: nearMe.enabled && nearMe.coords ? "#fff" : brand.slate,
+            "& .MuiChip-icon": {
+              color: nearMe.enabled && nearMe.coords ? "#fff" : brand.slateMuted,
+            },
+            "&:hover": {
+              bgcolor: nearMe.enabled && nearMe.coords ? brand.primaryDark : "#e2e8f0",
+            },
+          }}
+        />
+
+        {filterOptions.map((option) => {
+          const active = typeFilter === option.value;
+          return (
+            <Chip
+              key={option.value}
+              label={option.label}
+              size="small"
+              // Clicking the active chip clears it — back to everything.
+              onClick={() => setTypeFilter(active ? null : option.value)}
+              sx={{
+                fontWeight: 700,
+                fontSize: 12,
+                height: 28,
+                cursor: "pointer",
+                bgcolor: active ? brand.primarySoft : brand.canvas,
+                color: active ? brand.primary : brand.slate,
+                border: "1px solid",
+                borderColor: active ? brand.primary : brand.border,
+                "&:hover": {
+                  bgcolor: active ? brand.primarySoft : brand.border,
+                },
+              }}
+            />
+          );
+        })}
+      </Stack>
+    );
+  };
+
+  const renderResults = (onPick?: () => void, floating = true) => {
+    if (!showResults) return null;
+
+    return (
+      <Paper
+        elevation={floating ? 8 : 0}
+        sx={{
+          position: floating ? "absolute" : "static",
+          top: floating ? "100%" : "auto",
+          left: 0,
+          right: 0,
+          zIndex: 1300,
+          maxHeight: floating ? 420 : "none",
+          overflow: "auto",
+          mt: floating ? 0.5 : 1.5,
+          borderRadius: 2,
+        }}
+      >
+        {visibleResults.length > 0 ? (
+          <List dense disablePadding>
+            {visibleResults.map((result) => {
+              const tint = avatarTint(result.name);
+              return (
+                <ListItem
+                  key={`${result.type}-${result.id}`}
+                  component="div"
+                  onClick={() => {
+                    onPick?.();
+                    handleResultClick(result);
+                  }}
+                  sx={{
+                    cursor: "pointer",
+                    minHeight: 56,
+                    "&:hover": { bgcolor: "action.hover" },
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 44 }}>
+                    {result.type === "person" ? (
+                      <Avatar
+                        src={result.personPhotoUrl || undefined}
+                        sx={{
+                          width: 32,
+                          height: 32,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          bgcolor: tint.bg,
+                          color: tint.fg,
+                        }}
+                      >
+                        {initialsOf(result.name) || "?"}
+                      </Avatar>
+                    ) : result.type === "profession" ? (
+                      <TimelineIcon color="action" />
+                    ) : (
+                      <StoreIcon color="secondary" />
+                    )}
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Stack spacing={0.75}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {result.name}
+                        </Typography>
+                        {result.type === "person" &&
+                          (result.locationName || result.gotra || result.casteName) && (
+                            <Stack
+                              direction="row"
+                              spacing={0.75}
+                              sx={{ flexWrap: "wrap", rowGap: 0.75 }}
+                            >
+                              <MetaPill value={result.locationName} accent="brand" />
+                              {/* Distance leads the pills for a business:
+                                  it's the reason this result is where it is. */}
+                              <MetaPill
+                                value={
+                                  result.distanceKm === undefined
+                                    ? undefined
+                                    : result.distanceKm < 1
+                                      ? "Under 1 km away"
+                                      : `${Math.round(result.distanceKm)} km away`
+                                }
+                                accent="brand"
+                              />
+                              <MetaPill value={result.casteName} accent="slate" />
+                              <MetaPill value={result.gotra} accent="slate" />
+                            </Stack>
+                          )}
+                      </Stack>
+                    }
+                    secondary={result.extra || undefined}
+                    secondaryTypographyProps={{ fontSize: "0.75rem" }}
+                  />
+                  <Chip
+                    label={
+                      result.type === "person"
+                        ? "Person"
+                        : result.type === "profession"
+                          ? "Profession"
+                          : "Business"
+                    }
+                    size="small"
+                    color={
+                      result.type === "person"
+                        ? "primary"
+                        : result.type === "business"
+                          ? "secondary"
+                          : "default"
+                    }
+                    variant="outlined"
+                    sx={{ ml: 1, flexShrink: 0 }}
+                  />
+                </ListItem>
+              );
+            })}
+          </List>
+        ) : !isSearching ? (
+          <Box sx={{ p: 2, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              No results found for "{searchQuery}"
+            </Typography>
+            {!currentUser && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Family members are only searchable once you sign in.
+              </Typography>
+            )}
+          </Box>
+        ) : null}
+      </Paper>
+    );
+  };
+
+  const inputProps = {
+    startAdornment: (
+      <InputAdornment position="start">
+        <SearchIcon sx={{ color: brand.primary, mr: 1 }} />
+      </InputAdornment>
+    ),
+    endAdornment:
+      isSearching || showTypeFilter ? (
+        <InputAdornment position="end">
+          {isSearching ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
+          {renderFilters()}
+        </InputAdornment>
+      ) : null,
+  };
+
+  const fieldSx = {
+    bgcolor: brand.surface,
+    borderRadius: rounded ? 999 : 2,
+    ...(rounded
+      ? { "& .MuiOutlinedInput-root": { borderRadius: 999, pl: 2, pr: 0.75 } }
+      : null),
+  };
+
+  return (
+    <FullScreenMobilePicker
+      title="Search"
+      closeLabel="Close search"
+      dialogContent={({ closeDialog }) => (
+        <>
+          <TextField
+            fullWidth
+            autoFocus
+            placeholder={effectivePlaceholder}
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => {
+              if (searchResults.length > 0) setShowResults(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && searchQuery.trim()) {
+                performSearch(searchQuery);
+              }
+            }}
+            InputProps={inputProps}
+            sx={{ bgcolor: brand.surface, borderRadius: 2 }}
+          />
+          {renderResults(closeDialog, false)}
+        </>
+      )}
+    >
+      {({ isMobile: mobilePicker, openDialog }) => (
+        <ClickAwayListener onClickAway={() => !mobilePicker && setShowResults(false)}>
+          <Box sx={{ maxWidth, position: "relative", width: "100%" }}>
+            <TextField
+              fullWidth
+              placeholder={effectivePlaceholder}
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onClick={openDialog}
+              onFocus={() => {
+                if (mobilePicker) {
+                  openDialog();
+                  return;
+                }
+                if (searchResults.length > 0) setShowResults(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchQuery.trim()) {
+                  performSearch(searchQuery);
+                }
+              }}
+              InputProps={inputProps}
+              sx={fieldSx}
+              inputProps={{ readOnly: mobilePicker }}
+            />
+            {!mobilePicker && renderResults()}
+          </Box>
+        </ClickAwayListener>
+      )}
+    </FullScreenMobilePicker>
+  );
+};
+
+export default GlobalSearch;

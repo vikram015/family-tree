@@ -3,3 +3,6 @@
 
 .DS_Store
 .idea
+
+# Generated at build time from REACT_APP_FIREBASE_* (scripts/generate-messaging-config.js)
+public/firebase-messaging-config.js

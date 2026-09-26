@@ -3,7 +3,7 @@
 -- Centralized access check for tree write operations.
 -- Rules:
 -- - superadmin: full access
--- - admin: must be verified and assigned to tree village
+-- - admin: must be verified and assigned to tree location
 -- =====================================================
 CREATE OR REPLACE FUNCTION check_tree_write_access(
   p_tree_id UUID
@@ -13,8 +13,8 @@ DECLARE
   v_user_id UUID;
   v_user_role VARCHAR;
   v_user_is_verified BOOLEAN;
-  v_user_villages TEXT[];
-  v_tree_village_id UUID;
+  v_user_locations TEXT[];
+  v_tree_location_id UUID;
 BEGIN
   v_user_id := auth.uid();
 
@@ -25,8 +25,8 @@ BEGIN
     );
   END IF;
 
-  SELECT role, is_verified, villages
-  INTO v_user_role, v_user_is_verified, v_user_villages
+  SELECT role, is_verified, locations
+  INTO v_user_role, v_user_is_verified, v_user_locations
   FROM users
   WHERE id = v_user_id
     AND is_deleted = false;
@@ -38,13 +38,13 @@ BEGIN
     );
   END IF;
 
-  SELECT village_id
-  INTO v_tree_village_id
+  SELECT location_id
+  INTO v_tree_location_id
   FROM tree
   WHERE id = p_tree_id
     AND is_deleted = false;
 
-  IF v_tree_village_id IS NULL THEN
+  IF v_tree_location_id IS NULL THEN
     RETURN json_build_object(
       'allowed', false,
       'error', 'Tree not found'
@@ -62,10 +62,10 @@ BEGIN
     );
   END IF;
 
-  IF NOT (v_tree_village_id::TEXT = ANY(COALESCE(v_user_villages, ARRAY[]::TEXT[]))) THEN
+  IF NOT (v_tree_location_id::TEXT = ANY(COALESCE(v_user_locations, ARRAY[]::TEXT[]))) THEN
     RETURN json_build_object(
       'allowed', false,
-      'error', 'Permission denied: village access required'
+      'error', 'Permission denied: location access required'
     );
   END IF;
 

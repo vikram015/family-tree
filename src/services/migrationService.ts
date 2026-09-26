@@ -1,7 +1,7 @@
 /**
  * Migration utility to move data from Firebase to Supabase
  * This should be run once before switching to Supabase
- * Updated schema: Uses normalized tables (state, district, village) and people_relations table
+ * Updated schema: Uses normalized tables (state, district, location) and people_relations table
  * 
  * NOTE: Firebase IDs are not UUIDs, so we generate new UUIDs and maintain a mapping
  */
@@ -19,11 +19,11 @@ export const MigrationService = {
   },
 
   /**
-   * Migrate all villages from Firebase to Supabase
+   * Migrate all locations from Firebase to Supabase
    * DEPRECATED: Migration is complete.
    */
-  async migrateVillages(): Promise<{ success: number; failed: number }> {
-    console.warn('migrateVillages is deprecated - Firebase to Supabase migration is complete.');
+  async migrateLocations(): Promise<{ success: number; failed: number }> {
+    console.warn('migrateLocations is deprecated - Firebase to Supabase migration is complete.');
     return { success: 0, failed: 0 };
   },
 
@@ -105,7 +105,7 @@ export const MigrationService = {
    */
   getIdMappings() {
     return {
-      villages: new Map(),
+      locations: new Map(),
       trees: new Map(),
       people: new Map(),
     };

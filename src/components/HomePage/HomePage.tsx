@@ -1,783 +1,628 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import {
-  Container,
-  Typography,
   Box,
   Button,
-  Card,
-  CardContent,
+  Container,
+  Skeleton,
   Stack,
-  Divider,
-  TextField,
-  InputAdornment,
-  CircularProgress,
-  Paper,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Chip,
-  Avatar,
-  ClickAwayListener,
-  LinearProgress,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
+  Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
-import SearchIcon from "@mui/icons-material/Search";
-import CloseIcon from "@mui/icons-material/Close";
-import PersonIcon from "@mui/icons-material/Person";
-import StoreIcon from "@mui/icons-material/Store";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
-import PeopleIcon from "@mui/icons-material/People";
-import LocationCityIcon from "@mui/icons-material/LocationCity";
-import BusinessIcon from "@mui/icons-material/Business";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import AutoStoriesIcon from "@mui/icons-material/AutoStories";
-import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
-import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
-import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
+import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchDashboardStatistics,
   selectStatistics,
   selectStatisticsLoading,
 } from "../../store/slices/statisticsSlice";
-import { ApiService } from "../../services/apiService";
+import {
+  ApiService,
+  DashboardInsights,
+  FamilyEvents,
+  UpcomingFamilyEvent,
+} from "../../services/apiService";
+import { selectEffectiveUserOnboardingData } from "../../store/slices/userOnboardingSlice";
 import { useAuth } from "../hooks/useAuth";
+import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
+import { brand, fontSerif } from "../../theme/brand";
+import { GlobalSearch } from "./GlobalSearch";
+import { LandingPage } from "./LandingPage";
+import { TodayStrip } from "./TodayStrip";
+import { PersonalStats } from "./PersonalStats";
+import { TreeGaps } from "./TreeGaps";
+import { FeatureGrid } from "./FeatureGrid";
+import { NetworkStrip } from "./NetworkStrip";
+import { RecentPhotos } from "./RecentPhotos";
+import { QuickActions } from "./QuickActions";
+import { ContributorList, Contributor } from "./ContributorList";
+import { WishWall } from "./WishWall";
+import { eyebrowSx, panelSx } from "./homeTheme";
 
-interface SearchResult {
-  id: string;
-  name: string;
-  type: "person" | "business" | "profession";
-  treeId?: string;
-  treeName?: string;
-  personPhotoUrl?: string;
-  gotra?: string;
-  extra?: string;
-  villageName?: string;
-  casteName?: string;
-  subCasteName?: string;
-  parentHierarchy?: Array<{ id: string; name: string; generation: number }>;
-}
+/**
+ * The dashboard's ground.
+ *
+ * A flat near-white rather than the app's blue wash: this page is a field of
+ * white cards, and a gradient behind them made the cards read as floating on a
+ * second, differently-coloured page.
+ */
 
-interface DashboardContributor {
-  personName: string;
-  peopleAdded: number;
-}
+/** The small separator between eyebrow items. */
+const Dot: React.FC = () => (
+  <Box aria-hidden sx={{ width: 3, height: 3, borderRadius: "50%", bgcolor: "#cbd5e1" }} />
+);
 
-function getInitials(value?: string): string {
-  if (!value) return "?";
-  const parts = value.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || "")
-    .join("");
-}
+type NextAction = {
+  title: string;
+  description: string;
+  to: string;
+  cta: string;
+};
 
-function renderMetaPill(label: string, value?: string, accent?: "teal" | "amber" | "slate") {
-  if (!value) return null;
+const EMPTY_STATS: DashboardInsights["stats"] = {
+  peopleInTree: 0,
+  generations: 0,
+  addedThisMonth: 0,
+  incompleteProfiles: 0,
+};
 
-  const styles =
-    accent === "teal"
-      ? { bg: "#ecfeff", color: "#0f766e" }
-      : accent === "amber"
-        ? { bg: "#fff7ed", color: "#b45309" }
-        : { bg: "#f1f5f9", color: "#475569" };
-
-  return (
-    <Box
-      key={`${label}-${value}`}
-      sx={{
-        px: 0.9,
-        py: 0.45,
-        borderRadius: 999,
-        bgcolor: styles.bg,
-        color: styles.color,
-        fontSize: 11,
-        fontWeight: 600,
-        lineHeight: 1.2,
-        whiteSpace: "nowrap",
-      }}
-    >
-      <Box component="span">{value}</Box>
-    </Box>
-  );
-}
-
+/**
+ * The homepage is two different products behind one route.
+ *
+ * Signed out it's an acquisition surface (`LandingPage`) — it used to greet
+ * anonymous visitors with "Welcome back, Family Member" over internal metrics.
+ * Signed in it's a dashboard built around what the user can do next: today's
+ * family dates, their own tree's numbers, and the gaps worth filling.
+ *
+ * Which of the two we render must not flip after the first paint: a returning
+ * user seeing the landing page for a moment before the dashboard replaces it
+ * reads as a bug. Firebase resolves its persisted session asynchronously, so
+ * until it reports (`initialized`) we pick the side from `hadSession` — the
+ * previous visit's outcome — and render that side's loading state rather than
+ * guessing "signed out".
+ */
 export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const { userProfile, currentUser } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const suppressMobileSearchOpenRef = useRef(false);
-
+  // From `xl` the page has room for the design's right rail.
+  const isWide = useMediaQuery(theme.breakpoints.up("xl"));
+  /** Bumped when a wish is sent, so the wall re-reads itself. */
+  const [wallVersion, setWallVersion] = useState(0);
+  const { currentUser, userProfile, loading: authLoading, initialized, hadSession } = useAuth();
+  const onboarding = useAppSelector(selectEffectiveUserOnboardingData);
   const statistics = useAppSelector(selectStatistics);
   const loadingStats = useAppSelector(selectStatisticsLoading);
 
-  const displayName = userProfile?.displayName || userProfile?.name || "Family Member";
-  const loggedInLabel =
-    userProfile?.displayName ||
-    userProfile?.name ||
-    currentUser?.email ||
-    "Guest";
+  const [insights, setInsights] = useState<DashboardInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [familyEvents, setFamilyEvents] = useState<FamilyEvents | null>(null);
+  const [upcoming, setUpcoming] = useState<UpcomingFamilyEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [nextAction, setNextAction] = useState<NextAction | null>(null);
+  const [continueTreeLoading, setContinueTreeLoading] = useState(false);
 
-  const performSearch = useCallback(async (query: string) => {
-    if (!query.trim() || query.trim().length < 2) {
-      setSearchResults([]);
-      setShowResults(false);
-      return;
-    }
-    setIsSearching(true);
-    setShowResults(true);
-    try {
-      const rows = await ApiService.globalSearch(query.trim());
+  // Both fields map from the same DB column, so a user who never set a name
+  // (phone signups) has neither. Greet them without a placeholder standing in
+  // for their name.
+  const personName = (userProfile?.displayName || userProfile?.name || "").trim();
 
-      const results: SearchResult[] = [];
+  // Shown as a chip beside the greeting. Only roles the app actually grants —
+  // an invented status label ("Custodian", "Branch Keeper") would look like a
+  // standing the user had earned when it means nothing.
+  const roleLabel =
+    userProfile?.role === "superadmin"
+      ? "Super admin"
+      : userProfile?.role === "admin"
+        ? "Admin"
+        : null;
 
-      rows.forEach((row: any) => {
-        const lineageText =
-          row.entityType === "person" && Array.isArray(row.parentHierarchy)
-            ? row.parentHierarchy
-                .slice(-5)
-                .map((a: any) => a?.name)
-                .filter(Boolean)
-                .join(" -> ")
-            : "";
-
-        results.push({
-          id: row.entityId,
-          name: row.title || "Unknown",
-          type: row.entityType,
-          treeId: row.treeId,
-          extra:
-            row.entityType === "person"
-              ? lineageText || "Lineage: N/A"
-              : row.subtitle || undefined,
-          treeName: row.treeName || undefined,
-          personPhotoUrl: row.personPhotoUrl || undefined,
-          gotra: row.gotra || undefined,
-          villageName: row.villageName || undefined,
-          casteName: row.casteName || undefined,
-          subCasteName: row.subCasteName || undefined,
-          parentHierarchy: row.parentHierarchy || [],
-        });
-      });
-
-      setSearchResults(results);
-    } catch (err) {
-      console.error("Search error:", err);
-      setSearchResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
-
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => performSearch(value), 300);
-  };
-
-  const handleResultClick = (result: SearchResult) => {
-    setShowResults(false);
-    setSearchDialogOpen(false);
-    setSearchQuery("");
-    if (result.treeId) {
-      const params = new URLSearchParams();
-      params.set("tree", result.treeId);
-      if (result.type === "person" && result.id) {
-        params.set("personId", result.id);
-      }
-      navigate(`/families?${params.toString()}`);
-    } else if (result.type === "business" || result.type === "profession") {
-      navigate("/business");
-    }
-  };
+  const totalPeople = Number(statistics?.totalPeople || 0);
+  const totalTrees = Number(statistics?.totalTrees || 0);
+  const totalLocations = Number(statistics?.totalLocations || 0);
+  const totalBusinesses = Number(statistics?.totalBusinesses || 0);
+  const topContributors: Contributor[] = Array.isArray(statistics?.topContributors)
+    ? (statistics.topContributors as Contributor[])
+    : [];
 
   useEffect(() => {
     dispatch(fetchDashboardStatistics());
   }, [dispatch]);
 
-  const closeSearchDialog = useCallback(() => {
-    suppressMobileSearchOpenRef.current = true;
-    setSearchDialogOpen(false);
-    setShowResults(false);
+  // Personalized data — one round trip for the tree stats, worklist and badges.
+  useEffect(() => {
+    if (!currentUser) {
+      setInsights(null);
+      return;
+    }
+    let cancelled = false;
+    setInsightsLoading(true);
+    ApiService.getMyDashboardInsights()
+      .then((data) => {
+        if (!cancelled) setInsights(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load dashboard insights:", err);
+        if (!cancelled) setInsights(null);
+      })
+      .finally(() => {
+        if (!cancelled) setInsightsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile?.peopleId]);
 
-    window.setTimeout(() => {
-      suppressMobileSearchOpenRef.current = false;
-    }, 250);
-  }, []);
+  // Today's dates, plus the week ahead so a quiet day still has something.
+  useEffect(() => {
+    if (!currentUser || !userProfile?.peopleId) {
+      setFamilyEvents(null);
+      setUpcoming([]);
+      return;
+    }
+    let cancelled = false;
+    setEventsLoading(true);
+    Promise.all([
+      ApiService.getTodaysFamilyEvents().catch(() => null),
+      ApiService.getUpcomingFamilyEvents(7).catch(() => []),
+    ])
+      .then(([today, ahead]) => {
+        if (cancelled) return;
+        setFamilyEvents(today);
+        setUpcoming(Array.isArray(ahead) ? ahead : []);
+      })
+      .finally(() => {
+        if (!cancelled) setEventsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile?.peopleId]);
 
-  const renderSearchResults = () => {
-    if (!showResults) return null;
+  /**
+   * The single most useful thing this user could do next.
+   *
+   * Only computed for users who aren't linked to a person node yet — once
+   * they're linked, the `TreeGaps` worklist is a better prompt than a banner.
+   */
+  useEffect(() => {
+    let cancelled = false;
 
+    const compute = async () => {
+      if (!currentUser || !userProfile) {
+        setNextAction(null);
+        return;
+      }
+      if (userProfile.peopleId) {
+        setNextAction(null);
+        return;
+      }
+
+      let allRequests: any[] = [];
+      try {
+        allRequests = await ApiService.getMyLinkRequests();
+      } catch (err) {
+        console.error("Failed to load link requests:", err);
+      }
+      if (cancelled) return;
+
+      const pending = allRequests.filter((r) => r.status === "pending");
+      const pendingLink = pending.find((r) => r.requestType === "user_to_tree_node");
+      const hasApprovedBranchAccess = allRequests.some(
+        (r) => r.requestType === "branch_access_request" && r.status === "approved",
+      );
+      // An accepted invite already put them in a tree, so onboarding would only
+      // ask them to find one again — send them to link their node instead.
+      const joinedThroughInvite =
+        onboarding?.completion?.result === "invite_accepted";
+
+      // The decisive signal: can they already see a tree?
+      //
+      // The two flags above only catch users who arrived via an approved request
+      // or an invite. Someone who CREATED their own tree has neither — no request
+      // row exists — and was being sent to onboarding to "find my tree" when the
+      // tree was already theirs. getTrees() is access-scoped, so a non-empty
+      // result means they have somewhere to link themselves.
+      let hasAccessibleTree = false;
+      try {
+        const trees = await ApiService.getTrees();
+        hasAccessibleTree = (trees || []).length > 0;
+      } catch (err) {
+        // Non-fatal: fall back to the request-derived signals below.
+        console.warn("Could not check accessible trees for next action:", err);
+      }
+      if (cancelled) return;
+
+      if (pendingLink) {
+        setNextAction({
+          title: "Profile link pending approval",
+          description: `Your request to link with ${pendingLink.targetPersonName || "your family member"} is awaiting the tree owner's approval.`,
+          to: "/requests",
+          cta: "View request",
+        });
+        return;
+      }
+
+      setNextAction(
+        hasAccessibleTree || hasApprovedBranchAccess || joinedThroughInvite
+          ? {
+              title: "Link your profile",
+              description:
+                "Find yourself in your family tree to finish linking your account.",
+              to: "/profile",
+              cta: "Link my profile",
+            }
+          : {
+              title: "Finish setting up your profile",
+              description: "Find your family tree and request access to your branch.",
+              to: "/onboarding",
+              cta: "Find my tree",
+            },
+      );
+    };
+
+    void compute();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, userProfile, onboarding?.completion?.result]);
+
+  const handleContinueToYourTree = useCallback(async () => {
+    setContinueTreeLoading(true);
+    try {
+      navigate(await resolveDefaultFamilyTreePath());
+    } finally {
+      setContinueTreeLoading(false);
+    }
+  }, [navigate]);
+
+  // Before Firebase reports, the last visit's outcome is the best available
+  // guess — and the one that is right for this browser almost every time.
+  const showDashboard = initialized ? !!currentUser : hadSession;
+  // Auth still settling: the sections have skeletons, so show those instead of
+  // real zeros/empty states that would be replaced a moment later. Once the
+  // profile is in hand a later refetch (the hourly token refresh) must not send
+  // an already-populated dashboard back to skeletons.
+  const authPending = !initialized || (authLoading && !userProfile);
+
+  // ---- Signed out: a proper landing page, not an empty dashboard. ----------
+  if (!showDashboard) {
     return (
-      <Paper
-        elevation={8}
-        sx={{
-          position: isMobile ? "static" : "absolute",
-          top: isMobile ? "auto" : "100%",
-          left: 0,
-          right: 0,
-          zIndex: 1300,
-          maxHeight: isMobile ? "none" : 420,
-          overflow: "auto",
-          mt: isMobile ? 1.5 : 0.5,
-          borderRadius: 2,
-        }}
-      >
-        {searchResults.length > 0 ? (
-          <List dense disablePadding>
-            {searchResults.map((result) => (
-              <ListItem
-                key={`${result.type}-${result.id}`}
-                component="div"
-                onClick={() => handleResultClick(result)}
-                sx={{
-                  cursor: "pointer",
-                  "&:hover": { bgcolor: "action.hover" },
-                  borderBottom: "1px solid",
-                  borderColor: "divider",
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 36 }}>
-                  {result.type === "person" ? (
-                    <Avatar
-                      src={result.personPhotoUrl || undefined}
-                      sx={{
-                        width: 28,
-                        height: 28,
-                        fontSize: 11,
-                        fontWeight: 700,
-                        bgcolor: "#e0f2fe",
-                        color: "#0369a1",
-                      }}
-                    >
-                      {getInitials(result.name)}
-                    </Avatar>
-                  ) : result.type === "profession" ? (
-                    <TimelineIcon color="action" />
-                  ) : (
-                    <StoreIcon color="secondary" />
-                  )}
-                </ListItemIcon>
-                <ListItemText
-                  primary={
-                    <Stack spacing={0.75}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {result.name}
-                      </Typography>
-                      {result.type === "person" &&
-                        (result.villageName || result.gotra || result.casteName) && (
-                          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", rowGap: 0.75 }}>
-                            {renderMetaPill("Village", result.villageName, "teal")}
-                            {renderMetaPill("Caste", result.casteName, "slate")}
-                            {renderMetaPill("Sub caste", result.gotra, "slate")}
-                          </Stack>
-                        )}
-                    </Stack>
-                  }
-                  secondary={result.extra || undefined}
-                  primaryTypographyProps={{ fontWeight: 600 }}
-                  secondaryTypographyProps={{ fontSize: "0.75rem" }}
-                />
-                <Chip
-                  label={
-                    result.type === "person"
-                      ? "Person"
-                      : result.type === "profession"
-                        ? "Profession"
-                        : "Business"
-                  }
-                  size="small"
-                  color={
-                    result.type === "person"
-                      ? "primary"
-                      : result.type === "business"
-                        ? "secondary"
-                        : "default"
-                  }
-                  variant="outlined"
-                />
-              </ListItem>
-            ))}
-          </List>
-        ) : !isSearching ? (
-          <Box sx={{ p: 2, textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
-              No results found for "{searchQuery}"
-            </Typography>
-          </Box>
-        ) : null}
-      </Paper>
+      <>
+        <Helmet>
+          <title>Kinvia - Preserve Your Family Legacy</title>
+          <meta
+            name="description"
+            content="Kinvia helps families preserve lineage, stories, and relationships for future generations."
+          />
+        </Helmet>
+        <LandingPage
+          searchSlot={<GlobalSearch maxWidth="100%" rounded showTypeFilter />}
+          totalPeople={totalPeople}
+          totalTrees={totalTrees}
+          totalLocations={totalLocations}
+          totalBusinesses={totalBusinesses}
+          statsLoading={loadingStats}
+        />
+      </>
     );
-  };
+  }
 
-  const totalPeople = statistics?.totalPeople || 0;
-  const totalTrees = statistics?.totalTrees || 0;
-  const totalVillages = statistics?.totalVillages || 0;
-  const totalBusinesses = statistics?.totalBusinesses || 0;
-  const topContributors = Array.isArray(statistics?.topContributors)
-    ? (statistics.topContributors as DashboardContributor[])
-    : [];
-  const professionCoverage = totalPeople
-    ? Math.round(((statistics?.peopleWithProfessions || 0) / totalPeople) * 100)
-    : 0;
-
-  const pulseItems = [
-    `Families across ${totalVillages} villages are preserving lineage records.`,
-    `${totalBusinesses} family businesses are now visible in the network.`,
-    `${statistics?.totalProfessionsAssigned || 0} professional links are mapped.`,
-  ];
-
-  const historyTodayItems = [
-    "Remember elders by adding stories and photos to their profiles.",
-    "Reconnect branches by linking missing parents and spouses.",
-    "Preserve lineage accuracy by completing unknown dates of birth.",
-  ];
+  // ---- Signed in: the dashboard. ------------------------------------------
+  const stats = insights?.stats || EMPTY_STATS;
+  const counts = insights?.counts || { photos: 0, pendingRequests: 0 };
 
   return (
     <>
       <Helmet>
-        <title>Kinvia - Preserve Your Family Legacy</title>
+        <title>Kinvia - Your Family Dashboard</title>
         <meta
           name="description"
-          content="Kinvia helps families preserve lineage, stories, and relationships for future generations."
+          content="Your family at a glance — today's dates, your tree, and what to add next."
         />
       </Helmet>
 
-      <Box
-        sx={{
-          background:
-            "linear-gradient(120deg, #fff7ed 0%, #eefaf4 40%, #e8f1ff 100%)",
-          borderBottom: "1px solid",
-          borderColor: "divider",
-        }}
-      >
-        <Container maxWidth="lg" sx={{ py: { xs: 5, md: 7 } }}>
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "1.2fr 0.8fr" },
-              gap: 3,
-              alignItems: "stretch",
-            }}
-          >
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2.5, md: 4 },
-                borderRadius: 3,
-                border: "1px solid",
-                borderColor: "divider",
-                background:
-                  "linear-gradient(140deg, rgba(255,255,255,0.95), rgba(255,255,255,0.75))",
-              }}
-            >
-              <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>
-                Welcome back, {displayName}
-              </Typography>
-              <Typography variant="body2" sx={{ color: "text.secondary", mb: 0.8 }}>
-                Logged in as: <strong>{loggedInLabel}</strong>
-              </Typography>
-              <Typography variant="h6" sx={{ color: "text.secondary", mb: 1.5 }}>
-                Your family story is growing.
-              </Typography>
-              <Typography sx={{ color: "text.secondary", mb: 3 }}>
-                Every update you make today becomes heritage tomorrow.
-              </Typography>
+      {/*
+        One continuous surface, top to bottom.
 
-              <ClickAwayListener onClickAway={() => !isMobile && setShowResults(false)}>
-                <Box sx={{ maxWidth: 640, position: "relative", mb: 3 }}>
-                  <TextField
-                    fullWidth
-                    placeholder="Search family members, businesses..."
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    onClick={() => {
-                      if (isMobile && !suppressMobileSearchOpenRef.current) {
-                        setSearchDialogOpen(true);
-                      }
-                    }}
-                    onFocus={() => {
-                      if (isMobile) {
-                        if (suppressMobileSearchOpenRef.current) {
-                          return;
-                        }
-                        setSearchDialogOpen(true);
-                        return;
-                      }
-                      if (searchResults.length > 0) setShowResults(true);
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" && searchQuery.trim()) {
-                        performSearch(searchQuery);
-                      }
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
-                        </InputAdornment>
-                      ),
-                      endAdornment: isSearching ? (
-                        <InputAdornment position="end">
-                          <CircularProgress size={18} />
-                        </InputAdornment>
-                      ) : null,
-                    }}
+        The dashboard used to open with a tinted, bordered hero band, which cut
+        the page in two: a coloured strip at the top and a different-looking page
+        under it. The design treats the greeting as simply the first section of
+        the page, so the wash runs the whole way and the sections themselves
+        provide the structure.
+      */}
+      <Box sx={{ bgcolor: brand.pageCanvas, minHeight: "100vh" }}>
+        <Container
+          maxWidth={false}
+          sx={{ maxWidth: 1440, px: { xs: 2, sm: 3, lg: 4 }, py: { xs: 3, md: 4 } }}
+        >
+          <Stack spacing={{ xs: 3, md: 4 }}>
+            {/* ---- Greeting, primary actions, search ------------------------ */}
+            <Box component="section">
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "stretch", sm: "flex-end" }}
+                spacing={{ xs: 2, sm: 3 }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    alignItems="center"
+                    flexWrap="wrap"
+                    useFlexGap
+                    sx={{ mb: 0.5 }}
+                  >
+                    <Typography sx={{ ...(eyebrowSx as object), color: brand.primary }}>
+                      Welcome back
+                    </Typography>
+                    {roleLabel && (
+                      <>
+                        <Dot />
+                        <Box
+                          sx={{
+                            px: 1,
+                            py: 0.25,
+                            borderRadius: 1,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: brand.primaryDark,
+                            bgcolor: brand.primarySoft,
+                            border: "1px solid",
+                            borderColor: "rgba(191, 219, 254, 0.9)",
+                          }}
+                        >
+                          {roleLabel}
+                        </Box>
+                      </>
+                    )}
+                    {/* Which branch this dashboard is about — the design's
+                        "Dhana Ram Lineage Lead" line, minus the invented title. */}
+                    {insights?.tree?.name && (
+                      <>
+                        <Dot />
+                        <Typography
+                          noWrap
+                          sx={{
+                            display: { xs: "none", sm: "block" },
+                            fontSize: 12,
+                            color: brand.slateMuted,
+                            maxWidth: 260,
+                          }}
+                        >
+                          {insights.tree.name}
+                        </Typography>
+                      </>
+                    )}
+                  </Stack>
+
+                  <Typography
+                    component="h1"
                     sx={{
-                      bgcolor: "white",
-                      borderRadius: 2,
+                      fontWeight: 800,
+                      fontSize: { xs: 26, sm: 32, md: 36 },
+                      letterSpacing: "-0.02em",
+                      lineHeight: 1.15,
+                      color: brand.ink,
                     }}
-                    inputProps={{
-                      readOnly: isMobile,
-                    }}
-                  />
-                  {!isMobile && renderSearchResults()}
-                </Box>
-              </ClickAwayListener>
+                  >
+                    {personName ? (
+                      personName
+                    ) : authPending ? (
+                      <Skeleton variant="text" width={200} sx={{ maxWidth: "100%" }} />
+                    ) : (
+                      "Your family dashboard"
+                    )}
+                  </Typography>
 
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                <Button
-                  variant="contained"
-                  component={Link}
-                  to="/families"
-                  endIcon={<ArrowForwardIcon />}
+                  {/* The design's one serif line — a deliberate break from the
+                      UI typeface, so the sentiment doesn't read as chrome. */}
+                  <Typography
+                    sx={{
+                      mt: 0.5,
+                      fontFamily: fontSerif,
+                      fontSize: 15,
+                      fontStyle: "italic",
+                      color: brand.slateMuted,
+                    }}
+                  >
+                    Every update you make today becomes heritage tomorrow.
+                  </Typography>
+                </Box>
+
+                {/* The two destinations a returning user opens by name. */}
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  sx={{ flexShrink: 0, "& > *": { flex: { xs: 1, sm: "0 0 auto" } } }}
+                >
+                  <Button
+                    variant="contained"
+                    onClick={() => void handleContinueToYourTree()}
+                    disabled={continueTreeLoading}
+                    endIcon={<ArrowForwardIcon />}
+                    sx={{
+                      fontWeight: 700,
+                      minHeight: 44,
+                      px: 2.25,
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontSize: 14,
+                      boxShadow: "0 1px 2px rgba(13, 110, 253, 0.25)",
+                      bgcolor: brand.primary,
+                      "&:hover": { bgcolor: brand.primaryDark },
+                    }}
+                  >
+                    {continueTreeLoading ? "Opening…" : "Continue your tree"}
+                  </Button>
+                  <Button
+                    component={Link}
+                    to="/photos"
+                    variant="outlined"
+                    startIcon={<PhotoLibraryOutlinedIcon />}
+                    sx={{
+                      // Hidden on phones, where two side-by-side buttons force
+                      // the primary label onto two lines. Photos keeps its
+                      // Explore tile a screen below, so nothing is lost.
+                      display: { xs: "none", sm: "inline-flex" },
+                      fontWeight: 600,
+                      minHeight: 44,
+                      px: 2.25,
+                      borderRadius: 2,
+                      textTransform: "none",
+                      fontSize: 14,
+                      whiteSpace: "nowrap",
+                      bgcolor: brand.surface,
+                      color: brand.slate,
+                      borderColor: brand.border,
+                      "&:hover": { bgcolor: brand.canvas, borderColor: "#cbd5e1" },
+                    }}
+                  >
+                    Family photos
+                  </Button>
+                </Stack>
+              </Stack>
+
+              {/* Full width rather than sharing the greeting's row: search is
+                  the fastest way into a 600-person tree, not a sliver. */}
+              <Box sx={{ mt: { xs: 2, md: 2.5 }, maxWidth: 860 }}>
+                <GlobalSearch maxWidth="100%" rounded showTypeFilter />
+              </Box>
+
+              {nextAction && (
+                <Box
                   sx={{
-                    fontWeight: 700,
-                    bgcolor: "#b45309",
-                    "&:hover": { bgcolor: "#92400e" },
+                    ...(panelSx as object),
+                    p: { xs: 1.75, sm: 2 },
+                    mt: { xs: 2, md: 2.5 },
+                    display: "flex",
+                    flexDirection: { xs: "column", sm: "row" },
+                    alignItems: { xs: "flex-start", sm: "center" },
+                    gap: { xs: 1.5, sm: 2 },
+                    borderColor: brand.primary,
+                    bgcolor: brand.primarySoft,
                   }}
                 >
-                  Continue Your Tree
-                </Button>
-                <Button
-                  variant="outlined"
-                  component={Link}
-                  to="/business"
-                  sx={{ fontWeight: 700, borderColor: "#0f766e", color: "#0f766e" }}
-                >
-                  Explore Family Network
-                </Button>
-              </Stack>
-            </Paper>
+                  <AutoAwesomeOutlinedIcon sx={{ color: brand.primary, flexShrink: 0 }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, color: brand.ink }}>
+                      {nextAction.title}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: brand.slate }}>
+                      {nextAction.description}
+                    </Typography>
+                  </Box>
+                  <Button
+                    component={Link}
+                    to={nextAction.to}
+                    variant="contained"
+                    endIcon={<ArrowForwardIcon />}
+                    fullWidth={isMobile}
+                    sx={{
+                      flexShrink: 0,
+                      fontWeight: 700,
+                      minHeight: 44,
+                      textTransform: "none",
+                      fontSize: 14,
+                      bgcolor: brand.primary,
+                      "&:hover": { bgcolor: brand.primaryDark },
+                    }}
+                  >
+                    {nextAction.cta}
+                  </Button>
+                </Box>
+              )}
+            </Box>
 
+            {/*
+              Below `xl` everything is one column, exactly as the desktop
+              design. From `xl` the page splits 8/4 and the ranking, the archive
+              and the shortcuts move into a rail — the widescreen design — so a
+              2560px monitor isn't a column of content with empty margins.
+            */}
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 1.5,
-                alignContent: "start",
+                gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 8fr) minmax(0, 4fr)" },
+                gap: { xs: 3, md: 4 },
+                alignItems: "start",
               }}
             >
-              {[
-                { label: "Members", value: totalPeople, icon: <PeopleIcon /> },
-                { label: "Trees", value: totalTrees, icon: <AccountTreeIcon /> },
-                { label: "Villages", value: totalVillages, icon: <LocationCityIcon /> },
-                { label: "Businesses", value: totalBusinesses, icon: <BusinessIcon /> },
-              ].map((item) => (
-                <Card key={item.label} sx={{ borderRadius: 2.5 }}>
-                  <CardContent sx={{ py: 2.5 }}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <Box sx={{ color: "#0f766e", display: "flex" }}>{item.icon}</Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {item.label}
-                      </Typography>
-                    </Stack>
-                    <Typography sx={{ fontSize: 28, fontWeight: 800, mt: 1 }}>
-                      {loadingStats ? "-" : item.value}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              ))}
+              <Stack spacing={{ xs: 3, md: 4 }} sx={{ minWidth: 0 }}>
+                <TodayStrip
+                  events={familyEvents}
+                  upcoming={upcoming}
+                  loading={eventsLoading || authPending}
+                  treeId={insights?.tree?.id}
+                  // A wish sent from a card up here belongs on the wall below
+                  // immediately — they are on the same screen, so not showing it
+                  // reads as the send having failed.
+                  onWishSent={() => setWallVersion((version) => version + 1)}
+                />
+
+                <PersonalStats
+                  stats={stats}
+                  treeName={insights?.tree?.name}
+                  treeId={insights?.tree?.id}
+                  loading={insightsLoading || authPending}
+                />
+
+                {!isWide && <WishWall refreshKey={wallVersion} />}
+
+                <TreeGaps
+                  gaps={insights?.gaps || []}
+                  loading={insightsLoading || authPending}
+                  treeName={insights?.tree?.name}
+                  totalIncomplete={stats.incompleteProfiles}
+                />
+
+                <FeatureGrid counts={counts} loading={insightsLoading || authPending} />
+
+                <NetworkStrip
+                  totalPeople={totalPeople}
+                  totalTrees={totalTrees}
+                  totalLocations={totalLocations}
+                  totalBusinesses={totalBusinesses}
+                  loading={loadingStats}
+                />
+              </Stack>
+
+              {isWide && (
+                <Stack spacing={3} sx={{ minWidth: 0, position: "sticky", top: 88 }}>
+                  {/* What the family is saying sits where the photo archive
+                      used to: it changes daily and invites a reply, while the
+                      archive is a browse-when-you-feel-like-it surface that
+                      reads just as well further down. */}
+                  <WishWall refreshKey={wallVersion} />
+                  <QuickActions pendingRequests={Number(counts?.pendingRequests) || 0} />
+                </Stack>
+              )}
             </Box>
-          </Box>
+
+            {/*
+              The wall and the ranking close the page, below the two-column
+              grid so they span its full width at every breakpoint.
+
+              They belong together: the ranking is a maintenance statistic —
+              who edits the tree most — and on its own at the top of a rail it
+              read as a leaderboard the dashboard was built around. Next to what
+              people actually wrote to each other, it reads as what it is.
+            */}
+            <Stack spacing={{ xs: 3, md: 4 }} sx={{ minWidth: 0 }}>
+              <RecentPhotos />
+              <ContributorList contributors={topContributors} loading={loadingStats} />
+            </Stack>
+          </Stack>
         </Container>
       </Box>
-
-      <Dialog
-        open={searchDialogOpen}
-        onClose={closeSearchDialog}
-        fullScreen={isMobile}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            pl: 2,
-            pr: 1.5,
-            py: 1.5,
-          }}
-        >
-          Search
-          <IconButton
-            aria-label="Close search"
-            edge="end"
-            onClick={(event) => {
-              event.stopPropagation();
-              closeSearchDialog();
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent sx={{ pt: 1.5 }}>
-          <TextField
-            fullWidth
-            autoFocus
-            placeholder="Search family members, businesses..."
-            value={searchQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            onFocus={() => {
-              if (searchResults.length > 0) setShowResults(true);
-            }}
-            onKeyPress={(e) => {
-              if (e.key === "Enter" && searchQuery.trim()) {
-                performSearch(searchQuery);
-              }
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: "#0f766e", mr: 1 }} />
-                </InputAdornment>
-              ),
-              endAdornment: isSearching ? (
-                <InputAdornment position="end">
-                  <CircularProgress size={18} />
-                </InputAdornment>
-              ) : null,
-            }}
-            sx={{
-              bgcolor: "white",
-              borderRadius: 2,
-            }}
-          />
-          {renderSearchResults()}
-        </DialogContent>
-      </Dialog>
-
-      <Container maxWidth="lg" sx={{ py: 6 }}>
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
-            gap: 2,
-            mb: 5,
-          }}
-        >
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary">
-                Your Contribution Snapshot
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>
-                Keep your lineage alive
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 1.2, color: "text.secondary" }}>
-                Add one profile this week and strengthen your family memory map.
-              </Typography>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary">
-                Profile Completeness
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.5 }}>
-                {professionCoverage}%
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={professionCoverage}
-                sx={{ mt: 1.3, height: 8, borderRadius: 6 }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.7, display: "block" }}>
-                Based on profession mapping across members
-              </Typography>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary">
-                Suggested Next Action
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 800, mt: 0.5 }}>
-                Complete missing family details
-              </Typography>
-              <Button
-                component={Link}
-                to="/families"
-                size="small"
-                sx={{ mt: 1, px: 0, fontWeight: 700 }}
-                endIcon={<ArrowForwardIcon />}
-              >
-                Complete now
-              </Button>
-            </CardContent>
-          </Card>
-        </Box>
-
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" },
-            gap: 2,
-          }}
-        >
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <PeopleIcon sx={{ color: "#b45309" }} />
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Top Contributors
-                </Typography>
-              </Stack>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                People who have added the most family members.
-              </Typography>
-              <Stack spacing={1.2}>
-                {loadingStats ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Loading contributor statistics...
-                  </Typography>
-                ) : topContributors.length > 0 ? (
-                  topContributors.map((item, index) => (
-                    <Box
-                      key={`${item.personName}-${index}`}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 2,
-                        py: 1,
-                        borderBottom:
-                          index === topContributors.length - 1 ? "none" : "1px solid",
-                        borderColor: "divider",
-                      }}
-                    >
-                      <Stack direction="row" spacing={1.25} alignItems="center">
-                        <Chip
-                          label={`#${index + 1}`}
-                          size="small"
-                          sx={{
-                            bgcolor: "#fff7ed",
-                            color: "#b45309",
-                            fontWeight: 700,
-                            minWidth: 42,
-                          }}
-                        />
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {item.personName}
-                        </Typography>
-                      </Stack>
-                      <Typography variant="body2" color="text.secondary">
-                        {item.peopleAdded} added
-                      </Typography>
-                    </Box>
-                  ))
-                ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    No contributor statistics available yet.
-                  </Typography>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <TimelineIcon sx={{ color: "#0f766e" }} />
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Family Pulse
-                </Typography>
-              </Stack>
-              <Stack spacing={1.2}>
-                {pulseItems.map((item) => (
-                  <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
-                    <TaskAltIcon sx={{ color: "#0f766e", fontSize: 19, mt: 0.2 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      {item}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ borderRadius: 3 }}>
-            <CardContent sx={{ p: 3 }}>
-              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-                <HistoryEduIcon sx={{ color: "#b45309" }} />
-                <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                  Today in Family History
-                </Typography>
-              </Stack>
-              <Stack spacing={1.2}>
-                {historyTodayItems.map((item, idx) => (
-                  <Box key={item} sx={{ display: "flex", gap: 1.2, alignItems: "flex-start" }}>
-                    {idx === 0 ? (
-                      <AutoStoriesIcon sx={{ color: "#b45309", fontSize: 19, mt: 0.2 }} />
-                    ) : (
-                      <FavoriteBorderIcon sx={{ color: "#b45309", fontSize: 19, mt: 0.2 }} />
-                    )}
-                    <Typography variant="body2" color="text.secondary">
-                      {item}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            </CardContent>
-          </Card>
-        </Box>
-
-        <Divider sx={{ my: 5 }} />
-
-        <Box sx={{ textAlign: "center", py: 1 }}>
-          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5 }}>
-            Your legacy grows with every update
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Preserve roots, reconnect generations, and keep family memory alive.
-          </Typography>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="center">
-            <Button
-              variant="contained"
-              component={Link}
-              to="/families"
-              sx={{ bgcolor: "#0f766e", "&:hover": { bgcolor: "#115e59" }, fontWeight: 700 }}
-            >
-              Open Family Trees
-            </Button>
-            <Button variant="outlined" component={Link} to="/contact" sx={{ fontWeight: 700 }}>
-              Contact Support
-            </Button>
-          </Stack>
-        </Box>
-      </Container>
     </>
   );
 };
+
+export default HomePage;

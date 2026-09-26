@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.kinvia.app",
+      "sha256_cert_fingerprints": [
+        "75:FB:6E:D2:BD:1B:E7:AC:7B:A9:D3:55:F3:ED:D3:D6:5E:94:EC:E3:7E:3D:28:CB:89:FB:85:64:B3:E2:55:DF"
+      ]
+    }
+  }
+]

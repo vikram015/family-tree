@@ -4,7 +4,8 @@
     "lib": [
       "dom",
       "dom.iterable",
-      "esnext"
+      "esnext",
+      "webworker"
     ],
     "allowJs": true,
     "skipLibCheck": true,
@@ -18,8 +19,18 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "noFallthroughCasesInSwitch": true,
+    // isolatedModules is deliberately OFF: relatives-tree's .d.ts declares
+    // Gender/RelType as `declare const enum`, but the package DOES ship real
+    // runtime values in lib/types.js. The flag would reject every use of them as
+    // an un-inlinable ambient const enum, which is a false positive here.
+    "useDefineForClassFields": true,
+    "types": [
+      "vite/client",
+      "vite-plugin-pwa/client"
+    ],
   },
   "include": [
-    "src"
+    "src",
+    "vite.config.ts"
   ]
 }

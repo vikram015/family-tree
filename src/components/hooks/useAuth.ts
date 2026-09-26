@@ -4,6 +4,8 @@ import {
   selectCurrentUser,
   selectUserProfile,
   selectAuthLoading,
+  selectAuthInitialized,
+  selectHadSession,
   selectIsSuperAdmin,
   selectIsAdmin,
   logout as logoutAction,
@@ -17,6 +19,8 @@ export function useAuth() {
   const currentUser = useAppSelector(selectCurrentUser);
   const userProfile = useAppSelector(selectUserProfile);
   const loading = useAppSelector(selectAuthLoading);
+  const initialized = useAppSelector(selectAuthInitialized);
+  const hadSession = useAppSelector(selectHadSession);
   const isSuperAdminValue = useAppSelector(selectIsSuperAdmin);
   const isAdminValue = useAppSelector(selectIsAdmin);
 
@@ -34,6 +38,8 @@ export function useAuth() {
       phone: string,
       email?: string,
       privacyPolicyAccepted?: boolean,
+      gender?: string,
+      dob?: string,
     ) =>
       dispatch(
         updateUserProfileAction({
@@ -41,6 +47,8 @@ export function useAuth() {
           phone,
           email,
           privacyPolicyAccepted,
+          gender,
+          dob,
         }),
       ).unwrap(),
     [dispatch],
@@ -62,14 +70,14 @@ export function useAuth() {
   }, [userProfile]);
 
   const hasPermission = useCallback(
-    (requiredRole?: UserRole, villageId?: string) => {
+    (requiredRole?: UserRole, locationId?: string) => {
       if (!userProfile) return false;
       if (userProfile.role === "superadmin") return true;
       if (!requiredRole) return true;
       if (!userProfile.isVerified) return false;
       if (userProfile.role === requiredRole || userProfile.role === "superadmin") {
-        if (villageId) {
-          return (userProfile.villages || []).includes(villageId);
+        if (locationId) {
+          return (userProfile.locations || []).includes(locationId);
         }
         return true;
       }
@@ -78,12 +86,31 @@ export function useAuth() {
     [userProfile],
   );
 
-  const canManageVillage = useCallback(
-    (villageId: string) => {
+  /**
+   * Who may edit a person's profession profile: that person, and nobody else.
+   *
+   * Narrower than the write access that governs the rest of a person's record.
+   * A tree's custodians may correct a relative's name, dates and relations; a
+   * career profile speaks in the first person and publishes an employer, a work
+   * email and a phone number, so it stays with its subject. The server enforces
+   * the same rule (see `canEditProfile` in professionProfileService) — this only
+   * decides whether the affordance is offered.
+   */
+  const canEditProfessionProfile = useCallback(
+    (personId?: string | null) => {
+      if (!userProfile || !personId) return false;
+      if (userProfile.role === "superadmin") return true;
+      return userProfile.peopleId === personId;
+    },
+    [userProfile],
+  );
+
+  const canManageLocation = useCallback(
+    (locationId: string) => {
       if (!userProfile) return false;
       if (userProfile.role === "superadmin") return true;
       if (!userProfile.isVerified) return false;
-      return (userProfile.villages || []).includes(villageId);
+      return (userProfile.locations || []).includes(locationId);
     },
     [userProfile],
   );
@@ -93,6 +120,11 @@ export function useAuth() {
       currentUser,
       userProfile,
       loading,
+      // `initialized` is false until Firebase first reports; `hadSession` says
+      // whether the previous visit was signed in. Together they let a view pick
+      // its first paint instead of defaulting to the signed-out one.
+      initialized,
+      hadSession,
       logout,
       linkUserToNode,
       hasPermission,
@@ -100,13 +132,16 @@ export function useAuth() {
       isAdmin,
       isApproved,
       needsNodeLink,
-      canManageVillage,
+      canManageLocation,
+      canEditProfessionProfile,
       updateUserProfile,
     }),
     [
       currentUser,
       userProfile,
       loading,
+      initialized,
+      hadSession,
       logout,
       linkUserToNode,
       hasPermission,
@@ -114,7 +149,8 @@ export function useAuth() {
       isAdmin,
       isApproved,
       needsNodeLink,
-      canManageVillage,
+      canManageLocation,
+      canEditProfessionProfile,
       updateUserProfile,
     ],
   );

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { ApiService } from "../../services/apiService";
+import { ApiService, LocationCombinationOption } from "../../services/apiService";
+import { LocationPicker } from "../LocationPicker/LocationPicker";
 import {
   Button,
   Dialog,
@@ -8,22 +9,27 @@ import {
   DialogActions,
   TextField,
   Alert,
+  Snackbar,
   CircularProgress,
   Box,
-  Chip,
   Fab,
   Autocomplete,
   Tooltip,
   useMediaQuery,
   useTheme,
   createFilterOptions,
+  InputAdornment,
   type FilterOptionsState,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
-import { useVillage } from "../hooks/useVillage";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
 import { useLoginModal } from "../context/LoginModalContext";
+import { RichTextEditor } from "../common/RichTextEditor";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchAllSubCastes,
@@ -35,6 +41,13 @@ import {
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
   variant?: "button" | "fab";
+  hideTrigger?: boolean;
+  open?: boolean;
+  onClose?: () => void;
+  initialLocationId?: string;
+  initialCasteId?: string;
+  initialSubCasteId?: string;
+  title?: string;
 }
 
 type LookupOption = {
@@ -58,6 +71,28 @@ function isCreateOption(option: AutocompleteOption): option is CreateOption {
   return "isCreateOption" in option;
 }
 
+const inputIconSx = { color: "text.secondary" } as const;
+const inputWithIconSx = {
+  "& .MuiInputAdornment-root": inputIconSx,
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 2,
+  },
+} as const;
+
+const adornment = (icon: React.ReactNode) => (
+  <InputAdornment position="start">{icon}</InputAdornment>
+);
+
+const autocompleteStartAdornment = (
+  icon: React.ReactNode,
+  params: { InputProps: { startAdornment?: React.ReactNode } },
+) => (
+  <>
+    {adornment(icon)}
+    {params.InputProps.startAdornment}
+  </>
+);
+
 function renderLookupOption(
   props: React.HTMLAttributes<HTMLLIElement> & { key: React.Key },
   option: AutocompleteOption,
@@ -75,29 +110,18 @@ function renderLookupOption(
       sx={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
         gap: 1,
-        px: 1.5,
-        py: 1,
-        borderLeft: "4px solid",
-        borderColor: "success.main",
-        bgcolor: "success.50",
-        color: "success.dark",
+        borderTop: "1px solid",
+        borderColor: "divider",
+        mt: 0.5,
+        pt: 1,
+        pb: 1,
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-        <AddCircleOutlineIcon fontSize="small" color="success" />
-        <Box component="span" sx={{ fontWeight: 600 }}>
-          {option.name}
-        </Box>
+      <AddCircleOutlineIcon fontSize="small" color="primary" />
+      <Box component="span" sx={{ fontWeight: 700, color: "primary.main" }}>
+        {option.name}
       </Box>
-      <Chip
-        label="New"
-        size="small"
-        color="success"
-        variant="filled"
-        sx={{ fontWeight: 700 }}
-      />
     </Box>
   );
 }
@@ -105,6 +129,13 @@ function renderLookupOption(
 export const AddTree: React.FC<AddTreeProps> = ({
   onCreate,
   variant = "button",
+  hideTrigger = false,
+  open,
+  onClose,
+  initialLocationId,
+  initialCasteId,
+  initialSubCasteId,
+  title = "Create a new tree",
 }) => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
@@ -122,23 +153,27 @@ export const AddTree: React.FC<AddTreeProps> = ({
   const [loading, setLoading] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdId, setCreatedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const modalHistoryRef = useRef(false);
-  const [selectedVillageId, setSelectedVillageId] = useState<string>("");
+  const previousSelectedCasteRef = useRef("");
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+  const [selectedLocationOption, setSelectedLocationOption] =
+    useState<LocationCombinationOption | null>(null);
   const [casteInputValue, setCasteInputValue] = useState("");
   const [subCasteInputValue, setSubCasteInputValue] = useState("");
   const filteredSubCastes = useMemo(
     () => subCastes.filter((s) => !selectedCaste || s.casteId === selectedCaste),
     [subCastes, selectedCaste],
   );
-  const { villages, selectedVillage, setSelectedVillage } = useVillage();
+  const { selectedLocation, setSelectedLocation } = useLocations();
   const { currentUser } = useAuth() as any;
   const { openLoginModal } = useLoginModal();
+  const isControlledOpen = typeof open === "boolean";
+  const isModalOpen = isControlledOpen ? Boolean(open) : showModal;
 
   // Load castes when modal opens
   useEffect(() => {
-    if (showModal) {
+    if (isModalOpen) {
       if (castes.length === 0) {
         dispatch(fetchCastes());
       }
@@ -146,12 +181,18 @@ export const AddTree: React.FC<AddTreeProps> = ({
         dispatch(fetchAllSubCastes());
       }
     }
-  }, [showModal, castes.length, subCastes.length, dispatch]);
+  }, [isModalOpen, castes.length, subCastes.length, dispatch]);
 
   // Reset selected sub-caste when caste changes
   useEffect(() => {
-    setSelectedSubCaste("");
-    setSubCasteInputValue("");
+    if (
+      previousSelectedCasteRef.current &&
+      previousSelectedCasteRef.current !== selectedCaste
+    ) {
+      setSelectedSubCaste("");
+      setSubCasteInputValue("");
+    }
+    previousSelectedCasteRef.current = selectedCaste;
   }, [selectedCaste]);
 
   const selectedCasteOption = useMemo(
@@ -249,7 +290,79 @@ export const AddTree: React.FC<AddTreeProps> = ({
   );
 
   useEffect(() => {
-    if (!showModal) return;
+    if (!isModalOpen) {
+      return;
+    }
+
+    setSelectedLocationId(initialLocationId || selectedLocation || "");
+    setSelectedCaste(initialCasteId || "");
+    setSelectedSubCaste(initialSubCasteId || "");
+    setCasteInputValue("");
+    setSubCasteInputValue("");
+    setError(null);
+    previousSelectedCasteRef.current = initialCasteId || "";
+  }, [
+    isModalOpen,
+    initialLocationId,
+    initialCasteId,
+    initialSubCasteId,
+    selectedLocation,
+  ]);
+
+  // Resolve the prefilled location id into the full "village, district, state"
+  // option the picker renders. Setting only the id left the field looking empty,
+  // so onboarding users retyped a location they had already chosen. Mirrors the
+  // same lookup the header does.
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const locationId = initialLocationId || selectedLocation || "";
+    if (!locationId) {
+      setSelectedLocationOption(null);
+      return;
+    }
+    if (selectedLocationOption?.locationId === locationId) return;
+
+    let active = true;
+    ApiService.searchLocationCombinations({ locationId, limit: 1 })
+      .then((rows) => {
+        if (active && rows?.[0]) setSelectedLocationOption(rows[0]);
+      })
+      .catch(() => {
+        /* Non-fatal: the user can still search for the location by hand. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    isModalOpen,
+    initialLocationId,
+    selectedLocation,
+    selectedLocationOption?.locationId,
+  ]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (selectedCasteOption) {
+      setCasteInputValue(selectedCasteOption.name);
+    }
+  }, [isModalOpen, selectedCasteOption]);
+
+  useEffect(() => {
+    if (!isModalOpen) {
+      return;
+    }
+
+    if (selectedSubCasteOption) {
+      setSubCasteInputValue(selectedSubCasteOption.name);
+    }
+  }, [isModalOpen, selectedSubCasteOption]);
+
+  useEffect(() => {
+    if (!isModalOpen || isControlledOpen) return;
 
     if (!modalHistoryRef.current) {
       window.history.pushState({ modal: "create-tree" }, "");
@@ -266,7 +379,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [showModal]);
+  }, [isModalOpen, isControlledOpen]);
 
   const submit = async () => {
     setError(null);
@@ -275,7 +388,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
       // Create tree and store caste/subCaste as UUIDs
       const treeData = {
         name: name || "Default Tree",
-        villageId: selectedVillageId || selectedVillage || null,
+        locationId: selectedLocationId || selectedLocation || null,
         description: description || null,
         caste: selectedCaste || null,
         subCaste: selectedSubCaste || null,
@@ -284,12 +397,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
       const newTree = await ApiService.createTree(treeData);
       const treeId = newTree.id;
 
-      setCreatedId(treeId);
       setName("");
       setDescription("");
       setSelectedCaste("");
       setSelectedSubCaste("");
-      setShowModal(false);
+      if (!isControlledOpen) {
+        setShowModal(false);
+      }
+      onClose?.();
       if (onCreate) onCreate(treeId);
     } catch (err: any) {
       setError(err?.message ?? String(err));
@@ -308,19 +423,45 @@ export const AddTree: React.FC<AddTreeProps> = ({
       return;
     }
     setError(null);
-    setCreatedId(null);
     setName("");
     setDescription("");
-    setSelectedCaste("");
-    setSelectedSubCaste("");
+    setSelectedCaste(initialCasteId || "");
+    setSelectedSubCaste(initialSubCasteId || "");
     setCasteInputValue("");
     setSubCasteInputValue("");
-    setSelectedVillageId(selectedVillage || "");
-    setShowModal(true);
+    setSelectedLocationId(initialLocationId || selectedLocation || "");
+    previousSelectedCasteRef.current = initialCasteId || "";
+    if (!isControlledOpen) {
+      setShowModal(true);
+    }
+  };
+
+  useEffect(() => {
+    if (!isControlledOpen) {
+      return;
+    }
+
+    if (open && !currentUser) {
+      onClose?.();
+      openLoginModal();
+    }
+  }, [currentUser, isControlledOpen, onClose, open, openLoginModal]);
+
+  const handleRequestOpen = () => {
+    if (isControlledOpen) {
+      openModal();
+      return;
+    }
+    openModal();
   };
 
   const closeModal = () => {
     if (loading) return;
+    if (isControlledOpen) {
+      onClose?.();
+      return;
+    }
+
     setShowModal(false);
     if (modalHistoryRef.current) {
       modalHistoryRef.current = false;
@@ -336,13 +477,13 @@ export const AddTree: React.FC<AddTreeProps> = ({
 
   return (
     <Box>
-      {variant === "fab" ? (
+      {!hideTrigger && variant === "fab" ? (
         <>
           <Tooltip title="Create tree" placement="left">
             <Fab
               color="primary"
               aria-label="Create tree"
-              onClick={openModal}
+              onClick={handleRequestOpen}
               sx={{
                 display: { xs: "inline-flex", sm: "none" },
                 opacity: 1,
@@ -359,7 +500,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
             <Fab
               variant="extended"
               color="primary"
-              onClick={openModal}
+              onClick={handleRequestOpen}
               sx={{
                 display: { xs: "none", sm: "inline-flex" },
                 opacity: 0.62,
@@ -374,49 +515,41 @@ export const AddTree: React.FC<AddTreeProps> = ({
             </Fab>
           </Tooltip>
         </>
-      ) : (
+      ) : !hideTrigger ? (
         <Button
           variant="contained"
           color="primary"
           startIcon={<AddIcon />}
-          onClick={openModal}
+          onClick={handleRequestOpen}
         >
           Create tree
         </Button>
-      )}
+      ) : null}
 
       <Dialog
-        open={showModal}
+        open={isModalOpen}
         onClose={closeModal}
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Create a new tree</DialogTitle>
+        <DialogTitle>{title}</DialogTitle>
         <DialogContent>
-          <Autocomplete
-            options={villages}
-            getOptionLabel={(option) => option.name}
-            value={villages.find((v) => v.id === selectedVillageId) || null}
-            onChange={(_e, newValue) => {
-              const id = newValue?.id || "";
-              setSelectedVillageId(id);
-              if (id) {
-                setSelectedVillage(id);
-              }
-            }}
-            disabled={loading}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                margin="dense"
-                label="Village"
-                placeholder="Search village..."
-                variant="outlined"
-              />
-            )}
-            sx={{ mt: 1, mb: 2 }}
-          />
+          <Box sx={{ mt: 1, mb: 2 }}>
+            <LocationPicker
+              value={selectedLocationOption}
+              onChange={(option) => {
+                setSelectedLocationOption(option);
+                const id = option?.locationId || "";
+                setSelectedLocationId(id);
+                if (id) {
+                  setSelectedLocation(id);
+                }
+              }}
+              disabled={loading}
+              allowCreate
+            />
+          </Box>
 
           <TextField
             autoFocus
@@ -428,7 +561,12 @@ export const AddTree: React.FC<AddTreeProps> = ({
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
-            sx={{ mt: 1, mb: 2 }}
+            sx={[{ mt: 1, mb: 2 }, inputWithIconSx]}
+            InputProps={{
+              startAdornment: adornment(
+                <AccountTreeOutlinedIcon fontSize="small" />,
+              ),
+            }}
           />
 
           <Autocomplete
@@ -473,6 +611,14 @@ export const AddTree: React.FC<AddTreeProps> = ({
                 placeholder="Search or create caste..."
                 variant="outlined"
                 required
+                sx={inputWithIconSx}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: autocompleteStartAdornment(
+                    <GroupsOutlinedIcon fontSize="small" />,
+                    params,
+                  ),
+                }}
               />
             )}
             sx={{ mb: 2 }}
@@ -524,24 +670,28 @@ export const AddTree: React.FC<AddTreeProps> = ({
                 }
                 variant="outlined"
                 required
+                sx={inputWithIconSx}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: autocompleteStartAdornment(
+                    <BadgeOutlinedIcon fontSize="small" />,
+                    params,
+                  ),
+                }}
               />
             )}
             sx={{ mb: 2 }}
           />
 
-          <TextField
-            margin="dense"
-            label="Description (Optional)"
-            placeholder="e.g. A detailed description about the family"
-            fullWidth
-            variant="outlined"
-            multiline
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={loading}
-            sx={{ mb: 2 }}
-          />
+          <Box sx={{ mt: 2 }}>
+            <RichTextEditor
+              label="Description (optional)"
+              value={description}
+              onChange={setDescription}
+              minHeight={140}
+              placeholder="e.g. A detailed description about the family"
+            />
+          </Box>
 
           {error && (
             <Alert severity="error" sx={{ mt: 2 }}>
@@ -549,7 +699,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
             </Alert>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={closeModal} disabled={loading}>
             Cancel
           </Button>
@@ -564,16 +714,20 @@ export const AddTree: React.FC<AddTreeProps> = ({
         </DialogActions>
       </Dialog>
 
-      {createdId && !showModal && (
-        <Alert severity="success" sx={{ mt: 1 }}>
-          Created: {createdId}
+      {/* Failures surface in a portalled snackbar rather than inline. An Alert
+          rendered here sits inside the same fixed, right-anchored box as the FAB,
+          so it widened the box and pushed the button sideways. Success needs no
+          message at all — the user is taken straight into the new tree. */}
+      <Snackbar
+        open={Boolean(error) && !showModal}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" variant="filled" onClose={() => setError(null)}>
+          {error}
         </Alert>
-      )}
-      {error && !showModal && (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          Error: {error}
-        </Alert>
-      )}
+      </Snackbar>
     </Box>
   );
 };

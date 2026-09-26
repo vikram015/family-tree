@@ -10,11 +10,21 @@ export type FNode = ExtNode & {
   place?: string; // Place (birthplace or current location)
   notes?: string; // Additional notes
   photo?: string; // Photo URL
+  createdAt?: string; // Created timestamp
+  createdBy?: string; // User ID who created this person
+  createdByName?: string; // Display name/email of the creator
   customFields?: Record<string, string>; // Dynamic custom fields
   hierarchy?: Array<{ name: string; id: string }>; // Complete parent chain hierarchy
   treeId?: string; // Tree ID this node belongs to
-  villageId?: string; // Village ID this node belongs to
-  villageName?: string; // Village name
+  locationId?: string; // Location ID this node belongs to
+  locationName?: string; // Location name
+  /** Where this person was born, picked from Google Places. Separate from the
+   *  tree's location above, which says where the family is rooted. */
+  birthPlaceId?: string | null;
+  birthPlaceName?: string | null;
+  birthPlaceAddress?: string | null;
+  birthPlaceLatitude?: number | null;
+  birthPlaceLongitude?: number | null;
   name_lowercase?: string; // Lowercase name for case-insensitive search
   relationStartDate?: string; // Optional relation start date when creating/linking spouse
   relationEndDate?: string; // Optional relation end date when creating/linking spouse
