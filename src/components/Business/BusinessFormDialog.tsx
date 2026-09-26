@@ -47,6 +47,8 @@ import { RichTextEditor } from "../common/RichTextEditor";
 import { DateField } from "../common/DateField";
 import { hasRichTextContent } from "../common/richText";
 import { brand } from "../../theme/brand";
+import { useOwnerName } from "../common/useOwnerName";
+import { OwnerLine } from "../common/OwnerLine";
 
 const CUSTOM_CATEGORY = "__custom__";
 
@@ -87,6 +89,9 @@ interface BusinessFormDialogProps {
   business?: BusinessFormValue | null;
   /** Owner person id when the owner is fixed (Profile, node details, add-node flow). */
   personId?: string | null;
+  /** Display name of the fixed owner, when the caller has it. Looked up from
+   *  `personId` otherwise. */
+  ownerName?: string | null;
   /** Show an owner search/select field (used on the Business page). */
   enableOwnerSelect?: boolean;
   /** Location scope for the owner search. */
@@ -167,6 +172,7 @@ export function BusinessFormDialog({
   onClose,
   business,
   personId,
+  ownerName,
   enableOwnerSelect = false,
   locationId,
   defaultContact,
@@ -184,6 +190,10 @@ export function BusinessFormDialog({
   const [email, setEmail] = useState("");
   const [owner, setOwner] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  // With a fixed owner the record's own owner name wins (an edit), falling back
+  // to the person the dialog was opened for (a new business).
+  const fixedOwnerName = useOwnerName(open && !enableOwnerSelect && !owner, personId, ownerName);
+  const displayOwner = enableOwnerSelect ? (ownerId ? owner : "") : owner || fixedOwnerName;
   const [tagline, setTagline] = useState("");
   const [story, setStory] = useState("");
   const [foundedOn, setFoundedOn] = useState("");
@@ -336,11 +346,11 @@ export function BusinessFormDialog({
     }
     list.push({ id: "details", label: "Business details", icon: <StorefrontOutlinedIcon fontSize="small" /> });
     list.push({ id: "contact", label: "Location & contact", icon: <PlaceOutlinedIcon fontSize="small" /> });
-    if (enableOwnerSelect || owner) {
+    if (enableOwnerSelect || displayOwner) {
       list.push({ id: "owner", label: "Owner & family", icon: <AccountTreeOutlinedIcon fontSize="small" /> });
     }
     return list;
-  }, [isEdit, business?.id, enableOwnerSelect, owner]);
+  }, [isEdit, business?.id, enableOwnerSelect, displayOwner]);
 
   /**
    * How much of the profile is filled in.
@@ -543,6 +553,7 @@ export function BusinessFormDialog({
       }}
     >
       <DialogTitle
+        component="div"
         sx={{
           display: "flex",
           alignItems: "center",
@@ -562,6 +573,10 @@ export function BusinessFormDialog({
               ? name || "Untitled business"
               : "Everything except the name and category can be filled in later."}
           </Typography>
+          <OwnerLine
+            name={displayOwner}
+            placeholder={enableOwnerSelect ? "Owner not chosen yet — pick them below" : "Owner"}
+          />
         </Box>
         <IconButton onClick={onClose} disabled={saving} aria-label="Close" sx={{ flexShrink: 0 }}>
           <CloseIcon />
@@ -1041,7 +1056,7 @@ export function BusinessFormDialog({
               </Box>
             </FormSection>
 
-            {(enableOwnerSelect || owner) && (
+            {(enableOwnerSelect || displayOwner) && (
               <FormSection
                 innerRef={sectionRefSetters.owner}
                 index={sectionIndex("owner")}
@@ -1110,7 +1125,7 @@ export function BusinessFormDialog({
                       <Typography sx={{ fontSize: 12, color: brand.slateMuted, fontWeight: 600 }}>
                         Listed under
                       </Typography>
-                      <Typography sx={{ fontWeight: 700, color: brand.ink }}>{owner}</Typography>
+                      <Typography sx={{ fontWeight: 700, color: brand.ink }}>{displayOwner}</Typography>
                     </Box>
                   </Stack>
                 )}

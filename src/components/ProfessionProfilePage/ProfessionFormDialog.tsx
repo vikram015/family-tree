@@ -37,6 +37,8 @@ import {
 } from "../../services/apiService";
 import { PlacePicker, PlaceValue } from "../PlacePicker/PlacePicker";
 import { brand } from "../../theme/brand";
+import { useOwnerName } from "../common/useOwnerName";
+import { OwnerLine } from "../common/OwnerLine";
 
 const RichTextEditor = React.lazy(() =>
   import("../common/RichTextEditor").then((m) => ({ default: m.RichTextEditor })),
@@ -108,6 +110,9 @@ export interface ProfessionFormDialogProps {
   open: boolean;
   onClose: () => void;
   peopleId: string;
+  /** Display name of the person this profile belongs to. Looked up from
+   *  `peopleId` when the caller does not have it. */
+  ownerName?: string | null;
   profile?: ProfessionProfile | null;
   onSaved: () => void;
 }
@@ -116,11 +121,13 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
   open,
   onClose,
   peopleId,
+  ownerName,
   profile,
   onSaved,
 }) => {
   const theme = useTheme();
   const fullScreen = useMediaQuery(theme.breakpoints.down("md"));
+  const displayOwner = useOwnerName(open, peopleId, ownerName);
 
   const [title, setTitle] = useState("");
   const [sector, setSector] = useState("");
@@ -341,8 +348,9 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
       fullWidth
       PaperProps={{ sx: { borderRadius: fullScreen ? 0 : 3 } }}
     >
-      <DialogTitle sx={{ pr: 6, fontWeight: 800 }}>
+      <DialogTitle component="div" sx={{ pr: 6, fontWeight: 800 }}>
         {profile ? "Edit profession profile" : "Add profession profile"}
+        <OwnerLine name={displayOwner} placeholder="Profession owner" />
         <IconButton
           onClick={onClose}
           disabled={saving}

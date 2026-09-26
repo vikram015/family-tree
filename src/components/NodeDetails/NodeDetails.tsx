@@ -441,10 +441,18 @@ export const NodeDetails = memo(function NodeDetails({
     }
   }, [view, locations.length]);
 
-  // Reset view and values when node changes
+  // Reset the view only when a different person is opened. Keyed on the id, not
+  // the object: adding a relative merges a fresh copy of this node into the tree,
+  // and resetting on that would unmount AddNode just as it moves to its
+  // "add business or profession" step.
+  const nodeId = node?.id;
+  useEffect(() => {
+    if (nodeId) setView(initialView || "details");
+  }, [nodeId, initialView]);
+
+  // Keep the edit fields in sync with the latest copy of the node.
   useEffect(() => {
     if (node) {
-      setView(initialView || "details");
       setEditedName(node.name || "");
       setEditedNameHindi(node.nameHindi || "");
       setEditedDob(parsePickerValue(node.dob));
@@ -2814,6 +2822,7 @@ export const NodeDetails = memo(function NodeDetails({
           onClose={() => setBusinessDialogOpen(false)}
           business={editingBusiness}
           personId={node.id}
+          ownerName={node.name}
           defaultContact={phoneFromCustomFields(displayCustomFields)}
           onSaved={() => void refreshBusinesses()}
         />
@@ -2824,6 +2833,7 @@ export const NodeDetails = memo(function NodeDetails({
           open={professionDialogOpen}
           onClose={() => setProfessionDialogOpen(false)}
           peopleId={node.id}
+          ownerName={node.name}
           profile={professionProfile}
           onSaved={() => {
             setProfessionDialogOpen(false);

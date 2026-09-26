@@ -41,7 +41,6 @@ import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined
 import ChildCareOutlinedIcon from "@mui/icons-material/ChildCareOutlined";
 import FavoriteBorderOutlinedIcon from "@mui/icons-material/FavoriteBorderOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import BusinessIcon from "@mui/icons-material/Business";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
@@ -55,6 +54,7 @@ import { useLoginModal } from "../context/LoginModalContext";
 import { ApiService } from "../../services/apiService";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
+import { ProfessionFormDialog } from "../ProfessionProfilePage/ProfessionFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
 const DatePicker = React.lazy(() =>
   import("@mui/x-date-pickers/DatePicker").then((m) => ({
@@ -180,8 +180,10 @@ export default function AddNode({
   const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
   const [businessAdded, setBusinessAdded] = useState(false);
 
-  // Profession Fields
-  const [jobTitle, setJobTitle] = useState("");
+  // Profession is captured the same way, via the shared ProfessionFormDialog, so
+  // a career profile started here is the same full record as everywhere else.
+  const [professionDialogOpen, setProfessionDialogOpen] = useState(false);
+  const [professionAdded, setProfessionAdded] = useState(false);
 
   // New person fields
   const [bloodGroup, setBloodGroup] = useState("");
@@ -195,7 +197,6 @@ export default function AddNode({
   );
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSavingDetails, setIsSavingDetails] = useState(false);
 
   const stickyFooterSx = {
     position: "sticky",
@@ -474,7 +475,8 @@ const adornment = (icon: React.ReactNode) => (
     setSavedNodeId(null);
     setBusinessAdded(false);
     setBusinessDialogOpen(false);
-    setJobTitle("");
+    setProfessionAdded(false);
+    setProfessionDialogOpen(false);
     setOccupationType("business");
   }, [onCancel, applyDefaultOtherParent]);
 
@@ -511,7 +513,8 @@ const adornment = (icon: React.ReactNode) => (
     setFlowTargetId(targetId);
     setBusinessAdded(false);
     setBusinessDialogOpen(false);
-    setJobTitle("");
+    setProfessionAdded(false);
+    setProfessionDialogOpen(false);
     setOccupationType("business");
 
     // Close the dialog — prefer onComplete, fallback to onCancel
@@ -552,48 +555,10 @@ const adornment = (icon: React.ReactNode) => (
     setFlowTargetId(targetId);
     setBusinessAdded(false);
     setBusinessDialogOpen(false);
-    setJobTitle("");
+    setProfessionAdded(false);
+    setProfessionDialogOpen(false);
     setOccupationType("business");
   }, [targetId, applyDefaultOtherParent]);
-
-  const handleSaveDetails = useCallback(async (nextAction?: "add-son") => {
-    if (isSavingDetails) return;
-    setIsSavingDetails(true);
-    if (!savedNodeId) {
-      setIsSavingDetails(false);
-      handleFlowComplete();
-      return;
-    }
-
-    try {
-      if (jobTitle.trim()) {
-        // Starts the person's career profile — the same record the profession
-        // page and every edit form use. It used to create a row in the shared
-        // `professions` table instead, which put one person's details on a
-        // label everyone else shares.
-        await ApiService.saveProfessionProfile(savedNodeId, {
-          title: jobTitle.trim(),
-        });
-      }
-    } catch (error) {
-      console.error("Error saving details:", error);
-    } finally {
-      setIsSavingDetails(false);
-    }
-
-    if (nextAction === "add-son") {
-      handleContinueWithSon();
-      return;
-    }
-
-    handleFlowComplete();
-  }, [
-    handleContinueWithSon,
-    handleFlowComplete,
-    isSavingDetails,
-    jobTitle,
-    savedNodeId,
-  ]);
 
   const handleSave = useCallback(async () => {
     if (isSaving) return;
@@ -802,9 +767,9 @@ const adornment = (icon: React.ReactNode) => (
 
     if (step === 2) {
       onMobileSaveActionChange({
-        onClick: handleSaveDetails,
-        disabled: isSavingDetails,
-        saving: isSavingDetails,
+        onClick: handleFlowComplete,
+        disabled: false,
+        saving: false,
       });
       return () => onMobileSaveActionChange(null);
     }
@@ -818,10 +783,8 @@ const adornment = (icon: React.ReactNode) => (
     return () => onMobileSaveActionChange(null);
   }, [
     handleSave,
-    handleSaveDetails,
+    handleFlowComplete,
     isSaving,
-    isSavingDetails,
-    jobTitle,
     mode,
     name,
     occupationType,
@@ -880,10 +843,12 @@ const adornment = (icon: React.ReactNode) => (
           </Paper>
           <Box sx={{ textAlign: "center", mb: 1 }}>
             <Typography variant="h6" color="primary" gutterBottom>
-              👍 Person Added!
+              👍 {name.trim() || "Person"} added!
             </Typography>
             <Typography variant="subtitle1" fontWeight="bold">
-              Add Professional Details?
+              {name.trim()
+                ? `Add ${name.trim()}'s business or profession?`
+                : "Add Professional Details?"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Helping the community grow by adding business or career info.
@@ -929,7 +894,7 @@ const adornment = (icon: React.ReactNode) => (
 
               <Divider />
 
-              {/* Profession — optional, saved on finish */}
+              {/* Profession — optional, added immediately via the shared dialog */}
               <Box>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
                   <WorkOutlineOutlinedIcon fontSize="small" color="action" />
@@ -937,23 +902,31 @@ const adornment = (icon: React.ReactNode) => (
                     Profession
                   </Typography>
                 </Stack>
-                <Stack spacing={2}>
-                  <TextField
-                    label="Job Title / Profession"
-                    fullWidth
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
-                    placeholder="e.g. Software Engineer, Doctor, Teacher"
-                    sx={inputWithIconSx}
-                    InputProps={{
-                      startAdornment: adornment(<BadgeOutlinedIcon fontSize="small" />),
-                    }}
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    This starts their career profile — they can add experience,
-                    qualifications and contact details to it later.
-                  </Typography>
-                </Stack>
+                {professionAdded ? (
+                  <Paper
+                    variant="outlined"
+                    sx={{ p: 1.5, borderRadius: 2, display: "flex", alignItems: "center", gap: 1 }}
+                  >
+                    <CheckCircleOutlineIcon color="success" fontSize="small" />
+                    <Typography variant="body2">Profession details saved.</Typography>
+                    <Button
+                      size="small"
+                      onClick={() => setProfessionDialogOpen(true)}
+                      sx={{ ml: "auto" }}
+                    >
+                      Edit
+                    </Button>
+                  </Paper>
+                ) : (
+                  <Button
+                    variant="outlined"
+                    startIcon={<WorkOutlineOutlinedIcon fontSize="small" />}
+                    onClick={() => setProfessionDialogOpen(true)}
+                    disabled={!savedNodeId}
+                  >
+                    Add Profession Details
+                  </Button>
+                )}
               </Box>
             </Stack>
           </Paper>
@@ -964,9 +937,11 @@ const adornment = (icon: React.ReactNode) => (
               mt: 4,
             }}
           >
-            <Button onClick={handleFlowComplete} color="inherit">
-              Skip
-            </Button>
+            {!businessAdded && !professionAdded && (
+              <Button onClick={handleFlowComplete} color="inherit">
+                Skip
+              </Button>
+            )}
             <Button
               onClick={() => {
                 if (savedNodeId) {
@@ -977,17 +952,10 @@ const adornment = (icon: React.ReactNode) => (
             >
               Add Another Son
             </Button>
-            <Button
-              onClick={() => void handleSaveDetails()}
-              variant="contained"
-              startIcon={
-                isSavingDetails ? (
-                  <CircularProgress size={14} color="inherit" />
-                ) : undefined
-              }
-              disabled={isSavingDetails}
-            >
-              {isSavingDetails ? "Saving..." : "Save & Finish"}
+            {/* Both dialogs save as soon as they close, so there is nothing
+                left to write here — this only ends the flow. */}
+            <Button onClick={handleFlowComplete} variant="contained">
+              Finish
             </Button>
           </Box>
         </Stack>
@@ -1649,9 +1617,24 @@ const adornment = (icon: React.ReactNode) => (
         open={businessDialogOpen}
         onClose={() => setBusinessDialogOpen(false)}
         personId={savedNodeId}
+        ownerName={name.trim() || undefined}
         defaultContact={phoneFromCustomFields(customFields)}
         onSaved={() => setBusinessAdded(true)}
       />
+
+      {savedNodeId && (
+        <ProfessionFormDialog
+          open={professionDialogOpen}
+          onClose={() => setProfessionDialogOpen(false)}
+          peopleId={savedNodeId}
+          ownerName={name.trim() || undefined}
+          profile={null}
+          onSaved={() => {
+            setProfessionDialogOpen(false);
+            setProfessionAdded(true);
+          }}
+        />
+      )}
     </Box>
   );
 }
