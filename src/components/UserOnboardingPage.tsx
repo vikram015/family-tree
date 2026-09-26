@@ -1432,8 +1432,8 @@ export const UserOnboardingPage: React.FC = () => {
       setSelectedLocation(selectedLocationId);
     }
     // Return to where login was initiated if we remember it; otherwise open the
-    // freshly created tree and start the guided setup, which collects parents and
-    // grandparents while the user is still in a filling-things-in frame of mind.
+    // freshly created tree and start the guided setup, which collects the immediate
+    // family while the user is still in a filling-things-in frame of mind.
     const treeUrl = `/families?tree=${encodeURIComponent(treeId)}&setup=1`;
     navigate(consumePostLoginRedirect() || treeUrl, { replace: true });
   };

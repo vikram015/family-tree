@@ -282,6 +282,17 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
     );
   }
 
+  /**
+   * Today and the week ahead are separate sections, not alternatives.
+   *
+   * Both used to `return` from here, so whichever matched first won and the
+   * other never rendered — the days ahead were invisible on any day that had a
+   * birthday, i.e. most days worth opening the page for. They are built as
+   * values now and rendered together below.
+   */
+  let todaySection: React.ReactNode = null;
+  let upcomingSection: React.ReactNode = null;
+
   if (hasToday) {
     const filters: { id: EventFilter; label: string }[] = [
       { id: "all", label: `All today (${items.length})` },
@@ -310,7 +321,7 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
     // the mix makes it a celebration again.
     const memorial = deceased.length > 0 && birthdays.length + anniversaries.length === 0;
 
-    return (
+    todaySection = (
       <SectionShell tone={memorial ? "memorial" : "celebration"}>
         <Stack
           direction={{ xs: "column", md: "row" }}
@@ -409,13 +420,12 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
             />
           ))}
         </Box>
-        {wishDialog}
       </SectionShell>
     );
   }
 
   if (upcomingItems.length > 0) {
-    return (
+    upcomingSection = (
       <SectionShell tone="celebration">
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
           <Typography
@@ -466,17 +476,27 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
             />
           ))}
         </Carousel>
-        {wishDialog}
       </SectionShell>
     );
   }
 
   // Nothing to celebrate this week is not news, and a full card announcing it
   // pushed the worklist — the page's actual job — below the fold. One quiet line.
+  if (!todaySection && !upcomingSection) {
+    return (
+      <Typography variant="body2" sx={{ color: brand.slateMuted }}>
+        No birthdays or anniversaries this week.
+      </Typography>
+    );
+  }
+
   return (
-    <Typography variant="body2" sx={{ color: brand.slateMuted }}>
-      No birthdays or anniversaries this week.
-    </Typography>
+    <Stack spacing={{ xs: 3, md: 4 }}>
+      {todaySection}
+      {upcomingSection}
+      {/* One dialog for both strips, mounted once so it cannot open twice. */}
+      {wishDialog}
+    </Stack>
   );
 };
 

@@ -815,7 +815,9 @@ export function renderNodeCardSvg(
   isMobile?: boolean,
   canEditNode: boolean = true,
   isNameClickable: boolean = true,
-  shape: CardShape = "horizontal",
+  // Compact is the product default; every caller forwards the viewer's actual
+  // choice, so this only covers a caller that forgets to.
+  shape: CardShape = "vertical",
 ): string {
   // On mobile the name is not separately clickable (tapping the card opens
   // details), which also frees the whole width for the name itself.

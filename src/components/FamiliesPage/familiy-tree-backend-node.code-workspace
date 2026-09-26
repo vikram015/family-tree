@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../.."
+		},
+		{
+			"path": "../../../../kinvia-android"
 		}
 	],
 	"settings": {}

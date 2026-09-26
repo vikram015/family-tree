@@ -39,6 +39,7 @@ import { AdminManagement } from "../AdminManagement/AdminManagement";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
+import CelebrationPage from "../CelebrationPage/CelebrationPage";
 import { NotificationPromptProvider } from "../context/NotificationPromptContext";
 import {
   TreeFullscreenProvider,
@@ -256,6 +257,13 @@ function AppContent() {
                   what a given viewer may see and returns 404 when the answer is
                   "nothing", so the route itself needs no guard. */}
               <Route path="/profession/:peopleId" element={<ProfessionProfilePage />} />
+              {/* A celebration is the one page built to be forwarded, so it
+                  is unauthenticated by design. The server tiers the payload:
+                  family get the lineage panels, everyone else gets the card,
+                  the guestbook and a box to write in. Both the id form and the
+                  person/occasion form land here. */}
+              <Route path="/celebration" element={<CelebrationPage />} />
+              <Route path="/celebration/:eventId" element={<CelebrationPage />} />
               <Route path="/famous" element={<FamousPage />} />
               <Route
                 path="/photos"
@@ -310,16 +318,34 @@ export default React.memo(function App() {
           <LocalizationProvider dateAdapter={AdapterDayjs}>
             <AuthInitializer>
               <LocationInitializer>
-                <LoginModalProvider>
-                  <NotificationPromptProvider>
-                    <TreeFullscreenProvider>
-                      <BrowserRouter>
+                {/*
+                  The Router wraps the providers, not just the routes.
+
+                  `LoginModalProvider` renders the login modal as a sibling of
+                  its children, so with the Router *inside* the provider that
+                  modal sat outside the Router entirely — and `PhoneOtpForm`
+                  links to Terms and Privacy with a router <Link>. Opening the
+                  modal therefore crashed the app with "Cannot destructure
+                  property 'basename' of React.useContext(...) as it is null".
+
+                  It only surfaced once a signed-out visitor had a reason to
+                  open the modal from a page (reacting or replying on a
+                  celebration); before that, signing in meant navigating to
+                  /login, which is inside the Router and fine.
+
+                  None of these providers use router hooks, so hoisting the
+                  Router above them only ever adds context.
+                */}
+                <BrowserRouter>
+                  <LoginModalProvider>
+                    <NotificationPromptProvider>
+                      <TreeFullscreenProvider>
                         <AppContent />
-                      </BrowserRouter>
-                      <PwaUpdatePrompt />
-                    </TreeFullscreenProvider>
-                  </NotificationPromptProvider>
-                </LoginModalProvider>
+                        <PwaUpdatePrompt />
+                      </TreeFullscreenProvider>
+                    </NotificationPromptProvider>
+                  </LoginModalProvider>
+                </BrowserRouter>
               </LocationInitializer>
             </AuthInitializer>
           </LocalizationProvider>

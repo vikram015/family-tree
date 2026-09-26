@@ -103,13 +103,28 @@ function toTreeViewerNode(
 /** Where the browser remembers the card layout between visits. */
 const NODE_SHAPE_STORAGE_KEY = "kinvia:treeNodeShape";
 
+/**
+ * The card layout to open the tree with.
+ *
+ * Compact is the default. A wide card spends the whole row on each person, so
+ * siblings sit far apart and a generation runs off the screen; the compact card
+ * fits the same generation in a fraction of the width, which is what most
+ * people want to see first.
+ *
+ * An explicit "horizontal" is honoured rather than overridden — anyone who
+ * already picked Wide cards keeps them. Only an absent or unreadable value
+ * falls through to the default, so changing it here does not reach back and
+ * change a choice somebody made.
+ */
 function readStoredNodeShape(): TreeViewerNodeShape {
   try {
-    return window.localStorage.getItem(NODE_SHAPE_STORAGE_KEY) === "vertical"
-      ? "vertical"
-      : "horizontal";
+    const stored = window.localStorage.getItem(NODE_SHAPE_STORAGE_KEY);
+    if (stored === "horizontal") return "horizontal";
+    if (stored === "vertical") return "vertical";
+    return "vertical";
   } catch {
-    return "horizontal";
+    // Private mode, blocked storage: no stored preference to honour.
+    return "vertical";
   }
 }
 
@@ -259,7 +274,7 @@ export const DTreeComponent: React.FC<DTreeComponentProps> = ({
           // Without this the viewer's layout choice never reaches the card:
           // this renderer overrides the viewer's default one, so anything it
           // forgets to forward is silently dropped.
-          context.nodeShape ?? "horizontal",
+          context.nodeShape ?? "vertical",
         ),
       renderPlaceholderCardSvg,
       renderMarriageNodeSvg,

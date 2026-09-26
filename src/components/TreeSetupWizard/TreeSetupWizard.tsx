@@ -32,7 +32,8 @@ import { DateField } from "../common/DateField";
  * Replaces the old "Create First Node" dialog. A blank tree with one "add a
  * person" button asks the user to think in database terms; this asks the
  * questions they already know the answers to — who your parents are, who your
- * grandparents were — and turns each answer into a node.
+ * father's parents were — and turns each answer into a node. Relatives from
+ * other families (e.g. your mother's parents) are linked after creation.
  *
  * Every answer is written to the server the moment it is given, so closing the
  * tab half way through loses nothing. That is why there is no "review and
@@ -46,8 +47,6 @@ type StepKey =
   | "mother"
   | "dada"
   | "dadi"
-  | "nana"
-  | "nani"
   | "children";
 
 type StepDef = {
@@ -98,6 +97,9 @@ const STEPS: StepDef[] = [
     relation: "parent-of-anchor",
     offerDeceased: true,
   },
+  // Only the paternal line is asked for. Your mother's parents (nana, nani),
+  // and the parents of anyone who married into this family, belong to another
+  // family's tree and are linked from there once this tree exists.
   {
     key: "dada",
     title: "Your father's father",
@@ -112,29 +114,9 @@ const STEPS: StepDef[] = [
     key: "dadi",
     title: "Your father's mother",
     hindi: "दादी",
-    helper: "Even a first name is worth recording.",
+    helper: "She will be linked to your grandfather automatically.",
     gender: "female",
     anchor: "father",
-    relation: "parent-of-anchor",
-    offerDeceased: true,
-  },
-  {
-    key: "nana",
-    title: "Your mother's father",
-    hindi: "नाना",
-    helper: "Even a first name is worth recording.",
-    gender: "male",
-    anchor: "mother",
-    relation: "parent-of-anchor",
-    offerDeceased: true,
-  },
-  {
-    key: "nani",
-    title: "Your mother's mother",
-    hindi: "नानी",
-    helper: "Even a first name is worth recording.",
-    gender: "female",
-    anchor: "mother",
     relation: "parent-of-anchor",
     offerDeceased: true,
   },

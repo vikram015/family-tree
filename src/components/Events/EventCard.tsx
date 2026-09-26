@@ -179,6 +179,19 @@ const FEATURE_ACTION_LABEL: Record<WishEventType, string> = {
   remembrance: "Light candle",
 };
 
+/** The small underlined links under a feature card's name. */
+const linkSx = (color: string) => ({
+  border: 0,
+  p: 0,
+  bgcolor: "transparent",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600,
+  color,
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
+});
+
 const EventCard: React.FC<EventCardProps> = ({
   personId,
   eventType,
@@ -213,23 +226,39 @@ const EventCard: React.FC<EventCardProps> = ({
     typeof navigator !== "undefined" && typeof navigator.share === "function";
 
   /**
-   * The card's primary action: open the wish thread.
+   * Where the celebration lives for this card.
+   *
+   * The person/occasion form rather than an event id: the card has no id to
+   * hand out, and the event may never have been opened before. The celebration
+   * page resolves it (creating it if needed) and replaces the URL with the
+   * canonical one.
+   */
+  const celebrationPath =
+    `/celebration?personId=${encodeURIComponent(personId)}` +
+    `&eventType=${encodeURIComponent(eventType)}&eventYear=${year}`;
+
+  /**
+   * The card's primary action: open the celebration.
    *
    * `onSendWish`, when a surface supplies it, handles the wish in place instead
-   * — the dashboard opens a compose dialog rather than sending the user to the
-   * profile page for one sentence. Every other surface keeps the navigation, so
-   * the thread on the profile remains the canonical place a wish lives.
+   * — the dashboard opens a compose dialog rather than sending the user to a
+   * whole page for one sentence. Every other surface navigates to the
+   * celebration, which is now where a wish lives.
+   *
+   * The person/occasion form rather than an event id: the event may not have
+   * been materialized yet, and this is exactly the request that brings it into
+   * existence. The page swaps itself for the canonical `/celebration/:id` once
+   * the server answers.
    */
   const handleNavigate = () => {
     if (onSendWish) {
       onSendWish({ personId, name, photoUrl, eventType, year });
       return;
     }
-    const path = `/profile/person/${personId}?event=${eventType}&year=${year}`;
     if (onNavigate) {
-      onNavigate(path);
+      onNavigate(celebrationPath);
     } else {
-      navigate(path);
+      navigate(celebrationPath);
     }
   };
 
@@ -330,9 +359,23 @@ const EventCard: React.FC<EventCardProps> = ({
           </Box>
         </Stack>
 
-        {/* Straight into the tree, where the event card's person sits in
-            context — the same destination the profile's "view in tree" uses. */}
-        <Box sx={{ mt: 1.25, mb: 1.75 }}>
+        {/* Two ways out of the card, beneath the name.
+
+            The primary button sends a wish in a dialog — the fast path, for
+            people who only want to say one sentence. These are the slower
+            ones: the celebration itself, where the whole wall lives, and the
+            tree. The celebration leads, because on a birthday card it is the
+            more natural destination and it is otherwise reachable from
+            nowhere. */}
+        <Stack direction="row" spacing={1.5} sx={{ mt: 1.25, mb: 1.75 }}>
+          <Typography
+            component="button"
+            type="button"
+            onClick={() => go(celebrationPath)}
+            sx={linkSx(feature.ink)}
+          >
+            Open celebration
+          </Typography>
           <Typography
             component="button"
             type="button"
@@ -343,21 +386,11 @@ const EventCard: React.FC<EventCardProps> = ({
                   : `/families?personId=${personId}`,
               )
             }
-            sx={{
-              border: 0,
-              p: 0,
-              bgcolor: "transparent",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              color: feature.ink,
-              textDecoration: "underline",
-              textUnderlineOffset: 2,
-            }}
+            sx={linkSx(brand.slateMuted)}
           >
-            Inspect in tree
+            In tree
           </Typography>
-        </Box>
+        </Stack>
 
         <Stack direction="row" spacing={1} sx={{ mt: "auto" }}>
           <Button

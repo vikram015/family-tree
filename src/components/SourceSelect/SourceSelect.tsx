@@ -27,6 +27,9 @@ interface TreeItem {
   caste?: string;
   subCaste?: string;
   locationName?: string;
+  /** Carried for searching only — a row stays short by showing the village. */
+  districtName?: string;
+  stateName?: string;
 }
 
 interface SourceSelectProps {
@@ -90,6 +93,8 @@ export const SourceSelect = memo(function SourceSelect({
         caste: casteMap.get(tree.caste) || tree.caste,
         subCaste: subCasteMap.get(tree.subCaste) || tree.subCaste,
         locationName: tree.location?.name || tree.locationName,
+        districtName: tree.location?.district?.name || tree.districtName,
+        stateName: tree.location?.state?.name || tree.stateName,
       })),
     [trees, casteMap, subCasteMap],
   );
@@ -103,7 +108,11 @@ export const SourceSelect = memo(function SourceSelect({
         item.name.toLowerCase().includes(lowerSearch) ||
         item.caste?.toLowerCase().includes(lowerSearch) ||
         item.subCaste?.toLowerCase().includes(lowerSearch) ||
-        item.locationName?.toLowerCase().includes(lowerSearch),
+        item.locationName?.toLowerCase().includes(lowerSearch) ||
+        // A tree is most often looked for by where it belongs, and people type
+        // the district or the state as readily as the village.
+        item.districtName?.toLowerCase().includes(lowerSearch) ||
+        item.stateName?.toLowerCase().includes(lowerSearch),
     );
   }, [items, searchText]);
 
@@ -141,7 +150,10 @@ export const SourceSelect = memo(function SourceSelect({
                 caste: casteMap.get(targetTree.caste) || targetTree.caste,
                 subCaste:
                   subCasteMap.get(targetTree.subCaste) || targetTree.subCaste,
-                locationName: targetTree.location?.name,
+                locationName: targetTree.location?.name || targetTree.locationName,
+                districtName:
+                  targetTree.location?.district?.name || targetTree.districtName,
+                stateName: targetTree.location?.state?.name || targetTree.stateName,
               });
             }
           } catch (err) {
@@ -235,7 +247,13 @@ export const SourceSelect = memo(function SourceSelect({
       </Typography>
       {(item.caste || item.subCaste || item.locationName) && (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {[item.caste, item.subCaste, item.locationName]
+          {[
+            item.caste,
+            item.subCaste,
+            // Village and district together: village names repeat across
+            // districts, so the village alone does not always identify a place.
+            [item.locationName, item.districtName].filter(Boolean).join(", ") || undefined,
+          ]
             .filter(Boolean)
             .join(" • ")}
         </Typography>
@@ -291,7 +309,11 @@ export const SourceSelect = memo(function SourceSelect({
                 {item.name}
               </Typography>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {[item.caste, item.subCaste, item.locationName]
+                {[
+                  item.caste,
+                  item.subCaste,
+                  [item.locationName, item.districtName].filter(Boolean).join(", ") || undefined,
+                ]
                   .filter(Boolean)
                   .join(" • ")}
               </Typography>
@@ -329,7 +351,7 @@ export const SourceSelect = memo(function SourceSelect({
           <TextField
             fullWidth
             size="small"
-            placeholder="Search trees..."
+            placeholder="Search by tree, village, district or caste"
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             onClick={(e) => e.stopPropagation()}

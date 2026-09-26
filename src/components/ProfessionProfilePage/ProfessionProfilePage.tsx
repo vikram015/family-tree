@@ -264,7 +264,7 @@ export const ProfessionProfilePage: React.FC = () => {
       <Helmet>
         <title>
           {profile.personName
-            ? `${profile.personName} — ${profile.title} | Kinvia`
+            ? `${profile.personName}${profile.title ? ` — ${profile.title}` : ""} | Kinvia`
             : "Profession profile | Kinvia"}
         </title>
       </Helmet>
@@ -303,7 +303,12 @@ export const ProfessionProfilePage: React.FC = () => {
             >
               {profile.canEdit
                 ? "This is from your recorded profession. Add a profile to say what you actually do, where you studied, and what you can help younger relatives with."
-                : "This is from their recorded profession. They haven't written a career profile yet."}
+                : profile.isRestricted
+                  ? // A profile exists; its owner shared it with family only.
+                    // Saying so is kinder than a blank page, and more honest
+                    // than implying they never wrote one.
+                    "This profile is shared with family only, so you're seeing just their recorded profession. Sign in with a family account to see the rest."
+                  : "This is from their recorded profession."}
             </Alert>
           )}
 
@@ -338,9 +343,13 @@ export const ProfessionProfilePage: React.FC = () => {
                     )}
                   </Stack>
 
-                  <Typography sx={{ mt: 0.25, fontSize: { xs: 15, md: 17 }, fontWeight: 700, color: brand.primaryDark }}>
-                    {profile.title}
-                  </Typography>
+                  {/* A restricted profile with no public tags has no title to
+                      show — the notice above already explains why. */}
+                  {profile.title && (
+                    <Typography sx={{ mt: 0.25, fontSize: { xs: 15, md: 17 }, fontWeight: 700, color: brand.primaryDark }}>
+                      {profile.title}
+                    </Typography>
+                  )}
 
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
                     {profile.sector && <Chip size="small" label={profile.sector} sx={{ bgcolor: "#f1f5f9", fontWeight: 600 }} />}

@@ -22,6 +22,12 @@ export type PhotoVisibility = 'private' | 'family';
 export interface BusinessProfile {
   id: string;
   name: string;
+  /**
+   * True when the viewer is signed out and the server withheld the contact
+   * details, address and hours. Lets the page say they are protected rather
+   * than absent.
+   */
+  isLimited?: boolean;
   category?: string | null;
   /** Short blurb, also used on directory cards. */
   description?: string | null;
@@ -155,6 +161,11 @@ export interface ProfessionProfile {
    * tags as something they wrote.
    */
   hasProfile?: boolean;
+  /**
+   * A profile exists but is not shared with this viewer. The page says so,
+   * rather than implying nothing was written.
+   */
+  isRestricted?: boolean;
   /** Vocabulary tags, present whether or not a profile was written. */
   professions?: Array<{ id: string; name: string; category?: string | null }>;
   personName?: string | null;
@@ -398,6 +409,8 @@ export interface Wish {
   authorUserId: string | null;
   authorName: string | null;
   createdAt: string;
+  /** The celebration it belongs to. Null on wishes written before events. */
+  eventId?: string | null;
 }
 
 /** A wish as the dashboard wall shows it: the note plus both faces. */
@@ -405,6 +418,117 @@ export interface RecentWish extends Wish {
   personName: string | null;
   personPhotoUrl: string | null;
   authorPhotoUrl: string | null;
+}
+
+// =====================================================
+// CELEBRATIONS
+// =====================================================
+
+export type CelebrationEventType = 'birthday' | 'anniversary' | 'remembrance';
+
+/** A celebration as a thing with an identity, not a derived date. */
+export interface CelebrationEvent {
+  id: string;
+  eventType: CelebrationEventType;
+  eventYear: number;
+  eventDate: string | null;
+  /** "68th birthday", "40th anniversary". */
+  occurrenceNumber: number | null;
+  treeId: string | null;
+
+  primaryPersonId: string;
+  primaryName: string | null;
+  primaryNameHindi: string | null;
+  primaryGender: string | null;
+  primaryPhotoUrl: string | null;
+
+  secondaryPersonId: string | null;
+  secondaryName: string | null;
+  secondaryPhotoUrl: string | null;
+
+  wishCount: number;
+}
+
+/** The kinds of reaction a message can carry. Keys, not glyphs. */
+export type ReactionKind = 'heart' | 'pranam' | 'warmth';
+
+export interface ReactionTally {
+  kind: ReactionKind;
+  count: number;
+  /** Whether the signed-in viewer is one of the people counted. */
+  reacted: boolean;
+}
+
+export interface CelebrationWish {
+  id: string;
+  message: string;
+  createdAt: string;
+  authorUserId: string | null;
+  authorName: string | null;
+  authorPhotoUrl: string | null;
+  authorPeopleId: string | null;
+  /** Set when this is a reply to another message. */
+  parentWishId: string | null;
+  /** How the author described themselves when they wrote. */
+  authorRelation: string | null;
+  /** How the tree says they are related, which may differ. */
+  resolvedRelation: string | null;
+  resolvedRelationHindi: string | null;
+  canDelete: boolean;
+  /** The author only, within an hour — narrower than canDelete, which a
+   *  superadmin also gets and which never expires for them. */
+  canEdit: boolean;
+  /**
+   * When this viewer's edit/delete window closes, so an open page can expire
+   * the buttons itself. Null when the permission is not time-limited.
+   */
+  permissionExpiresAt: string | null;
+  /** Null until the author changes what they wrote. */
+  editedAt: string | null;
+  reactions: ReactionTally[];
+  /** Present on top-level messages only; threads are one level deep. */
+  replies?: CelebrationWish[];
+}
+
+/** How one person connects to another, as a walk through the tree. */
+export interface RelationshipResult {
+  found: boolean;
+  degrees: number;
+  label: string;
+  labelHindi: string | null;
+  path: {
+    id: string;
+    name: string | null;
+    gender: string | null;
+    photoUrl: string | null;
+    dob: string | null;
+  }[];
+  steps: ('up' | 'down' | 'spouse')[];
+}
+
+export interface CelebrationPedigree {
+  parents: { id: string; name: string | null; gender: string | null }[];
+  spouse: { id: string; name: string | null; startDate: string | null } | null;
+  childCount: number;
+  grandchildCount: number;
+}
+
+/**
+ * Everything the celebration page renders.
+ *
+ * `viewerTier` is the server's answer to "is this person family?", and the
+ * family-only blocks are simply absent for a visitor rather than present and
+ * empty — so there is nothing for the client to accidentally reveal.
+ */
+export interface CelebrationPayload {
+  event: CelebrationEvent;
+  viewerTier: 'family' | 'visitor';
+  wishes: CelebrationWish[];
+  canPost: boolean;
+  pedigree?: CelebrationPedigree;
+  otherMilestones?: CelebrationEvent[];
+  history?: CelebrationEvent[];
+  viewerRelation?: RelationshipResult;
 }
 
 export interface LinkRequest {
@@ -1906,6 +2030,95 @@ export const ApiService = {
     message: string;
   }): Promise<Wish> {
     return backendApi.post<Wish>('/api/wishes', payload);
+  },
+
+  // =====================================================
+  // CELEBRATIONS
+  // =====================================================
+
+  /** Open a celebration by id. */
+  async getCelebration(eventId: string): Promise<CelebrationPayload> {
+    return backendApi.get<CelebrationPayload>(`/api/celebration/${eventId}`);
+  },
+
+  /**
+   * Open the celebration for a person and occasion, creating it if this is the
+   * first time anyone has looked. The server validates that the event is real
+   * before minting anything.
+   */
+  async resolveCelebration(
+    personId: string,
+    eventType: CelebrationEventType,
+    eventYear: number,
+  ): Promise<CelebrationPayload> {
+    return backendApi.get<CelebrationPayload>('/api/celebration/resolve', {
+      personId,
+      eventType,
+      eventYear,
+    });
+  },
+
+  /**
+   * Post a wish. Returns the whole refreshed page, so the new entry arrives
+   * with its author relation already resolved rather than the client guessing
+   * at it and correcting on the next load.
+   */
+  async postCelebrationWish(
+    eventId: string,
+    message: string,
+    authorRelation?: string | null,
+    parentWishId?: string | null,
+  ): Promise<CelebrationPayload> {
+    return backendApi.post<CelebrationPayload>(`/api/celebration/${eventId}/wishes`, {
+      message,
+      authorRelation: authorRelation || null,
+      parentWishId: parentWishId || null,
+    });
+  },
+
+  /**
+   * Toggle one reaction on one message.
+   *
+   * Returns just that message's tallies, not the whole page — reacting is a
+   * tap, and re-rendering the page for it would be conspicuous.
+   */
+  async toggleWishReaction(
+    eventId: string,
+    wishId: string,
+    kind: ReactionKind,
+  ): Promise<{ wishId: string; reactions: ReactionTally[] }> {
+    return backendApi.post<{ wishId: string; reactions: ReactionTally[] }>(
+      `/api/celebration/${eventId}/wishes/${wishId}/reactions`,
+      { kind },
+    );
+  },
+
+  /**
+   * Change what a message says. Returns the refreshed page, because an edit can
+   * land on a reply nested under another message and the server re-groups.
+   */
+  async editCelebrationWish(
+    eventId: string,
+    wishId: string,
+    message: string,
+  ): Promise<CelebrationPayload> {
+    return backendApi.patch<CelebrationPayload>(
+      `/api/celebration/${eventId}/wishes/${wishId}`,
+      { message },
+    );
+  },
+
+  /** Removes the message and any replies to it. */
+  async deleteCelebrationWish(eventId: string, wishId: string): Promise<void> {
+    await backendApi.delete(`/api/celebration/${eventId}/wishes/${wishId}`);
+  },
+
+  /** Past celebrations for one person. Empty unless the viewer is family. */
+  async getCelebrationHistory(personId: string, limit = 12): Promise<CelebrationEvent[]> {
+    return backendApi.get<CelebrationEvent[]>(
+      `/api/celebration/person/${personId}/history`,
+      { limit },
+    );
   },
 
   /**

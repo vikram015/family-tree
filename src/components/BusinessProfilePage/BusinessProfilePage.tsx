@@ -12,8 +12,9 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PhoneIcon from "@mui/icons-material/Phone";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
@@ -160,6 +161,7 @@ const linkSx = {
 
 export const BusinessProfilePage: React.FC = () => {
   const { businessId } = useParams<{ businessId: string }>();
+  const navigate = useNavigate();
   const { currentUser, userProfile, isSuperAdmin } = useAuth();
 
   const [business, setBusiness] = useState<BusinessProfile | null>(null);
@@ -558,6 +560,33 @@ export const BusinessProfilePage: React.FC = () => {
                           }
                         />
                       )}
+                    </Stack>
+                  ) : business.isLimited ? (
+                    /* Withheld, not absent. Saying "none have been added" to a
+                       signed-out visitor would be untrue and would give them no
+                       reason to sign in. */
+                    <Stack spacing={1.5} alignItems="flex-start">
+                      <Stack direction="row" spacing={1} alignItems="flex-start">
+                        <LockOutlinedIcon sx={{ fontSize: 18, color: brand.slateMuted, mt: "2px" }} />
+                        <Typography sx={{ color: brand.slate, fontSize: 14.5, lineHeight: 1.6 }}>
+                          Contact details, opening hours and the full address are
+                          shared with signed-in members of the family network.
+                        </Typography>
+                      </Stack>
+                      <Button
+                        variant="contained"
+                        onClick={() => navigate("/login")}
+                        sx={{
+                          textTransform: "none",
+                          fontWeight: 800,
+                          borderRadius: 2,
+                          px: 2.5,
+                          bgcolor: brand.primaryDark,
+                          "&:hover": { bgcolor: "#1e40af" },
+                        }}
+                      >
+                        Sign in to see full details
+                      </Button>
                     </Stack>
                   ) : (
                     <Typography sx={{ color: brand.slateMuted }}>

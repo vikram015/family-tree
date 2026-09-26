@@ -4,8 +4,8 @@
     "ignore": [
       "firebase.json",
       "firebase.dev.json",
-      "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/.DS_Store"
     ],
     "headers": [
       {

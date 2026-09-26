@@ -101,6 +101,22 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       port: 3000,
+      host: true,
+      /**
+       * Serving the built bundle is what makes a tunnel usable.
+       *
+       * The dev server hands out hundreds of unbundled ES modules; across a
+       * tunnel's latency the browser cancels them mid-flight and the page
+       * never finishes loading. `vite preview` serves the same few hashed
+       * chunks the deployed site does, so it behaves like the real thing.
+       *
+       * It needs the same host allowance and API proxy as the dev server.
+       */
+      allowedHosts: [".trycloudflare.com", ".ngrok-free.app", ".loca.lt"],
+      proxy: {
+        "/api": { target: "http://localhost:8080", changeOrigin: true },
+        "/share": { target: "http://localhost:8080", changeOrigin: true },
+      },
     },
     build: {
       outDir: "build", // firebase.json and the deploy scripts expect build/

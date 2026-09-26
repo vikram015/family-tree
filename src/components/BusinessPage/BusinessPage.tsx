@@ -309,6 +309,8 @@ export const BusinessPage: React.FC = () => {
   const [nearbyBusinesses, setNearbyBusinesses] = useState<any[] | null>(null);
   const [nearbyProfessions, setNearbyProfessions] = useState<any[] | null>(null);
   const [nearbyProfessionsLoading, setNearbyProfessionsLoading] = useState(false);
+  // Bumped after a profile is saved, so the nearby list re-reads and shows it.
+  const [nearbyProfessionsVersion, setNearbyProfessionsVersion] = useState(0);
   const [nearbyLoading, setNearbyLoading] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
   // Fixed for now. Exposed as a value rather than a control because a radius
@@ -378,7 +380,14 @@ export const BusinessPage: React.FC = () => {
         ) {
           return current;
         }
-        return { ...current, name: place.name, address: place.address || place.name };
+        // Both fields get the locality, not the full formatted address.
+        //
+        // Reverse geocoding a GPS fix returns whatever building the point
+        // landed on — "Haryana Agricultural University, Hisar, Haryana, India"
+        // — and the picker shows `address`. For a centre meaning "roughly
+        // where I am", the town is the honest label; the precise address would
+        // claim a precision the 25km radius does not have.
+        return { ...current, name: place.name, address: place.name };
       });
     },
     [],
@@ -468,7 +477,7 @@ export const BusinessPage: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [centre?.latitude, centre?.longitude, radiusKm]);
+  }, [centre?.latitude, centre?.longitude, radiusKm, nearbyProfessionsVersion]);
 
   /**
    * Re-read the businesses around the centre.
@@ -706,6 +715,7 @@ export const BusinessPage: React.FC = () => {
     try {
       await ApiService.removeProfessionFromPerson(personId, professionId);
 
+      setNearbyProfessionsVersion((v) => v + 1);
       // Refresh professions data by dispatching Redux action
       if (selectedLocation) {
         dispatch(fetchProfessionsData(selectedLocation));
@@ -2484,6 +2494,9 @@ export const BusinessPage: React.FC = () => {
           profile={professionEditorProfile}
           onSaved={() => {
             setProfessionEditorPersonId(null);
+            // The list shows the nearby rows whenever a centre is set, so
+            // refreshing redux alone left a new profile invisible.
+            setNearbyProfessionsVersion((v) => v + 1);
             if (selectedLocation) {
               dispatch(fetchProfessionsData(selectedLocation));
             }

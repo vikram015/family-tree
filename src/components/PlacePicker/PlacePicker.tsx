@@ -195,12 +195,24 @@ export const PlacePicker: React.FC<PlacePickerProps> = ({
       }
       inputValue={inputValue}
       onInputChange={(_event, next, reason) => {
-        setInputValue(next);
-        // Clearing the field clears the stored place — otherwise an emptied box
-        // would still save the old one.
-        if (reason === "clear" || (reason === "input" && next.trim() === "")) {
-          onChange(null);
+        // Typing and clearing are the user's; everything else is MUI syncing
+        // the text from `value`.
+        if (reason === "input" || reason === "clear") {
+          setInputValue(next);
+          // Clearing the field clears the stored place — otherwise an emptied
+          // box would still save the old one.
+          if (reason === "clear" || next.trim() === "") {
+            onChange(null);
+          }
+          return;
         }
+
+        // A place taken from the device's position has coordinates but no
+        // Google placeId, so the `value` handed to MUI above is null. MUI then
+        // syncs the input from that null and hands us an empty string — which
+        // blanked the field for exactly the case "use my location" produces.
+        // The prop is the truth here, so it wins over MUI's reset.
+        setInputValue(labelOf(value) || next);
       }}
       onChange={(_event, selected) => void handleSelect(selected as PlaceSuggestion | null)}
       noOptionsText={

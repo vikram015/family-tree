@@ -229,7 +229,10 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
       setLoadingProfile(true);
       ApiService.getProfessionProfile(peopleId)
         .then((full) => {
-          if (active && full) applyProfile(full);
+          // A person with no profile yet still gets a tag-only stand-in (title
+          // built from their profession tags) — that is display data, not
+          // something to pre-fill a new profile with.
+          if (active && full && full.hasProfile !== false) applyProfile(full);
         })
         .catch((err) => {
           console.error("Failed to load profession profile for editing:", err);
@@ -359,6 +362,9 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
 
         <Stack spacing={2.5}>
           {/* ---- Role ---------------------------------------------------- */}
+          {/* Title, work email and contact number carry made-up autocomplete
+              tokens: Chrome ignores "off" and would otherwise fill them from the
+              viewer's saved address card, which reads as data we pre-filled. */}
           <Box sx={{ p: 2.5, bgcolor: "#fff", borderRadius: 3, border: "1px solid #e2e8f0" }}>
             <SectionHeading title="Role" subtitle="What you do, and where." />
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
@@ -368,6 +374,7 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 fullWidth
+                inputProps={{ autoComplete: "profession-title" }}
                 placeholder="e.g. Software architect"
                 sx={{ gridColumn: { sm: "1 / -1" } }}
               />
@@ -591,7 +598,14 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
               subtitle="All optional. Your phone number stays hidden until you switch it on."
             />
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
-              <TextField label="Work email" type="email" value={workEmail} onChange={(e) => setWorkEmail(e.target.value)} fullWidth />
+              <TextField
+                label="Work email"
+                type="email"
+                value={workEmail}
+                onChange={(e) => setWorkEmail(e.target.value)}
+                fullWidth
+                inputProps={{ autoComplete: "profession-work-email" }}
+              />
               <Box sx={{ gridColumn: { sm: "1 / -1" } }}>
                 <PlacePicker
                   value={workPlace}
@@ -612,7 +626,7 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
                 onChange={(e) => setContactPhone(e.target.value)}
                 fullWidth
                 placeholder="e.g. 98765 43210"
-                inputProps={{ inputMode: "tel", maxLength: 32 }}
+                inputProps={{ inputMode: "tel", maxLength: 32, autoComplete: "profession-contact-phone" }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">

@@ -183,9 +183,10 @@ const HeroTreeGraphic: React.FC = () => {
         />
 
         <g transform="translate(0, 44)">
-          <rect x="-46" y="-8" width="92" height="18" rx="9" fill="#ffffff" stroke="#bfdbfe" strokeWidth="1" />
+          {/* Sized for the longest name shown here; measured, not guessed. */}
+          <rect x="-56" y="-8" width="112" height="18" rx="9" fill="#ffffff" stroke="#bfdbfe" strokeWidth="1" />
           <text x="0" y="4.5" textAnchor="middle" fill="#0f172a" fontSize="9" fontWeight="800">
-            Nikolaos • 1918
+            Hukam Chand • 1918
           </text>
         </g>
       </g>
@@ -195,12 +196,12 @@ const HeroTreeGraphic: React.FC = () => {
         <circle cx="0" cy="0" r="26" fill="#FFFFFF" stroke="#2563eb" strokeWidth="3" filter={`url(#${glowId})`} />
         <circle cx="0" cy="0" r="20" fill="#dbeafe" />
         <text x="0" y="5" textAnchor="middle" fill="#1e3a8a" fontSize="12" fontWeight="800">
-          MR
+          SD
         </text>
         <g transform="translate(0, 36)">
           <rect x="-38" y="-7" width="76" height="16" rx="8" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
           <text x="0" y="4" textAnchor="middle" fill="#475569" fontSize="8.5" fontWeight="700">
-            Athens • 1922
+            Hisar • 1922
           </text>
         </g>
       </g>
@@ -210,7 +211,7 @@ const HeroTreeGraphic: React.FC = () => {
         <circle cx="0" cy="0" r="24" fill="#FFFFFF" stroke="#2563eb" strokeWidth="3" />
         <circle cx="0" cy="0" r="17" fill="#eff6ff" />
         <text x="0" y="4.5" textAnchor="middle" fill="#1d4ed8" fontSize="11" fontWeight="800">
-          AR
+          RK
         </text>
         {/* Has-photos badge. The mock had an audio-memoir wave here; this app
             stores photos, not recordings, so the badge says photos. */}
@@ -220,7 +221,7 @@ const HeroTreeGraphic: React.FC = () => {
         <g transform="translate(0, 34)">
           <rect x="-40" y="-7" width="80" height="16" rx="8" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
           <text x="0" y="4" textAnchor="middle" fill="#475569" fontSize="8.5" fontWeight="600">
-            b. 1947 • Piraeus
+            b. 1947 • Gangwa
           </text>
         </g>
       </g>
@@ -241,12 +242,12 @@ const HeroTreeGraphic: React.FC = () => {
         <circle cx="0" cy="0" r="27" fill="#FFFFFF" stroke="#1d4ed8" strokeWidth="3.5" />
         <circle cx="0" cy="0" r="19" fill="#dbeafe" />
         <text x="0" y="5" textAnchor="middle" fill="#1e3a8a" fontSize="12" fontWeight="800">
-          VN
+          BL
         </text>
         <g transform="translate(0, 36)">
           <rect x="-45" y="-7" width="90" height="16" rx="8" fill="#ffffff" stroke="#bfdbfe" strokeWidth="1" />
           <text x="0" y="4" textAnchor="middle" fill="#1d4ed8" fontSize="8.5" fontWeight="700">
-            m. 1951 • Melbourne
+            m. 1951 • Jaipur
           </text>
         </g>
       </g>
@@ -255,12 +256,12 @@ const HeroTreeGraphic: React.FC = () => {
         <circle cx="0" cy="0" r="24" fill="#FFFFFF" stroke="#38bdf8" strokeWidth="3" />
         <circle cx="0" cy="0" r="17" fill="#f0f9ff" />
         <text x="0" y="4.5" textAnchor="middle" fill="#0284c7" fontSize="11" fontWeight="800">
-          CL
+          KD
         </text>
         <g transform="translate(0, 34)">
           <rect x="-38" y="-7" width="76" height="16" rx="8" fill="#ffffff" stroke="#e2e8f0" strokeWidth="1" />
           <text x="0" y="4" textAnchor="middle" fill="#475569" fontSize="8.5" fontWeight="600">
-            b. 1956 • Sydney
+            b. 1956 • Delhi
           </text>
         </g>
       </g>
@@ -673,7 +674,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </Typography>
                   </Stack>
                   <Typography sx={{ fontWeight: 800, color: brand.ink, fontSize: 15 }} noWrap>
-                    The bakery, 1954
+                    The bakery, 1994
                   </Typography>
                   <Typography sx={{ fontSize: 12, color: brand.slateMuted }}>
                     Kept with the people in it

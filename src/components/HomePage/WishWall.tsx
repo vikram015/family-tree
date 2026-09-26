@@ -161,11 +161,18 @@ export const WishWall: React.FC<WishWallProps> = ({ refreshKey = 0 }) => {
                     {author}
                   </Box>{" "}
                   {EVENT_VERB[wish.eventType] || "wrote to"}{" "}
-                  {/* The recipient is the useful link: the wall is a way into
-                      people's pages, not a read-only feed. */}
+                  {/* The recipient is the useful link: the wall is a way in,
+                      not a read-only feed. It leads to the celebration the
+                      message was written on, where the rest of the messages
+                      are — the person's profile only had the one. Wishes
+                      predating events still fall back to the profile. */}
                   <Box
                     component={Link}
-                    to={`/profile/person/${wish.peopleId}`}
+                    to={
+                      wish.eventId
+                        ? `/celebration/${wish.eventId}`
+                        : `/profile/person/${wish.peopleId}`
+                    }
                     sx={{
                       fontWeight: 700,
                       color: brand.primaryDark,

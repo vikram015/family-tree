@@ -120,7 +120,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   initialShowFullTree = true,
   initialShowSpouses = true,
   initialLanguage = "hindi",
-  initialNodeShape = "horizontal",
+  initialNodeShape = "vertical",
   onPreferencesChange,
   features,
   renderers,
@@ -203,7 +203,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
             context.isMobile,
             context.canEditNode ?? true,
             context.allowNameDetailsClick ?? true,
-            context.nodeShape ?? "horizontal",
+            context.nodeShape ?? "vertical",
           )),
       renderPlaceholderCardSvg:
         renderers?.renderPlaceholderCardSvg ?? renderPlaceholderCardSvg,
