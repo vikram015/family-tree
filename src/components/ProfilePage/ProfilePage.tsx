@@ -33,7 +33,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import CelebrationHistoryCard from "../CelebrationPage/CelebrationHistoryCard";
 import { useLoginModal } from "../context/LoginModalContext";
@@ -105,7 +105,20 @@ export const ProfilePage: React.FC = () => {
   const { locations, selectedLocation, setSelectedLocation } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
-  const [isLinking, setIsLinking] = useState(false);
+  const [searchParams] = useSearchParams();
+  // `?link=1` — arriving from a "link your profile" prompt elsewhere (e.g. the
+  // Photos page) opens the tree search straight away instead of making the
+  // user find and press "Link My Profile" again.
+  const openLinkingOnArrival = searchParams.get("link") === "1";
+  const [isLinking, setIsLinking] = useState(openLinkingOnArrival);
+  const linkSectionRef = useRef<HTMLDivElement | null>(null);
+  const scrolledToLinkRef = useRef(false);
+  const linkSectionVisible = Boolean(currentUser && userProfile && !userProfile.peopleId);
+  useEffect(() => {
+    if (!openLinkingOnArrival || !linkSectionVisible || scrolledToLinkRef.current) return;
+    scrolledToLinkRef.current = true;
+    linkSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [openLinkingOnArrival, linkSectionVisible]);
   const [searchValue, setSearchValue] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<any | null>(null);
   // Likely matches for "this is me", fetched from the trees the user can see.
@@ -870,7 +883,7 @@ export const ProfilePage: React.FC = () => {
 
         {/* Tree Linking Section — logged-in user not yet linked to a person. */}
         {isOwnAccountView && currentUser && !userProfile?.peopleId && (
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, md: 8 }} ref={linkSectionRef}>
           <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
             <Box
               sx={{

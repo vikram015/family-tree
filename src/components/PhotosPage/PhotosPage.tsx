@@ -24,6 +24,8 @@ import FileUploadOutlinedIcon from "@mui/icons-material/FileUploadOutlined";
 import SearchIcon from "@mui/icons-material/Search";
 import GridViewRoundedIcon from "@mui/icons-material/GridViewRounded";
 import ViewComfyRoundedIcon from "@mui/icons-material/ViewComfyRounded";
+import LinkIcon from "@mui/icons-material/Link";
+import { Link as RouterLink } from "react-router-dom";
 import { brand } from "../../theme/brand";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "../hooks/useAuth";
@@ -300,7 +302,22 @@ export function PhotosPage() {
       </Stack>
 
       {!ownPersonId && (
-        <Alert severity="info" sx={{ mb: 3 }}>
+        <Alert
+          severity="info"
+          sx={{ mb: 3, alignItems: "center" }}
+          action={
+            <Button
+              component={RouterLink}
+              to="/profile?link=1"
+              color="inherit"
+              size="small"
+              startIcon={<LinkIcon />}
+              sx={{ fontWeight: 700, whiteSpace: "nowrap" }}
+            >
+              Link my profile
+            </Button>
+          }
+        >
           Link your account to your profile in a family tree to start adding photos. You can still add
           photos of other relatives from their profile page.
         </Alert>

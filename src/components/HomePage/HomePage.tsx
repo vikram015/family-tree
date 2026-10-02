@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   Box,
@@ -106,7 +106,14 @@ export const HomePage: React.FC = () => {
   const [familyEvents, setFamilyEvents] = useState<FamilyEvents | null>(null);
   const [upcoming, setUpcoming] = useState<UpcomingFamilyEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
-  const [nextAction, setNextAction] = useState<NextAction | null>(null);
+  // What the "next action" card is decided from. Fetched once per user; the
+  // card itself is derived below, so the onboarding result arriving later only
+  // re-renders it instead of refetching link requests and trees.
+  const [linkSignals, setLinkSignals] = useState<{
+    pendingLink: any | null;
+    hasApprovedBranchAccess: boolean;
+    hasAccessibleTree: boolean;
+  } | null>(null);
   const [continueTreeLoading, setContinueTreeLoading] = useState(false);
 
   // Both fields map from the same DB column, so a user who never set a name
@@ -137,11 +144,19 @@ export const HomePage: React.FC = () => {
   }, [dispatch]);
 
   // Personalized data — one round trip for the tree stats, worklist and badges.
+  // Each personal effect below waits for the profile (`profileId`) and is keyed
+  // on ids, not on the user objects: firing as soon as Firebase answers and
+  // again when the profile lands loaded the whole dashboard twice.
+  const signedInUid = currentUser?.uid ?? null;
+  const profileId = userProfile?.id ?? null;
+  const peopleId = userProfile?.peopleId ?? null;
+
   useEffect(() => {
-    if (!currentUser) {
+    if (!signedInUid) {
       setInsights(null);
       return;
     }
+    if (!profileId) return;
     let cancelled = false;
     setInsightsLoading(true);
     ApiService.getMyDashboardInsights()
@@ -158,11 +173,11 @@ export const HomePage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [currentUser, userProfile?.peopleId]);
+  }, [signedInUid, profileId, peopleId]);
 
   // Today's dates, plus the week ahead so a quiet day still has something.
   useEffect(() => {
-    if (!currentUser || !userProfile?.peopleId) {
+    if (!signedInUid || !peopleId) {
       setFamilyEvents(null);
       setUpcoming([]);
       return;
@@ -184,7 +199,7 @@ export const HomePage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [currentUser, userProfile?.peopleId]);
+  }, [signedInUid, peopleId]);
 
   /**
    * The single most useful thing this user could do next.
@@ -195,13 +210,10 @@ export const HomePage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const compute = async () => {
-      if (!currentUser || !userProfile) {
-        setNextAction(null);
-        return;
-      }
-      if (userProfile.peopleId) {
-        setNextAction(null);
+    const load = async () => {
+      // Only users not yet linked to a person need the card at all.
+      if (!signedInUid || !profileId || peopleId) {
+        setLinkSignals(null);
         return;
       }
 
@@ -213,66 +225,67 @@ export const HomePage: React.FC = () => {
       }
       if (cancelled) return;
 
-      const pending = allRequests.filter((r) => r.status === "pending");
-      const pendingLink = pending.find((r) => r.requestType === "user_to_tree_node");
-      const hasApprovedBranchAccess = allRequests.some(
-        (r) => r.requestType === "branch_access_request" && r.status === "approved",
-      );
-      // An accepted invite already put them in a tree, so onboarding would only
-      // ask them to find one again — send them to link their node instead.
-      const joinedThroughInvite =
-        onboarding?.completion?.result === "invite_accepted";
-
-      // The decisive signal: can they already see a tree?
-      //
-      // The two flags above only catch users who arrived via an approved request
-      // or an invite. Someone who CREATED their own tree has neither — no request
-      // row exists — and was being sent to onboarding to "find my tree" when the
-      // tree was already theirs. getTrees() is access-scoped, so a non-empty
-      // result means they have somewhere to link themselves.
+      // The decisive signal: can they already see a tree? Someone who CREATED
+      // their own tree has no request row and no invite, and was being sent to
+      // onboarding to "find my tree" when the tree was already theirs.
+      // getTrees() is access-scoped, so a non-empty result means they have
+      // somewhere to link themselves.
       let hasAccessibleTree = false;
       try {
         const trees = await ApiService.getTrees();
         hasAccessibleTree = (trees || []).length > 0;
       } catch (err) {
-        // Non-fatal: fall back to the request-derived signals below.
+        // Non-fatal: fall back to the request-derived signals.
         console.warn("Could not check accessible trees for next action:", err);
       }
       if (cancelled) return;
 
-      if (pendingLink) {
-        setNextAction({
-          title: "Profile link pending approval",
-          description: `Your request to link with ${pendingLink.targetPersonName || "your family member"} is awaiting the tree owner's approval.`,
-          to: "/requests",
-          cta: "View request",
-        });
-        return;
-      }
-
-      setNextAction(
-        hasAccessibleTree || hasApprovedBranchAccess || joinedThroughInvite
-          ? {
-              title: "Link your profile",
-              description:
-                "Find yourself in your family tree to finish linking your account.",
-              to: "/profile",
-              cta: "Link my profile",
-            }
-          : {
-              title: "Finish setting up your profile",
-              description: "Find your family tree and request access to your branch.",
-              to: "/onboarding",
-              cta: "Find my tree",
-            },
-      );
+      setLinkSignals({
+        pendingLink:
+          allRequests.find(
+            (r) => r.status === "pending" && r.requestType === "user_to_tree_node",
+          ) || null,
+        hasApprovedBranchAccess: allRequests.some(
+          (r) => r.requestType === "branch_access_request" && r.status === "approved",
+        ),
+        hasAccessibleTree,
+      });
     };
 
-    void compute();
+    void load();
     return () => {
       cancelled = true;
     };
-  }, [currentUser, userProfile, onboarding?.completion?.result]);
+  }, [signedInUid, profileId, peopleId]);
+
+  // An accepted invite already put them in a tree, so onboarding would only
+  // ask them to find one again — send them to link their node instead.
+  const joinedThroughInvite = onboarding?.completion?.result === "invite_accepted";
+
+  const nextAction = useMemo<NextAction | null>(() => {
+    if (!linkSignals) return null;
+    if (linkSignals.pendingLink) {
+      return {
+        title: "Profile link pending approval",
+        description: `Your request to link with ${linkSignals.pendingLink.targetPersonName || "your family member"} is awaiting the tree owner's approval.`,
+        to: "/requests",
+        cta: "View request",
+      };
+    }
+    return linkSignals.hasAccessibleTree || linkSignals.hasApprovedBranchAccess || joinedThroughInvite
+      ? {
+          title: "Link your profile",
+          description: "Find yourself in your family tree to finish linking your account.",
+          to: "/profile?link=1",
+          cta: "Link my profile",
+        }
+      : {
+          title: "Finish setting up your profile",
+          description: "Find your family tree and request access to your branch.",
+          to: "/onboarding",
+          cta: "Find my tree",
+        };
+  }, [linkSignals, joinedThroughInvite]);
 
   const handleContinueToYourTree = useCallback(async () => {
     setContinueTreeLoading(true);

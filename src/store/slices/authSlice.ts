@@ -1,10 +1,25 @@
-import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk, current, isDraft, PayloadAction } from "@reduxjs/toolkit";
+
 import { signOut } from "firebase/auth";
 import { firebaseAuth } from "../../firebase";
 import { backendApi } from "../../services/backendApi";
 import { pushNotifications } from "../../services/pushNotifications";
 import { AppUser, UserRole } from "../../components/model/User";
 import { readSessionHint, writeSessionHint } from "../../utils/authSessionHint";
+
+/**
+ * Whether two snapshots hold the same data.
+ *
+ * Firebase reports the same user again on every ID-token refresh, and the
+ * profile is re-fetched with it. Replacing the stored objects with equal copies
+ * hands every component a "new" user, and effects keyed on it run again — the
+ * dashboard loaded twice on each visit and refetched hourly. Keep the existing
+ * object unless something in it actually changed.
+ */
+function sameData(stored: unknown, next: unknown): boolean {
+  const plain = isDraft(stored) ? current(stored as object) : stored;
+  return JSON.stringify(plain ?? null) === JSON.stringify(next ?? null);
+}
 
 interface AuthState {
   currentUser: any;
@@ -176,14 +191,21 @@ const authSlice = createSlice({
         // Firebase has already answered by the time this fires, so publish the
         // user immediately — the profile fetch below is a separate, slower
         // round trip and the UI shouldn't look signed out while it runs.
-        state.currentUser = action.meta.arg?.user ?? null;
+        const nextUser = action.meta.arg?.user ?? null;
+        if (!sameData(state.currentUser, nextUser)) {
+          state.currentUser = nextUser;
+        }
         state.initialized = true;
         state.loading = true;
       })
       .addCase(updateAuthState.fulfilled, (state, action) => {
         state.initialized = true;
-        state.currentUser = action.payload.currentUser;
-        state.userProfile = action.payload.userProfile;
+        if (!sameData(state.currentUser, action.payload.currentUser)) {
+          state.currentUser = action.payload.currentUser;
+        }
+        if (!sameData(state.userProfile, action.payload.userProfile)) {
+          state.userProfile = action.payload.userProfile;
+        }
         state.loading = false;
         state.error = null;
       })

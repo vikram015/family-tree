@@ -50,11 +50,18 @@ export function LocationInitializer({
     dispatch(fetchLocations());
   }, [dispatch]);
 
+  // Once each. A single effect keyed on both lengths re-ran when the sub-castes
+  // landed — with castes still in flight, so still empty — and fetched castes a
+  // second time.
+  const castesRequestedRef = useRef(false);
+  const subCastesRequestedRef = useRef(false);
   useEffect(() => {
-    if (castes.length === 0) {
+    if (castes.length === 0 && !castesRequestedRef.current) {
+      castesRequestedRef.current = true;
       dispatch(fetchCastes());
     }
-    if (subCastes.length === 0) {
+    if (subCastes.length === 0 && !subCastesRequestedRef.current) {
+      subCastesRequestedRef.current = true;
       dispatch(fetchAllSubCastes());
     }
   }, [dispatch, castes.length, subCastes.length]);

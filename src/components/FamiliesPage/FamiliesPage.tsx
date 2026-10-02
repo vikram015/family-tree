@@ -54,6 +54,7 @@ import { useTreeData } from "./hooks/useTreeData";
 import { useLinkRequests } from "./hooks/useLinkRequests";
 import { useAppDispatch } from "../../store/hooks";
 import { fetchUserOnboarding } from "../../store/slices/userOnboardingSlice";
+import { setPostLoginRedirect } from "../../utils/postLoginRedirect";
 
 interface FamiliesPageProps {
   treeId: string;
@@ -284,6 +285,20 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         // the onboarding guard off until the completed status lands, so the
         // user stays in the tree instead of being bounced to /onboarding.
         dispatch(fetchUserOnboarding());
+        // An invited user without basic details on file is sent to /onboarding
+        // by the guard as soon as the token leaves the URL — before this page
+        // can show the tree. Remember the tree so onboarding returns them here
+        // instead of to the dashboard.
+        if (
+          !userProfile?.name?.trim() ||
+          !userProfile?.email?.trim() ||
+          !userProfile?.privacyPolicyAccepted
+        ) {
+          const back = new URLSearchParams();
+          if (acceptedTreeId) back.set("tree", acceptedTreeId);
+          if (result?.personId) back.set("personId", result.personId);
+          setPostLoginRedirect(`/families?${back.toString()}`);
+        }
         // Always move the user to the tree they were invited to, and drop the
         // one-time invite token from the URL. A branch-scoped invite also
         // focuses the branch root they were granted access to — that node is
@@ -338,6 +353,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     dispatch,
       setTreeWriteScope,
     showSnackbar,
+    userProfile,
 ]);
 
   useEffect(() => {
@@ -1363,7 +1379,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           py: 0,
         }}
       >
-        {isPreview && (
+        {isPreview && !inviteAccepting && !isLoading && (
           <Stack
             direction="row"
             alignItems="center"
@@ -1403,7 +1419,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         )}
         {/* The connected-family banner above already says this, and says more, so
             the two must never stack. */}
+        {/* Only once the tree is on screen and this tree's edit rights are
+            known: before that "can't edit" just means "not loaded yet", and the
+            scope can still be the previous tree's for a moment after switching. */}
         {treeId &&
+          !isLoading &&
+          !inviteAccepting &&
+          treeWriteScope?.treeId === treeId &&
           !isPreview &&
           !canWriteAnyBranch &&
           !(isAdmin() && !isApproved) &&
@@ -1489,7 +1511,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               Sign in
             </Button>
           </Paper>
-        ) : isLoading ? (
+        ) : isLoading || inviteAccepting ? (
           <Paper
             elevation={0}
             sx={{
@@ -1506,7 +1528,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           >
             <CircularProgress />
             <Typography variant="body1" sx={{ color: "text.secondary" }}>
-              Loading tree...
+              {inviteAccepting ? "Opening the tree you were invited to..." : "Loading tree..."}
             </Typography>
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
               Building relationships, permissions, and branch data.

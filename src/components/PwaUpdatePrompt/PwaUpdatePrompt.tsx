@@ -18,8 +18,16 @@ export const PwaUpdatePrompt: React.FC = () => {
     };
     window.addEventListener("sw-update-available", onUpdate);
 
-    // When the new worker takes control, reload once to load fresh assets.
+    // When a NEW worker replaces the one that served this page, reload once to
+    // load fresh assets. On a first visit there is no previous worker: the
+    // freshly installed one claiming the page also fires `controllerchange`,
+    // and reloading then just loads the whole app — dashboard included — twice.
+    let hadController = Boolean(navigator.serviceWorker?.controller);
     const onControllerChange = () => {
+      if (!hadController) {
+        hadController = true;
+        return;
+      }
       if (reloadingRef.current) return;
       reloadingRef.current = true;
       window.location.reload();

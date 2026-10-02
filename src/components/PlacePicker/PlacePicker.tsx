@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Autocomplete,
   Box,
@@ -100,6 +100,18 @@ export const PlacePicker: React.FC<PlacePickerProps> = ({
     setInputValue(labelOf(value));
   }, [value?.placeId, value?.address, value?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The selection handed to MUI must keep its identity between renders. A new
+  // object every render reads to Autocomplete as a new selection, and it resets
+  // the text to that selection's label on each keystroke — which made a filled
+  // field impossible to edit until it was cleared with the ✕.
+  const selectedOption = useMemo(
+    () =>
+      value?.placeId
+        ? { placeId: value.placeId, name: value.name || "", address: labelOf(value) }
+        : null,
+    [value?.placeId, value?.name, value?.address], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   const search = useCallback(async (query: string) => {
     const trimmed = query.trim();
     if (trimmed.length < 2) {
@@ -188,11 +200,7 @@ export const PlacePicker: React.FC<PlacePickerProps> = ({
       getOptionLabel={(option) =>
         typeof option === "string" ? option : option.address || option.name
       }
-      value={
-        value?.placeId
-          ? { placeId: value.placeId, name: value.name || "", address: labelOf(value) }
-          : null
-      }
+      value={selectedOption}
       inputValue={inputValue}
       onInputChange={(_event, next, reason) => {
         // Typing and clearing are the user's; everything else is MUI syncing

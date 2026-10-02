@@ -60,7 +60,6 @@ import { Link as RouterLink } from "react-router-dom";
 import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
 import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
-import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import HowToRegOutlinedIcon from "@mui/icons-material/HowToRegOutlined";
 import HourglassTopOutlinedIcon from "@mui/icons-material/HourglassTopOutlined";
@@ -520,27 +519,6 @@ export const NodeDetails = memo(function NodeDetails({
       setProfessionProfile(null);
     }
   }, [node]);
-
-  const handleShareNode = useCallback(async () => {
-    if (!node) return;
-    const base = window.location.origin;
-    const linkTreeId = treeId || node.treeId || "";
-    const url = `${base}/families?tree=${encodeURIComponent(linkTreeId)}&personId=${encodeURIComponent(node.id)}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: node.name || "Family member",
-          text: `View ${node.name || "this profile"} on the family tree:`,
-          url,
-        });
-      } else {
-        await navigator.clipboard.writeText(url);
-        showSnackbar("Profile link copied to clipboard.", "success");
-      }
-    } catch {
-      // Share was cancelled or clipboard failed — nothing to do.
-    }
-  }, [node, treeId, showSnackbar]);
 
   const handleRequestBranchAccess = useCallback(async () => {
     if (!node || !treeId) return;
@@ -1268,21 +1246,6 @@ export const NodeDetails = memo(function NodeDetails({
                         </IconButton>
                       </Tooltip>
                     )}
-                    <Tooltip title="Share">
-                      <IconButton
-                        size="large"
-                        color="primary"
-                        onClick={handleShareNode}
-                        sx={{
-                          border: 1,
-                          borderColor: "divider",
-                          width: 48,
-                          height: 48,
-                        }}
-                      >
-                        <ShareOutlinedIcon />
-                      </IconButton>
-                    </Tooltip>
                     {isUnlinkedUser && (
                       <Tooltip
                         title={
@@ -1543,24 +1506,6 @@ export const NodeDetails = memo(function NodeDetails({
                               Business
                             </Typography>
                           </Stack>
-                          {/* One business per person: once there is one, the
-                              control on each card below is Edit, not another
-                              Add. People who already have several keep them —
-                              nothing is hidden, only the Add is. */}
-                          {canEditCurrentNode && businesses.length === 0 && (
-                            <Tooltip title="Add business">
-                              <IconButton
-                                size="small"
-                                aria-label="Add business"
-                                onClick={() => {
-                                  setEditingBusiness(null);
-                                  setBusinessDialogOpen(true);
-                                }}
-                              >
-                                <AddIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
                         </Stack>
 
                         {businesses.length > 0 ? (
@@ -1602,11 +1547,41 @@ export const NodeDetails = memo(function NodeDetails({
                                 )}
                               </Box>
                             ))}
+                            {/* One business per person: once there is one, the
+                                control on its card is Edit, not another Add.
+                                People who already have several keep them. */}
+                            {businesses.map((biz) => (
+                              <Button
+                                key={`view-${biz.id}`}
+                                component={RouterLink}
+                                to={`/business/${biz.id}`}
+                                size="small"
+                                endIcon={<ChevronRightIcon fontSize="small" />}
+                                sx={{ alignSelf: "flex-start", px: 0 }}
+                              >
+                                {businesses.length > 1 ? `View ${biz.name}` : "View business profile"}
+                              </Button>
+                            ))}
                           </Stack>
                         ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            No business added yet.
-                          </Typography>
+                          <>
+                            <Typography variant="body2" color="text.secondary">
+                              No business added yet.
+                            </Typography>
+                            {canEditCurrentNode && (
+                              <Button
+                                size="small"
+                                endIcon={<ChevronRightIcon fontSize="small" />}
+                                sx={{ mt: 1, px: 0 }}
+                                onClick={() => {
+                                  setEditingBusiness(null);
+                                  setBusinessDialogOpen(true);
+                                }}
+                              >
+                                Add business
+                              </Button>
+                            )}
+                          </>
                         )}
                       </Box>
 
@@ -1629,22 +1604,14 @@ export const NodeDetails = memo(function NodeDetails({
                               Profession
                             </Typography>
                           </Stack>
-                          {canEditProfessionProfile(node?.id) && (
-                            <Tooltip
-                              title={professionProfile ? "Edit profession" : "Add profession"}
-                            >
+                          {professionProfile && canEditProfessionProfile(node?.id) && (
+                            <Tooltip title="Edit profession">
                               <IconButton
                                 size="small"
-                                aria-label={
-                                  professionProfile ? "Edit profession" : "Add profession"
-                                }
+                                aria-label="Edit profession"
                                 onClick={() => setProfessionDialogOpen(true)}
                               >
-                                {professionProfile ? (
-                                  <EditIcon fontSize="small" />
-                                ) : (
-                                  <AddIcon fontSize="small" />
-                                )}
+                                <EditIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
@@ -1708,15 +1675,30 @@ export const NodeDetails = memo(function NodeDetails({
                           </Typography>
                         )}
 
-                        <Button
-                          component={RouterLink}
-                          to={`/profession/${node.id}`}
-                          size="small"
-                          endIcon={<ChevronRightIcon fontSize="small" />}
-                          sx={{ mt: 1, px: 0 }}
-                        >
-                          View career profile
-                        </Button>
+                        {/* A career profile page only has something to show once a
+                            profile exists; until then the action is to add one. */}
+                        {professionProfile ? (
+                          <Button
+                            component={RouterLink}
+                            to={`/profession/${node.id}`}
+                            size="small"
+                            endIcon={<ChevronRightIcon fontSize="small" />}
+                            sx={{ mt: 1, px: 0 }}
+                          >
+                            View career profile
+                          </Button>
+                        ) : (
+                          canEditProfessionProfile(node?.id) && (
+                            <Button
+                              size="small"
+                              endIcon={<ChevronRightIcon fontSize="small" />}
+                              sx={{ mt: 1, px: 0 }}
+                              onClick={() => setProfessionDialogOpen(true)}
+                            >
+                              Add profession
+                            </Button>
+                          )
+                        )}
                       </Box>
                     </Stack>
                   )}

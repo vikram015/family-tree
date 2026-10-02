@@ -1110,8 +1110,16 @@ export const UserOnboardingPage: React.FC = () => {
 
     const trimmedDob = profileDob.trim();
 
+    // Onboarding is already complete when the user arrived through an invite:
+    // the backend completes it on acceptance, and basic details were the only
+    // missing piece. Those users go back to the tree they were invited to
+    // rather than on into the location and matching steps.
+    const alreadyCompleted = onboarding.status === "completed";
+
     setLocalError("");
-    setStepOverride("location");
+    if (!alreadyCompleted) {
+      setStepOverride("location");
+    }
 
     try {
       await updateUserProfile(
@@ -1122,6 +1130,19 @@ export const UserOnboardingPage: React.FC = () => {
         profileGender,
         trimmedDob || undefined,
       );
+      if (alreadyCompleted) {
+        await dispatch(
+          updateUserOnboarding({
+            profile: {
+              name: trimmedName,
+              email: trimmedEmail,
+              completedAt: nowIso(),
+            },
+          }),
+        ).unwrap();
+        navigate(consumePostLoginRedirect() || "/families", { replace: true });
+        return;
+      }
       await dispatch(
         updateUserOnboarding({
           currentStep: "location",
