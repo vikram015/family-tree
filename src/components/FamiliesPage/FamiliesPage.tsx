@@ -44,7 +44,7 @@ import { useLocations } from "../hooks/useLocations";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import { useTreeFullscreen } from "../context/TreeFullscreenContext";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
 import { TimelineView } from "./timeline/TimelineView";
@@ -124,6 +124,28 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [inviteBranchPersonLocked, setInviteBranchPersonLocked] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteAccepting, setInviteAccepting] = useState(false);
+  /**
+   * Why an invite could not be accepted, while the user decides what to do.
+   *
+   * The token stays in the URL until then: its presence is what holds the
+   * onboarding guard off. Dropping it straight away (the old behaviour) sent a
+   * new user to /onboarding in the same instant, so the error flashed by unread
+   * and they went through onboarding with no idea their invite had failed.
+   */
+  const [inviteFailure, setInviteFailure] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const dismissInviteFailure = useCallback(
+    (thenGoTo?: string) => {
+      setInviteFailure(null);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("inviteToken");
+        return next;
+      });
+      if (thenGoTo) navigate(thenGoTo);
+    },
+    [navigate, setSearchParams],
+  );
   // Transient feedback for invite actions (replaces native alert()).
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -330,12 +352,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       })
       .catch((error) => {
         console.error("Failed to accept invite:", error);
-        showSnackbar(`Failed to accept invite: ${error instanceof Error ? error.message : String(error)}`, "error");
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete("inviteToken");
-          return next;
-        });
+        setInviteFailure(error instanceof Error ? error.message : String(error));
         inviteLoginPromptedRef.current = null;
       })
       .finally(() => {
@@ -2119,6 +2136,27 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         />
       )}
 
+      <Dialog
+        open={Boolean(inviteFailure)}
+        onClose={() => dismissInviteFailure()}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>This invite couldn't be used</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 1.5 }}>{inviteFailure}</DialogContentText>
+          <DialogContentText>
+            You can still join: continue with onboarding to find your family's tree and
+            request access to your branch.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => dismissInviteFailure()}>Stay here</Button>
+          <Button variant="contained" onClick={() => dismissInviteFailure("/onboarding")}>
+            Continue with onboarding
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Snackbar
         open={snackbar.open}
         autoHideDuration={5000}
