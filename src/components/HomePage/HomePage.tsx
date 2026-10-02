@@ -41,6 +41,8 @@ import { RecentPhotos } from "./RecentPhotos";
 import { QuickActions } from "./QuickActions";
 import { ContributorList, Contributor } from "./ContributorList";
 import { WishWall } from "./WishWall";
+// Hidden for now — restore with the <InstallAppCard /> below and the pwaInstall import in index.tsx.
+// import { InstallAppCard } from "./InstallAppCard";
 import { eyebrowSx, panelSx } from "./homeTheme";
 
 /**
@@ -538,6 +540,8 @@ export const HomePage: React.FC = () => {
                   </Button>
                 </Box>
               )}
+
+              {/* <InstallAppCard /> */}
             </Box>
 
             {/*

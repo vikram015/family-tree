@@ -52,6 +52,35 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * One request to wake the API before any others are sent.
+ *
+ * The API runs on Cloud Run and scales to zero. When a page load fires a dozen
+ * calls at a cold service, Cloud Run sees a dozen pending requests and no
+ * instance, and starts several instances at once — nine in one logged burst —
+ * each paying the full ~5s startup. Sending one cheap request first means one
+ * instance starts; the rest arrive once it is up and fit inside its
+ * concurrency.
+ *
+ * Started at import, so it overlaps Firebase's session restore and costs a
+ * warm service nothing noticeable. Capped, and failures are swallowed: this
+ * only orders requests, it must never block or break them.
+ */
+const WARMUP_TIMEOUT_MS = 10000;
+const apiWarmup: Promise<void> = new Promise<void>((resolve) => {
+  if (typeof window === "undefined") {
+    resolve();
+    return;
+  }
+  const timer = window.setTimeout(resolve, WARMUP_TIMEOUT_MS);
+  fetch(buildUrl("/health"), { method: "GET" })
+    .catch(() => undefined)
+    .finally(() => {
+      window.clearTimeout(timer);
+      resolve();
+    });
+});
+
 async function getAuthToken(): Promise<string | undefined> {
   try {
     await firebaseAuth.authStateReady();
@@ -64,7 +93,7 @@ async function getAuthToken(): Promise<string | undefined> {
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", query, body } = options;
 
-  const token = await getAuthToken();
+  const [token] = await Promise.all([getAuthToken(), apiWarmup]);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -113,7 +142,7 @@ export const backendApi = {
     return request<T>(path, { method: "DELETE", query });
   },
   async upload<T>(path: string, formData: FormData, query?: Record<string, QueryValue>) {
-    const token = await getAuthToken();
+    const [token] = await Promise.all([getAuthToken(), apiWarmup]);
     const headers: Record<string, string> = {};
     if (token) {
       headers.Authorization = `Bearer ${token}`;

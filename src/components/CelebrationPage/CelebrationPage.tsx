@@ -412,6 +412,7 @@ export const CelebrationPage: React.FC = () => {
                       pedigree={payload.pedigree}
                       honoreeName={honoreeName}
                       honoreePersonId={event.primaryPersonId}
+                      treeId={event.treeId}
                     />
                   )}
                   {payload.history && (

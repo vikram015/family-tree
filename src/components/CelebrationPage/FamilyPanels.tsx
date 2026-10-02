@@ -38,7 +38,9 @@ export const PedigreeAnchor: React.FC<{
   pedigree: CelebrationPedigree;
   honoreeName: string;
   honoreePersonId: string;
-}> = ({ pedigree, honoreeName, honoreePersonId }) => {
+  /** The honoree's tree. Without it the tree page falls back to the viewer's own tree. */
+  treeId: string | null;
+}> = ({ pedigree, honoreeName, honoreePersonId, treeId }) => {
   const hasAnything =
     pedigree.parents.length > 0 ||
     pedigree.spouse ||
@@ -131,7 +133,11 @@ export const PedigreeAnchor: React.FC<{
 
       <Box
         component={Link}
-        to={`/families?personId=${honoreePersonId}`}
+        to={
+          treeId
+            ? `/families?tree=${treeId}&personId=${honoreePersonId}`
+            : `/families?personId=${honoreePersonId}`
+        }
         sx={{
           display: "block",
           mt: 2,

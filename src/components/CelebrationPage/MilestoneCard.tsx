@@ -217,7 +217,11 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
             {isFamily && (
               <Button
                 component={Link}
-                to={`/families?personId=${event.primaryPersonId}`}
+                to={
+                  event.treeId
+                    ? `/families?tree=${event.treeId}&personId=${event.primaryPersonId}`
+                    : `/families?personId=${event.primaryPersonId}`
+                }
                 variant="text"
                 startIcon={<AccountTreeIcon />}
                 sx={{ borderRadius: 2, textTransform: "none", fontWeight: 600, color: brand.slate }}
