@@ -691,6 +691,29 @@ export interface PredefinedPeopleField {
   showUpfront: boolean;
 }
 
+/** Superadmin view: the trees one user is connected to. */
+export interface AdminUserTreeAccess {
+  user: {
+    id: string;
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+    role: string;
+    isBlocked?: boolean;
+    lastLoginAt?: string | null;
+  };
+  trees: Array<{
+    treeId: string;
+    treeName: string | null;
+    locationName: string | null;
+    isOwner: boolean;
+    nodesAdded: number;
+    lastAddedAt: string | null;
+    permissions: Array<{ role: string; personId: string | null; personName: string | null }>;
+  }>;
+  totals: { trees: number; nodesAdded: number };
+}
+
 export interface TreeWriteScope {
   treeId: string;
   canWriteAll: boolean;
@@ -1187,6 +1210,23 @@ export const ApiService = {
 
   async revokeTreeInvite(treeId: string, inviteId: string): Promise<{ success: boolean }> {
     return backendApi.patch<{ success: boolean }>(`/api/tree/${treeId}/invites/${inviteId}/revoke`);
+  },
+
+  /** Who an invite link is from and for — readable before signing in. */
+  /** Superadmin: which trees a user can reach and how many people they added. */
+  async getAdminUserTreeAccess(userId: string): Promise<AdminUserTreeAccess> {
+    return backendApi.get<AdminUserTreeAccess>(`/api/admin/users/${encodeURIComponent(userId)}/trees`);
+  },
+
+  async getInvitePreview(token: string): Promise<{
+    usable: boolean;
+    status: string;
+    treeName: string | null;
+    personName: string | null;
+    invitedByName: string | null;
+    invitedPhone: string | null;
+  }> {
+    return backendApi.get('/api/tree/invites/preview', { token });
   },
 
   async acceptTreeInvite(token: string): Promise<{ success: boolean; treeId: string; personId: string | null; role: string }> {

@@ -25,15 +25,28 @@ interface LoginModalProps {
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** Number to start with — the user can still change it. */
+  initialPhone?: string;
+  /** Replaces the generic subtitle, e.g. who sent an invite. */
+  intro?: string;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
   open,
   onClose,
   onSuccess,
+  initialPhone,
+  intro,
 }) => {
   const auth = usePhoneOtpAuth(onSuccess);
-  const { reset } = auth;
+  const { reset, setPhone } = auth;
+
+  // Start from the number we were given, once per opening.
+  useEffect(() => {
+    if (open && initialPhone && /^\d{10}$/.test(initialPhone)) {
+      setPhone(initialPhone);
+    }
+  }, [open, initialPhone, setPhone]);
 
   // Reopening should never resume a half-finished attempt with a stale
   // verifier, so the flow is cleared whenever the dialog closes.
@@ -132,12 +145,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               color: brand.ink,
             }}
           >
-            {auth.awaitingCode ? "Verify your number" : "Welcome back"}
+            {auth.awaitingCode ? "Verify your number" : intro ? "You've been invited" : "Welcome back"}
           </Typography>
           <Typography sx={{ mt: 1, color: brand.slate, fontSize: 15 }}>
             {auth.awaitingCode
               ? `Enter the ${OTP_LENGTH}-digit code we just sent you.`
-              : "Sign in securely to continue your family story."}
+              : intro || "Sign in securely to continue your family story."}
           </Typography>
         </Box>
       </DialogTitle>

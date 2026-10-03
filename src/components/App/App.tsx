@@ -36,6 +36,7 @@ import { FAQPage } from "../FAQ/FAQPage";
 import { Footer } from "../Footer/Footer";
 import { DebugPage } from "../DebugPage/DebugPage";
 import { AdminManagement } from "../AdminManagement/AdminManagement";
+import { AdminUserAccessPage } from "../AdminManagement/AdminUserAccessPage";
 import { ErrorBoundary } from "../ErrorBoundary/ErrorBoundary";
 import { LoginPage } from "../LoginPage/LoginPage";
 import { LoginModalProvider } from "../context/LoginModalContext";
@@ -279,6 +280,7 @@ function AppContent() {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/faq" element={<FAQPage />} />
               <Route path="/admin" element={<AdminManagement />} />
+              <Route path="/admin/users/:userId" element={<AdminUserAccessPage />} />
               <Route path="/debug" element={<DebugPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/profile/person/:personId" element={<ProfilePage />} />

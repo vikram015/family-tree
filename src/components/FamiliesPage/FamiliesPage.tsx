@@ -289,7 +289,35 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     if (!currentUser) {
       if (inviteLoginPromptedRef.current !== inviteToken) {
         inviteLoginPromptedRef.current = inviteToken;
-        openLoginModal();
+        // Open the sign-in already filled with the number the invite was sent
+        // to, and say who it is from. Signing in with any other number would
+        // only fail at the accept step. If the preview can't be read, the
+        // plain sign-in still works.
+        const token = inviteToken;
+        ApiService.getInvitePreview(token)
+          .then((preview) => {
+            if (inviteLoginPromptedRef.current !== token) return;
+            const from = preview.invitedByName || "A relative";
+            // "the Singhal Family tree", not "the Singhal Family family tree".
+            const where = preview.treeName
+              ? /family/i.test(preview.treeName)
+                ? ` the ${preview.treeName} tree`
+                : ` the ${preview.treeName} family tree`
+              : " their family tree";
+            const branch = preview.personName ? ` (${preview.personName}'s branch)` : "";
+            const intro = preview.usable
+              ? `${from} invited you to${where}${branch}. Sign in to accept.`
+              : preview.status === "accepted"
+                ? "This invite has already been used. Sign in to continue."
+                : "This invite has expired. Sign in to continue, or ask for a new one.";
+            openLoginModal(undefined, {
+              phone: preview.usable ? preview.invitedPhone : null,
+              intro,
+            });
+          })
+          .catch(() => {
+            if (inviteLoginPromptedRef.current === token) openLoginModal();
+          });
       }
       return;
     }

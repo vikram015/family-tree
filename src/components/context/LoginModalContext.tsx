@@ -1,8 +1,16 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { LoginModal } from "../LoginModal/LoginModal";
 
+/** Optional context for one opening — e.g. an invite link that knows its number. */
+export interface LoginModalOptions {
+  /** Ten-digit local number to start the phone field with. */
+  phone?: string | null;
+  /** One line shown under the title in place of the generic welcome. */
+  intro?: string | null;
+}
+
 interface LoginModalContextType {
-  openLoginModal: (onSuccess?: () => void) => void;
+  openLoginModal: (onSuccess?: () => void, options?: LoginModalOptions) => void;
   closeLoginModal: () => void;
 }
 
@@ -21,7 +29,10 @@ export const LoginModalProvider: React.FC<{ children: React.ReactNode }> = ({
     (() => void) | undefined
   >();
 
-  const openLoginModal = useCallback((onSuccess?: () => void) => {
+  const [options, setOptions] = useState<LoginModalOptions | undefined>();
+
+  const openLoginModal = useCallback((onSuccess?: () => void, nextOptions?: LoginModalOptions) => {
+    setOptions(nextOptions);
     setIsOpen(true);
     setOnSuccessCallback(() => onSuccess);
   }, []);
@@ -29,6 +40,7 @@ export const LoginModalProvider: React.FC<{ children: React.ReactNode }> = ({
   const closeLoginModal = useCallback(() => {
     setIsOpen(false);
     setOnSuccessCallback(undefined);
+    setOptions(undefined);
   }, []);
 
   const handleSuccess = useCallback(() => {
@@ -48,6 +60,8 @@ export const LoginModalProvider: React.FC<{ children: React.ReactNode }> = ({
         open={isOpen}
         onClose={closeLoginModal}
         onSuccess={handleSuccess}
+        initialPhone={options?.phone || undefined}
+        intro={options?.intro || undefined}
       />
     </LoginModalContext.Provider>
   );

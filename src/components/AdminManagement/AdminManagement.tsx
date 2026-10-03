@@ -251,8 +251,10 @@ export const AdminManagement: React.FC = () => {
     const checkAccessAndLoad = async () => {
       if (authLoading) return;
 
-      if (!isAdmin()) {
-        setError("Access denied. Only admins can access this page.");
+      // Superadmins only. Every account is created with role "admin", so an
+      // admin check let any signed-in user who typed /admin see all users.
+      if (!isSuperAdmin()) {
+        setError("Access denied. Only superadmins can access this page.");
         setLoading(false);
         return;
       }
@@ -633,6 +635,7 @@ export const AdminManagement: React.FC = () => {
                   </TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Linked Node</TableCell>
+                  <TableCell>Trees</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell sortDirection={userOrderBy === "createdAt" ? userOrder : false}>
                     <TableSortLabel
@@ -680,6 +683,15 @@ export const AdminManagement: React.FC = () => {
                           Not linked
                         </Typography>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        onClick={() => navigate(`/admin/users/${user.id}`)}
+                        sx={{ px: 0.5, minWidth: 0, whiteSpace: "nowrap", fontWeight: 700 }}
+                      >
+                        View trees
+                      </Button>
                     </TableCell>
                     <TableCell>
                       {user.isBlocked ? (
