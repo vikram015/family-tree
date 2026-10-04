@@ -68,7 +68,11 @@ export const LoginPage: React.FC = () => {
   const onboardingLoaded = useAppSelector(selectUserOnboardingLoaded);
   const statistics = useAppSelector(selectStatistics);
   const statsLoading = useAppSelector(selectStatisticsLoading);
-  const from = (location.state as any)?.from?.pathname || "/families";
+  // With no page to return to (the header's Login button, the landing page's
+  // sign-in buttons), a returning user lands on the dashboard, not the tree.
+  // A login that started from a specific page — "Families" while signed out, a
+  // protected route — still goes back there.
+  const from = (location.state as any)?.from?.pathname || "/";
 
   const auth = usePhoneOtpAuth();
 
