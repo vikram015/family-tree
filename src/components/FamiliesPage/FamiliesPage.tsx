@@ -14,7 +14,6 @@ import {
   Paper,
   Stack,
   TextField,
-  Tooltip,
   IconButton,
   Snackbar,
   useTheme,
@@ -28,7 +27,6 @@ import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
-import ShareOutlinedIcon from "@mui/icons-material/ShareOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
@@ -48,7 +46,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
 import { TimelineView } from "./timeline/TimelineView";
-import { InviteCollaboratorDialog } from "./InviteCollaboratorDialog";
+import { InviteToTreeDialog, InvitePersonTarget } from "./InviteToTreeDialog";
 import { useTreeWriteAccess } from "./hooks/useTreeWriteAccess";
 import { useTreeData } from "./hooks/useTreeData";
 import { useLinkRequests } from "./hooks/useLinkRequests";
@@ -113,16 +111,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   });
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"tree" | "timeline">("tree");
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [invitePhone, setInvitePhone] = useState("");
-  const [inviteRole, setInviteRole] = useState("write");
-  const [inviteScope, setInviteScope] = useState<"full" | "branch">("full");
-  const [invitePersonId, setInvitePersonId] = useState("");
-  const [invitePersonSearch, setInvitePersonSearch] = useState("");
-  const [inviteSelectedPersonName, setInviteSelectedPersonName] = useState("");
-  // When opened from a node, the branch person is fixed (shown as selected, not searchable).
-  const [inviteBranchPersonLocked, setInviteBranchPersonLocked] = useState(false);
-  const [inviteBusy, setInviteBusy] = useState(false);
+  /** Who the invite dialog is for while it is open; null when closed. */
+  const [inviteTarget, setInviteTarget] = useState<{
+    person: InvitePersonTarget | null;
+    lock: boolean;
+    allowFullTree: boolean;
+  } | null>(null);
   const [inviteAccepting, setInviteAccepting] = useState(false);
   /**
    * Why an invite could not be accepted, while the user decides what to do.
@@ -755,62 +749,32 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 ],
   );
 
-  const handleShareTree = useCallback(async () => {
-    const shareUrl = (() => {
-      if (!treeId) {
-        return window.location.href;
-      }
-
-      const currentUrl = new URL(window.location.href);
-      const nextUrl = new URL(`${window.location.origin}/families`);
-      nextUrl.searchParams.set("tree", treeId);
-
-      const currentPersonId = currentUrl.searchParams.get("personId");
-      if (currentPersonId) {
-        nextUrl.searchParams.set("personId", currentPersonId);
-      }
-
-      return nextUrl.toString();
-    })();
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Family Tree",
-          url: shareUrl,
-        });
-        return;
-      }
-      showSnackbar("Native share is not supported on this device/browser.", "warning");
-    } catch (err) {
-      console.warn("Share cancelled or failed:", err);
-    }
-  }, [treeId, showSnackbar]);
-
+  // The toolbar "Invite" — full-tree editors may invite to the whole tree;
+  // branch editors invite to a branch they can edit, starting from the person
+  // in focus or their own node.
   const handleOpenInviteDialog = useCallback(() => {
-    // Start from a clean form each time so a previously entered number/role/scope
-    // is not retained from the last invite.
-    setInvitePhone("");
-    setInviteRole("write");
-    setInviteScope("full");
-    setInviteBranchPersonLocked(false);
     if (!currentUser) {
-      openLoginModal(() => setInviteDialogOpen(true));
+      openLoginModal();
       return;
     }
-    if (!canManageInvites) {
-      showSnackbar("You need full-tree access to invite collaborators.", "warning");
+    if (!canWriteAnyBranch) {
+      showSnackbar("You need edit access to invite family to this tree.", "warning");
       return;
     }
-    const defaultPersonId = selectId || rootId || "";
-    const defaultPerson = nodes.find((node) => node.id === defaultPersonId);
-    setInvitePersonId(defaultPersonId);
-    setInviteSelectedPersonName(defaultPerson?.name || "");
-    setInvitePersonSearch(defaultPerson?.name || "");
-    setInviteDialogOpen(true);
-  }, [currentUser, openLoginModal, canManageInvites, selectId, rootId, nodes, showSnackbar]);
+    if (canManageInvites) {
+      setInviteTarget({ person: null, lock: false, allowFullTree: true });
+      return;
+    }
+    const startId = [selectId, userProfile?.peopleId].find((id) => id && canEditNode(id)) || "";
+    const startNode = nodes.find((n) => n.id === startId);
+    setInviteTarget({
+      person: startNode ? { id: startNode.id, name: startNode.name } : null,
+      lock: false,
+      allowFullTree: false,
+    });
+  }, [currentUser, openLoginModal, canWriteAnyBranch, canManageInvites, selectId, userProfile?.peopleId, canEditNode, nodes, showSnackbar]);
 
-  // Open the invite dialog scoped to a specific person's branch (from node details).
+  // Invite scoped to one person's branch (from their details).
   const handleInviteForNode = useCallback(
     (personId: string) => {
       const openForNode = () => {
@@ -818,15 +782,12 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           showSnackbar("You don't have access to invite collaborators for this branch.", "warning");
           return;
         }
-        setInvitePhone("");
-        setInviteRole("write");
-        setInviteScope("branch");
-        setInvitePersonId(personId);
         const person = nodes.find((n) => n.id === personId);
-        setInviteSelectedPersonName(person?.name || "");
-        setInvitePersonSearch(person?.name || "");
-        setInviteBranchPersonLocked(true);
-        setInviteDialogOpen(true);
+        setInviteTarget({
+          person: { id: personId, name: person?.name || "" },
+          lock: true,
+          allowFullTree: canManageInvites,
+        });
       };
       if (!currentUser) {
         openLoginModal(openForNode);
@@ -834,97 +795,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       }
       openForNode();
     },
-    [currentUser, openLoginModal, canEditNode, nodes, showSnackbar],
+    [currentUser, openLoginModal, canEditNode, canManageInvites, nodes, showSnackbar],
   );
-
-  const handleCreateInvite = useCallback(async () => {
-    if (!treeId) return;
-    if (!canManageInvites) {
-      showSnackbar("You need full-tree access to invite collaborators.", "warning");
-      return;
-    }
-
-    const selectedBranchId = invitePersonId || null;
-    const personId = inviteScope === "branch" ? selectedBranchId : null;
-    if (inviteScope === "branch" && !personId) {
-      showSnackbar("Select a person in the tree to invite for branch access.", "warning");
-      return;
-    }
-
-    const phoneDigits = invitePhone.replace(/\D/g, "").slice(0, 10);
-    const normalizedInvitePhone = phoneDigits ? `+91${phoneDigits}` : null;
-
-    try {
-      setInviteBusy(true);
-      const invite = await ApiService.createTreeInvite(treeId, {
-        role: inviteRole,
-        personId,
-        invitedPhone: normalizedInvitePhone,
-      });
-
-      // If the invitee already had an account, the backend grants access immediately
-      // (no link to share).
-      if (invite.granted) {
-        const grantedName = invite.user?.name || "The user";
-        showSnackbar(`${grantedName} already has an account and now has access to this tree.`, "success");
-        setInviteDialogOpen(false);
-        setInvitePhone("");
-        setInviteRole("write");
-        setInviteScope("full");
-        setInvitePersonId("");
-        setInvitePersonSearch("");
-        setInviteSelectedPersonName("");
-        return;
-      }
-
-      // Always build the link on the CURRENT browser domain (the backend's
-      // inviteLink is generated with a hard-coded host). Keep the backend link's
-      // path + query (which carries the token) but swap in this origin.
-      const inviteOrigin = window.location.origin;
-      const fallbackLink = `${inviteOrigin}/families?tree=${treeId}&inviteToken=${invite.inviteToken || ""}`;
-      let shareLink = fallbackLink;
-      if (invite.inviteLink) {
-        try {
-          const parsed = new URL(invite.inviteLink);
-          shareLink = `${inviteOrigin}${parsed.pathname}${parsed.search}${parsed.hash}`;
-        } catch {
-          shareLink = fallbackLink;
-        }
-      }
-      // Only worth offering on the link path: an instant grant has no pending
-      // outcome for the inviter to be told about.
-      offerNotifications(
-        "We'll let you know as soon as your invite is accepted.",
-      );
-      const targetScope = personId ? `branch from ${nodes.find((n) => n.id === personId)?.name || "selected person"}` : "full tree";
-      const targetPhone = normalizedInvitePhone ? `Phone: ${normalizedInvitePhone}\n` : "";
-      const shareText = `You are invited to edit the family tree (${targetScope}).\n${targetPhone}${shareLink}`;
-
-      if (navigator.share) {
-        await navigator.share({
-          title: "Family Tree Invite",
-          text: shareText,
-          url: shareLink,
-        });
-      } else {
-        await navigator.clipboard.writeText(shareText);
-        showSnackbar("Invite link copied to clipboard. Share it via SMS/WhatsApp.", "success");
-      }
-
-      setInviteDialogOpen(false);
-      setInvitePhone("");
-      setInviteRole("write");
-      setInviteScope("full");
-      setInvitePersonId("");
-      setInvitePersonSearch("");
-      setInviteSelectedPersonName("");
-    } catch (error) {
-      console.error("Failed to create invite:", error);
-      showSnackbar(`Failed to create invite: ${error instanceof Error ? error.message : String(error)}`, "error");
-    } finally {
-      setInviteBusy(false);
-    }
-  }, [treeId, canManageInvites, invitePersonId, inviteScope, inviteRole, invitePhone, nodes, showSnackbar, offerNotifications]);
 
   const handleConfirmRejectRequest = useCallback(async () => {
     const note = rejectDialog.note.trim();
@@ -1605,69 +1477,29 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               backgroundColor: theme.palette.background.paper,
             }}
           >
-            <Stack
-              direction="row"
-              spacing={1}
-              sx={{
-                position: "absolute",
-                left: { xs: 12, sm: 16 },
-                bottom: { xs: 12, sm: 16 },
-                zIndex: 2,
-              }}
-            >
-              {canManageInvites && (
-                <Tooltip title="Invite collaborator">
-                  <span>
-                    <IconButton
-                      aria-label="Invite collaborator"
-                      onClick={handleOpenInviteDialog}
-                      disabled={!treeId}
-                      size={isMobile ? "small" : "medium"}
-                      sx={{
-                        border: "1px solid",
-                        borderColor: "divider",
-                        backgroundColor: alpha(theme.palette.background.paper, 0.92),
-                        boxShadow: theme.shadows[2],
-                        opacity: { xs: 1, sm: 0.62 },
-                        transition: "opacity 0.2s ease, background-color 0.2s ease",
-                        "&:hover": {
-                          opacity: 1,
-                          backgroundColor: alpha(theme.palette.background.paper, 1),
-                        },
-                      }}
-                    >
-                      <PersonAddAltOutlinedIcon
-                        fontSize={isMobile ? "small" : "medium"}
-                      />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              )}
-              <Tooltip title="Share tree">
-                <span>
-                  <IconButton
-                    aria-label="Share tree"
-                    onClick={handleShareTree}
-                    disabled={!treeId}
-                    size={isMobile ? "small" : "medium"}
-                    sx={{
-                      border: "1px solid",
-                      borderColor: "divider",
-                      backgroundColor: alpha(theme.palette.background.paper, 0.92),
-                      boxShadow: theme.shadows[2],
-                      opacity: { xs: 1, sm: 0.62 },
-                      transition: "opacity 0.2s ease, background-color 0.2s ease",
-                      "&:hover": {
-                        opacity: 1,
-                        backgroundColor: alpha(theme.palette.background.paper, 1),
-                      },
-                    }}
-                  >
-                    <ShareOutlinedIcon fontSize={isMobile ? "small" : "medium"} />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Stack>
+            {/* Top-left of the canvas: the bottom-left corner sits under the
+                "Explore the tree" tip. Labelled, because an icon alone was the
+                reason nobody found the invite. */}
+            {treeId && canWriteAnyBranch && (
+              <Button
+                variant="contained"
+                size={isMobile ? "small" : "medium"}
+                startIcon={<PersonAddAltOutlinedIcon />}
+                onClick={handleOpenInviteDialog}
+                sx={{
+                  position: "absolute",
+                  left: { xs: 12, sm: 16 },
+                  top: { xs: 12, sm: 16 },
+                  zIndex: 2,
+                  borderRadius: 999,
+                  fontWeight: 700,
+                  textTransform: "none",
+                  boxShadow: theme.shadows[3],
+                }}
+              >
+                Invite family
+              </Button>
+            )}
             {viewMode === "timeline" ? (
               <TimelineView
                 nodes={nodes}
@@ -2098,46 +1930,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         </DialogActions>
       </Dialog>
 
-      <InviteCollaboratorDialog
-        open={inviteDialogOpen}
-        busy={inviteBusy}
-        invitePhone={invitePhone}
-        inviteRole={inviteRole}
-        inviteScope={inviteScope}
-        invitePersonId={invitePersonId}
-        invitePersonSearch={invitePersonSearch}
+      <InviteToTreeDialog
+        open={Boolean(inviteTarget)}
+        onClose={() => setInviteTarget(null)}
         treeId={treeId}
-        selectedBranchPersonName={inviteSelectedPersonName || nodes.find((n) => n.id === invitePersonId)?.name || undefined}
-        lockBranchPerson={inviteBranchPersonLocked}
-        onClose={() => setInviteDialogOpen(false)}
-        onInvitePhoneChange={(value) => {
-          const digits = value.replace(/\D/g, "").slice(0, 10);
-          setInvitePhone(digits);
-        }}
-        onInviteRoleChange={setInviteRole}
-        onInviteScopeChange={(scope) => {
-          setInviteScope(scope);
-          if (scope === "branch" && !invitePersonId) {
-            const defaultPersonId = selectId || rootId || "";
-            const defaultPerson = nodes.find((node) => node.id === defaultPersonId);
-            setInvitePersonId(defaultPersonId);
-            setInviteSelectedPersonName(defaultPerson?.name || "");
-            setInvitePersonSearch(defaultPerson?.name || "");
-          }
-        }}
-        onInvitePersonIdChange={(value) => {
-          setInvitePersonId(value);
-          if (!value) {
-            setInviteSelectedPersonName("");
-          }
-        }}
-        onInvitePersonSearchChange={setInvitePersonSearch}
-        onInvitePersonSelect={(person) => {
-          setInvitePersonId(person?.id || "");
-          setInviteSelectedPersonName(person?.name || "");
-          setInvitePersonSearch(person?.name || "");
-        }}
-        onCreateInvite={handleCreateInvite}
+        person={inviteTarget?.person || null}
+        lockPerson={inviteTarget?.lock || false}
+        allowFullTree={inviteTarget?.allowFullTree ?? false}
       />
 
       {/* `isPreview` is re-checked here, not just in the handlers: no path —

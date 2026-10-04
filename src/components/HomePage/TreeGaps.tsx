@@ -1,13 +1,33 @@
 import React from "react";
-import { Avatar, Box, ButtonBase, Skeleton, Stack, Typography } from "@mui/material";
+import {
+  Avatar,
+  Box,
+  Button,
+  ButtonBase,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Skeleton,
+  Stack,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
 import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
+import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined";
+import AddIcon from "@mui/icons-material/Add";
+import AccountCircleOutlinedIcon from "@mui/icons-material/AccountCircleOutlined";
 import { TreeGap, TreeGapType } from "../../services/apiService";
 import { AddDobDialog } from "./AddDobDialog";
+import { InviteToTreeDialog } from "../FamiliesPage/InviteToTreeDialog";
+import { useAuth } from "../hooks/useAuth";
 import { brand } from "../../theme/brand";
 import {
   avatarTint,
@@ -25,7 +45,9 @@ import {
  * on the page wash: a to-do list needs an edge to read as a queue, and on a long
  * dashboard an unboxed list ran into the section above it.
  *
- * Each row states the person, what is missing, and the one tap that fixes it.
+ * Each row states the person, what is missing, and the ways to fix it: on wide
+ * screens as buttons on the row (fill it in, or invite the person to), on
+ * phones as a sheet with everything that person is missing.
  */
 
 export interface TreeGapsProps {
@@ -49,15 +71,41 @@ export interface TreeGapsProps {
  */
 const GAP_META: Record<
   TreeGapType,
-  { action: string; Icon: typeof CakeOutlinedIcon; urgent?: boolean }
+  { action: string; sheetAction: string; Icon: typeof CakeOutlinedIcon; urgent?: boolean }
 > = {
-  dob: { action: "Add date", Icon: CakeOutlinedIcon, urgent: true },
-  photo: { action: "Add photo", Icon: PhotoCameraOutlinedIcon },
-  profession: { action: "Add work", Icon: WorkOutlineOutlinedIcon },
+  dob: { action: "Add date", sheetAction: "Add date of birth", Icon: CakeOutlinedIcon, urgent: true },
+  photo: { action: "Add photo", sheetAction: "Add photo", Icon: PhotoCameraOutlinedIcon },
+  profession: { action: "Add work", sheetAction: "Add profession", Icon: WorkOutlineOutlinedIcon },
 };
+
+/** The row's pill buttons: soft blue, hairline border, one height. */
+const pillSx = {
+  flexShrink: 0,
+  px: 1.75,
+  height: 32,
+  borderRadius: 2,
+  bgcolor: brand.primarySoft,
+  border: "1px solid rgba(191, 219, 254, 0.9)",
+  color: brand.primaryDark,
+  fontSize: 12.5,
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+  textTransform: "none",
+  "&:hover": { bgcolor: brand.primarySoft, borderColor: brand.primary },
+} as const;
 
 const URGENT_INK = "#e11d48";
 const PENDING_INK = "#b45309";
+
+/** First name for button labels: "Invite Ramesh", not "Invite Ramesh Kumar Singh". */
+function firstName(name: string): string {
+  return (name || "").trim().split(/\s+/)[0] || "them";
+}
+
+/** Someone alive with no account yet — the only people worth inviting. */
+function canInvite(gap: TreeGap): boolean {
+  return gap.isAlive !== false && !gap.hasAccount;
+}
 
 export const TreeGaps: React.FC<TreeGapsProps> = ({
   gaps,
@@ -66,8 +114,15 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
   totalIncomplete,
 }) => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { canEditProfessionProfile } = useAuth();
   /** The person whose birth date is being entered, if any. */
   const [dobTarget, setDobTarget] = React.useState<TreeGap | null>(null);
+  /** The person whose options sheet is open (phones). */
+  const [sheetTarget, setSheetTarget] = React.useState<TreeGap | null>(null);
+  /** The person being invited, if any. */
+  const [inviteTarget, setInviteTarget] = React.useState<TreeGap | null>(null);
   /**
    * Rows filled in during this visit.
    *
@@ -81,6 +136,27 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
   const visibleGaps = gaps.filter((gap) => !resolved.has(`${gap.personId}-${gap.gap}`));
   const isEmpty = !loading && visibleGaps.length === 0;
   const total = Number(totalIncomplete) || 0;
+
+  /** Fill one missing item: a date in place, anything else on the profile. */
+  const fixGap = React.useCallback(
+    (gap: TreeGap, kind: TreeGapType) => {
+      if (kind === "dob") {
+        setDobTarget(gap);
+        return;
+      }
+      navigate(`/profile/person/${gap.personId}`);
+    },
+    [navigate],
+  );
+
+  /** Profession is self-service (a career profile speaks for its owner). */
+  const missingFor = React.useCallback(
+    (gap: TreeGap): TreeGapType[] =>
+      (gap.missing?.length ? gap.missing : [gap.gap]).filter(
+        (kind) => kind !== "profession" || canEditProfessionProfile(gap.personId),
+      ),
+    [canEditProfessionProfile],
+  );
 
   return (
     // The metric card's "Needs attention" tile links straight here.
@@ -138,29 +214,8 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
             const tint = avatarTint(gap.name || gap.personId);
             const statusInk = meta.urgent ? URGENT_INK : PENDING_INK;
 
-            return (
-              // One interactive element per row: the whole row is the button, and
-              // the pill on the right is purely visual so nothing nests.
-              <ButtonBase
-                key={`${gap.personId}-${gap.gap}`}
-                onClick={() =>
-                  // A date is one field, so it is filled here rather than by
-                  // sending the user to the full profile page and losing their
-                  // place in the list. A photo or a job still needs that page.
-                  gap.gap === "dob"
-                    ? setDobTarget(gap)
-                    : navigate(`/profile/person/${gap.personId}`)
-                }
-                aria-label={`${meta.action} for ${gap.name}`}
-                sx={{
-                  ...(listRowSx as object),
-                  borderRadius: 0,
-                  "@media (hover: hover)": {
-                    "&:hover": { bgcolor: "#f8fafc" },
-                  },
-                  "&:active": { bgcolor: "#f8fafc" },
-                }}
-              >
+            const identity = (
+              <>
                 <Avatar
                   src={gap.photoUrl || undefined}
                   alt={gap.name}
@@ -210,41 +265,161 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
                     </Typography>
                   </Stack>
                 </Box>
+              </>
+            );
 
-                {/* Text pill from `sm` up; on phones the row itself is the tap
-                    target, so a chevron is enough and never crowds the name. */}
-                <Box
-                  aria-hidden
+            // Phones: the whole row opens the person's sheet — one tap target,
+            // nothing nested.
+            if (isMobile) {
+              return (
+                <ButtonBase
+                  key={`${gap.personId}-${gap.gap}`}
+                  onClick={() => setSheetTarget(gap)}
+                  aria-label={`Options for ${gap.name}`}
                   sx={{
-                    display: { xs: "none", sm: "inline-flex" },
-                    alignItems: "center",
-                    flexShrink: 0,
-                    px: 1.75,
-                    height: 32,
-                    borderRadius: 2,
-                    bgcolor: brand.primarySoft,
-                    border: "1px solid rgba(191, 219, 254, 0.9)",
-                    color: brand.primaryDark,
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    whiteSpace: "nowrap",
+                    ...(listRowSx as object),
+                    borderRadius: 0,
+                    "&:active": { bgcolor: "#f8fafc" },
                   }}
                 >
+                  {identity}
+                  <ArrowForwardIcon aria-hidden sx={{ fontSize: 20, color: brand.primary, flexShrink: 0 }} />
+                </ButtonBase>
+              );
+            }
+
+            // Wide screens: the row is plain, its actions are real buttons.
+            return (
+              <Box
+                key={`${gap.personId}-${gap.gap}`}
+                sx={{
+                  ...(listRowSx as object),
+                  "@media (hover: hover)": { "&:hover": { bgcolor: "#f8fafc" } },
+                }}
+              >
+                {identity}
+                {canInvite(gap) && (
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon sx={{ fontSize: "16px !important" }} />}
+                    onClick={() => setInviteTarget(gap)}
+                    aria-label={`Invite ${gap.name} to edit`}
+                    sx={{ ...pillSx, "& .MuiButton-startIcon": { mr: 0.5 } }}
+                  >
+                    Invite to edit
+                  </Button>
+                )}
+                <Button
+                  size="small"
+                  onClick={() => fixGap(gap, gap.gap)}
+                  aria-label={`${meta.action} for ${gap.name}`}
+                  sx={pillSx}
+                >
                   {meta.action}
-                </Box>
-                <ArrowForwardIcon
-                  aria-hidden
-                  sx={{
-                    display: { xs: "block", sm: "none" },
-                    fontSize: 20,
-                    color: brand.primary,
-                    flexShrink: 0,
-                  }}
-                />
-              </ButtonBase>
+                </Button>
+              </Box>
             );
           })}
       </Box>
+
+      {/* Phones: everything this person is missing, plus inviting them. */}
+      <Drawer
+        anchor="bottom"
+        open={Boolean(sheetTarget)}
+        onClose={() => setSheetTarget(null)}
+        PaperProps={{
+          sx: {
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            pb: "max(12px, env(safe-area-inset-bottom, 0px))",
+          },
+        }}
+      >
+        {sheetTarget && (
+          <Box role="dialog" aria-label={`Options for ${sheetTarget.name}`}>
+            <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: "#cbd5e1", mx: "auto", mt: 1.25, mb: 1 }} />
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ px: 2.5, pt: 0.5, pb: 1.5 }}>
+              <Avatar
+                src={sheetTarget.photoUrl || undefined}
+                alt={sheetTarget.name}
+                sx={{
+                  width: 44,
+                  height: 44,
+                  bgcolor: avatarTint(sheetTarget.name || sheetTarget.personId).bg,
+                  color: avatarTint(sheetTarget.name || sheetTarget.personId).fg,
+                  fontWeight: 700,
+                }}
+              >
+                {initialsOf(sheetTarget.name) || "?"}
+              </Avatar>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography noWrap sx={{ fontWeight: 800, fontSize: 16, color: brand.ink }}>
+                  {sheetTarget.name}
+                </Typography>
+                {(sheetTarget.relation || sheetTarget.nameHindi) && (
+                  <Typography noWrap sx={{ fontSize: 13, color: brand.slateMuted }}>
+                    {sheetTarget.relation || sheetTarget.nameHindi}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+            <List disablePadding>
+              {missingFor(sheetTarget).map((kind) => {
+                const m = GAP_META[kind];
+                const KindIcon = m.Icon;
+                return (
+                  <ListItemButton
+                    key={kind}
+                    onClick={() => {
+                      const target = sheetTarget;
+                      setSheetTarget(null);
+                      fixGap(target, kind);
+                    }}
+                    sx={{ minHeight: 52, px: 2.5 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 40 }}>
+                      <KindIcon sx={{ color: m.urgent ? URGENT_INK : PENDING_INK }} />
+                    </ListItemIcon>
+                    <ListItemText primary={m.sheetAction} primaryTypographyProps={{ fontWeight: 600 }} />
+                  </ListItemButton>
+                );
+              })}
+              {canInvite(sheetTarget) && (
+                <ListItemButton
+                  onClick={() => {
+                    const target = sheetTarget;
+                    setSheetTarget(null);
+                    setInviteTarget(target);
+                  }}
+                  sx={{ minHeight: 52, px: 2.5 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40 }}>
+                    <PersonAddAlt1OutlinedIcon sx={{ color: brand.primary }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={`Invite ${firstName(sheetTarget.name)}`}
+                    secondary="They can fill in their own details"
+                    primaryTypographyProps={{ fontWeight: 700, color: brand.primaryDark }}
+                  />
+                </ListItemButton>
+              )}
+              <ListItemButton
+                onClick={() => {
+                  const target = sheetTarget;
+                  setSheetTarget(null);
+                  navigate(`/profile/person/${target.personId}`);
+                }}
+                sx={{ minHeight: 52, px: 2.5 }}
+              >
+                <ListItemIcon sx={{ minWidth: 40 }}>
+                  <AccountCircleOutlinedIcon sx={{ color: brand.slateMuted }} />
+                </ListItemIcon>
+                <ListItemText primary="Open profile" primaryTypographyProps={{ fontWeight: 600 }} />
+              </ListItemButton>
+            </List>
+          </Box>
+        )}
+      </Drawer>
 
       {dobTarget && (
         <AddDobDialog
@@ -258,6 +433,15 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
           }
         />
       )}
+
+      <InviteToTreeDialog
+        open={Boolean(inviteTarget)}
+        onClose={() => setInviteTarget(null)}
+        treeId={inviteTarget?.treeId || ""}
+        person={inviteTarget ? { id: inviteTarget.personId, name: inviteTarget.name } : null}
+        lockPerson
+        allowFullTree={false}
+      />
     </Box>
   );
 };

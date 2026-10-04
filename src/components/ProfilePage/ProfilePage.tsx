@@ -48,8 +48,6 @@ import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { NotificationSettingsCard } from "./NotificationSettingsCard";
 import { useNotificationPrompt } from "../context/NotificationPromptContext";
-import BusinessIcon from "@mui/icons-material/Business";
-import WorkIcon from "@mui/icons-material/Work";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
@@ -59,6 +57,25 @@ import NotesOutlinedIcon from "@mui/icons-material/NotesOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import CakeOutlinedIcon from "@mui/icons-material/CakeOutlined";
 import WcOutlinedIcon from "@mui/icons-material/WcOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import LocationOnOutlinedIcon from "@mui/icons-material/LocationOnOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
+import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
+import WorkOutlineOutlinedIcon from "@mui/icons-material/WorkOutlineOutlined";
+import SchemaOutlinedIcon from "@mui/icons-material/SchemaOutlined";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { brand } from "../../theme/brand";
+import {
+  CardHeading,
+  FeatureTile,
+  InfoTile,
+  LineagePath,
+  LineageStep,
+  ProfileCard,
+  SectionHeading,
+} from "./ProfileSections";
 import { ApiService, LinkRequest } from "../../services/apiService";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { ProfessionFormDialog } from "../ProfessionProfilePage/ProfessionFormDialog";
@@ -184,6 +201,10 @@ export const ProfilePage: React.FC = () => {
   });
   const [savingProfile, setSavingProfile] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | undefined>();
+  /** Oldest ancestor → … → this person, for the generations path. */
+  const [lineage, setLineage] = useState<LineageStep[]>([]);
+  /** People in this person's tree, for the family tile. */
+  const [treePeopleCount, setTreePeopleCount] = useState<number | null>(null);
   const [profilePhotoUploading, setProfilePhotoUploading] = useState(false);
   const [linkedPersonDetails, setLinkedPersonDetails] = useState<any | null>(
     null,
@@ -552,6 +573,45 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
+  const lineagePersonId = linkedPersonDetails?.id || null;
+  const lineageTreeId = linkedPersonDetails?.tree?.id || null;
+  useEffect(() => {
+    // Signed-in only: the lineage is names from a private tree.
+    if (!currentUser || !lineagePersonId) {
+      setLineage([]);
+      return;
+    }
+    let cancelled = false;
+    ApiService.getPersonLineage(lineagePersonId)
+      .then((rows) => {
+        if (!cancelled) setLineage(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setLineage([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, lineagePersonId]);
+
+  useEffect(() => {
+    if (!lineageTreeId) {
+      setTreePeopleCount(null);
+      return;
+    }
+    let cancelled = false;
+    ApiService.getTreeSummary(lineageTreeId)
+      .then((summary) => {
+        if (!cancelled) setTreePeopleCount(Number(summary?.peopleCount) || null);
+      })
+      .catch(() => {
+        if (!cancelled) setTreePeopleCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lineageTreeId]);
+
   const handleOpenLinkedProfileInTree = useCallback(() => {
     const personId = effectivePersonId;
     const treeId =
@@ -624,22 +684,66 @@ export const ProfilePage: React.FC = () => {
     );
   }
 
+  const isOwnSignedIn = Boolean(isOwnAccountView && currentUser);
+  const roleLabel =
+    userProfile?.role === "superadmin" ? "Super admin" : userProfile?.role === "admin" ? "Admin" : "Member";
+  const displayName = linkedPersonDetails?.name || userProfile?.displayName || "Your profile";
+  const nameHindi = linkedPersonDetails?.nameHindi || null;
+
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, md: 4 } }}>
       <Stack
-        direction="row"
-        alignItems="center"
+        direction={{ xs: "column", md: "row" }}
+        alignItems={{ xs: "flex-start", md: "flex-end" }}
         justifyContent="space-between"
-        sx={{ mb: 3 }}
+        spacing={2}
+        sx={{ mb: { xs: 3, md: 4 } }}
       >
-        <Typography variant="h4" sx={{ fontWeight: "bold" }}>
-          {pageTitle}
-        </Typography>
-        {isPublicPersonView && (
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)}>
-            Back
-          </Button>
-        )}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography
+            sx={{ fontSize: 11.5, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600, color: brand.slateMuted }}
+          >
+            {isPublicPersonView ? "Family profile" : "Your account"}
+          </Typography>
+          <Typography
+            component="h1"
+            sx={{ mt: 0.5, fontWeight: 800, fontSize: { xs: 28, md: 40 }, lineHeight: 1.15, letterSpacing: "-0.02em", color: brand.ink }}
+          >
+            {pageTitle}
+          </Typography>
+          <Typography sx={{ mt: 0.75, fontSize: { xs: 14, md: 16 }, color: brand.slateMuted, maxWidth: 640 }}>
+            {isPublicPersonView
+              ? "What the family tree records about this person."
+              : "Your details, your place in the family tree, and how relatives can reach you."}
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+          {isPublicPersonView && (
+            <Button startIcon={<ArrowBackIcon />} onClick={() => navigate(-1)} sx={{ textTransform: "none", fontWeight: 600 }}>
+              Back
+            </Button>
+          )}
+          {isOwnSignedIn && (
+            <Button
+              variant="outlined"
+              startIcon={<EditIcon />}
+              onClick={() => setOpenEditProfileDialog(true)}
+              sx={{ borderRadius: 3, textTransform: "none", fontWeight: 700, bgcolor: brand.surface, borderColor: brand.border, color: brand.ink }}
+            >
+              Edit profile
+            </Button>
+          )}
+          {effectivePersonId && linkedPersonDetails?.tree && (
+            <Button
+              variant="contained"
+              startIcon={<AccountTreeOutlinedIcon />}
+              onClick={handleOpenLinkedProfileInTree}
+              sx={{ borderRadius: 3, textTransform: "none", fontWeight: 700, boxShadow: "none" }}
+            >
+              Open in tree
+            </Button>
+          )}
+        </Stack>
       </Stack>
 
       {(error || success) && (
@@ -657,227 +761,165 @@ export const ProfilePage: React.FC = () => {
 
       {!personLoading && (
       <Grid container spacing={3}>
-        {/* Account info — logged-in user only */}
-        {isOwnAccountView && currentUser && (
-        <Grid size={{ xs: 12, md: isPublicPersonView ? 12 : 4 }}>
-          <Paper
-            elevation={2}
-            sx={{
-              p: 3,
-              textAlign: "center",
-              height: "100%",
-              position: "relative",
-            }}
-          >
-            <Tooltip title="Edit Profile">
-              <IconButton
-                size="small"
-                onClick={() => setOpenEditProfileDialog(true)}
-                sx={{ position: "absolute", top: 8, right: 8 }}
-              >
-                <EditIcon />
-              </IconButton>
-            </Tooltip>
-
-            <Avatar
-              src={profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined}
-              sx={{
-                width: 100,
-                height: 100,
-                bgcolor: "primary.main",
-                fontSize: 40,
-                mx: "auto",
-                mb: 2,
-              }}
-            >
-              {(linkedPersonDetails?.name || userProfile?.displayName || currentUser.email || "U")
-                .charAt(0)
-                .toUpperCase()}
-            </Avatar>
-            <Typography variant="h6" gutterBottom>
-              {userProfile?.displayName || "User"}
-            </Typography>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 1,
-                mb: 1,
-                color: "text.secondary",
-              }}
-            >
-              <EmailIcon fontSize="small" />
-              <Typography variant="body2">
-                {userProfile?.email || currentUser.email}
-              </Typography>
-            </Box>
-            {userProfile?.phone && (
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 1,
-                  mb: 1,
-                  color: "text.secondary",
-                }}
-              >
-                <PhoneIcon fontSize="small" />
-                <Typography variant="body2">{userProfile.phone}</Typography>
-              </Box>
-            )}
-            {canManagePerson && (
-              <>
-                <Box
+        {/* Identity — your own account only. */}
+        {isOwnSignedIn && (
+        <Grid size={{ xs: 12, md: 5 }}>
+          <ProfileCard>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2.5} alignItems={{ xs: "center", sm: "flex-start" }}>
+              <Box sx={{ position: "relative", flexShrink: 0 }}>
+                <Avatar
+                  variant="rounded"
+                  src={profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined}
                   sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 1,
-                    mb: 1,
-                    color: "text.secondary",
+                    width: 96,
+                    height: 96,
+                    borderRadius: 4,
+                    fontSize: 44,
+                    fontWeight: 800,
+                    background: `linear-gradient(135deg, ${brand.primary} 0%, ${brand.primaryDark} 100%)`,
+                    boxShadow: "0 10px 24px -8px rgba(13,110,253,0.45)",
                   }}
                 >
-                  <CakeOutlinedIcon fontSize="small" />
-                  <Typography variant="body2">
-                    {linkedPersonDetails?.dob
-                      ? formatDisplayDate(linkedPersonDetails.dob)
-                      : "Date of birth not set"}
-                  </Typography>
-                </Box>
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 1,
-                    mb: 1,
-                    color: "text.secondary",
-                  }}
-                >
-                  <WcOutlinedIcon fontSize="small" />
-                  <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
-                    {linkedPersonDetails?.gender || "Gender not set"}
-                  </Typography>
-                </Box>
-              </>
-            )}
-
-            <Divider sx={{ my: 2 }} />
-
-            <Box sx={{ textAlign: "left" }}>
-              <Typography
-                variant="subtitle2"
-                color="text.secondary"
-                gutterBottom
-              >
-                Account Status
-              </Typography>
-              <Box
-                sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
-              >
-                <AdminPanelSettingsIcon color="action" fontSize="small" />
-                <Typography variant="body2">
-                  Role: <strong>{userProfile?.role || "User"}</strong>
-                </Typography>
+                  {displayName.charAt(0).toUpperCase()}
+                </Avatar>
+                <Tooltip title="Change photo or details">
+                  <IconButton
+                    size="small"
+                    onClick={() => setOpenEditProfileDialog(true)}
+                    aria-label="Change photo"
+                    sx={{
+                      position: "absolute",
+                      right: -6,
+                      bottom: -6,
+                      width: 32,
+                      height: 32,
+                      bgcolor: brand.surface,
+                      color: brand.primary,
+                      boxShadow: "0 2px 6px rgba(15,23,42,0.15)",
+                      "&:hover": { bgcolor: brand.canvas },
+                    }}
+                  >
+                    <PhotoCameraOutlinedIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
               </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <VerifiedUserIcon
-                  color={userProfile?.isVerified ? "success" : "disabled"}
-                  fontSize="small"
-                />
-                <Typography variant="body2">
-                  Status:{" "}
-                  <strong>
-                    {userProfile?.isVerified
-                      ? "Verified"
-                      : "Pending Verification"}
-                  </strong>
-                </Typography>
+              <Box sx={{ minWidth: 0, textAlign: { xs: "center", sm: "left" } }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap justifyContent={{ xs: "center", sm: "flex-start" }}>
+                  <Typography sx={{ fontWeight: 700, fontSize: 24, color: brand.ink, lineHeight: 1.2 }}>{displayName}</Typography>
+                  {nameHindi && (
+                    <Box component="span" sx={{ px: 1, py: 0.25, borderRadius: 1, bgcolor: brand.primarySoft, color: brand.primary, fontSize: 12.5, fontWeight: 600 }}>
+                      {nameHindi}
+                    </Box>
+                  )}
+                </Stack>
+                <Stack direction="row" spacing={1} sx={{ mt: 1.25 }} justifyContent={{ xs: "center", sm: "flex-start" }} flexWrap="wrap" useFlexGap>
+                  <Chip size="small" icon={<AdminPanelSettingsIcon />} label={roleLabel} sx={{ bgcolor: brand.primarySoft, color: brand.primaryDark, fontWeight: 600, "& .MuiChip-icon": { color: brand.primary } }} />
+                  <Chip
+                    size="small"
+                    icon={<VerifiedUserIcon />}
+                    label={userProfile?.isVerified ? "Verified" : "Pending verification"}
+                    sx={{
+                      bgcolor: userProfile?.isVerified ? brand.accentSoft : brand.canvas,
+                      color: userProfile?.isVerified ? brand.accentDark : brand.slateMuted,
+                      fontWeight: 600,
+                      "& .MuiChip-icon": { color: userProfile?.isVerified ? brand.accent : brand.slateMuted },
+                    }}
+                  />
+                </Stack>
               </Box>
-            </Box>
-          </Paper>
+            </Stack>
+
+            <Stack spacing={1.25} sx={{ mt: 3 }}>
+              <InfoTile icon={<EmailIcon />} label="Email" value={userProfile?.email || currentUser?.email || "Not added"} muted={!(userProfile?.email || currentUser?.email)} />
+              <InfoTile icon={<PhoneIcon />} label="Mobile number" value={userProfile?.phone || "Not added"} muted={!userProfile?.phone} />
+              {canManagePerson && (
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.25 }}>
+                  <InfoTile
+                    icon={<CakeOutlinedIcon />}
+                    label="Date of birth"
+                    value={linkedPersonDetails?.dob ? formatDisplayDate(linkedPersonDetails.dob) : "Not set"}
+                    muted={!linkedPersonDetails?.dob}
+                  />
+                  <InfoTile
+                    icon={<WcOutlinedIcon />}
+                    label="Gender"
+                    value={<Box component="span" sx={{ textTransform: "capitalize" }}>{linkedPersonDetails?.gender || "Not set"}</Box>}
+                    muted={!linkedPersonDetails?.gender}
+                  />
+                </Box>
+              )}
+            </Stack>
+          </ProfileCard>
         </Grid>
         )}
 
-        {/* Family tree person summary */}
+        {/* Your place in the family. */}
         {effectivePersonId && linkedPersonDetails && (
-          <Grid size={{ xs: 12, md: isOwnAccountView && currentUser ? 8 : 12 }}>
-            <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
-              <Stack direction="row" spacing={2} alignItems="flex-start">
-                {!(isOwnAccountView && currentUser) && (
+          <Grid size={{ xs: 12, md: isOwnSignedIn ? 7 : 12 }}>
+            <ProfileCard>
+              {!isOwnSignedIn && (
+                <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2.5 }}>
                   <Avatar
-                    src={
-                      profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined
-                    }
-                    sx={{
-                      width: 88,
-                      height: 88,
-                      bgcolor: "primary.main",
-                      fontSize: 32,
-                    }}
+                    src={profilePhotoUrl || linkedPersonDetails?.photoUrl || undefined}
+                    sx={{ width: 64, height: 64, bgcolor: brand.primary, fontSize: 26, fontWeight: 700 }}
                   >
                     {(linkedPersonDetails?.name || "?").charAt(0).toUpperCase()}
                   </Avatar>
-                )}
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    <Link
-                      component="button"
-                      type="button"
-                      underline="hover"
-                      onClick={handleOpenLinkedProfileInTree}
-                      sx={{ fontWeight: 700 }}
-                    >
-                      {linkedPersonDetails.name}
-                    </Link>
-                  </Typography>
-                  {linkedPersonDetails.nameHindi && (
-                    <Typography variant="body2" color="text.secondary">
-                      {linkedPersonDetails.nameHindi}
-                    </Typography>
-                  )}
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-                    {(linkedPersonDetails.gender || canManagePerson) && (
-                      <Chip
-                        size="small"
-                        label={`Gender: ${linkedPersonDetails.gender || "Not set"}`}
-                        sx={{ textTransform: "capitalize" }}
-                      />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontWeight: 700, fontSize: 22, color: brand.ink }}>{linkedPersonDetails.name}</Typography>
+                    {linkedPersonDetails.nameHindi && (
+                      <Typography sx={{ fontSize: 14, color: brand.slateMuted }}>{linkedPersonDetails.nameHindi}</Typography>
                     )}
-                    {(linkedPersonDetails.dob || canManagePerson) && (
-                      <Chip
-                        size="small"
-                        label={`DOB: ${
-                          linkedPersonDetails.dob
-                            ? formatDisplayDate(linkedPersonDetails.dob)
-                            : "Not set"
-                        }`}
-                      />
-                    )}
-                  </Stack>
-                  {linkedPersonDetails.tree && (
-                    <Stack spacing={0.5} sx={{ mt: 2 }}>
-                      <Typography variant="body2">
-                        <strong>Tree:</strong>{" "}
-                        {linkedPersonDetails.tree.name || "Family tree"}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Caste:</strong> {linkedTreeCaste || "N/A"}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Sub-caste:</strong> {linkedTreeSubCaste || "N/A"}
-                      </Typography>
-                      <Typography variant="body2">
-                        <strong>Location:</strong>{" "}
-                        {linkedPersonDetails.tree.location?.name || "N/A"}
-                      </Typography>
+                    <Stack direction="row" spacing={1} sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
+                      {(linkedPersonDetails.gender || canManagePerson) && (
+                        <Chip size="small" label={linkedPersonDetails.gender || "Gender not set"} sx={{ textTransform: "capitalize" }} />
+                      )}
+                      {(linkedPersonDetails.dob || canManagePerson) && (
+                        <Chip size="small" icon={<CakeOutlinedIcon />} label={linkedPersonDetails.dob ? formatDisplayDate(linkedPersonDetails.dob) : "Birth date not set"} />
+                      )}
                     </Stack>
-                  )}
+                  </Box>
+                </Stack>
+              )}
+              <CardHeading
+                icon={<SchemaOutlinedIcon />}
+                title={isOwnSignedIn ? "Your place in the family" : "Place in the family"}
+                subtitle={
+                  linkedPersonDetails.tree
+                    ? `Recorded in the ${linkedPersonDetails.tree.name || "family"} tree${linkedPersonDetails.tree.location?.name ? `, ${linkedPersonDetails.tree.location.name}` : ""}.`
+                    : undefined
+                }
+              />
+              {linkedPersonDetails.tree && (
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
+                  <FeatureTile
+                    eyebrow="Family tree"
+                    title={linkedPersonDetails.tree.name || "Family tree"}
+                    caption={treePeopleCount ? `${treePeopleCount.toLocaleString("en-IN")} people recorded` : undefined}
+                    icon={<AccountTreeOutlinedIcon />}
+                    footer={
+                      <Link component="button" type="button" underline="hover" onClick={handleOpenLinkedProfileInTree} sx={{ fontWeight: 600, fontSize: 12.5, display: "inline-flex", alignItems: "center" }}>
+                        Open tree <ChevronRightIcon sx={{ fontSize: 16 }} />
+                      </Link>
+                    }
+                  />
+                  <FeatureTile
+                    eyebrow="Village"
+                    title={linkedPersonDetails.tree.location?.name || "Not set"}
+                    accent="green"
+                    icon={<LocationOnOutlinedIcon />}
+                    footer={
+                      <Link component={RouterLink} to="/locations" underline="hover" sx={{ fontWeight: 600, fontSize: 12.5, color: brand.accentDark, display: "inline-flex", alignItems: "center" }}>
+                        Browse villages <ChevronRightIcon sx={{ fontSize: 16 }} />
+                      </Link>
+                    }
+                  />
+                  <InfoTile icon={<GroupsOutlinedIcon />} label="Community / caste" value={linkedTreeCaste || "Not set"} muted={!linkedTreeCaste} />
+                  <InfoTile icon={<HubOutlinedIcon />} label="Gotra / sub-caste" value={linkedTreeSubCaste || "Not set"} muted={!linkedTreeSubCaste} />
                 </Box>
-              </Stack>
-            </Paper>
+              )}
+              <LineagePath steps={lineage} selfLabel={isOwnSignedIn ? "You" : "Here"} />
+            </ProfileCard>
           </Grid>
         )}
 
@@ -1131,12 +1173,12 @@ export const ProfilePage: React.FC = () => {
             person has neither a business nor a profession to reveal. */}
         {effectivePersonId &&
           (currentUser || businesses.length > 0 || professions.length > 0) && (
-          <Grid size={{ xs: 12 }}>
-            <Paper elevation={2} sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Professional & Business Details
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
+          <Grid size={{ xs: 12 }} sx={{ mt: { xs: 1, md: 2 } }}>
+            <SectionHeading
+              title="Work & business"
+              subtitle={isOwnSignedIn ? "Your career and family trade, for relatives looking for help close to home." : undefined}
+            />
+            <Box>
 
               {!currentUser ? (
                 <Box sx={{ textAlign: "center", py: 2 }}>
@@ -1159,43 +1201,30 @@ export const ProfilePage: React.FC = () => {
                   </Button>
                 </Box>
               ) : (
-              <Grid container spacing={4}>
+              <Grid container spacing={3}>
                 {/* Profession Column — one career profile per person, so the
                     header control edits the existing one rather than adding
                     another. Legacy profession tags still show underneath until
                     they are migrated into a profile. */}
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      mb: 2,
-                    }}
-                  >
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <WorkIcon color="action" />
-                      <Typography variant="subtitle1" fontWeight="bold">
-                        Profession
-                      </Typography>
-                    </Box>
-                    {canEditProfessionProfile(effectivePersonId) && (
-                      <Tooltip title={professionProfile ? "Edit profession" : "Add profession"}>
-                        <IconButton
-                          size="small"
-                          aria-label={professionProfile ? "Edit profession" : "Add profession"}
-                          onClick={() => setOpenProfessionDialog(true)}
-                          color="primary"
-                        >
-                          {professionProfile ? <EditIcon /> : <AddIcon />}
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
+                  <ProfileCard>
+                  <CardHeading
+                    icon={<WorkOutlineOutlinedIcon />}
+                    title="Profession"
+                    action={
+                      professionProfile && canEditProfessionProfile(effectivePersonId) ? (
+                        <Tooltip title="Edit profession">
+                          <IconButton size="small" aria-label="Edit profession" onClick={() => setOpenProfessionDialog(true)} sx={{ color: brand.slateMuted }}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      ) : undefined
+                    }
+                  />
 
                   {professionProfile ? (
-                    <Paper variant="outlined" sx={{ p: 1.75, borderRadius: 2 }}>
-                      <Typography variant="subtitle2" fontWeight={800}>
+                    <Box sx={{ p: 2.5, borderRadius: 3, bgcolor: brand.canvas }}>
+                      <Typography sx={{ fontWeight: 700, fontSize: 18, color: brand.ink }}>
                         {professionProfile.title}
                       </Typography>
                       {(professionProfile.organization || professionProfile.sector) && (
@@ -1214,11 +1243,12 @@ export const ProfilePage: React.FC = () => {
                         component={RouterLink}
                         to={`/profession/${effectivePersonId}`}
                         size="small"
-                        sx={{ mt: 1, px: 0 }}
+                        endIcon={<ChevronRightIcon />}
+                        sx={{ mt: 1.5, px: 0, fontWeight: 700, textTransform: "none" }}
                       >
                         View career profile
                       </Button>
-                    </Paper>
+                    </Box>
                   ) : professions.length > 0 ? (
                     <Stack spacing={1}>
                       {professions.map((prof: any) => (
@@ -1263,60 +1293,55 @@ export const ProfilePage: React.FC = () => {
                       ))}
                     </Stack>
                   ) : (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ fontStyle: "italic" }}
-                    >
-                      No profession added yet.
-                    </Typography>
+                    <Stack alignItems="center" spacing={1} sx={{ py: 3, px: 2, borderRadius: 3, bgcolor: brand.canvas, textAlign: "center" }}>
+                      <WorkOutlineOutlinedIcon sx={{ color: brand.slateMuted }} />
+                      <Typography sx={{ fontWeight: 700, color: brand.ink }}>No profession added yet</Typography>
+                      {canEditProfessionProfile(effectivePersonId) && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<AddIcon />}
+                          onClick={() => setOpenProfessionDialog(true)}
+                          sx={{ mt: 0.5, borderRadius: 2.5, textTransform: "none", fontWeight: 700, bgcolor: brand.surface }}
+                        >
+                          Add profession
+                        </Button>
+                      )}
+                    </Stack>
                   )}
+                  </ProfileCard>
                 </Grid>
 
                 {/* Businesses Column */}
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      mb: 2,
-                    }}
-                  >
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <BusinessIcon color="action" />
-                      <Typography variant="subtitle1" fontWeight="bold">
-                        Business
-                      </Typography>
-                    </Box>
-                    {/* One business per person: the Add disappears once there
-                        is one, and each card carries its own Edit. */}
-                    {canManagePerson && businesses.length === 0 && (
-                      <Tooltip title="Add business">
-                        <IconButton
-                          size="small"
-                          aria-label="Add business"
-                          onClick={() => handleOpenBusinessDialog()}
-                          color="primary"
-                        >
-                          <AddIcon />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
+                  <ProfileCard>
+                  {/* One business per person: once there is one, each card
+                      carries its own Edit instead of an Add. */}
+                  <CardHeading icon={<StorefrontOutlinedIcon />} title={businesses.length > 1 ? "Family businesses" : "Family business"} />
 
                   {businesses.length === 0 ? (
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ fontStyle: "italic" }}
-                    >
-                      No business added yet.
-                    </Typography>
+                    <Stack alignItems="center" spacing={1} sx={{ py: 3, px: 2, borderRadius: 3, bgcolor: brand.canvas, textAlign: "center" }}>
+                      <StorefrontOutlinedIcon sx={{ color: brand.slateMuted }} />
+                      <Typography sx={{ fontWeight: 700, color: brand.ink }}>No family business added yet</Typography>
+                      <Typography sx={{ fontSize: 13.5, color: brand.slateMuted, maxWidth: 360 }}>
+                        A shop, firm or service the family runs — relatives can then find it by trade and distance.
+                      </Typography>
+                      {canManagePerson && (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<AddIcon />}
+                          onClick={() => handleOpenBusinessDialog()}
+                          sx={{ mt: 0.5, borderRadius: 2.5, textTransform: "none", fontWeight: 700, bgcolor: brand.surface }}
+                        >
+                          Add business
+                        </Button>
+                      )}
+                    </Stack>
                   ) : (
                     <Stack spacing={1.5}>
                       {businesses.map((biz: any) => (
-                        <Card key={biz.id} variant="outlined" sx={{ borderRadius: 2 }}>
+                        <Card key={biz.id} elevation={0} sx={{ borderRadius: 3, bgcolor: brand.canvas }}>
                           <CardContent sx={{ pb: "16px !important" }}>
                             <Box
                               sx={{
@@ -1402,16 +1427,18 @@ export const ProfilePage: React.FC = () => {
                       ))}
                     </Stack>
                   )}
+                  </ProfileCard>
                 </Grid>
               </Grid>
               )}
-            </Paper>
+            </Box>
           </Grid>
         )}
 
         {/* Push notification opt-in — only meaningful for your own account. */}
         {isOwnAccountView && currentUser && (
-          <Grid size={{ xs: 12, md: 8 }}>
+          <Grid size={{ xs: 12 }} sx={{ mt: { xs: 1, md: 2 } }}>
+            <SectionHeading title="Notifications" subtitle="Requests to join your branch, birthdays and wishes from family." />
             <NotificationSettingsCard />
           </Grid>
         )}
@@ -1420,7 +1447,8 @@ export const ProfilePage: React.FC = () => {
             wall. Above the Wall section below, which only ever shows one
             thread at a time — this is how you reach the others. */}
         {effectivePersonId && (
-          <Grid size={{ xs: 12 }}>
+          <Grid size={{ xs: 12 }} sx={{ mt: { xs: 1, md: 2 } }}>
+            <SectionHeading title="Celebrations" subtitle="Birthdays, anniversaries and remembrance days, with the wishes left for each." />
             <CelebrationHistoryCard
               personId={effectivePersonId}
               personName={linkedPersonDetails?.name}

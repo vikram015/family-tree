@@ -1227,24 +1227,22 @@ export const NodeDetails = memo(function NodeDetails({
                     direction="row"
                     spacing={1.5}
                     useFlexGap
+                    flexWrap="wrap"
                     justifyContent="center"
+                    alignItems="center"
                   >
-                    {canEditCurrentNode && onInviteCollaborator && (
-                      <Tooltip title="Invite collaborator">
-                        <IconButton
-                          size="large"
-                          color="primary"
-                          onClick={() => onInviteCollaborator(node.id)}
-                          sx={{
-                            border: 1,
-                            borderColor: "divider",
-                            width: 48,
-                            height: 48,
-                          }}
-                        >
-                          <PersonAddAlt1OutlinedIcon />
-                        </IconButton>
-                      </Tooltip>
+                    {/* Labelled, with the person's name: an unlabelled icon was
+                        why nobody found the invite. Not offered for someone who
+                        has died. */}
+                    {canEditCurrentNode && onInviteCollaborator && node.isAlive !== false && (
+                      <Button
+                        variant="contained"
+                        startIcon={<PersonAddAlt1OutlinedIcon />}
+                        onClick={() => onInviteCollaborator(node.id)}
+                        sx={{ height: 48, borderRadius: 999, px: 2.5, fontWeight: 700, textTransform: "none" }}
+                      >
+                        Invite {(node.name || "").trim().split(/\s+/)[0] || "them"}
+                      </Button>
                     )}
                     {isUnlinkedUser && (
                       <Tooltip

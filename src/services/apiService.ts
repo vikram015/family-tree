@@ -375,6 +375,12 @@ export interface TreeGap {
   gender: string | null;
   treeId: string;
   gap: TreeGapType;
+  /** Every missing item, most valuable first (`gap` is the first). */
+  missing?: TreeGapType[];
+  /** False for someone who has died — never offered as an invitee. */
+  isAlive?: boolean;
+  /** Already linked to an account — nobody to invite. */
+  hasAccount?: boolean;
   /** Ready-to-render copy, e.g. "No birth date". */
   label: string;
   /** Ready-to-render placement in the tree, e.g. "Son of Ram Kumar". Null when
@@ -848,6 +854,13 @@ export const ApiService = {
   /**
    * Create a new person in the family tree
    */
+  /** Oldest recorded ancestor → … → this person (one parent per step). */
+  async getPersonLineage(
+    personId: string,
+  ): Promise<Array<{ id: string; name: string; nameHindi: string | null; depth: number }>> {
+    return backendApi.get(`/api/people/${encodeURIComponent(personId)}/lineage`);
+  },
+
   async getPersonCustomFields(personId: string): Promise<Record<string, string>> {
     return backendApi.get<Record<string, string>>(`/api/people/${personId}/custom-fields`);
   },

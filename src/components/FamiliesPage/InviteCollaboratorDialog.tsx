@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -59,6 +60,10 @@ interface InviteCollaboratorDialogProps {
   /** When true the branch person is fixed (e.g. opened from a node) and shown as
    *  already selected instead of a searchable field. */
   lockBranchPerson?: boolean;
+  /** Offer "Full tree" — only for people who can edit the whole tree. */
+  allowFullTree?: boolean;
+  /** Why the last attempt failed, shown in the dialog rather than a toast. */
+  error?: string | null;
   onClose: () => void;
   onInvitePhoneChange: (value: string) => void;
   onInviteRoleChange: (value: string) => void;
@@ -80,6 +85,8 @@ export function InviteCollaboratorDialog({
   treeId,
   selectedBranchPersonName,
   lockBranchPerson = false,
+  allowFullTree = true,
+  error = null,
   onClose,
   onInvitePhoneChange,
   onInviteRoleChange,
@@ -326,7 +333,7 @@ export function InviteCollaboratorDialog({
               onChange={(e) => onInviteScopeChange(e.target.value as "full" | "branch")}
               startAdornment={iconAdornment(<AccountTreeOutlinedIcon fontSize="small" />)}
             >
-              <MenuItem value="full">Full tree</MenuItem>
+              {allowFullTree && <MenuItem value="full">Full tree</MenuItem>}
               <MenuItem value="branch">Selected person branch</MenuItem>
             </Select>
           </FormControl>
@@ -388,6 +395,7 @@ export function InviteCollaboratorDialog({
               <MenuItem value="viewer">Viewer</MenuItem>
             </Select>
           </FormControl>
+          {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>
       <DialogActions sx={isMobile ? { px: 3, py: 2 } : undefined}>
