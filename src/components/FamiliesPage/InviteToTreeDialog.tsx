@@ -36,6 +36,11 @@ export interface InviteToTreeDialogProps {
   allowFullTree?: boolean;
   /** Overrides the number looked up from the person's details. */
   initialPhone?: string | null;
+  /**
+   * The invite is for `person` themselves (not someone helping with their
+   * branch): accepting also links the invitee's account to that profile.
+   */
+  linkToPerson?: boolean;
 }
 
 /** Ten local digits from whatever was stored ("+91 98765-43210" → "9876543210"). */
@@ -62,6 +67,7 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
   lockPerson = false,
   allowFullTree = true,
   initialPhone,
+  linkToPerson = false,
 }) => {
   const { offerNotifications } = useNotificationPrompt();
   const [phone, setPhone] = useState("");
@@ -75,7 +81,7 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
   /** Set once the invite exists: either a link to send, or access granted. */
   const [result, setResult] = useState<
     | { kind: "link"; link: string; text: string; phone: string; personName: string }
-    | { kind: "granted"; name: string }
+    | { kind: "granted"; name: string; linked: boolean }
     | null
   >(null);
   const [copied, setCopied] = useState(false);
@@ -128,9 +134,10 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         role,
         personId: branchId,
         invitedPhone: digits ? `+91${digits}` : null,
+        linkToPerson: Boolean(linkToPerson && branchId),
       });
       if (invite.granted) {
-        setResult({ kind: "granted", name: invite.user?.name || "They" });
+        setResult({ kind: "granted", name: invite.user?.name || "They", linked: Boolean(invite.linked) });
         return;
       }
       // Build the link on this site's domain; the backend's host is fixed.
@@ -158,7 +165,7 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
     } finally {
       setBusy(false);
     }
-  }, [treeId, scope, personId, personName, phone, role, offerNotifications]);
+  }, [treeId, scope, personId, personName, phone, role, linkToPerson, offerNotifications]);
 
   const handleCopy = useCallback(async () => {
     if (result?.kind !== "link") return;
@@ -194,7 +201,8 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         <DialogContent>
           {result.kind === "granted" ? (
             <Alert severity="success">
-              {result.name} already has an account and can open this tree now.
+              {result.name} already has an account and can open this tree now
+              {result.linked ? `, linked to ${personName || "this"}'s profile.` : "."}
             </Alert>
           ) : (
             <Stack spacing={2}>
@@ -203,6 +211,9 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
                   ? `Only +91 ${result.phone} can use this link. `
                   : "Anyone you send this link to can join. "}
                 It works for 7 days.
+                {linkToPerson && personName
+                  ? ` When they join, their account is linked to ${personName}'s profile.`
+                  : ""}
               </Typography>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                 <Button

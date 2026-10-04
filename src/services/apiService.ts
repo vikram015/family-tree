@@ -748,6 +748,8 @@ export interface TreeInvite {
   granted?: boolean;
   /** Present when granted === true: the existing user who received access. */
   user?: { id: string; name: string | null; phone: string | null };
+  /** True when the invitee's account was also linked to the invited person. */
+  linked?: boolean;
 }
 
 export const ApiService = {
@@ -1204,6 +1206,8 @@ export const ApiService = {
       role?: string;
       invitedPhone?: string | null;
       expiresInDays?: number;
+      /** The invite is for this person themselves: link their account on accept. */
+      linkToPerson?: boolean;
     },
   ): Promise<TreeInvite> {
     return backendApi.post<TreeInvite>(`/api/tree/${treeId}/invites`, payload);

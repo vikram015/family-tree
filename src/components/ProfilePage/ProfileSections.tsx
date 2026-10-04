@@ -177,6 +177,13 @@ export interface LineageStep {
  * Scrolls sideways when the line is long rather than squeezing names.
  */
 export const LineagePath: React.FC<{ steps: LineageStep[]; selfLabel?: string }> = ({ steps, selfLabel = "You" }) => {
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  // Open at the right-hand end: you and your nearest ancestors first. A long
+  // line otherwise opened on the oldest names with "You" scrolled out of view.
+  React.useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [steps]);
   if (steps.length < 2) return null;
   const path = steps.map((s) => s.name).join(" › ");
   return (
@@ -191,7 +198,7 @@ export const LineagePath: React.FC<{ steps: LineageStep[]; selfLabel?: string }>
           {path}
         </Typography>
       </Stack>
-      <Box sx={{ overflowX: "auto", pb: 0.5 }}>
+      <Box ref={scrollRef} sx={{ overflowX: "auto", pb: 0.5 }}>
         <Stack direction="row" alignItems="flex-start" sx={{ minWidth: steps.length * 84 }}>
           {steps.map((step, index) => {
             const isSelf = index === steps.length - 1;

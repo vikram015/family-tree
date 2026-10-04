@@ -1231,9 +1231,8 @@ export const NodeDetails = memo(function NodeDetails({
                     justifyContent="center"
                     alignItems="center"
                   >
-                    {/* Labelled, with the person's name: an unlabelled icon was
-                        why nobody found the invite. Not offered for someone who
-                        has died. */}
+                    {/* Labelled: an unlabelled icon was why nobody found the
+                        invite. Not offered for someone who has died. */}
                     {canEditCurrentNode && onInviteCollaborator && node.isAlive !== false && (
                       <Button
                         variant="contained"
@@ -1241,7 +1240,7 @@ export const NodeDetails = memo(function NodeDetails({
                         onClick={() => onInviteCollaborator(node.id)}
                         sx={{ height: 48, borderRadius: 999, px: 2.5, fontWeight: 700, textTransform: "none" }}
                       >
-                        Invite {(node.name || "").trim().split(/\s+/)[0] || "them"}
+                        Invite collaborator
                       </Button>
                     )}
                     {isUnlinkedUser && (

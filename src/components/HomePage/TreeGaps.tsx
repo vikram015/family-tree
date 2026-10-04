@@ -11,6 +11,7 @@ import {
   ListItemText,
   Skeleton,
   Stack,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -102,9 +103,14 @@ function firstName(name: string): string {
   return (name || "").trim().split(/\s+/)[0] || "them";
 }
 
-/** Someone alive with no account yet — the only people worth inviting. */
-function canInvite(gap: TreeGap): boolean {
-  return gap.isAlive !== false && !gap.hasAccount;
+/** Invitable at all: never offered for someone who has died. */
+function isInvitable(gap: TreeGap): boolean {
+  return gap.isAlive !== false;
+}
+
+/** Shown but disabled: this person already has an account linked. */
+function alreadyOnKinvia(gap: TreeGap): boolean {
+  return Boolean(gap.hasAccount);
 }
 
 export const TreeGaps: React.FC<TreeGapsProps> = ({
@@ -298,16 +304,26 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
                 }}
               >
                 {identity}
-                {canInvite(gap) && (
-                  <Button
-                    size="small"
-                    startIcon={<AddIcon sx={{ fontSize: "16px !important" }} />}
-                    onClick={() => setInviteTarget(gap)}
-                    aria-label={`Invite ${gap.name} to edit`}
-                    sx={{ ...pillSx, "& .MuiButton-startIcon": { mr: 0.5 } }}
-                  >
-                    Invite to edit
-                  </Button>
+                {isInvitable(gap) && (
+                  <Tooltip title={alreadyOnKinvia(gap) ? `${firstName(gap.name)} is already on Kinvia` : ""}>
+                    {/* span: a disabled button can't host the tooltip itself */}
+                    <span>
+                      <Button
+                        size="small"
+                        disabled={alreadyOnKinvia(gap)}
+                        startIcon={<AddIcon sx={{ fontSize: "16px !important" }} />}
+                        onClick={() => setInviteTarget(gap)}
+                        aria-label={`Invite ${gap.name} to edit`}
+                        sx={{
+                          ...pillSx,
+                          "& .MuiButton-startIcon": { mr: 0.5 },
+                          "&.Mui-disabled": { bgcolor: "#f1f5f9", borderColor: "#e2e8f0", color: brand.slateMuted },
+                        }}
+                      >
+                        Invite to edit
+                      </Button>
+                    </span>
+                  </Tooltip>
                 )}
                 <Button
                   size="small"
@@ -384,8 +400,9 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
                   </ListItemButton>
                 );
               })}
-              {canInvite(sheetTarget) && (
+              {isInvitable(sheetTarget) && (
                 <ListItemButton
+                  disabled={alreadyOnKinvia(sheetTarget)}
                   onClick={() => {
                     const target = sheetTarget;
                     setSheetTarget(null);
@@ -398,7 +415,11 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
                   </ListItemIcon>
                   <ListItemText
                     primary={`Invite ${firstName(sheetTarget.name)}`}
-                    secondary="They can fill in their own details"
+                    secondary={
+                      alreadyOnKinvia(sheetTarget)
+                        ? "Already on Kinvia"
+                        : "They join as themselves and can fill in their own details"
+                    }
                     primaryTypographyProps={{ fontWeight: 700, color: brand.primaryDark }}
                   />
                 </ListItemButton>
@@ -441,6 +462,7 @@ export const TreeGaps: React.FC<TreeGapsProps> = ({
         person={inviteTarget ? { id: inviteTarget.personId, name: inviteTarget.name } : null}
         lockPerson
         allowFullTree={false}
+        linkToPerson
       />
     </Box>
   );
