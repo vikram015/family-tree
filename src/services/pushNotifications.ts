@@ -216,6 +216,37 @@ export const pushNotifications = {
   },
 
   /**
+   * Shows a system notification for a message that arrived while the app was
+   * open. FCM hands those to the page instead of displaying them, and on a
+   * phone a toast alone is easy to miss. Shown through the FCM worker, whose
+   * `notificationclick` handler routes the tap back into the app.
+   *
+   * `tag` collapses repeats of the same message into one notification.
+   */
+  async showLocalNotification(input: {
+    title: string;
+    body: string;
+    clickPath: string;
+    tag?: string;
+  }): Promise<boolean> {
+    if (!(await ensureSupported()) || Notification.permission !== "granted") return false;
+    try {
+      const registration = await navigator.serviceWorker.getRegistration(MESSAGING_SW_SCOPE);
+      if (!registration?.active) return false;
+      await registration.showNotification(input.title, {
+        body: input.body,
+        icon: "/logo192.png",
+        tag: input.tag,
+        data: { kinviaLink: new URL(input.clickPath, window.location.origin).href },
+      });
+      return true;
+    } catch (error) {
+      console.warn("Failed to show notification:", error);
+      return false;
+    }
+  },
+
+  /**
    * Subscribes to messages that arrive while the app is in the foreground
    * (the service worker only handles background ones). Returns an unsubscribe
    * function, or a no-op when push is unavailable.

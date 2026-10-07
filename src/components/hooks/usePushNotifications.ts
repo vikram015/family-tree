@@ -5,6 +5,8 @@ import { pushNotifications } from "../../services/pushNotifications";
 import { useAuth } from "./useAuth";
 
 export type ForegroundNotification = {
+  /** FCM message id, so one message never becomes two notifications. */
+  id?: string;
   title: string;
   body: string;
   clickPath: string;
@@ -56,6 +58,7 @@ export function usePushNotifications() {
         if (!active) return;
         const data = (payload.data || {}) as Record<string, string>;
         setNotification({
+          id: payload.messageId,
           title: payload.notification?.title || "New notification",
           body: payload.notification?.body || "",
           clickPath: data.clickPath || "/requests",

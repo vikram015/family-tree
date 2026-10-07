@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, Suspense } from "react";
+import React, { useCallback, useEffect, useState, Suspense } from "react";
 import {
   ThemeProvider,
   CssBaseline,
@@ -74,6 +74,17 @@ function AppContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
+  // Bumped when a notification is opened: re-keys <Routes> so the target page
+  // mounts fresh and refetches — a tap often lands on a page that was already
+  // open, which would otherwise keep showing what it loaded before.
+  const [routeKey, setRouteKey] = useState(0);
+  const openFromNotification = useCallback(
+    (path: string) => {
+      navigate(path);
+      setRouteKey((key) => key + 1);
+    },
+    [navigate],
+  );
   const { currentUser, userProfile, loading } = useAuth();
   const treeId = searchParams.get("tree") || "";
 
@@ -175,7 +186,7 @@ function AppContent() {
       }}
     >
       <UserOnboardingRouteGuard />
-      <PushNotificationToast />
+      <PushNotificationToast onOpen={openFromNotification} />
       {!isTreeFullscreen && <Header />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box
@@ -210,7 +221,7 @@ function AppContent() {
             }
           >
             <ErrorBoundary>
-              <Routes>
+              <Routes key={routeKey}>
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/onboarding" element={<UserOnboardingPage />} />
