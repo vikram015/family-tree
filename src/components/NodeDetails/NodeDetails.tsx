@@ -1236,8 +1236,9 @@ export const NodeDetails = memo(function NodeDetails({
                     alignItems="center"
                   >
                     {/* Labelled: an unlabelled icon was why nobody found the
-                        invite. Not offered for someone who has died. */}
-                    {canEditCurrentNode && onInviteCollaborator && node.isAlive !== false && (
+                        invite. Offered for someone who has died too: their
+                        branch still needs looking after. */}
+                    {canEditCurrentNode && onInviteCollaborator && (
                       <Button
                         variant="contained"
                         startIcon={<PersonAddAlt1OutlinedIcon />}
