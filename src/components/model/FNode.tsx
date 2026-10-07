@@ -13,6 +13,7 @@ export type FNode = ExtNode & {
   createdAt?: string; // Created timestamp
   createdBy?: string; // User ID who created this person
   createdByName?: string; // Display name/email of the creator
+  hasAccount?: boolean; // Someone has signed in as this person
   customFields?: Record<string, string>; // Dynamic custom fields
   hierarchy?: Array<{ name: string; id: string }>; // Complete parent chain hierarchy
   treeId?: string; // Tree ID this node belongs to

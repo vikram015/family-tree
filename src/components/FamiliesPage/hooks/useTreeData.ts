@@ -158,6 +158,7 @@ export function useTreeData({
               createdAt: person.createdAt || undefined,
               createdBy: person.createdBy || undefined,
               createdByName: person.createdByName || undefined,
+              hasAccount: person.hasAccount === true,
               bloodGroup: person.bloodGroup || undefined,
               isAlive: person.isAlive !== false,
               deceasedDate: person.deceasedDate || undefined,
@@ -375,6 +376,8 @@ export function useTreeData({
             createdAt: raw.createdAt || undefined,
             createdBy: raw.createdBy || undefined,
             createdByName: raw.createdByName || undefined,
+            // Not every source of affected nodes sends it; keep what we knew.
+            hasAccount: raw.hasAccount ?? nodeMap.get(raw.id)?.hasAccount ?? false,
             bloodGroup: raw.bloodGroup || undefined,
             isAlive: raw.isAlive !== false,
             deceasedDate: raw.deceasedDate || undefined,

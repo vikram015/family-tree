@@ -170,6 +170,8 @@ interface NodeDetailsProps {
   treeId?: string;
   /** Open the invite-collaborator dialog scoped to this person's branch. */
   onInviteCollaborator?: (personId: string) => void;
+  /** Invite this person themselves: accepting links the invitee to the profile. */
+  onInvitePerson?: (personId: string) => void;
   /** Open directly in a specific view (e.g. "add" when clicking a placeholder) */
   initialView?: "details" | "edit" | "add";
   /** Pre-selected relation info when opening in "add" view from a placeholder */
@@ -217,6 +219,7 @@ export const NodeDetails = memo(function NodeDetails({
     canEditNode,
     treeId,
     onInviteCollaborator,
+    onInvitePerson,
   } = props;
   const formatDisplayDate = (value?: string) => {
     if (!value) return "";
@@ -1049,6 +1052,7 @@ export const NodeDetails = memo(function NodeDetails({
     nodes.find((n) => n.id === (node.spouses?.[0] as any)?.id)?.name ||
     "the current spouse";
   const canEditCurrentNode = canEditNode ? canEditNode(node.id) : true;
+  const inviteFirstName = node.name.trim().split(/\s+/)[0] || node.name;
   const isSuperAdminUser = typeof isSuperAdmin === "function" ? isSuperAdmin() : Boolean(isSuperAdmin);
   // If the user already has a pending self-link request for this node (or an
   // ancestor of it, meaning this node is within that pending branch), hide the
@@ -1243,6 +1247,23 @@ export const NodeDetails = memo(function NodeDetails({
                         Invite collaborator
                       </Button>
                     )}
+                    {/* Invites the person themselves: accepting links the
+                        invitee's account to this profile. Not for yourself,
+                        nor anyone already linked to an account. */}
+                    {canEditCurrentNode &&
+                      onInvitePerson &&
+                      node.isAlive !== false &&
+                      !node.hasAccount &&
+                      node.id !== userProfile?.peopleId && (
+                        <Button
+                          variant="outlined"
+                          startIcon={<PersonAddAlt1OutlinedIcon />}
+                          onClick={() => onInvitePerson(node.id)}
+                          sx={{ height: 48, borderRadius: 999, px: 2.5, fontWeight: 700, textTransform: "none" }}
+                        >
+                          Invite {inviteFirstName}
+                        </Button>
+                      )}
                     {isUnlinkedUser && (
                       <Tooltip
                         title={

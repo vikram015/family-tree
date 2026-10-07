@@ -116,6 +116,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     person: InvitePersonTarget | null;
     lock: boolean;
     allowFullTree: boolean;
+    /** Inviting the person themselves (accepting links them to the profile). */
+    linkToPerson?: boolean;
   } | null>(null);
   const [inviteAccepting, setInviteAccepting] = useState(false);
   /**
@@ -774,9 +776,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     });
   }, [currentUser, openLoginModal, canWriteAnyBranch, canManageInvites, selectId, userProfile?.peopleId, canEditNode, nodes, showSnackbar]);
 
-  // Invite scoped to one person's branch (from their details).
+  // Invite scoped to one person's branch (from their details). With
+  // `linkToPerson` the invite is for that person themselves, as on the dashboard.
   const handleInviteForNode = useCallback(
-    (personId: string) => {
+    (personId: string, linkToPerson = false) => {
       const openForNode = () => {
         if (!canEditNode(personId)) {
           showSnackbar("You don't have access to invite collaborators for this branch.", "warning");
@@ -786,7 +789,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         setInviteTarget({
           person: { id: personId, name: person?.name || "" },
           lock: true,
-          allowFullTree: canManageInvites,
+          allowFullTree: linkToPerson ? false : canManageInvites,
+          linkToPerson,
         });
       };
       if (!currentUser) {
@@ -796,6 +800,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       openForNode();
     },
     [currentUser, openLoginModal, canEditNode, canManageInvites, nodes, showSnackbar],
+  );
+  const handleInvitePerson = useCallback(
+    (personId: string) => handleInviteForNode(personId, true),
+    [handleInviteForNode],
   );
 
   const handleConfirmRejectRequest = useCallback(async () => {
@@ -1937,6 +1945,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         person={inviteTarget?.person || null}
         lockPerson={inviteTarget?.lock || false}
         allowFullTree={inviteTarget?.allowFullTree ?? false}
+        linkToPerson={inviteTarget?.linkToPerson || false}
       />
 
       {/* `isPreview` is re-checked here, not just in the handlers: no path —
@@ -1958,6 +1967,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           canEditNode={canEditNode}
           treeId={treeId}
           onInviteCollaborator={handleInviteForNode}
+          onInvitePerson={handleInvitePerson}
           initialView={nodeDetailsInitialView}
           initialAddInfo={nodeDetailsAddInfo}
         />

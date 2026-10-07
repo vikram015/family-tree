@@ -609,6 +609,7 @@ interface CompleteTreeNode {
   createdAt: string;
   createdBy?: string | null;
   createdByName?: string | null;
+  hasAccount?: boolean;
   parents: PersonWithRelations[];
   children: PersonWithRelations[];
   spouses: PersonWithRelations[];
