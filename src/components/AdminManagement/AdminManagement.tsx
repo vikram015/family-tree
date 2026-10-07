@@ -520,7 +520,12 @@ export const AdminManagement: React.FC = () => {
           allowScrollButtonsMobile
         >
           <Tab
-            label="Users"
+            // Total, not the search-filtered count; hidden until the first load.
+            label={
+              loading && users.length === 0
+                ? "Users"
+                : `Users (${users.length.toLocaleString("en-IN")})`
+            }
             id="admin-tab-0"
             aria-controls="admin-tabpanel-0"
           />
@@ -636,7 +641,6 @@ export const AdminManagement: React.FC = () => {
                   <TableCell>Role</TableCell>
                   <TableCell>Linked Node</TableCell>
                   <TableCell>Trees</TableCell>
-                  <TableCell>Status</TableCell>
                   <TableCell sortDirection={userOrderBy === "createdAt" ? userOrder : false}>
                     <TableSortLabel
                       active={userOrderBy === "createdAt"}
@@ -692,30 +696,6 @@ export const AdminManagement: React.FC = () => {
                       >
                         View trees
                       </Button>
-                    </TableCell>
-                    <TableCell>
-                      {user.isBlocked ? (
-                        <Chip
-                          icon={<Block />}
-                          label="Blocked"
-                          color="error"
-                          size="small"
-                        />
-                      ) : user.isVerified ? (
-                        <Chip
-                          icon={<CheckCircle />}
-                          label="Approved"
-                          color="success"
-                          size="small"
-                          variant="outlined"
-                        />
-                      ) : (
-                        <Chip
-                          label="Pending Approval"
-                          color="warning"
-                          size="small"
-                        />
-                      )}
                     </TableCell>
                     <TableCell>{formatDate((user as any).createdAt)}</TableCell>
                     <TableCell>
