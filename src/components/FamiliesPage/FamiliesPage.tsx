@@ -16,6 +16,10 @@ import {
   TextField,
   IconButton,
   Snackbar,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
+  Backdrop,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
@@ -28,6 +32,7 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import AddIcon from "@mui/icons-material/Add";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import { LockedTreePreview } from "./LockedTreePreview";
@@ -165,6 +170,8 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
    */
   const [hasAnyTree, setHasAnyTree] = useState<boolean | null>(null);
   const [createTreeOpen, setCreateTreeOpen] = useState(false);
+  /** Mobile speed dial (Create tree / Invite family) expanded state. */
+  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   // The create dialog opens by itself once per visit. Re-opening it every time
   // the effect re-runs would trap someone who deliberately closed it.
   const createTreePromptedRef = useRef(false);
@@ -1221,6 +1228,18 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     [statistics, theme.palette],
   );
 
+  // Same conditions under which the tree canvas renders (signed in, loaded,
+  // not a locked preview, has people) plus edit rights to invite.
+  const showCanvasInvite = Boolean(
+    treeId &&
+      canWriteAnyBranch &&
+      !requiresSignIn &&
+      !isLoading &&
+      !inviteAccepting &&
+      !isPreview &&
+      nodes.length > 0,
+  );
+
   return (
     <Box
       sx={{
@@ -1276,20 +1295,65 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             transition: "opacity 0.2s ease",
           }}
         >
-          <AddTree
-            variant="fab"
-            onCreate={(createdTreeId) => {
-              // Move to the newly created tree
-              setTreeId(createdTreeId);
-              // Every new tree starts empty, so run the same guided setup the
-              // onboarding flow uses rather than dropping the user on a blank canvas.
-              setShowSetupWizard(true);
-              // Call parent onCreate callback if provided
-              onCreate?.(createdTreeId);
-            }}
-          />
+          {/* On phones the canvas "Invite family" pill fights the chart
+              controls for space, so it moves into the + button, which expands
+              like an Android speed dial. */}
+          {isMobile && showCanvasInvite ? (
+            <SpeedDial
+              ariaLabel="Tree actions"
+              open={fabMenuOpen}
+              onOpen={(_, reason) => {
+                if (reason === "toggle") setFabMenuOpen(true);
+              }}
+              onClose={(_, reason) => {
+                if (reason !== "mouseLeave") setFabMenuOpen(false);
+              }}
+              icon={<SpeedDialIcon icon={<AddIcon />} />}
+              sx={{
+                "& .MuiSpeedDialAction-staticTooltipLabel": {
+                  whiteSpace: "nowrap",
+                  fontWeight: 600,
+                },
+              }}
+            >
+              <SpeedDialAction
+                icon={<PersonAddAltOutlinedIcon />}
+                slotProps={{ tooltip: { title: "Invite family", open: true } }}
+                onClick={() => {
+                  setFabMenuOpen(false);
+                  handleOpenInviteDialog();
+                }}
+              />
+              <SpeedDialAction
+                icon={<AccountTreeOutlinedIcon />}
+                slotProps={{ tooltip: { title: "Create tree", open: true } }}
+                onClick={() => {
+                  setFabMenuOpen(false);
+                  setCreateTreeOpen(true);
+                }}
+              />
+            </SpeedDial>
+          ) : (
+            <AddTree
+              variant="fab"
+              onCreate={(createdTreeId) => {
+                // Move to the newly created tree
+                setTreeId(createdTreeId);
+                // Every new tree starts empty, so run the same guided setup the
+                // onboarding flow uses rather than dropping the user on a blank canvas.
+                setShowSetupWizard(true);
+                // Call parent onCreate callback if provided
+                onCreate?.(createdTreeId);
+              }}
+            />
+          )}
         </Box>
       )}
+      <Backdrop
+        open={isMobile && fabMenuOpen}
+        onClick={() => setFabMenuOpen(false)}
+        sx={{ zIndex: 1199 }}
+      />
       <Box
         sx={{
           position: "relative",
@@ -1488,16 +1552,16 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             {/* Top-left of the canvas: the bottom-left corner sits under the
                 "Explore the tree" tip. Labelled, because an icon alone was the
                 reason nobody found the invite. */}
-            {treeId && canWriteAnyBranch && (
+            {showCanvasInvite && !isMobile && (
               <Button
                 variant="contained"
-                size={isMobile ? "small" : "medium"}
+                size="medium"
                 startIcon={<PersonAddAltOutlinedIcon />}
                 onClick={handleOpenInviteDialog}
                 sx={{
                   position: "absolute",
-                  left: { xs: 12, sm: 16 },
-                  top: { xs: 12, sm: 16 },
+                  left: 16,
+                  top: 16,
                   zIndex: 2,
                   borderRadius: 999,
                   fontWeight: 700,
