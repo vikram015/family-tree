@@ -1563,7 +1563,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
                   left: 16,
                   top: 16,
                   zIndex: 2,
-                  borderRadius: 999,
                   fontWeight: 700,
                   textTransform: "none",
                   boxShadow: theme.shadows[3],

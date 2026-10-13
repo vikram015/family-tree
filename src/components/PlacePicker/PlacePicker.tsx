@@ -45,6 +45,8 @@ interface PlacePickerProps {
   helperText?: string;
   /** Marks the field required — the asterisk only; the form still validates. */
   required?: boolean;
+  /** Marks the field invalid; `helperText` then carries the reason. */
+  error?: boolean;
   disabled?: boolean;
   size?: "small" | "medium";
   /**
@@ -82,6 +84,7 @@ export const PlacePicker: React.FC<PlacePickerProps> = ({
   placeholder = "Search for a place",
   helperText,
   required = false,
+  error = false,
   disabled = false,
   size = "medium",
   sx,
@@ -246,6 +249,7 @@ export const PlacePicker: React.FC<PlacePickerProps> = ({
           {...params}
           label={label}
           required={required}
+          error={error}
           placeholder={placeholder}
           helperText={helperText}
           sx={sx}

@@ -579,7 +579,6 @@ export const UserOnboardingPage: React.FC = () => {
   const primaryOnboardingButtonSx = {
     minHeight: 48,
     px: 4,
-    borderRadius: 2,
     bgcolor: onboardingBlue,
     boxShadow: "0 10px 20px rgba(13,110,253,0.22)",
     fontWeight: 800,
@@ -592,7 +591,6 @@ export const UserOnboardingPage: React.FC = () => {
   const secondaryOnboardingButtonSx = {
     minHeight: 48,
     px: 3,
-    borderRadius: 2,
     borderColor: "rgba(13,110,253,0.45)",
     color: onboardingBlue,
     bgcolor: "#ffffff",

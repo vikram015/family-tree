@@ -339,7 +339,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 handleLogout();
                 setDrawerOpen(false);
               }}
-              sx={{ textTransform: "none", fontWeight: 700, borderRadius: 2 }}
+              sx={{ textTransform: "none", fontWeight: 700 }}
             >
               Logout
             </Button>
@@ -354,7 +354,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               sx={{
                 textTransform: "none",
                 fontWeight: 700,
-                borderRadius: 2,
                 py: 1,
                 mb: 1.5,
               }}
@@ -372,7 +371,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               sx={{
                 textTransform: "none",
                 fontWeight: 700,
-                borderRadius: 2,
                 py: 1,
                 color: "#fff",
                 background: brandGradient,
@@ -517,7 +515,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                     sx={{
                       px: 1.5,
                       py: 0.75,
-                      borderRadius: 2,
                       textTransform: "none",
                       fontSize: 14,
                       fontWeight: active ? 600 : 500,
@@ -597,7 +594,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                       pl: 0.75,
                       pr: 1.25,
                       py: 0.5,
-                      borderRadius: 999,
                       border: "1px solid",
                       borderColor: brand.border,
                       bgcolor: "#fff",
@@ -684,7 +680,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                     sx={{
                       textTransform: "none",
                       fontWeight: 600,
-                      borderRadius: 999,
                       px: 1.5,
                       color: brand.slate,
                       "&:hover": {
@@ -704,7 +699,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                     sx={{
                       textTransform: "none",
                       fontWeight: 700,
-                      borderRadius: 999,
                       px: 2.25,
                       py: 0.75,
                       color: "#fff",
@@ -773,7 +767,6 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                       ml: 1,
                       textTransform: "none",
                       fontWeight: 700,
-                      borderRadius: 999,
                       px: 1.5,
                       whiteSpace: "nowrap",
                       color: "#fff",

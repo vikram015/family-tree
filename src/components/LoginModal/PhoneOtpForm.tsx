@@ -66,7 +66,6 @@ export const PhoneOtpForm: React.FC<PhoneOtpFormProps> = ({ auth, size = "page" 
 
   const submitSx = {
     minHeight: isPage ? 56 : 52,
-    borderRadius: 2.5,
     bgcolor: brand.primary,
     boxShadow: "0 14px 30px rgba(13,110,253,0.28)",
     fontWeight: 800,

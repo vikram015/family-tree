@@ -260,7 +260,7 @@ export const SendWishDialog: React.FC<SendWishDialogProps> = ({
                 key={emoji}
                 onClick={() => insertEmoji(emoji)}
                 aria-label={`Insert ${emoji}`}
-                sx={{ fontSize: 20, width: 40, height: 40, borderRadius: 1.5 }}
+                sx={{ fontSize: 20, width: 40, height: 40 }}
               >
                 {emoji}
               </IconButton>
@@ -301,7 +301,6 @@ export const SendWishDialog: React.FC<SendWishDialogProps> = ({
           sx={{
             textTransform: "none",
             fontWeight: 800,
-            borderRadius: 2,
             px: 3,
             bgcolor: brand.primaryDark,
             "&:hover": { bgcolor: "#1e40af" },

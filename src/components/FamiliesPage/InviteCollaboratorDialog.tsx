@@ -64,6 +64,8 @@ interface InviteCollaboratorDialogProps {
   allowFullTree?: boolean;
   /** Why the last attempt failed, shown in the dialog rather than a toast. */
   error?: string | null;
+  /** Problem with the number, shown under the field. */
+  phoneError?: string | null;
   onClose: () => void;
   onInvitePhoneChange: (value: string) => void;
   onInviteRoleChange: (value: string) => void;
@@ -87,6 +89,7 @@ export function InviteCollaboratorDialog({
   lockBranchPerson = false,
   allowFullTree = true,
   error = null,
+  phoneError = null,
   onClose,
   onInvitePhoneChange,
   onInviteRoleChange,
@@ -252,12 +255,14 @@ export function InviteCollaboratorDialog({
       <DialogContent sx={isMobile ? { flex: 1, overflowY: "auto" } : undefined}>
         <Stack spacing={2.5} sx={{ pt: 0.5 }}>
           <DialogContentText sx={{ m: 0 }}>
-            Enter a phone number to invite someone. If they already have an account, access is
+            Enter their mobile number to invite them. If they already have an account, access is
             granted instantly. Otherwise, you'll get a link to share via SMS, WhatsApp, or any app.
           </DialogContentText>
 
           <TextField
-            label="Phone Number (optional)"
+            label="Mobile Number"
+            required
+            error={Boolean(phoneError)}
             placeholder="10 digit mobile number"
             fullWidth
             value={invitePhone}
@@ -292,6 +297,7 @@ export function InviteCollaboratorDialog({
               ) : undefined,
             }}
             helperText={
+              phoneError ||
               contactNotice ||
               (pickedContactName
                 ? `From contacts: ${pickedContactName}`
@@ -405,7 +411,7 @@ export function InviteCollaboratorDialog({
         <Button
           onClick={onCreateInvite}
           variant="contained"
-          disabled={busy || (inviteScope === "branch" && !invitePersonId)}
+          disabled={busy}
         >
           {busy ? "Inviting..." : "Invite"}
         </Button>

@@ -207,7 +207,6 @@ export const ProfessionProfilePage: React.FC = () => {
                   mt: 2.5,
                   textTransform: "none",
                   fontWeight: 800,
-                  borderRadius: 2,
                   px: 2.5,
                   bgcolor: brand.primaryDark,
                   "&:hover": { bgcolor: "#1e40af" },
@@ -290,7 +289,6 @@ export const ProfessionProfilePage: React.FC = () => {
                     sx={{
                       textTransform: "none",
                       fontWeight: 800,
-                      borderRadius: 2,
                       whiteSpace: "nowrap",
                       bgcolor: brand.primaryDark,
                       "&:hover": { bgcolor: "#1e40af" },
@@ -377,7 +375,6 @@ export const ProfessionProfilePage: React.FC = () => {
                     flexShrink: 0,
                     minHeight: 42,
                     px: 2.25,
-                    borderRadius: 2,
                     fontWeight: 700,
                     textTransform: "none",
                     bgcolor: brand.primaryDark,

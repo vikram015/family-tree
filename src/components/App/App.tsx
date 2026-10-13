@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, Suspense } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, Suspense } from "react";
 import {
   ThemeProvider,
   CssBaseline,
@@ -13,6 +13,7 @@ import {
   useSearchParams,
   useLocation,
   useNavigate,
+  useNavigationType,
 } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -87,6 +88,15 @@ function AppContent() {
   );
   const { currentUser, userProfile, loading } = useAuth();
   const treeId = searchParams.get("tree") || "";
+
+  // Pages scroll inside the shell below, not the window, so the browser never
+  // resets it: a page opened from halfway down a list would open halfway down.
+  // Start each newly opened page at the top; Back (POP) is left alone.
+  const scrollShellRef = useRef<HTMLDivElement | null>(null);
+  const navigationType = useNavigationType();
+  useLayoutEffect(() => {
+    if (navigationType !== "POP") scrollShellRef.current?.scrollTo({ top: 0 });
+  }, [location.pathname, navigationType]);
 
   // The footer is shown on standard content pages. It's hidden on full-screen
   // / self-managed-height routes: the tree view (/families), the photos page
@@ -190,6 +200,7 @@ function AppContent() {
       {!isTreeFullscreen && <Header />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box
+          ref={scrollShellRef}
           sx={{
             flex: 1,
             minHeight: 0,

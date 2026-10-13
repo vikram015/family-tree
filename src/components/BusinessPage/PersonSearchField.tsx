@@ -107,6 +107,8 @@ interface PersonSearchFieldProps {
   marriageCandidates?: boolean;
   /** With `marriageCandidates`, drops results from the tree being linked from. */
   excludeTreeId?: string;
+  /** Marks the field invalid and shows this reason under it. */
+  errorText?: string;
 }
 
 export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
@@ -126,6 +128,7 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
   writableOnly = false,
   marriageCandidates = false,
   excludeTreeId,
+  errorText,
 }) => {
   const [searchResults, setSearchResults] = useState<PersonSearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
@@ -258,6 +261,8 @@ export const PersonSearchField: React.FC<PersonSearchFieldProps> = ({
           size="medium"
           autoComplete="off"
           disabled={disabled}
+          error={Boolean(errorText)}
+          helperText={errorText}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">

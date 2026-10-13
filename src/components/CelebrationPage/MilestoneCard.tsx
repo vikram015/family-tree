@@ -187,7 +187,6 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
               variant="contained"
               onClick={onWriteWish}
               sx={{
-                borderRadius: 2,
                 textTransform: "none",
                 fontWeight: 700,
                 px: 2.5,
@@ -201,7 +200,6 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
               startIcon={<ShareIcon />}
               onClick={onShare}
               sx={{
-                borderRadius: 2,
                 textTransform: "none",
                 fontWeight: 600,
                 bgcolor: "rgba(255,255,255,0.7)",
@@ -224,7 +222,7 @@ export const MilestoneCard: React.FC<MilestoneCardProps> = ({
                 }
                 variant="text"
                 startIcon={<AccountTreeIcon />}
-                sx={{ borderRadius: 2, textTransform: "none", fontWeight: 600, color: brand.slate }}
+                sx={{ textTransform: "none", fontWeight: 600, color: brand.slate }}
               >
                 View in tree
               </Button>

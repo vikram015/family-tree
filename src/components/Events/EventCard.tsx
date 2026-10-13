@@ -407,7 +407,6 @@ const EventCard: React.FC<EventCardProps> = ({
               minHeight: 36,
               fontSize: 12.5,
               fontWeight: 700,
-              borderRadius: 2,
               // The theme uppercases buttons app-wide; these carry names and
               // verbs that read as shouting in caps, and wrap to two lines in a
               // 280px card.
@@ -437,7 +436,6 @@ const EventCard: React.FC<EventCardProps> = ({
               minHeight: 36,
               fontSize: 12.5,
               fontWeight: 600,
-              borderRadius: 2,
               textTransform: "none",
               whiteSpace: "nowrap",
               color: brand.slate,

@@ -178,7 +178,6 @@ export const AddDobDialog: React.FC<AddDobDialogProps> = ({
           sx={{
             textTransform: "none",
             fontWeight: 800,
-            borderRadius: 2,
             px: 3,
             bgcolor: brand.primaryDark,
             "&:hover": { bgcolor: "#1e40af" },

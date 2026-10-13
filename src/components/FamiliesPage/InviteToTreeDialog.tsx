@@ -78,6 +78,8 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
   const [personName, setPersonName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Shown under the number field once Invite has been tapped without one. */
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   /** Set once the invite exists: either a link to send, or access granted. */
   const [result, setResult] = useState<
     | { kind: "link"; link: string; text: string; phone: string; personName: string }
@@ -97,6 +99,7 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
     setPhone(localDigits(initialPhone));
     setBusy(false);
     setError(null);
+    setPhoneError(null);
     setResult(null);
     setCopied(false);
   }, [open, person, allowFullTree, initialPhone]);
@@ -122,18 +125,27 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
   const handleCreate = useCallback(async () => {
     if (!treeId) return;
     const branchId = scope === "branch" ? personId || null : null;
+    const digits = localDigits(phone);
+    // The number is required: it ties the link to one person, so a forwarded
+    // invite can't be used by someone else.
+    const phoneProblem = !digits
+      ? "Enter their mobile number."
+      : digits.length !== 10
+        ? "Enter all 10 digits of the mobile number."
+        : null;
+    setPhoneError(phoneProblem);
     if (scope === "branch" && !branchId) {
       setError("Choose the person whose branch they can edit.");
       return;
     }
-    const digits = localDigits(phone);
+    if (phoneProblem) return;
     setBusy(true);
     setError(null);
     try {
       const invite = await ApiService.createTreeInvite(treeId, {
         role,
         personId: branchId,
-        invitedPhone: digits ? `+91${digits}` : null,
+        invitedPhone: `+91${digits}`,
         linkToPerson: Boolean(linkToPerson && branchId),
       });
       if (invite.granted) {
@@ -270,8 +282,12 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         lockBranchPerson={lockPerson}
         allowFullTree={allowFullTree}
         error={error}
+        phoneError={phoneError}
         onClose={onClose}
-        onInvitePhoneChange={(value) => setPhone(value.replace(/\D/g, "").slice(0, 10))}
+        onInvitePhoneChange={(value) => {
+          setPhone(value.replace(/\D/g, "").slice(0, 10));
+          setPhoneError(null);
+        }}
         onInviteRoleChange={setRole}
         onInviteScopeChange={setScope}
         onInvitePersonIdChange={(value) => {

@@ -162,7 +162,6 @@ function readStoredLocationChoice(): string {
 const primaryButtonSx = {
   bgcolor: businessBlue,
   boxShadow: "0 10px 20px rgba(13,110,253,0.18)",
-  borderRadius: 2,
   fontWeight: 800,
   textTransform: "none",
   "&:hover": {

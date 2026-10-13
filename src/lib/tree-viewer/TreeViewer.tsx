@@ -2302,7 +2302,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                 style={{
                   padding: "10px 0",
                   border: "1px solid #455a64",
-                  borderRadius: 8,
+                  borderRadius: 999,
                   background: "#eceff1",
                   color: "#263238",
                   fontWeight: 600,
@@ -2327,7 +2327,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                   style={{
                     padding: "10px 0",
                     border: "1px solid #00796b",
-                    borderRadius: 8,
+                    borderRadius: 999,
                     background: "#e0f2f1",
                     color: "#00695c",
                     fontWeight: 600,
@@ -2348,7 +2348,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                     style={{
                       padding: "10px 0",
                       border: "1px solid #1976d2",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       background: "#e3f2fd",
                       color: "#1565c0",
                       fontWeight: 600,
@@ -2368,7 +2368,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                     style={{
                       padding: "10px 0",
                       border: "1px solid #d32f2f",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       background: "#ffebee",
                       color: "#c62828",
                       fontWeight: 600,
@@ -2403,7 +2403,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                       style={{
                         padding: "10px 0",
                         border: "1px solid #6d4c41",
-                        borderRadius: 8,
+                        borderRadius: 999,
                         background: "#efebe9",
                         color: "#5d4037",
                         fontWeight: 600,
@@ -2424,7 +2424,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                       style={{
                         padding: "10px 0",
                         border: "1px solid #6a1b9a",
-                        borderRadius: 8,
+                        borderRadius: 999,
                         background: "#f3e5f5",
                         color: "#6a1b9a",
                         fontWeight: 600,
@@ -2444,7 +2444,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                     style={{
                       padding: "10px 0",
                       border: "1px solid #4caf50",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       background: "#e8f5e9",
                       color: "#2e7d32",
                       fontWeight: 600,
@@ -2471,7 +2471,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                     style={{
                       padding: "10px 0",
                       border: "1px solid #1976d2",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       background: "#e3f2fd",
                       color: "#1565c0",
                       fontWeight: 600,
@@ -2490,7 +2490,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
                     style={{
                       padding: "10px 0",
                       border: "1px solid #e91e63",
-                      borderRadius: 8,
+                      borderRadius: 999,
                       background: "#fce4ec",
                       color: "#c2185b",
                       fontWeight: 600,

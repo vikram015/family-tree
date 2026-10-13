@@ -44,6 +44,19 @@ export const theme = createTheme({
   shape: {
     borderRadius: 8,
   },
+  // Every button is a pill. This is the one place that decides it — buttons
+  // should not set their own borderRadius, which is how they drifted to a mix
+  // of 8, 16, 20 and 24px.
+  components: {
+    MuiButton: {
+      styleOverrides: { root: { borderRadius: 999 } },
+    },
+    // A toggle group keeps square inner corners between its buttons (MUI's
+    // group styles zero them), so this rounds only the group's two ends.
+    MuiToggleButton: {
+      styleOverrides: { root: { borderRadius: 999 } },
+    },
+  },
 });
 
 export default theme;

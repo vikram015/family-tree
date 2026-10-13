@@ -173,7 +173,6 @@ export const NodePreviewSheet: React.FC<NodePreviewSheetProps> = memo(
               size="medium"
               onClick={() => onViewDetails(node.id)}
               sx={{
-                borderRadius: 2,
                 textTransform: "none",
                 fontWeight: 600,
                 py: 1,

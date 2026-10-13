@@ -166,6 +166,10 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
   const [saving, setSaving] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [error, setError] = useState("");
+  /** Set by the first Save tap; from then on missing fields are marked. */
+  const [showErrors, setShowErrors] = useState(false);
+  const titleRef = useRef<HTMLDivElement | null>(null);
+  const placeRef = useRef<HTMLDivElement | null>(null);
 
   // Reset from the record every time the dialog opens, so a cancelled edit
   // never leaks into the next one.
@@ -226,6 +230,7 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
   useEffect(() => {
     if (!open) return;
     setError("");
+    setShowErrors(false);
     // Paint immediately from whatever the caller had…
     applyProfile(profileRef.current);
 
@@ -253,10 +258,22 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
     };
   }, [open, peopleId, applyProfile]);
 
-  const canSave = useMemo(
-    () => title.trim().length > 0 && Boolean(workPlace?.placeId) && !saving && !loadingProfile,
-    [title, workPlace, saving, loadingProfile],
-  );
+  /**
+   * What's wrong with each required field, worked out from the current values
+   * so a message goes away as soon as the field is fixed.
+   */
+  const fieldErrors = useMemo(() => {
+    const errors: { title?: string; place?: string } = {};
+    if (!title.trim()) errors.title = "A profession title is required.";
+    // Same rule as a business listing, and for the same reason: the directory
+    // is browsed by place. Typed text could not answer "who works near here",
+    // so this has to be a chosen place with coordinates behind it.
+    if (!workPlace?.placeId || workPlace.latitude == null || workPlace.longitude == null) {
+      errors.place = "Choose where you work from the suggestions — it's how people find you.";
+    }
+    return errors;
+  }, [title, workPlace]);
+  const shownErrors = showErrors ? fieldErrors : {};
 
   const updateMilestone = (index: number, patch: Partial<ProfessionMilestone>) => {
     setMilestones((current) =>
@@ -278,15 +295,11 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
   };
 
   const handleSave = async () => {
-    if (!title.trim()) {
-      setError("A profession title is required.");
-      return;
-    }
-    // Same rule as a business listing, and for the same reason: the directory
-    // is browsed by place. Typed text could not answer "who works near here",
-    // so this has to be a chosen place with coordinates behind it.
-    if (!workPlace?.placeId || workPlace.latitude == null || workPlace.longitude == null) {
-      setError("Choose where you work from the suggestions — it's how people find you.");
+    setShowErrors(true);
+    const firstInvalid = fieldErrors.title ? titleRef.current : fieldErrors.place ? placeRef.current : null;
+    if (fieldErrors.title || fieldErrors.place) {
+      setError("");
+      firstInvalid?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     setSaving(true);
@@ -377,8 +390,11 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
             <SectionHeading title="Role" subtitle="What you do, and where." />
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
               <TextField
+                ref={titleRef}
                 label="Profession title"
                 required
+                error={Boolean(shownErrors.title)}
+                helperText={shownErrors.title}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 fullWidth
@@ -603,7 +619,7 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
           <Box sx={{ p: 2.5, bgcolor: "#fff", borderRadius: 3, border: "1px solid #e2e8f0" }}>
             <SectionHeading
               title="How people reach you about work"
-              subtitle="All optional. Your phone number stays hidden until you switch it on."
+              subtitle="Only where you work is required. Your phone number stays hidden until you switch it on."
             />
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 2 }}>
               <TextField
@@ -614,7 +630,7 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
                 fullWidth
                 inputProps={{ autoComplete: "profession-work-email" }}
               />
-              <Box sx={{ gridColumn: { sm: "1 / -1" } }}>
+              <Box ref={placeRef} sx={{ gridColumn: { sm: "1 / -1" } }}>
                 <PlacePicker
                   value={workPlace}
                   onChange={(place) => {
@@ -623,8 +639,11 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
                   }}
                   label="Where you work"
                   required
+                  error={Boolean(shownErrors.place)}
                   placeholder="Search for the city, town, or area"
-                  helperText="Required — this is how people searching nearby find you."
+                  helperText={
+                    shownErrors.place || "Required — this is how people searching nearby find you."
+                  }
                 />
               </Box>
               <TextField
@@ -755,9 +774,9 @@ export const ProfessionFormDialog: React.FC<ProfessionFormDialogProps> = ({
         <Button
           variant="contained"
           onClick={handleSave}
-          disabled={!canSave}
+          disabled={saving || loadingProfile}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
-          sx={{ textTransform: "none", fontWeight: 800, borderRadius: 2, px: 3, bgcolor: brand.primaryDark, "&:hover": { bgcolor: "#1e40af" } }}
+          sx={{ textTransform: "none", fontWeight: 800, px: 3, bgcolor: brand.primaryDark, "&:hover": { bgcolor: "#1e40af" } }}
         >
           {saving ? "Saving…" : "Save profile"}
         </Button>

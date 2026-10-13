@@ -397,7 +397,7 @@ export const OnboardingTreePreviewDialog: React.FC<
                     fullWidth
                     size="large"
                     disableElevation
-                    sx={{ fontWeight: 700, borderRadius: 2, py: 1.1 }}
+                    sx={{ fontWeight: 700, py: 1.1 }}
                     onClick={handleCreateBranchAccessRequest}
                     disabled={actionLoading || isBranchAccessRequested || hasSelectedBranchAccess}
                   >

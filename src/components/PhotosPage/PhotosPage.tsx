@@ -287,7 +287,6 @@ export function PhotosPage() {
             sx={{
               minHeight: 42,
               px: 2.25,
-              borderRadius: 2.5,
               fontWeight: 700,
               fontSize: 14,
               textTransform: "none",
@@ -464,11 +463,11 @@ export function PhotosPage() {
             onChange={(_e, next) => next && setView(next)}
             sx={{
               bgcolor: "#f1f5f9",
-              borderRadius: 2,
+              borderRadius: 999,
               p: 0.25,
               "& .MuiToggleButton-root": {
                 border: 0,
-                borderRadius: "8px !important",
+                borderRadius: "999px !important",
                 px: 1,
                 py: 0.5,
                 color: brand.slateMuted,

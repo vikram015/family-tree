@@ -162,7 +162,7 @@ export const WishComposer: React.FC<WishComposerProps> = ({
               // to the first parameter, which is the after-login callback, and
               // the modal would then try to invoke a MouseEvent on success.
               onClick={() => onRequestSignIn()}
-              sx={{ mt: 2, borderRadius: 2, textTransform: "none", fontWeight: 700, boxShadow: "none" }}
+              sx={{ mt: 2, textTransform: "none", fontWeight: 700, boxShadow: "none" }}
             >
               Sign in to write
             </Button>
@@ -302,7 +302,7 @@ export const WishComposer: React.FC<WishComposerProps> = ({
             variant="contained"
             disabled={!message.trim() || submitting}
             startIcon={submitting ? <CircularProgress size={15} color="inherit" /> : undefined}
-            sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700, px: 3, boxShadow: "none" }}
+            sx={{ textTransform: "none", fontWeight: 700, px: 3, boxShadow: "none" }}
           >
             {submitting ? "Posting…" : "Post"}
           </Button>

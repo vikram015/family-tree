@@ -349,7 +349,7 @@ export const CelebrationPage: React.FC = () => {
           <Button
             variant="contained"
             onClick={() => navigate("/")}
-            sx={{ mt: 2, borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+            sx={{ mt: 2, textTransform: "none", fontWeight: 700 }}
           >
             Go to Kinvia
           </Button>

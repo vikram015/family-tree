@@ -84,7 +84,6 @@ const pillSx = {
   flexShrink: 0,
   px: 1.75,
   height: 32,
-  borderRadius: 2,
   bgcolor: brand.primarySoft,
   border: "1px solid rgba(191, 219, 254, 0.9)",
   color: brand.primaryDark,

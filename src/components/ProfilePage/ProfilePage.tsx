@@ -728,7 +728,7 @@ export const ProfilePage: React.FC = () => {
               variant="outlined"
               startIcon={<EditIcon />}
               onClick={() => setOpenEditProfileDialog(true)}
-              sx={{ borderRadius: 3, textTransform: "none", fontWeight: 700, bgcolor: brand.surface, borderColor: brand.border, color: brand.ink }}
+              sx={{ textTransform: "none", fontWeight: 700, bgcolor: brand.surface, borderColor: brand.border, color: brand.ink }}
             >
               Edit profile
             </Button>
@@ -738,7 +738,7 @@ export const ProfilePage: React.FC = () => {
               variant="contained"
               startIcon={<AccountTreeOutlinedIcon />}
               onClick={handleOpenLinkedProfileInTree}
-              sx={{ borderRadius: 3, textTransform: "none", fontWeight: 700, boxShadow: "none" }}
+              sx={{ textTransform: "none", fontWeight: 700, boxShadow: "none" }}
             >
               Open in tree
             </Button>
@@ -1302,7 +1302,7 @@ export const ProfilePage: React.FC = () => {
                           variant="outlined"
                           startIcon={<AddIcon />}
                           onClick={() => setOpenProfessionDialog(true)}
-                          sx={{ mt: 0.5, borderRadius: 2.5, textTransform: "none", fontWeight: 700, bgcolor: brand.surface }}
+                          sx={{ mt: 0.5, textTransform: "none", fontWeight: 700, bgcolor: brand.surface }}
                         >
                           Add profession
                         </Button>
@@ -1332,7 +1332,7 @@ export const ProfilePage: React.FC = () => {
                           variant="outlined"
                           startIcon={<AddIcon />}
                           onClick={() => handleOpenBusinessDialog()}
-                          sx={{ mt: 0.5, borderRadius: 2.5, textTransform: "none", fontWeight: 700, bgcolor: brand.surface }}
+                          sx={{ mt: 0.5, textTransform: "none", fontWeight: 700, bgcolor: brand.surface }}
                         >
                           Add business
                         </Button>

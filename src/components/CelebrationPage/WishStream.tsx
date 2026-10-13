@@ -408,7 +408,7 @@ const WishBody: React.FC<{
               variant="contained"
               disabled={!draft.trim() || saving}
               onClick={() => void save()}
-              sx={{ textTransform: "none", fontWeight: 700, borderRadius: 2, boxShadow: "none" }}
+              sx={{ textTransform: "none", fontWeight: 700, boxShadow: "none" }}
             >
               {saving ? "Saving…" : "Save"}
             </Button>
@@ -524,7 +524,6 @@ export const WishStream: React.FC<WishStreamProps> = ({
                   sx={{
                     minHeight: 26,
                     px: 1,
-                    borderRadius: 999,
                     textTransform: "none",
                     fontSize: 12,
                     fontWeight: 700,
@@ -590,7 +589,7 @@ export const WishStream: React.FC<WishStreamProps> = ({
                       variant="contained"
                       disabled={!replyText.trim() || sending}
                       onClick={() => void submitReply(wish.id)}
-                      sx={{ textTransform: "none", fontWeight: 700, borderRadius: 2, boxShadow: "none" }}
+                      sx={{ textTransform: "none", fontWeight: 700, boxShadow: "none" }}
                     >
                       {sending ? "Posting…" : "Reply"}
                     </Button>

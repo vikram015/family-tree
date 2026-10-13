@@ -1243,7 +1243,7 @@ export const NodeDetails = memo(function NodeDetails({
                         variant="contained"
                         startIcon={<PersonAddAlt1OutlinedIcon />}
                         onClick={() => onInviteCollaborator(node.id)}
-                        sx={{ height: 48, borderRadius: 999, px: 2.5, fontWeight: 700, textTransform: "none" }}
+                        sx={{ height: 48, px: 2.5, fontWeight: 700, textTransform: "none" }}
                       >
                         Invite collaborator
                       </Button>
@@ -1260,7 +1260,7 @@ export const NodeDetails = memo(function NodeDetails({
                           variant="outlined"
                           startIcon={<PersonAddAlt1OutlinedIcon />}
                           onClick={() => onInvitePerson(node.id)}
-                          sx={{ height: 48, borderRadius: 999, px: 2.5, fontWeight: 700, textTransform: "none" }}
+                          sx={{ height: 48, px: 2.5, fontWeight: 700, textTransform: "none" }}
                         >
                           Invite {inviteFirstName}
                         </Button>

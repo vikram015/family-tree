@@ -206,10 +206,14 @@ export function BusinessFormDialog({
   const [place, setPlace] = useState<PlaceValue | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | undefined>(undefined);
   const [coverUrl, setCoverUrl] = useState<string | undefined>(undefined);
-  const [imageBusy, setImageBusy] = useState(false);
+  // Separate so uploading one image doesn't put a spinner on the other.
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingRecord, setLoadingRecord] = useState(false);
   const [error, setError] = useState("");
+  /** Set by the first Save tap; from then on missing fields are marked. */
+  const [showErrors, setShowErrors] = useState(false);
   /** Set on the first edit, so a late-arriving fetch never clobbers typing. */
   const dirtyRef = useRef(false);
 
@@ -288,6 +292,7 @@ export function BusinessFormDialog({
     if (!open) return;
     populate(business || {}, { withDefaults: true });
     setError("");
+    setShowErrors(false);
     setActiveSection(business?.id ? "visuals" : "details");
     dirtyRef.current = false;
   }, [open, business, populate]);
@@ -419,66 +424,73 @@ export function BusinessFormDialog({
     setActiveSection(current);
   }, [sections]);
 
-  const handleSave = async () => {
-    if (!name.trim()) {
-      setError("Business name is required.");
-      scrollToSection("details");
-      return;
-    }
+  const resolvedPersonId = enableOwnerSelect ? ownerId || null : personId || null;
+
+  /**
+   * What's wrong with each required field, worked out from the current values
+   * so a message goes away as soon as the field is fixed.
+   */
+  const fieldErrors = useMemo(() => {
+    const errors: Partial<
+      Record<"name" | "category" | "owner" | "place" | "contact" | "email", string>
+    > = {};
+    if (!name.trim()) errors.name = "Business name is required.";
     if (!resolvedCategory) {
-      setError("Category is required.");
-      scrollToSection("details");
-      return;
+      errors.category =
+        categorySelect === CUSTOM_CATEGORY ? "Type the category." : "Choose a category.";
     }
-    const resolvedPersonId = enableOwnerSelect ? ownerId || null : personId || null;
-    // Every business belongs to somebody. This used to be checked only when the
-    // dialog showed an owner picker, so the flows that pass an owner in could
-    // save one with `peopleId: null` — an ownerless listing that no profile
-    // links to and nobody can edit.
-    if (!resolvedPersonId) {
-      setError(
-        enableOwnerSelect
-          ? "Search for the owner and pick them from the list."
-          : "This business has no owner. Open it from the owner's profile, or add the owner first.",
-      );
-      scrollToSection(enableOwnerSelect ? "owner" : "details");
-      return;
-    }
-    // Typing a name is not choosing a person: the field keeps whatever was
-    // typed, so a name with no id behind it means nothing was selected.
-    if (enableOwnerSelect && owner.trim() && !ownerId) {
-      setError("Pick the owner from the search results so we know who they are.");
-      scrollToSection("owner");
-      return;
+    // Every business belongs to somebody. Typing a name is not choosing a
+    // person: the field keeps whatever was typed, so a name with no id behind
+    // it means nothing was selected.
+    if (enableOwnerSelect && !ownerId) {
+      errors.owner = owner.trim()
+        ? "Pick the owner from the search results so we know who they are."
+        : "Search for the owner and pick them from the list.";
     }
     // A business with no place cannot be found by anyone searching nearby,
     // which is the main way the directory is used.
     if (!place?.placeId || place.latitude == null || place.longitude == null) {
-      setError("Choose the business location from the suggestions.");
-      scrollToSection("contact");
-      return;
+      errors.place = "Choose the business location from the suggestions.";
     }
-    // A directory listing nobody can ring is not a listing. Matches the app's
-    // existing rule for a phone number (10 digits, as the sign-in flow uses),
-    // while allowing a country code in front of it.
+    // A directory listing nobody can ring is not a listing. 10 digits, as the
+    // sign-in flow uses, while allowing a country code in front of it.
     if (!contact.trim()) {
-      setError("A contact number is required.");
-      scrollToSection("contact");
-      return;
-    }
-    if (contact.replace(/\D/g, "").length < 10) {
-      setError("Enter a 10-digit contact number.");
-      scrollToSection("contact");
-      return;
+      errors.contact = "A contact number is required.";
+    } else if (contact.replace(/\D/g, "").length < 10) {
+      errors.contact = "Enter a 10-digit contact number.";
     }
     if (!email.trim()) {
-      setError("An email address is required.");
-      scrollToSection("contact");
+      errors.email = "An email address is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.email = "Please enter a valid email address.";
+    }
+    return errors;
+  }, [name, resolvedCategory, categorySelect, enableOwnerSelect, ownerId, owner, place, contact, email]);
+  const shownErrors = showErrors ? fieldErrors : {};
+  const footerError =
+    error || (Object.keys(shownErrors).length ? "Please fill in the fields marked in red." : "");
+
+  const handleSave = async () => {
+    setShowErrors(true);
+    // Fields in the order they appear, so the jump lands on the first one.
+    const order: Array<[keyof typeof fieldErrors, SectionId]> = [
+      ["name", "details"],
+      ["category", "details"],
+      ["place", "contact"],
+      ["contact", "contact"],
+      ["email", "contact"],
+      ["owner", "owner"],
+    ];
+    const firstInvalid = order.find(([field]) => fieldErrors[field]);
+    if (firstInvalid) {
+      setError("");
+      scrollToSection(firstInvalid[1]);
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("Please enter a valid email address.");
-      scrollToSection("contact");
+    // The flows that pass an owner in could otherwise save one with
+    // `peopleId: null` — an ownerless listing nobody can edit.
+    if (!resolvedPersonId) {
+      setError("This business has no owner. Open it from the owner's profile, or add the owner first.");
       return;
     }
 
@@ -710,14 +722,14 @@ export function BusinessFormDialog({
                         currentPhoto={logoUrl}
                         previewVariant="rounded"
                         previewSize={104}
-                        uploading={imageBusy}
+                        uploading={logoBusy}
                         // A shop logo is a file someone already has, not a photo
                         // they take on the spot — and the trigger belongs on the
                         // image, the way every app does an avatar.
                         allowCamera={false}
                         triggerVariant="overlay"
                         onCropped={async (blob) => {
-                          setImageBusy(true);
+                          setLogoBusy(true);
                           try {
                             setLogoUrl(
                               await ApiService.uploadBusinessImage(business.id!, "logo", blob),
@@ -725,18 +737,18 @@ export function BusinessFormDialog({
                           } catch (e: any) {
                             setError(e?.message || "Failed to upload the logo.");
                           } finally {
-                            setImageBusy(false);
+                            setLogoBusy(false);
                           }
                         }}
                         onRemove={async () => {
-                          setImageBusy(true);
+                          setLogoBusy(true);
                           try {
                             await ApiService.removeBusinessImage(business.id!, "logo");
                             setLogoUrl(undefined);
                           } catch (e: any) {
                             setError(e?.message || "Failed to remove the logo.");
                           } finally {
-                            setImageBusy(false);
+                            setLogoBusy(false);
                           }
                         }}
                       />
@@ -769,7 +781,22 @@ export function BusinessFormDialog({
                         p: 1.25,
                       }}
                     >
-                      {!coverUrl && (
+                      {coverBusy && (
+                        <Box
+                          sx={{
+                            position: "absolute",
+                            inset: 0,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            bgcolor: "rgba(255,255,255,0.6)",
+                            zIndex: 2,
+                          }}
+                        >
+                          <CircularProgress size={28} />
+                        </Box>
+                      )}
+                      {!coverUrl && !coverBusy && (
                         <Typography
                           sx={{
                             position: "absolute",
@@ -788,7 +815,7 @@ export function BusinessFormDialog({
                         component="label"
                         size="small"
                         variant="contained"
-                        disabled={imageBusy}
+                        disabled={coverBusy}
                         sx={{ textTransform: "none", fontWeight: 700, zIndex: 1 }}
                       >
                         {coverUrl ? "Replace" : "Upload"}
@@ -800,7 +827,7 @@ export function BusinessFormDialog({
                             const file = e.target.files?.[0];
                             e.target.value = "";
                             if (!file) return;
-                            setImageBusy(true);
+                            setCoverBusy(true);
                             try {
                               setCoverUrl(
                                 await ApiService.uploadBusinessImage(business.id!, "cover", file),
@@ -808,7 +835,7 @@ export function BusinessFormDialog({
                             } catch (err: any) {
                               setError(err?.message || "Failed to upload the cover photo.");
                             } finally {
-                              setImageBusy(false);
+                              setCoverBusy(false);
                             }
                           }}
                         />
@@ -818,17 +845,17 @@ export function BusinessFormDialog({
                           size="small"
                           variant="contained"
                           color="inherit"
-                          disabled={imageBusy}
+                          disabled={coverBusy}
                           sx={{ textTransform: "none", fontWeight: 700, zIndex: 1 }}
                           onClick={async () => {
-                            setImageBusy(true);
+                            setCoverBusy(true);
                             try {
                               await ApiService.removeBusinessImage(business.id!, "cover");
                               setCoverUrl(undefined);
                             } catch (err: any) {
                               setError(err?.message || "Failed to remove the cover photo.");
                             } finally {
-                              setImageBusy(false);
+                              setCoverBusy(false);
                             }
                           }}
                         >
@@ -860,7 +887,11 @@ export function BusinessFormDialog({
                   onChange={(e) => edited(setName)(e.target.value)}
                   fullWidth
                   required
-                  autoFocus
+                  // Focusing opens the keyboard on a phone, covering the form
+                  // before it has been read — only worth it on a new desktop form.
+                  autoFocus={!isEdit && !fullScreen}
+                  error={Boolean(shownErrors.name)}
+                  helperText={shownErrors.name}
                   placeholder="Shop or company name"
                   InputProps={{ startAdornment: adornment(<BusinessIcon fontSize="small" />) }}
                   sx={{ gridColumn: { md: "1 / -1" } }}
@@ -880,7 +911,11 @@ export function BusinessFormDialog({
                   sx={{ gridColumn: { md: "1 / -1" } }}
                 />
 
-                <FormControl fullWidth required>
+                <FormControl
+                  fullWidth
+                  required
+                  error={Boolean(shownErrors.category && categorySelect !== CUSTOM_CATEGORY)}
+                >
                   <InputLabel shrink>Category</InputLabel>
                   <Select
                     value={categorySelect}
@@ -899,6 +934,9 @@ export function BusinessFormDialog({
                     ))}
                     <MenuItem value={CUSTOM_CATEGORY}>Other (type your own)</MenuItem>
                   </Select>
+                  {shownErrors.category && categorySelect !== CUSTOM_CATEGORY && (
+                    <FormHelperText>{shownErrors.category}</FormHelperText>
+                  )}
                 </FormControl>
 
                 {categorySelect === CUSTOM_CATEGORY ? (
@@ -907,6 +945,9 @@ export function BusinessFormDialog({
                     value={customCategory}
                     onChange={(e) => edited(setCustomCategory)(e.target.value)}
                     fullWidth
+                    required
+                    error={Boolean(shownErrors.category)}
+                    helperText={shownErrors.category}
                     placeholder="e.g. Catering, Transport"
                     InputProps={{
                       startAdornment: adornment(<CategoryOutlinedIcon fontSize="small" />),
@@ -1006,8 +1047,12 @@ export function BusinessFormDialog({
                     onChange={edited(setPlace)}
                     label="Location"
                     required
+                    error={Boolean(shownErrors.place)}
                     placeholder="Search for the town, area, or landmark"
-                    helperText="Required — this is how people searching nearby find the business."
+                    helperText={
+                      shownErrors.place ||
+                      "Required — this is how people searching nearby find the business."
+                    }
                   />
                 </Box>
 
@@ -1027,6 +1072,8 @@ export function BusinessFormDialog({
                   value={contact}
                   onChange={(e) => edited(setContact)(e.target.value)}
                   fullWidth
+                  error={Boolean(shownErrors.contact)}
+                  helperText={shownErrors.contact}
                   placeholder="Phone number"
                   InputProps={{ startAdornment: adornment(<PhoneOutlinedIcon fontSize="small" />) }}
                 />
@@ -1038,6 +1085,8 @@ export function BusinessFormDialog({
                   value={email}
                   onChange={(e) => edited(setEmail)(e.target.value)}
                   fullWidth
+                  error={Boolean(shownErrors.email)}
+                  helperText={shownErrors.email}
                   placeholder="Email"
                   InputProps={{ startAdornment: adornment(<EmailOutlinedIcon fontSize="small" />) }}
                 />
@@ -1092,6 +1141,7 @@ export function BusinessFormDialog({
                     selectedPerson={ownerId ? { id: ownerId, name: owner } : null}
                     locationId={locationId}
                     writableOnly
+                    errorText={shownErrors.owner}
                     startIcon={<PersonOutlineIcon fontSize="small" />}
                   />
                 ) : (
@@ -1145,9 +1195,9 @@ export function BusinessFormDialog({
           borderColor: brand.border,
         }}
       >
-        {error ? (
+        {footerError ? (
           <FormHelperText error sx={{ mr: "auto", fontSize: 13 }}>
-            {error}
+            {footerError}
           </FormHelperText>
         ) : (
           <Typography sx={{ mr: "auto", fontSize: 13, color: brand.slateMuted }}>
@@ -1162,7 +1212,7 @@ export function BusinessFormDialog({
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={saving || loadingRecord || !name.trim() || !resolvedCategory}
+          disabled={saving || loadingRecord}
           sx={{ fontWeight: 700, minHeight: 44, px: 3 }}
         >
           {saving

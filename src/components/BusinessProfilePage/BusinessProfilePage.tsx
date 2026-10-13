@@ -579,7 +579,6 @@ export const BusinessProfilePage: React.FC = () => {
                         sx={{
                           textTransform: "none",
                           fontWeight: 800,
-                          borderRadius: 2,
                           px: 2.5,
                           bgcolor: brand.primaryDark,
                           "&:hover": { bgcolor: "#1e40af" },
