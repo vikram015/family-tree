@@ -310,10 +310,12 @@ export const HomePage: React.FC = () => {
     return (
       <>
         <Helmet>
-          <title>Kinvia - Preserve Your Family Legacy</title>
+          {/* Same title and description as index.html — this is what search
+              engines see once the page runs, so the two must not disagree. */}
+          <title>Kinvia – Your Family Tree, Celebrations & Family Business Directory</title>
           <meta
             name="description"
-            content="Kinvia helps families preserve lineage, stories, and relationships for future generations."
+            content="Build your family tree together with relatives, link yourself to your own profile, and keep everyone close: birthdays, anniversaries and remembrances, family businesses and careers, photos, and village family trees. Free, in English and Hindi."
           />
         </Helmet>
         <LandingPage

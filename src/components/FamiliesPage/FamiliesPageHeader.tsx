@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Chip,
+  IconButton,
   Paper,
   Stack,
   ToggleButton,
@@ -12,6 +13,7 @@ import {
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { alpha } from "@mui/material/styles";
 import { SourceSelect } from "../SourceSelect/SourceSelect";
 import { TreePersonSearch } from "./TreePersonSearch";
@@ -54,6 +56,13 @@ interface FamiliesPageHeaderProps {
   onSearchSelect: (personId: string) => void;
   pendingRequestsCount?: number;
   onPendingRequestsClick?: () => void;
+  /** Shown in place of the "Family Tree" title when `onBack` is set. */
+  treeName?: string;
+  /**
+   * Phone layout: the tree was picked from the tree list, so the header leads
+   * with a way back to it and the tree's name, and drops the tree picker.
+   */
+  onBack?: () => void;
 }
 
 export function FamiliesPageHeader({
@@ -70,6 +79,8 @@ export function FamiliesPageHeader({
   onSearchSelect,
   pendingRequestsCount = 0,
   onPendingRequestsClick,
+  treeName,
+  onBack,
 }: FamiliesPageHeaderProps) {
   return (
     <Box
@@ -77,9 +88,21 @@ export function FamiliesPageHeader({
         px: { xs: 1.25, sm: 2, md: 3 },
         pt: { xs: 0.75, sm: 1.5 },
         pb: { xs: 0.75, sm: 1.5 },
-        borderBottom: "1px solid",
-        borderColor: "divider",
-        background: pageGradient,
+        // On a phone this is the screen's only bar (the app header is hidden
+        // over a tree), so it is drawn as an app bar: a solid surface lifted
+        // above the canvas by a shadow, not a strip of the page background.
+        ...(onBack
+          ? {
+              position: "relative",
+              zIndex: (theme) => theme.zIndex.appBar,
+              bgcolor: "background.paper",
+              boxShadow: "0 2px 4px -1px rgba(15,23,42,0.10), 0 4px 10px 0 rgba(15,23,42,0.08)",
+            }
+          : {
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              background: pageGradient,
+            }),
       }}
     >
       <Stack spacing={{ xs: 0.875, sm: 1.25 }}>
@@ -96,18 +119,47 @@ export function FamiliesPageHeader({
               direction="row"
               spacing={1}
               alignItems="center"
-              sx={{ flexWrap: "wrap", width: "100%", mb: { xs: 0.25, sm: 0.75 } }}
+              sx={{
+                // The back bar keeps the name and the toggle on one line; the
+                // name truncates instead of wrapping.
+                flexWrap: onBack ? "nowrap" : "wrap",
+                width: "100%",
+                mb: { xs: 0.25, sm: 0.75 },
+              }}
             >
-              <Typography variant={isMobile ? "h6" : "h4"} sx={{ fontWeight: 800 }}>
-                Family Tree
-              </Typography>
-              <Chip
-                icon={treeStatus.icon}
-                label={treeStatus.label}
-                color={treeStatus.color}
-                variant={treeStatus.color === "default" ? "outlined" : "filled"}
-                size="small"
-              />
+              {onBack ? (
+                <>
+                  <IconButton
+                    aria-label="Back to your trees"
+                    onClick={onBack}
+                    edge="start"
+                    size="small"
+                    sx={{ color: "text.primary" }}
+                  >
+                    <ArrowBackIcon />
+                  </IconButton>
+                  <Typography
+                    variant="h6"
+                    noWrap
+                    sx={{ fontWeight: 800, minWidth: 0, flex: "1 1 auto", ml: "4px !important" }}
+                  >
+                    {treeName || "Family Tree"}
+                  </Typography>
+                </>
+              ) : (
+                <>
+                  <Typography variant={isMobile ? "h6" : "h4"} sx={{ fontWeight: 800 }}>
+                    Family Tree
+                  </Typography>
+                  <Chip
+                    icon={treeStatus.icon}
+                    label={treeStatus.label}
+                    color={treeStatus.color}
+                    variant={treeStatus.color === "default" ? "outlined" : "filled"}
+                    size="small"
+                  />
+                </>
+              )}
               {pendingRequestsCount > 0 && (
                 <Chip
                   icon={<PendingActionsOutlinedIcon />}
@@ -136,7 +188,7 @@ export function FamiliesPageHeader({
                 </ToggleButton>
               </ToggleButtonGroup>
             </Stack>
-            {!isMobile && (
+            {!isMobile && !onBack && (
               <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 780 }}>
                 {treeStatus.description}
               </Typography>
@@ -204,7 +256,8 @@ export function FamiliesPageHeader({
             }}
           >
             <Stack spacing={{ xs: 0.75, sm: 1 }}>
-              <SourceSelect onChange={onSourceChange} />
+              {/* The tree list is the picker on phones. */}
+              {!onBack && <SourceSelect onChange={onSourceChange} />}
               {nodes.length > 0 && (
                 <TreePersonSearch nodes={nodes} onSelect={onSearchSelect} />
               )}
@@ -222,7 +275,7 @@ export function FamiliesPageHeader({
           </Stack>
         )}
 
-        {!treeId && (
+        {!treeId && !onBack && (
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
             Select a tree to begin browsing.
           </Typography>

@@ -1,39 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Public pages only: what a visitor can open without signing in.
+
+  Left out on purpose: /families, /business (the directory), /photos, /profile,
+  /requests and /admin all need an account — a crawler would only ever index a
+  sign-in prompt. Public business (/business/:id), career (/profession/:id) and
+  celebration (/celebration/:id) pages are reachable via shared links and are
+  not listed here individually. /famous is a placeholder and isn't linked.
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://kinvia.in/</loc>
-    <lastmod>2026-01-05</lastmod>
+    <lastmod>2026-10-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://kinvia.in/families</loc>
-    <lastmod>2026-01-05</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <loc>https://kinvia.in/locations</loc>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://kinvia.in/heritage</loc>
-    <lastmod>2026-01-05</lastmod>
+    <loc>https://kinvia.in/about</loc>
+    <lastmod>2026-10-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://kinvia.in/famous</loc>
-    <lastmod>2026-01-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kinvia.in/business</loc>
-    <lastmod>2026-01-05</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://kinvia.in/contact</loc>
-    <lastmod>2026-01-05</lastmod>
+    <loc>https://kinvia.in/faq</loc>
+    <lastmod>2026-10-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kinvia.in/privacy-policy</loc>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://kinvia.in/terms</loc>
+    <lastmod>2026-10-15</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
   </url>
 </urlset>

@@ -6,7 +6,6 @@ import {
   Typography,
   Box,
   Card,
-  CardActionArea,
   CardContent,
   Paper,
   Stack,
@@ -29,17 +28,14 @@ import {
   Tooltip,
   InputAdornment,
 } from "@mui/material";
+import { ProfessionPersonCard } from "./ProfessionPersonCard";
 import BusinessIcon from "@mui/icons-material/Business";
 import HandshakeIcon from "@mui/icons-material/Handshake";
 import AddIcon from "@mui/icons-material/Add";
-import WorkOutlineIcon from "@mui/icons-material/WorkOutline";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PersonIcon from "@mui/icons-material/Person";
-import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import PlaceIcon from "@mui/icons-material/Place";
 import SearchIcon from "@mui/icons-material/Search";
 import { useLocations } from "../hooks/useLocations";
 import { useAuth } from "../hooks/useAuth";
@@ -244,6 +240,8 @@ const OwnerLink: React.FC<{
 };
 
 export const BusinessPage: React.FC = () => {
+  /** Professions are filtered by category with pills, as in the design. */
+  const [professionCategory, setProfessionCategory] = useState("all");
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { selectedLocation, setSelectedLocation, locations } = useLocations();
@@ -269,8 +267,6 @@ export const BusinessPage: React.FC = () => {
   const [manageableOwnerIds, setManageableOwnerIds] = useState<Set<string>>(
     new Set(),
   );
-  const canEditPerson = (personId?: string | null) =>
-    Boolean(personId && manageableOwnerIds.has(personId));
   const canEditBusiness = (business: { ownerId?: string | null }) =>
     Boolean(business.ownerId && manageableOwnerIds.has(business.ownerId));
 
@@ -707,24 +703,6 @@ export const BusinessPage: React.FC = () => {
     setProfessionSearchInput("");
   };
 
-  const handleRemoveProfession = async (
-    personId: string,
-    professionId: string,
-  ) => {
-    try {
-      await ApiService.removeProfessionFromPerson(personId, professionId);
-
-      setNearbyProfessionsVersion((v) => v + 1);
-      // Refresh professions data by dispatching Redux action
-      if (selectedLocation) {
-        dispatch(fetchProfessionsData(selectedLocation));
-      }
-    } catch (error) {
-      console.error("Error removing profession:", error);
-      alert("Error removing profession");
-    }
-  };
-
   /**
    * Counted over the list actually on screen, which is the radius result
    * whenever there is a centre. Counting the village fetch instead left the
@@ -973,43 +951,13 @@ export const BusinessPage: React.FC = () => {
       });
 
   /**
-   * The professions directory, derived from the people actually being shown.
-   *
-   * It used to read `professionsWithCount` straight from redux, which is always
-   * the village-scoped fetch — so it kept listing the old village's trades and
-   * people after the user moved the search somewhere else, and ignored the
-   * search box entirely. Grouping the resolved list instead means every section
-   * on the page answers for the same place and the same query.
+   * A person's category for the filter pills: the vocabulary category
+   * their profile sits under, else their profile's sector.
    */
-  const professionGroups = (() => {
-    const groups = new Map<string, any>();
-    for (const item of filteredPeopleWithProfessions) {
-      const person = item.person as any;
-      for (const prof of item.professions) {
-        if (!prof?.id) continue;
-        if (!groups.has(prof.id)) {
-          groups.set(prof.id, {
-            professionId: prof.id,
-            professionName: prof.name,
-            professionDescription: prof.description,
-            professionCategory: prof.category,
-            people: [],
-          });
-        }
-        groups.get(prof.id).people.push({
-          personId: person.id,
-          personName: person.name,
-          treeId: person.treeId,
-          casteName: person.casteName,
-          subCasteName: person.subCasteName,
-          parentHierarchy: person.parentHierarchy || [],
-        });
-      }
-    }
-    return [...groups.values()].sort((a, b) =>
-      String(a.professionName || "").localeCompare(String(b.professionName || "")),
-    );
-  })();
+  const professionCategoryOf = (item: { professions: any[]; profile?: any }) =>
+    item.professions.find((prof) => prof?.category)?.category ||
+    (item as any).profile?.sector ||
+    "Other";
 
   // Likewise float the user's own profession card to the top.
   const orderedPeopleWithProfessions = myPeopleId
@@ -1019,6 +967,27 @@ export const BusinessPage: React.FC = () => {
           (b.person.id === myPeopleId ? 0 : 1),
       )
     : filteredPeopleWithProfessions;
+
+  // The category pills, with counts, over the people being shown.
+  const phoneProfessionCategories = (() => {
+    const counts = new Map<string, number>();
+    for (const item of orderedPeopleWithProfessions) {
+      const category = professionCategoryOf(item);
+      counts.set(category, (counts.get(category) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  })();
+  const activeProfessionCategory = phoneProfessionCategories.some(
+    ([category]) => category === professionCategory,
+  )
+    ? professionCategory
+    : "all";
+  const professionPeopleOnScreen =
+    activeProfessionCategory !== "all"
+      ? orderedPeopleWithProfessions.filter(
+          (item) => professionCategoryOf(item) === activeProfessionCategory,
+        )
+      : orderedPeopleWithProfessions;
 
   const benefits = [
     {
@@ -1691,336 +1660,78 @@ export const BusinessPage: React.FC = () => {
                 same place and search as the businesses above.
               </Typography>
 
+              {phoneProfessionCategories.length > 1 && (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{
+                    mb: 2,
+                    mx: { xs: -2, md: 0 },
+                    px: { xs: 2, md: 0 },
+                    overflowX: "auto",
+                    scrollbarWidth: "none",
+                    "&::-webkit-scrollbar": { display: "none" },
+                  }}
+                >
+                  {[["all", orderedPeopleWithProfessions.length] as [string, number], ...phoneProfessionCategories].map(
+                    ([category, count]) => {
+                      const active = activeProfessionCategory === category;
+                      return (
+                        <Chip
+                          key={category}
+                          clickable
+                          aria-pressed={active}
+                          onClick={() => setProfessionCategory(category)}
+                          label={`${category === "all" ? "All" : category} (${count})`}
+                          sx={{
+                            flexShrink: 0,
+                            fontWeight: 700,
+                            ...(active
+                              ? { bgcolor: brand.primary, color: "#fff", "&:hover": { bgcolor: brand.primaryDark } }
+                              : { bgcolor: brand.surface, color: brand.slate, border: `1px solid ${BORDER_SUBTLE}` }),
+                          }}
+                        />
+                      );
+                    },
+                  )}
+                </Stack>
+              )}
+
               {nearbyProfessionsLoading && centre?.latitude != null ? (
                 <Box sx={{ textAlign: "center", py: 6 }}>
                   <CircularProgress />
                 </Box>
-              ) : orderedPeopleWithProfessions.length > 0 ? (
+              ) : professionPeopleOnScreen.length > 0 ? (
                 <Box
                   sx={{
                     display: "grid",
+                    // minmax(0, …): a plain 1fr column won't shrink below
+                    // its content, and the cards' one-line names and titles
+                    // pushed a phone's column wider than the screen.
                     gridTemplateColumns: {
-                      xs: "1fr",
-                      sm: "1fr 1fr",
-                      md: "repeat(3, 1fr)",
+                      xs: "minmax(0, 1fr)",
+                      sm: "repeat(2, minmax(0, 1fr))",
+                      md: "repeat(3, minmax(0, 1fr))",
                     },
                     gap: 2,
                   }}
                 >
-                  {orderedPeopleWithProfessions.map((item) => {
+                  {professionPeopleOnScreen.map((item) => {
                     const profile: ProfessionProfileSummary | null =
                       (item as any).profile || null;
-                    const experience =
-                      profile?.totalExperienceYears != null &&
-                      Number(profile.totalExperienceYears) > 0
-                        ? `${Number(profile.totalExperienceYears)} yr${Number(profile.totalExperienceYears) === 1 ? "" : "s"}`
-                        : null;
-                    const facts = [
-                      profile?.organization
-                        ? { icon: <BusinessOutlinedIcon sx={{ fontSize: 15, color: mutedText }} />, label: "Works at", value: profile.organization }
-                        : null,
-                      experience
-                        ? { icon: <TimelineIcon sx={{ fontSize: 15, color: mutedText }} />, label: "Experience", value: experience }
-                        : null,
-                      profile?.workLocation
-                        ? { icon: <PlaceIcon sx={{ fontSize: 15, color: mutedText }} />, label: "Based in", value: profile.workLocation }
-                        : null,
-                      // Present only when its owner published it — the server
-                      // sends null to everyone else.
-                      profile?.contactPhone
-                        ? {
-                            icon: <PhoneIcon sx={{ fontSize: 15, color: mutedText }} />,
-                            label: "Phone",
-                            value: profile.contactPhone,
-                            href: `tel:${profile.contactPhone.replace(/[^\d+]/g, "")}`,
-                          }
-                        : null,
-                    ].filter(Boolean) as Array<{
-                      icon: React.ReactNode;
-                      label: string;
-                      value: string;
-                      href?: string;
-                    }>;
-
-                    // The profession tags, as a headline for people with no
-                    // career profile of their own.
-                    const professionHeadline = item.professions
-                      .map((prof) => prof.name)
-                      .filter(Boolean)
-                      .join(" · ");
-
                     return (
-                      <Card
+                      <ProfessionPersonCard
                         key={item.person.id}
-                        sx={{
-                          ...cardSx,
-                          display: "flex",
-                          flexDirection: "column",
-                          bgcolor: brand.surface,
-                          borderRadius: 3,
-                          overflow: "hidden",
-                          transition: "transform 200ms ease, box-shadow 200ms ease",
-                          "@media (hover: hover)": {
-                            "&:hover": {
-                              transform: "translateY(-4px)",
-                              boxShadow:
-                                "0 12px 28px -6px rgba(29, 78, 216, 0.12), 0 4px 8px -2px rgba(15, 23, 42, 0.04)",
-                            },
-                          },
+                        person={item.person as any}
+                        profile={profile}
+                        professionNames={item.professions.map((prof) => prof.name)}
+                        distanceKm={(item as any).distanceKm}
+                        canEdit={canEditProfessionProfile(item.person.id)}
+                        onEdit={() => {
+                          setProfessionEditorProfile(profile);
+                          setProfessionEditorPersonId(item.person.id);
                         }}
-                      >
-                        {/* The body is the link: a profession is a thing you
-                            open, like a business, not a row of tags. The tag
-                            chips and the add control stay outside it, since
-                            they are their own actions. */}
-                        <CardActionArea
-                          component={RouterLink}
-                          to={`/profession/${item.person.id}`}
-                          sx={{ flexGrow: 1, alignItems: "stretch" }}
-                        >
-                          <CardContent sx={{ p: 3, pb: 2 }}>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 1,
-                                mb: 2,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <Box
-                                sx={{
-                                  width: 40,
-                                  height: 40,
-                                  borderRadius: 2,
-                                  bgcolor: `${businessBlue}14`,
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <WorkOutlineIcon sx={{ color: businessBlue, fontSize: 20 }} />
-                              </Box>
-                              {profile?.sector && (
-                                <Chip
-                                  label={profile.sector}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{
-                                    borderColor: `${businessBlue}55`,
-                                    color: businessBlue,
-                                    fontWeight: 700,
-                                    bgcolor: brand.surface,
-                                    maxWidth: 160,
-                                  }}
-                                />
-                              )}
-                              {profile?.mentorshipAvailable && (
-                                <Chip
-                                  label="Mentors"
-                                  size="small"
-                                  sx={{
-                                    bgcolor: "#ECFDF5",
-                                    color: "#047857",
-                                    fontWeight: 700,
-                                  }}
-                                />
-                              )}
-                            </Box>
-
-                            <Tooltip
-                              title={
-                                <Box sx={{ p: 1 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {item.person.name}
-                                  </Typography>
-                                  {(item.person as any).casteName && (
-                                    <Typography variant="caption" display="block">
-                                      Caste: {(item.person as any).casteName}
-                                    </Typography>
-                                  )}
-                                  {(item.person as any).subCasteName && (
-                                    <Typography variant="caption" display="block">
-                                      Sub-Caste: {(item.person as any).subCasteName}
-                                    </Typography>
-                                  )}
-                                  <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                                    🧬{" "}
-                                    {(item.person as any).parentHierarchy &&
-                                    (item.person as any).parentHierarchy.length > 0
-                                      ? (item.person as any).parentHierarchy
-                                          .slice(-5)
-                                          .map((a: any) => a.name)
-                                          .join(" → ")
-                                      : "No ancestry data"}
-                                  </Typography>
-                                </Box>
-                              }
-                            >
-                              <Typography
-                                variant="h6"
-                                sx={{ fontWeight: 900, color: slateText, letterSpacing: 0 }}
-                              >
-                                {item.person.name}
-                              </Typography>
-                            </Tooltip>
-
-                            {/* A career profile is the better headline, but most
-                                people only have the profession tag they were
-                                given — and that came down in this same response.
-                                Falling through to it means the card names what
-                                the person does instead of announcing what the
-                                record is missing. */}
-                            {profile?.title ? (
-                              <Typography
-                                sx={{ fontSize: 14, fontWeight: 700, color: businessBlue, mb: 0.75 }}
-                              >
-                                {profile.title}
-                                {profile.subSpecialization ? ` · ${profile.subSpecialization}` : ""}
-                              </Typography>
-                            ) : professionHeadline ? (
-                              <Typography
-                                sx={{ fontSize: 14, fontWeight: 700, color: businessBlue, mb: 0.75 }}
-                              >
-                                {professionHeadline}
-                              </Typography>
-                            ) : (
-                              <Typography sx={{ fontSize: 13.5, color: mutedText, mb: 0.75 }}>
-                                No profession recorded yet
-                              </Typography>
-                            )}
-
-                            {profile?.summary && (
-                              <Box
-                                sx={{
-                                  color: mutedText,
-                                  fontSize: 14,
-                                  lineHeight: 1.5,
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                  overflow: "hidden",
-                                }}
-                              >
-                                <RichText value={profile.summary} />
-                              </Box>
-                            )}
-                          </CardContent>
-                        </CardActionArea>
-
-                        {facts.length > 0 && (
-                          <Box
-                            sx={{
-                              px: 3,
-                              py: 1.75,
-                              bgcolor: CARD_FOOTER_BG,
-                              borderTop: `1px solid ${BORDER_SUBTLE}`,
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: 1,
-                            }}
-                          >
-                            {facts.map((fact) => (
-                              <Stack
-                                key={fact.label}
-                                direction="row"
-                                alignItems="center"
-                                justifyContent="space-between"
-                                spacing={1}
-                              >
-                                <Stack direction="row" alignItems="center" spacing={0.75}>
-                                  {fact.icon}
-                                  <Typography sx={{ fontSize: 11.5, color: mutedText }}>
-                                    {fact.label}
-                                  </Typography>
-                                </Stack>
-                                <Typography
-                                  noWrap
-                                  {...(fact.href
-                                    ? { component: "a" as const, href: fact.href }
-                                    : {})}
-                                  sx={{
-                                    fontSize: 13,
-                                    fontWeight: 700,
-                                    color: fact.href ? businessBlue : slateText,
-                                    textDecoration: "none",
-                                    minWidth: 0,
-                                  }}
-                                >
-                                  {fact.value}
-                                </Typography>
-                              </Stack>
-                            ))}
-                          </Box>
-                        )}
-
-                        {/* Tags and the controls that act on them. Outside the
-                            link so a chip's delete button isn't nested in an
-                            anchor, and so tapping a tag can't open the page. */}
-                        <Box
-                          sx={{
-                            px: 3,
-                            py: 2,
-                            borderTop: `1px solid ${BORDER_SUBTLE}`,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 1.25,
-                          }}
-                        >
-                          {item.professions.length > 0 ? (
-                            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }} useFlexGap>
-                              {item.professions.map((prof) => (
-                                <Chip
-                                  key={prof.id}
-                                  label={prof.name}
-                                  onDelete={
-                                    canEditPerson(item.person.id)
-                                      ? () => handleRemoveProfession(item.person.id, prof.id)
-                                      : undefined
-                                  }
-                                  variant="outlined"
-                                  size="small"
-                                />
-                              ))}
-                            </Stack>
-                          ) : (
-                            <Typography variant="body2" sx={{ color: mutedText }}>
-                              No profession tags added yet
-                            </Typography>
-                          )}
-
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            justifyContent="space-between"
-                            spacing={1}
-                          >
-                            <Button
-                              size="small"
-                              startIcon={<PersonIcon sx={{ fontSize: 16 }} />}
-                              onClick={() => navigate(`/profile/person/${item.person.id}`)}
-                              sx={{ textTransform: "none", px: 0.5 }}
-                            >
-                              Family profile
-                            </Button>
-                            {canEditProfessionProfile(item.person.id) && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => {
-                                  setProfessionEditorProfile(profile);
-                                  setProfessionEditorPersonId(item.person.id);
-                                }}
-                                startIcon={profile ? <EditIcon /> : <AddIcon />}
-                                sx={{ whiteSpace: "nowrap", textTransform: "none" }}
-                              >
-                                {profile ? "Edit profession" : "Add profession"}
-                              </Button>
-                            )}
-                          </Stack>
-                        </Box>
-                      </Card>
+                      />
                     );
                   })}
                 </Box>
@@ -2053,161 +1764,6 @@ export const BusinessPage: React.FC = () => {
                 </Paper>
               )}
             </Box>
-
-            <Divider sx={{ my: 6 }} />
-
-            {/* Professions Categories with People */}
-            {professionGroups.length > 0 && (
-              <Box sx={{ mb: 8 }}>
-                <Typography
-                  variant="h4"
-                  gutterBottom
-                  sx={{ textAlign: "center", fontWeight: 700, mb: 6 }}
-                >
-                  Professions Directory
-                </Typography>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gridTemplateColumns: {
-                      xs: "1fr",
-                      sm: "1fr 1fr",
-                      md: "1fr 1fr 1fr",
-                    },
-                    gap: 3,
-                  }}
-                >
-                  {professionGroups.map((professionData: any) => {
-                    // Group people by profession
-                    const peopleInProfession = professionData.people || [];
-
-                    return (
-                      <Card
-                        key={professionData.professionId}
-                        sx={{ ...cardSx, bgcolor: brand.surface }}
-                      >
-                        <CardContent>
-                          <Typography
-                            variant="h6"
-                            gutterBottom
-                            sx={{ fontWeight: 900, mb: 2, color: slateText }}
-                          >
-                            {professionData.professionName}
-                          </Typography>
-                          {professionData.professionDescription && (
-                            <Typography
-                              variant="body2"
-                              color="text.secondary"
-                              paragraph
-                              sx={{ minHeight: 40, mb: 2 }}
-                            >
-                              {professionData.professionDescription}
-                            </Typography>
-                          )}
-                          <Stack spacing={1}>
-                            {peopleInProfession.map((person: any) => {
-                              const hierarchyText =
-                                person.parentHierarchy &&
-                                person.parentHierarchy.length > 0
-                                  ? person.parentHierarchy
-                                      .slice(-5)
-                                      .map((a: any) => a.name)
-                                      .join(" → ")
-                                  : "No ancestry data";
-
-                              const tooltipContent = (
-                                <Box sx={{ p: 1 }}>
-                                  <Typography
-                                    variant="body2"
-                                    sx={{ fontWeight: 600 }}
-                                  >
-                                    {person.personName}
-                                  </Typography>
-                                  {person.casteName && (
-                                    <Typography
-                                      variant="caption"
-                                      display="block"
-                                    >
-                                      Caste: {person.casteName}
-                                    </Typography>
-                                  )}
-                                  {person.subCasteName && (
-                                    <Typography
-                                      variant="caption"
-                                      display="block"
-                                    >
-                                      Sub-Caste: {person.subCasteName}
-                                    </Typography>
-                                  )}
-                                  <Typography
-                                    variant="caption"
-                                    display="block"
-                                    sx={{ mt: 1 }}
-                                  >
-                                    🧬 {hierarchyText}
-                                  </Typography>
-                                </Box>
-                              );
-
-                              return (
-                                <Tooltip
-                                  key={person.personId}
-                                  title={tooltipContent}
-                                >
-                                  <Box
-                                    onClick={() =>
-                                      navigate(
-                                        buildFamilyPagePath(
-                                          person.treeId,
-                                          person.personId,
-                                        ),
-                                      )
-                                    }
-                                    sx={{
-                                      p: 1.5,
-                                      bgcolor: brand.canvas,
-                                      borderRadius: 2,
-                                      border: "1px solid rgba(15,23,42,0.08)",
-                                      cursor: "pointer",
-                                      color: businessBlue,
-                                      textDecoration: "underline",
-                                      transition: "all 0.2s",
-                                      "&:hover": {
-                                        bgcolor: brand.primarySoft,
-                                        fontWeight: 600,
-                                        transform: "translateX(4px)",
-                                      },
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="body2"
-                                      sx={{ fontWeight: 600 }}
-                                    >
-                                      {person.personName}
-                                    </Typography>
-                                    <Typography
-                                      variant="caption"
-                                      sx={{
-                                        display: "block",
-                                        mt: 0.5,
-                                        color: "text.secondary",
-                                        textDecoration: "none",
-                                      }}
-                                    >
-                                      Lineage: {hierarchyText}
-                                    </Typography>
-                                  </Box>
-                                </Tooltip>
-                              );
-                            })}
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </Box>
-              </Box>
-            )}
 
             <Divider sx={{ my: 5, borderColor: "rgba(15,23,42,0.08)" }} />
 

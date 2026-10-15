@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -25,6 +26,18 @@ import { ApiService } from "../../services/apiService";
 import { HindiNameInput } from "../HindiNameInput/HindiNameInput";
 import { brand } from "../../theme/brand";
 import { DateField } from "../common/DateField";
+import { useAuth } from "../hooks/useAuth";
+
+/** "Male"/"female"/… as the form's lower-case value, or "" if unknown. */
+function asFormGender(value?: string | null): "male" | "female" | "" {
+  const v = String(value || "").trim().toLowerCase();
+  return v === "male" || v === "female" ? v : "";
+}
+
+/** A husband or wife defaults to the other gender; still editable. */
+function oppositeGender(value: "male" | "female" | ""): "male" | "female" | "" {
+  return value === "male" ? "female" : value === "female" ? "male" : "";
+}
 
 /**
  * Guided first-run setup for a brand-new tree.
@@ -166,6 +179,8 @@ export interface TreeSetupWizardProps {
   /** Prefills the first question so the user is not retyping their own name. */
   defaultSelfName?: string;
   defaultSelfGender?: string;
+  /** The signed-in user's date of birth ("YYYY-MM-DD"), for the "yourself" step. */
+  defaultSelfDob?: string;
   onClose: () => void;
   /** Fired once at the end so the caller can reload the tree in one go. */
   onComplete: (createdAnyone: boolean) => void;
@@ -176,9 +191,20 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
   treeId,
   defaultSelfName,
   defaultSelfGender,
+  defaultSelfDob,
   onClose,
   onComplete,
 }) => {
+  const { userProfile, refreshUserProfile } = useAuth();
+  // "Start with yourself" is the user's own node. Linking their account to it
+  // here saves them finding themselves in the tree afterwards. Offered only
+  // while the account isn't linked to anyone; they created the tree, so it
+  // links on the spot.
+  const canLinkSelf = !userProfile?.peopleId;
+  const [linkSelf, setLinkSelf] = useState(true);
+  const [linkNote, setLinkNote] = useState<string | null>(null);
+  /** The gender saved for "yourself" — the spouse step defaults to the other. */
+  const [selfGender, setSelfGender] = useState<"male" | "female" | "">("");
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -188,15 +214,16 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
   const [form, setForm] = useState<FormState>({
     ...EMPTY_FORM,
     name: defaultSelfName || "",
-    gender: (defaultSelfGender as FormState["gender"]) || "",
+    gender: asFormGender(defaultSelfGender),
+    dob: defaultSelfDob ? String(defaultSelfDob).slice(0, 10) : "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Read through a ref so a late-arriving user profile can refresh the defaults
   // for the NEXT run without wiping what the user is typing in the current one.
-  const defaultsRef = useRef({ name: defaultSelfName, gender: defaultSelfGender });
-  defaultsRef.current = { name: defaultSelfName, gender: defaultSelfGender };
+  const defaultsRef = useRef({ name: defaultSelfName, gender: defaultSelfGender, dob: defaultSelfDob });
+  defaultsRef.current = { name: defaultSelfName, gender: defaultSelfGender, dob: defaultSelfDob };
 
   // Each run belongs to one specific, empty tree. The dialog stays mounted
   // between runs, so without this a second tree would inherit the first run's
@@ -208,10 +235,14 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
     setChildCount(0);
     setSaving(false);
     setError(null);
+    setLinkSelf(true);
+    setLinkNote(null);
+    setSelfGender("");
     setForm({
       ...EMPTY_FORM,
       name: defaultsRef.current.name || "",
-      gender: (defaultsRef.current.gender as FormState["gender"]) || "",
+      gender: asFormGender(defaultsRef.current.gender),
+      dob: defaultsRef.current.dob ? String(defaultsRef.current.dob).slice(0, 10) : "",
     });
   }, [open, treeId]);
 
@@ -232,14 +263,26 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
     setError(null);
   }, []);
 
-  const goNext = useCallback(() => {
-    if (isLast) {
-      onComplete(createdCount > 0);
-      return;
-    }
-    setStepIndex((i) => i + 1);
-    resetForm();
-  }, [isLast, onComplete, createdCount, resetForm]);
+  const goNext = useCallback(
+    (savedSelfGender?: "male" | "female" | "") => {
+      if (isLast) {
+        onComplete(createdCount > 0);
+        return;
+      }
+      const nextStep = visibleSteps[stepIndex + 1];
+      setStepIndex((i) => i + 1);
+      setForm({
+        ...EMPTY_FORM,
+        // The husband or wife step starts on the opposite of the user's gender.
+        gender:
+          nextStep?.key === "spouse"
+            ? oppositeGender(savedSelfGender ?? selfGender)
+            : "",
+      });
+      setError(null);
+    },
+    [isLast, onComplete, createdCount, visibleSteps, stepIndex, selfGender],
+  );
 
   const handleSave = useCallback(async () => {
     if (!step) return;
@@ -294,14 +337,39 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
         resetForm();
       } else {
         setCreatedIds((prev) => ({ ...prev, [step.key]: result.personId as string }));
-        goNext();
+        if (step.key === "self") {
+          const savedGender = asFormGender(gender);
+          setSelfGender(savedGender);
+          if (canLinkSelf && linkSelf) {
+            // Best effort: the tree is fine either way, and an unlinked user
+            // can still link from their profile.
+            try {
+              const linked = await ApiService.createUserNodeLinkRequest({
+                targetPersonId: result.personId as string,
+              });
+              if (linked.autoLinked) {
+                await refreshUserProfile().catch(() => undefined);
+                setLinkNote(`Linked to your account as ${name}.`);
+              } else {
+                setLinkNote("Sent for approval before it links to your account.");
+              }
+            } catch (linkError: any) {
+              setLinkNote(
+                `Saved, but couldn't link it to your account: ${linkError?.message || "try again from your profile."}`,
+              );
+            }
+          }
+          goNext(savedGender);
+        } else {
+          goNext();
+        }
       }
     } catch (err: any) {
       setError(err?.message || "Could not save this person.");
     } finally {
       setSaving(false);
     }
-  }, [step, form, createdIds, treeId, goNext, resetForm]);
+  }, [step, form, createdIds, treeId, goNext, resetForm, canLinkSelf, linkSelf, refreshUserProfile]);
 
   if (!open || !step) return null;
 
@@ -367,6 +435,12 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
           </Alert>
         )}
 
+        {linkNote && step.relation !== "root" && (
+          <Alert severity="info" sx={{ mb: 2 }} onClose={() => setLinkNote(null)}>
+            {linkNote}
+          </Alert>
+        )}
+
         <Stack spacing={2}>
           <TextField
             autoFocus
@@ -414,6 +488,19 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
             disabled={saving}
           />
 
+          {step.relation === "root" && canLinkSelf && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={linkSelf}
+                  onChange={(e) => setLinkSelf(e.target.checked)}
+                  disabled={saving}
+                />
+              }
+              label="This is me — link it to my account"
+            />
+          )}
+
           {step.offerAnniversary && (
             <DateField
               label="Wedding anniversary (optional)"
@@ -459,7 +546,7 @@ export const TreeSetupWizard: React.FC<TreeSetupWizardProps> = ({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 2.5, pt: 1, gap: 1, flexWrap: "wrap" }}>
-        <Button onClick={goNext} disabled={saving} color="inherit">
+        <Button onClick={() => goNext()} disabled={saving} color="inherit">
           {step.relation === "root" ? "Skip setup" : isLast ? "Finish" : "Skip"}
         </Button>
         <Box sx={{ flex: 1 }} />

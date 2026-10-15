@@ -27,6 +27,7 @@ import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import dTree from "./dTree";
+import { useCloseOnBack } from "../../components/hooks/useCloseOnBack";
 import "./dTree.css";
 import {
   renderNodeCardSvg,
@@ -251,11 +252,24 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   const [mobileSheetNodeId, setMobileSheetNodeId] = useState<string | null>(
     null,
   );
+  // The phone's Back closes the sheet rather than leaving the tree under it.
+  const closeMobileSheet = useCallback(() => setMobileSheetNodeId(null), []);
+  useCloseOnBack(Boolean(mobileSheetNodeId), closeMobileSheet, "kinviaPersonSheet");
   const [hoverInfo, setHoverInfo] = useState<{
     node: TreeViewerNode;
     anchorEl: Element;
   } | null>(null);
   const [showInteractionHint, setShowInteractionHint] = useState(false);
+  /**
+   * Who was drawn as a spouse card, and who as a main card, on the last draw.
+   * Someone drawn only as a spouse married into this family: their parents
+   * belong to their own family's tree, so — as on the desktop, where a spouse
+   * card's add menu offers children only — no "Add father/mother" for them.
+   */
+  const spouseCardIdsRef = useRef<Set<string>>(new Set());
+  const mainCardIdsRef = useRef<Set<string>>(new Set());
+  const isMarriedIn = (id?: string | null) =>
+    Boolean(id && spouseCardIdsRef.current.has(id) && !mainCardIdsRef.current.has(id));
   const mobileSheetNode = mobileSheetNodeId
     ? nodes.find((n) => n.id === mobileSheetNodeId) || null
     : null;
@@ -266,8 +280,9 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     : [];
   const hasFather = parentNodes.some((p) => p?.gender === "male");
   const hasMother = parentNodes.some((p) => p?.gender === "female");
-  const showFatherButton = !hasFather;
-  const showMotherButton = !hasMother;
+  const sheetNodeMarriedIn = isMarriedIn(mobileSheetNode?.id);
+  const showFatherButton = !hasFather && !sheetNodeMarriedIn;
+  const showMotherButton = !hasMother && !sheetNodeMarriedIn;
   const parentActionCount =
     (showFatherButton ? 1 : 0) + (showMotherButton ? 1 : 0) + 1;
   const parentActionColumns = `repeat(${parentActionCount}, 1fr)`;
@@ -304,11 +319,12 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
   const canEditContextNode = Boolean(
     contextNode && !contextIsExternal && isNodeEditable(contextNode.id),
   );
+  const contextMarriedIn = isMarriedIn(contextNode?.id);
   const contextShowFather = Boolean(
-    contextNode && !contextParentNodes.some((p) => p?.gender === "male"),
+    contextNode && !contextMarriedIn && !contextParentNodes.some((p) => p?.gender === "male"),
   );
   const contextShowMother = Boolean(
-    contextNode && !contextParentNodes.some((p) => p?.gender === "female"),
+    contextNode && !contextMarriedIn && !contextParentNodes.some((p) => p?.gender === "female"),
   );
   const runContextAction = useCallback(
     (fn: () => void) => {
@@ -1125,6 +1141,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
 
     const person = nodes.find((n) => n.id === personId);
     if (!person) return null;
+    mainCardIdsRef.current.add(personId);
     const canEditCurrentPerson = isNodeEditable(personId);
     const visibleSpouses = showSpouses ? person.spouses || [] : [];
 
@@ -1210,6 +1227,7 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
       visibleSpouses.forEach((spouse: TreeViewerRelation) => {
         const spouseNode = nodes.find((n) => n.id === spouse.id);
         if (!spouseNode) return;
+        spouseCardIdsRef.current.add(spouseNode.id);
         const canEditSpouseNode = isNodeEditable(spouseNode.id);
 
         // A child belongs to this marriage when one parent is the person and the
@@ -1614,6 +1632,8 @@ export const TreeViewer: React.FC<TreeViewerProps> = ({
     // Clear previous tree
     select(containerRef.current).selectAll("*").remove();
 
+    spouseCardIdsRef.current = new Set();
+    mainCardIdsRef.current = new Set();
     const rootNode = convertToTreeFormat(rootId);
     if (!rootNode) {
       console.error("Could not find root node with ID:", rootId);

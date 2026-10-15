@@ -84,8 +84,13 @@ import { FullScreenMobileAutocomplete } from "./FullScreenMobilePicker";
 import { CreateLocationDialog } from "./LocationPicker/CreateLocationDialog";
 import { brand } from "../theme/brand";
 
+// The desktop picker on every device. The responsive DatePicker turns into its
+// mobile variant on touch screens, where the field is read-only and only a
+// calendar dialog can set it — so typing a birth date "sometimes" didn't work,
+// depending on the phone. This one always takes typing; the calendar still
+// opens from its icon.
 const DatePicker = React.lazy(() =>
-  import("@mui/x-date-pickers/DatePicker").then((m) => ({ default: m.DatePicker })),
+  import("@mui/x-date-pickers/DesktopDatePicker").then((m) => ({ default: m.DesktopDatePicker })),
 );
 
 const STEP_INDEX: Record<string, number> = {
@@ -262,6 +267,12 @@ export const UserOnboardingPage: React.FC = () => {
   const [createLocationOpen, setCreateLocationOpen] = useState(false);
   const [createLocationName, setCreateLocationName] = useState("");
   const [localError, setLocalError] = useState("");
+  // A validation message is about what was submitted. Once the user changes a
+  // field it no longer describes the form — "Please select your gender" stayed
+  // up after Female was picked — so it goes until they submit again.
+  useEffect(() => {
+    setLocalError("");
+  }, [profileName, profileEmail, profileGender, profileDob, privacyAccepted]);
   // Still fetched: OnboardingTreePreviewDialog needs it to tell whether the
   // user already has a pending branch-access request for a given person, and
   // the pending-link banner below reflects a link request made elsewhere
@@ -1928,6 +1939,11 @@ export const UserOnboardingPage: React.FC = () => {
                       <Suspense fallback={<TextField label="Date of Birth" fullWidth sx={inputCardSx} />}>
                         <DatePicker
                           label="Date of Birth"
+                          // A plain <input> instead of v8's section editor, so the
+                          // field carries the standard MuiOutlinedInput classes
+                          // inputCardSx styles — without it the micro-label sat
+                          // on top of DD/MM/YYYY and the border kept its notch.
+                          enableAccessibleFieldDOMStructure={false}
                           value={profileDob ? dayjs(profileDob) : null}
                           onChange={(value) =>
                             setProfileDob(value && value.isValid() ? value.format("YYYY-MM-DD") : "")

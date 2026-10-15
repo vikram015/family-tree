@@ -4,6 +4,7 @@ import {
   CssBaseline,
   Box,
   CircularProgress,
+  useMediaQuery,
 } from "@mui/material";
 import { theme } from "../../theme/theme";
 import {
@@ -15,7 +16,7 @@ import {
   useNavigate,
   useNavigationType,
 } from "react-router-dom";
-import { HelmetProvider } from "react-helmet-async";
+import { Helmet, HelmetProvider } from "react-helmet-async";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { AuthInitializer } from "../AuthInitializer";
@@ -23,6 +24,7 @@ import { LocationInitializer } from "../LocationInitializer";
 import { PwaUpdatePrompt } from "../PwaUpdatePrompt/PwaUpdatePrompt";
 import { PushNotificationToast } from "../PushNotificationToast/PushNotificationToast";
 import Header from "../Header/Header";
+import { BottomTabBar } from "../BottomTabBar/BottomTabBar";
 import { HomePage } from "../HomePage/HomePage";
 // import { FamiliesPage } from "../FamiliesPage/FamiliesPage"; // Lazy loaded
 import { BusinessPage } from "../BusinessPage/BusinessPage";
@@ -69,6 +71,43 @@ const FamiliesPage = React.lazy(() =>
   })),
 );
 
+// The phone's tree list (the Families tab). Small, but it pulls in the
+// create-tree dialog, so it loads on demand like the tree page.
+const TreeListPage = React.lazy(() =>
+  import("../FamiliesPage/TreeListPage").then((module) => ({
+    default: module.TreeListPage,
+  })),
+);
+
+/**
+ * `/families` query parameters that start a specific flow on the tree page —
+ * an invite, the setup wizard, a person to focus. With any of these the URL is
+ * a destination, not "show me my trees", so the phone skips the list.
+ */
+const FAMILIES_FLOW_PARAMS = ["tree", "personId", "inviteToken", "setup", "createRoot"];
+
+/** The production origin; canonical URLs always point here, even on dev. */
+const CANONICAL_ORIGIN = "https://kinvia.in";
+
+/**
+ * The page's canonical URL (and og:url): the production origin plus this
+ * route's path, without the query string — "?tree=…" and the like are the same
+ * page in a different state, not separate pages to index.
+ */
+const CanonicalUrl: React.FC = () => {
+  const { pathname } = useLocation();
+  const href = `${CANONICAL_ORIGIN}${pathname === "/" ? "/" : pathname.replace(/\/+$/, "")}`;
+  return (
+    <Helmet>
+      <link rel="canonical" href={href} />
+      <meta property="og:url" content={href} />
+    </Helmet>
+  );
+};
+
+/** Routes that are their own full-screen flow and get no tab bar. */
+const TABLESS_ROUTES = ["/onboarding", "/login"];
+
 function AppContent() {
   const { isFullscreen: isTreeFullscreen } = useTreeFullscreen();
   console.log("AppContent: Rendering");
@@ -86,8 +125,33 @@ function AppContent() {
     },
     [navigate],
   );
-  const { currentUser, userProfile, loading } = useAuth();
+  const { currentUser, userProfile, loading, initialized, hadSession } = useAuth();
+  // Same hint the header uses: a returning user gets the signed-in shell
+  // straight away rather than once Firebase restores the session.
+  const showAuthedShell = initialized ? !!currentUser : hadSession;
   const treeId = searchParams.get("tree") || "";
+
+  // Below md the app is laid out for a phone: bottom tabs, a tree list on the
+  // Families tab, and the tree itself full screen. `noSsr` makes the first
+  // render already know, so /families doesn't start the desktop redirect
+  // before the media query settles.
+  const isCompactNav = useMediaQuery(theme.breakpoints.down("md"), { noSsr: true });
+  const onFamilies = location.pathname === "/families";
+  const showTreeList =
+    isCompactNav && onFamilies && !FAMILIES_FLOW_PARAMS.some((key) => searchParams.has(key));
+  // A tree on a phone gets the whole screen: no app header, no tabs. Its own
+  // top bar has the way back to the list.
+  const isPhoneTreeView = isCompactNav && onFamilies && !showTreeList;
+  // Signed-out visitors get no tabs: three of the four (Business, Families,
+  // Photos) are sign-in walls for them, and the landing page has one job.
+  const showTabs =
+    showAuthedShell &&
+    isCompactNav &&
+    !isPhoneTreeView &&
+    !isTreeFullscreen &&
+    !TABLESS_ROUTES.some(
+      (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
+    );
 
   // Pages scroll inside the shell below, not the window, so the browser never
   // resets it: a page opened from halfway down a list would open halfway down.
@@ -150,6 +214,10 @@ function AppContent() {
     if (location.pathname !== "/families" || treeId || !currentUser) {
       return;
     }
+    // The phone shows the tree list here instead of jumping into one tree.
+    if (showTreeList) {
+      return;
+    }
 
     let active = true;
     resolveDefaultFamilyTreePath().then((targetPath) => {
@@ -161,7 +229,7 @@ function AppContent() {
     return () => {
       active = false;
     };
-  }, [currentUser, location.pathname, navigate, treeId]);
+  }, [currentUser, location.pathname, navigate, treeId, showTreeList]);
 
   const onChange = useCallback(
     (value: string) => {
@@ -195,9 +263,10 @@ function AppContent() {
         },
       }}
     >
+      <CanonicalUrl />
       <UserOnboardingRouteGuard />
       <PushNotificationToast onOpen={openFromNotification} />
-      {!isTreeFullscreen && <Header />}
+      {!isTreeFullscreen && !isPhoneTreeView && <Header />}
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", width: "100%" }}>
         <Box
           ref={scrollShellRef}
@@ -253,14 +322,18 @@ function AppContent() {
                       </Box>
                     }
                   >
-                    <FamiliesPage
-                      treeId={treeId}
-                      setTreeId={setTreeId}
-                      onSourceChange={onChange}
-                      onCreate={(id) => {
-                        onChange(id);
-                      }}
-                    />
+                    {showTreeList ? (
+                      <TreeListPage />
+                    ) : (
+                      <FamiliesPage
+                        treeId={treeId}
+                        setTreeId={setTreeId}
+                        onSourceChange={onChange}
+                        onCreate={(id) => {
+                          onChange(id);
+                        }}
+                      />
+                    )}
                   </Suspense>
                 }
               />
@@ -316,6 +389,7 @@ function AppContent() {
           </Box>
         </Box>
       </Box>
+      {showTabs && <BottomTabBar />}
     </Box>
   );
 }

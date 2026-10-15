@@ -37,8 +37,10 @@ const notify = () => listeners.forEach((listener) => listener());
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (event) => {
-    // Stop the browser's own mini-infobar; our button offers it instead.
-    event.preventDefault();
+    // Kept so our own "Install app" can open the real dialog later. Not
+    // preventDefault()ed: that would also hide the browser's own install
+    // offer (Chrome's mini-infobar), and ours is an extra way in, not a
+    // replacement for it.
     deferredPrompt = event as BeforeInstallPromptEvent;
     notify();
   });

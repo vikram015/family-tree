@@ -7,7 +7,6 @@ import {
   Button,
   Grid,
   Alert,
-  Autocomplete,
   Avatar,
   Divider,
   FormControl,
@@ -39,7 +38,6 @@ import CelebrationHistoryCard from "../CelebrationPage/CelebrationHistoryCard";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useLocations } from "../hooks/useLocations";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import LinkIcon from "@mui/icons-material/Link";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EmailIcon from "@mui/icons-material/Email";
@@ -88,10 +86,15 @@ import {
   submitLocationAccessRequest,
 } from "../../store/thunks/apiThunks";
 import dayjs from "dayjs";
+import { routerHistoryState } from "../hooks/useCloseOnBack";
+import { readableProfessionProfile } from "../../utils/professionProfile";
+import { SelfLinkConfirmDialog } from "../SelfLink/SelfLinkConfirmDialog";
 
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
+// Desktop picker on every device: the responsive one turns read-only on touch
+// screens (calendar only), so typing a date failed on some phones.
 const DatePicker = React.lazy(() =>
-  import("@mui/x-date-pickers/DatePicker").then((m) => ({ default: m.DatePicker })),
+  import("@mui/x-date-pickers/DesktopDatePicker").then((m) => ({ default: m.DesktopDatePicker })),
 );
 
 const BUSINESS_CATEGORY_LABELS: Record<string, string> = {
@@ -115,11 +118,11 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { personId: routePersonId } = useParams<{ personId?: string }>();
   const dispatch = useAppDispatch();
-  const { userProfile, currentUser, updateUserProfile, canEditProfessionProfile } =
+  const { userProfile, currentUser, updateUserProfile, refreshUserProfile, canEditProfessionProfile } =
     useAuth();
   const { openLoginModal } = useLoginModal();
   const { offerNotifications } = useNotificationPrompt();
-  const { locations, selectedLocation, setSelectedLocation } = useLocations();
+  const { locations } = useLocations();
   const castes = useAppSelector(selectCastes);
   const subCastes = useAppSelector(selectSubCastes);
   const [searchParams] = useSearchParams();
@@ -142,7 +145,11 @@ export const ProfilePage: React.FC = () => {
   const [linkCandidates, setLinkCandidates] = useState<any[]>([]);
   const [linkCandidatesLoading, setLinkCandidatesLoading] = useState(false);
   const [showManualSearch, setShowManualSearch] = useState(false);
-  const [linking, setLinking] = useState(false);
+  // Whether this user can open any tree at all. With none, there's nothing to
+  // link to yet — finding the family's tree is onboarding's job.
+  const [hasAnyTree, setHasAnyTree] = useState<boolean | null>(null);
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
   // Pending self-link request (account -> tree person) awaiting owner approval.
   const [pendingLinkRequest, setPendingLinkRequest] = useState<LinkRequest | null>(null);
   // Confirmation modal shown before a link request is sent.
@@ -151,7 +158,6 @@ export const ProfilePage: React.FC = () => {
   const [success, setSuccess] = useState("");
 
   // New state for Business and Profession
-  const [professions, setProfessions] = useState<any[]>([]);
   const [businesses, setBusinesses] = useState<any[]>([]);
   const [personCustomFields, setPersonCustomFields] = useState<
     Record<string, string>
@@ -174,7 +180,7 @@ export const ProfilePage: React.FC = () => {
   useEffect(() => {
     if (!openEditProfileDialog) return;
     closedByBackRef.current = false;
-    window.history.pushState({ dialog: "edit-profile" }, "");
+    window.history.pushState({ ...routerHistoryState(), dialog: "edit-profile" }, "");
     const onPopState = () => {
       closedByBackRef.current = true;
       setOpenEditProfileDialog(false);
@@ -267,10 +273,10 @@ export const ProfilePage: React.FC = () => {
   }, []);
 
   const refreshProfessions = useCallback(async (personId: string) => {
-    const updatedProfs = await ApiService.getProfessionsByPerson(personId);
-    setProfessions(updatedProfs || []);
     try {
-      setProfessionProfile(await ApiService.getProfessionProfile(personId));
+      setProfessionProfile(
+        readableProfessionProfile(await ApiService.getProfessionProfile(personId)),
+      );
     } catch {
       setProfessionProfile(null);
     }
@@ -293,7 +299,6 @@ export const ProfilePage: React.FC = () => {
     const fetchDetails = async () => {
       if (!effectivePersonId) {
         setLinkedPersonDetails(null);
-        setProfessions([]);
         setBusinesses([]);
         setPersonNotFound(false);
         setProfilePhotoUrl(undefined);
@@ -308,8 +313,7 @@ export const ProfilePage: React.FC = () => {
         const personWithTree = await refreshPersonDetails(effectivePersonId);
         if (!personWithTree) {
           setLinkedPersonDetails(null);
-          setProfessions([]);
-          setBusinesses([]);
+            setBusinesses([]);
           setPersonNotFound(true);
           return;
         }
@@ -317,17 +321,15 @@ export const ProfilePage: React.FC = () => {
         setLinkedPersonDetails(personWithTree);
         setProfilePhotoUrl((personWithTree as any)?.photoUrl || undefined);
 
-        const [profs, biz, customFields, careerProfile] = await Promise.all([
+        const [biz, customFields, careerProfile] = await Promise.all([
           // Fetched so we know whether the person has any to reveal; the actual
           // details stay hidden behind the login prompt for guests.
-          ApiService.getProfessionsByPerson(effectivePersonId),
           ApiService.getBusinessesByPerson(effectivePersonId),
           ApiService.getPersonCustomFields(effectivePersonId).catch(() => ({})),
           ApiService.getProfessionProfile(effectivePersonId).catch(() => null),
         ]);
-        setProfessions(profs || []);
         setBusinesses(biz || []);
-        setProfessionProfile(careerProfile);
+        setProfessionProfile(readableProfessionProfile(careerProfile));
         setPersonCustomFields(customFields || {});
       } catch (err) {
         console.error("Error fetching details:", err);
@@ -493,26 +495,32 @@ export const ProfilePage: React.FC = () => {
     }
   };
 
-  const handleRemoveProfession = async (profId: string) => {
-    if (!effectivePersonId || !canManagePerson) return;
-    try {
-      await ApiService.removeProfessionFromPerson(effectivePersonId, profId);
-      await refreshProfessions(effectivePersonId);
-    } catch (err) {
-      console.error("Error removing profession:", err);
-    }
-  };
-
   // Send a self-link request (pending owner approval) instead of linking
   // directly — mirrors the "This is me" flow on the family-tree node details.
   // Surface the probable matches as soon as the panel opens, so the common case
   // is one tap rather than "type your own name into an empty box".
   useEffect(() => {
     if (!isLinking) return;
+    let active = true;
+    ApiService.getMyTrees()
+      .then((trees) => active && setHasAnyTree(trees.length > 0))
+      .catch(() => active && setHasAnyTree(true));
+    return () => {
+      active = false;
+    };
+  }, [isLinking]);
+
+  // The name search re-asks the same endpoint as the suggestions, so it stays
+  // inside the trees this user can open — it used to search every tree in a
+  // chosen village. Debounced so typing doesn't fire a request per key.
+  const linkSearchQuery = showManualSearch ? searchValue.trim() : "";
+  useEffect(() => {
+    if (!isLinking) return;
 
     let active = true;
     setLinkCandidatesLoading(true);
-    ApiService.getProfileLinkCandidates()
+    const timer = window.setTimeout(() => {
+    ApiService.getProfileLinkCandidates(linkSearchQuery ? { query: linkSearchQuery } : {})
       .then((rows) => {
         // The search API returns personId/personName; the rest of this page (and
         // handleLink) expects the id/name shape PersonSearchField produces.
@@ -540,36 +548,50 @@ export const ProfilePage: React.FC = () => {
       .finally(() => {
         if (active) setLinkCandidatesLoading(false);
       });
+    }, linkSearchQuery ? 350 : 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timer);
     };
-  }, [isLinking]);
+  }, [isLinking, linkSearchQuery]);
 
-  const handleLink = async () => {
-    if (!selectedPerson) return;
-    setLinking(true);
+  // After the "Is this you?" dialog: linked on the spot (they could already
+  // edit this person) or sent to the tree's editors.
+  const handleLinkDone = (created: LinkRequest & { autoLinked?: boolean }) => {
     setError("");
-    setSuccess("");
-    try {
-      const created = await ApiService.createUserNodeLinkRequest({
-        targetPersonId: selectedPerson.id,
-      });
-      setPendingLinkRequest(created);
-      offerNotifications(
-        "We'll let you know as soon as your link request is reviewed.",
-      );
+    setLinkConfirmOpen(false);
+    setIsLinking(false);
+    setSelectedPerson(null);
+    setSearchValue("");
+    if (created.autoLinked) {
       setSuccess(
-        "Link request sent. It's pending the tree owner's approval.",
+        `You're now linked as ${created.targetPersonName || "this profile"}. If that's not you, unlink it below.`,
       );
-      setLinkConfirmOpen(false);
-      setIsLinking(false);
-      setSelectedPerson(null);
-      setSearchValue("");
+      return;
+    }
+    setPendingLinkRequest(created);
+    offerNotifications("We'll let you know as soon as your link request is reviewed.");
+    setSuccess("Link request sent. It's pending approval.");
+  };
+
+  const handleUnlink = async () => {
+    if (!userProfile?.peopleId) return;
+    setUnlinking(true);
+    setError("");
+    try {
+      const result = await ApiService.unlinkAccount(userProfile.peopleId);
+      await refreshUserProfile().catch(() => undefined);
+      setUnlinkConfirmOpen(false);
+      setSuccess(
+        result.removedBranchAccess
+          ? "Unlinked. The edit access that came with this link was removed too."
+          : "Unlinked. You can link the right profile now.",
+      );
     } catch (e: any) {
-      setError(e.message || "Failed to send link request. Please try again.");
+      setError(e?.message || "Couldn't unlink. Please try again.");
     } finally {
-      setLinking(false);
+      setUnlinking(false);
     }
   };
 
@@ -919,6 +941,21 @@ export const ProfilePage: React.FC = () => {
                 </Box>
               )}
               <LineagePath steps={lineage} selfLabel={isOwnSignedIn ? "You" : "Here"} />
+              {/* Picking the wrong person must be fixable without anyone's help. */}
+              {isOwnSignedIn && !routePersonId && userProfile?.peopleId && (
+                <Typography variant="body2" sx={{ mt: 2, color: brand.slateMuted }}>
+                  Not you?{" "}
+                  <Link
+                    component="button"
+                    type="button"
+                    underline="hover"
+                    onClick={() => setUnlinkConfirmOpen(true)}
+                    sx={{ fontWeight: 600, verticalAlign: "baseline" }}
+                  >
+                    Unlink this profile
+                  </Link>
+                </Typography>
+              )}
             </ProfileCard>
           </Grid>
         )}
@@ -981,9 +1018,23 @@ export const ProfilePage: React.FC = () => {
                     </Button>
                   </Box>
                 ) : (
+                  hasAnyTree === false ? (
+                  <Box sx={{ textAlign: "center", py: 3 }}>
+                    <Typography sx={{ fontWeight: 700, mb: 1 }}>
+                      You're not part of any family tree yet
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Find your family's tree first and ask to join it. Once you're in,
+                      you can link yourself here.
+                    </Typography>
+                    <Button variant="contained" onClick={() => navigate("/onboarding")}>
+                      Find your family's tree
+                    </Button>
+                  </Box>
+                  ) : (
                   <Box>
                     <Typography variant="subtitle1" gutterBottom>
-                      Find your profile in the tree
+                      Find your profile in your family trees
                     </Typography>
 
                     {/* The likely matches, drawn from the trees this user can
@@ -1072,51 +1123,21 @@ export const ProfilePage: React.FC = () => {
                       </Button>
                     )}
 
-                    <Box sx={{ display: showManualSearch ? "block" : "none" }}>
-                    <Autocomplete
-                      fullWidth
-                      sx={{ mb: 3 }}
-                      options={locations}
-                      autoHighlight
-                      getOptionLabel={(option) => option?.name || ""}
-                      isOptionEqualToValue={(option, value) =>
-                        option.id === value.id
-                      }
-                      value={
-                        locations.find((l) => l.id === selectedLocation) || null
-                      }
-                      onChange={(_e, newValue) => {
-                        setSelectedLocation(newValue ? newValue.id : "");
-                        // Clear a previously picked person when the location changes.
-                        setSelectedPerson(null);
-                        setSearchValue("");
-                      }}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Select Location"
-                          placeholder="Search your location..."
-                        />
-                      )}
-                    />
-
-                    <PersonSearchField
-                      label="Search Your Name"
-                      placeholder="Start typing your name"
-                      searchValue={searchValue}
-                      onSearchValueChange={(value) => {
-                        setSearchValue(value);
-                        if (!value) setSelectedPerson(null);
-                      }}
-                      onPersonSelect={(person) => {
-                        setSelectedPerson(person);
-                        setSearchValue(person.name);
-                      }}
-                      selectedPerson={selectedPerson}
-                      locationId={selectedLocation}
-                      disabled={!selectedLocation}
-                    />
-                    </Box>
+                    {showManualSearch && (
+                      <TextField
+                        fullWidth
+                        autoFocus
+                        label="Search your name"
+                        placeholder="Start typing your name"
+                        helperText="Searches the family trees you're part of."
+                        value={searchValue}
+                        onChange={(e) => {
+                          setSearchValue(e.target.value);
+                          setSelectedPerson(null);
+                        }}
+                        sx={{ mb: 2 }}
+                      />
+                    )}
 
                     {selectedPerson && (
                       <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
@@ -1146,22 +1167,20 @@ export const ProfilePage: React.FC = () => {
                         justifyContent: "flex-end",
                       }}
                     >
-                      <Button
-                        onClick={() => setIsLinking(false)}
-                        disabled={linking}
-                      >
+                      <Button onClick={() => setIsLinking(false)}>
                         Cancel
                       </Button>
                       <Button
                         variant="contained"
                         onClick={() => setLinkConfirmOpen(true)}
-                        disabled={!selectedPerson || linking}
+                        disabled={!selectedPerson}
                         startIcon={<LinkIcon />}
                       >
-                        Send Link Request
+                        Continue
                       </Button>
                     </Box>
                   </Box>
+                  )
                 )}
               </Box>
             )}
@@ -1172,7 +1191,7 @@ export const ProfilePage: React.FC = () => {
         {/* Business & Professional Details Section — hidden for guests when the
             person has neither a business nor a profession to reveal. */}
         {effectivePersonId &&
-          (currentUser || businesses.length > 0 || professions.length > 0) && (
+          (currentUser || businesses.length > 0 || Boolean(professionProfile)) && (
           <Grid size={{ xs: 12 }} sx={{ mt: { xs: 1, md: 2 } }}>
             <SectionHeading
               title="Work & business"
@@ -1249,49 +1268,6 @@ export const ProfilePage: React.FC = () => {
                         View career profile
                       </Button>
                     </Box>
-                  ) : professions.length > 0 ? (
-                    <Stack spacing={1}>
-                      {professions.map((prof: any) => (
-                        <Paper
-                          key={prof.id}
-                          variant="outlined"
-                          sx={{ p: 1.5, borderRadius: 2 }}
-                        >
-                          <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "flex-start",
-                              gap: 1,
-                            }}
-                          >
-                            <Box>
-                              <Typography variant="subtitle2" fontWeight={700}>
-                                {prof.name}
-                              </Typography>
-                              {prof.category && (
-                                <Typography variant="body2" color="text.secondary">
-                                  {prof.category}
-                                </Typography>
-                              )}
-                              {prof.description && (
-                                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                  {prof.description}
-                                </Typography>
-                              )}
-                            </Box>
-                            {canManagePerson && (
-                              <IconButton
-                                size="small"
-                                onClick={() => handleRemoveProfession(prof.id)}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            )}
-                          </Box>
-                        </Paper>
-                      ))}
-                    </Stack>
                   ) : (
                     <Stack alignItems="center" spacing={1} sx={{ py: 3, px: 2, borderRadius: 3, bgcolor: brand.canvas, textAlign: "center" }}>
                       <WorkOutlineOutlinedIcon sx={{ color: brand.slateMuted }} />
@@ -1761,98 +1737,44 @@ export const ProfilePage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Confirm before sending a self-link request */}
-      <Dialog
+      {/* "Is this you?" — shared with the tree's person card. */}
+      <SelfLinkConfirmDialog
         open={linkConfirmOpen}
-        onClose={() => !linking && setLinkConfirmOpen(false)}
+        personId={selectedPerson?.id || null}
+        onClose={() => setLinkConfirmOpen(false)}
+        onDone={handleLinkDone}
+      />
+
+      <Dialog
+        open={unlinkConfirmOpen}
+        onClose={() => !unlinking && setUnlinkConfirmOpen(false)}
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Confirm your profile</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800 }}>Unlink this profile?</DialogTitle>
         <DialogContent dividers>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Please confirm this is you. A link request will be sent to the tree
-            owner for approval.
+          <Typography variant="body2">
+            Your account will no longer be linked to{" "}
+            <strong>{linkedPersonDetails?.name || "this profile"}</strong>. Edit access you got
+            from linking it is removed too; anything you were given separately stays.
           </Typography>
-
-          {selectedPerson && (
-            <Stack direction="row" spacing={2} alignItems="flex-start">
-              <Avatar
-                src={selectedPerson.photoUrl || undefined}
-                sx={{ width: 56, height: 56, bgcolor: "primary.main" }}
-              >
-                {(selectedPerson.name || "?").charAt(0).toUpperCase()}
-              </Avatar>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  {selectedPerson.name}
-                </Typography>
-
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  flexWrap="wrap"
-                  useFlexGap
-                  sx={{ mt: 1 }}
-                >
-                  {selectedPerson.locationName && (
-                    <Chip size="small" label={selectedPerson.locationName} />
-                  )}
-                  {selectedPerson.casteName && (
-                    <Chip
-                      size="small"
-                      label={`Caste: ${selectedPerson.casteName}`}
-                    />
-                  )}
-                  {(selectedPerson.subCasteName || selectedPerson.gotra) && (
-                    <Chip
-                      size="small"
-                      label={`Sub-caste: ${selectedPerson.subCasteName || selectedPerson.gotra}`}
-                    />
-                  )}
-                </Stack>
-
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mt: 1.5, display: "block" }}
-                >
-                  <strong>Lineage:</strong>{" "}
-                  {Array.isArray(selectedPerson.hierarchy) &&
-                  selectedPerson.hierarchy.length > 0
-                    ? selectedPerson.hierarchy
-                        .slice(-5)
-                        .map((a: any) => a?.name)
-                        .filter(Boolean)
-                        .join(" → ")
-                    : "No ancestry data"}
-                </Typography>
-              </Box>
-            </Stack>
-          )}
-
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {error}
-            </Alert>
-          )}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+            Afterwards you can link the right profile.
+          </Typography>
         </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setLinkConfirmOpen(false)}
-            disabled={linking}
-          >
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setUnlinkConfirmOpen(false)} disabled={unlinking}>
             Cancel
           </Button>
           <Button
             variant="contained"
-            onClick={handleLink}
-            disabled={!selectedPerson || linking}
-            startIcon={
-              linking ? <CircularProgress size={16} /> : <LinkIcon />
-            }
+            color="error"
+            disableElevation
+            onClick={() => void handleUnlink()}
+            disabled={unlinking}
+            startIcon={unlinking ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {linking ? "Sending..." : "Confirm & Send Request"}
+            Unlink
           </Button>
         </DialogActions>
       </Dialog>

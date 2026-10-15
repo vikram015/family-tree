@@ -36,6 +36,7 @@ import {
   ContactCandidate,
   useContactPicker,
 } from "../hooks/useContactPicker";
+import { routerHistoryState } from "../hooks/useCloseOnBack";
 
 type BranchPersonOption = {
   id: string;
@@ -110,7 +111,7 @@ export function InviteCollaboratorDialog({
   }, [onClose]);
   useEffect(() => {
     if (!open) return;
-    window.history.pushState({ inviteDialog: true }, "");
+    window.history.pushState({ ...routerHistoryState(), inviteDialog: true }, "");
     const handlePopState = () => onCloseRef.current();
     window.addEventListener("popstate", handlePopState);
     return () => {

@@ -16,10 +16,7 @@ import {
   TextField,
   IconButton,
   Snackbar,
-  SpeedDial,
-  SpeedDialAction,
-  SpeedDialIcon,
-  Backdrop,
+  Fab,
   useTheme,
   useMediaQuery,
 } from "@mui/material";
@@ -32,7 +29,6 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
-import AddIcon from "@mui/icons-material/Add";
 import { DTreeComponent } from "../DTree/DTreeComponent";
 import { NodeDetails } from "../NodeDetails/NodeDetails";
 import { LockedTreePreview } from "./LockedTreePreview";
@@ -43,11 +39,12 @@ import { Gender, RelType } from "relatives-tree/lib/types";
 import AddTree from "../AddTree/AddTree";
 import TreeSetupWizard from "../TreeSetupWizard/TreeSetupWizard";
 import { useAuth } from "../hooks/useAuth";
+import { useCloseOnBack } from "../hooks/useCloseOnBack";
 import { useLocations } from "../hooks/useLocations";
 import { useLoginModal } from "../context/LoginModalContext";
 import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import { useTreeFullscreen } from "../context/TreeFullscreenContext";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { FamiliesPageHeader } from "./FamiliesPageHeader";
 import type { StatusAlert } from "./FamiliesPageHeader";
 import { TimelineView } from "./timeline/TimelineView";
@@ -74,6 +71,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  // Below md the app navigates by bottom tabs and picks trees from a list page,
+  // so the tree view trades its picker for a back bar to that list.
+  const isCompactNav = useMediaQuery(theme.breakpoints.down("md"));
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -114,6 +115,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     targetTreeId: null,
     targetPersonId: null,
   });
+  useCloseOnBack(
+    externalTreeConfirm.open,
+    () => setExternalTreeConfirm({ open: false, targetTreeId: null, targetPersonId: null }),
+    "kinviaTreeSwitchConfirm",
+  );
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"tree" | "timeline">("tree");
   /** Who the invite dialog is for while it is open; null when closed. */
@@ -135,6 +141,30 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
    */
   const [inviteFailure, setInviteFailure] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // Opened from the tree list: step back to it, keeping its scroll. Arrived any
+  // other way (a shared link, a notification): there is no list behind us in
+  // history, so put it in this entry's place — pushing it instead would leave
+  // the tree behind the list, and the phone's Back would bounce back into it.
+  const handleBackToList = useCallback(() => {
+    if ((location.state as { fromTreeList?: boolean } | null)?.fromTreeList) {
+      navigate(-1);
+    } else {
+      navigate("/families", { replace: true });
+    }
+  }, [location.state, navigate]);
+
+  /**
+   * For tidying this page's own query string (a consumed invite token, a
+   * one-shot `setup`/`createRoot` flag, the focused person). Replaces the entry
+   * rather than pushing one — Back should not step through those — and keeps
+   * the entry's state, which is how the back arrow knows the tree list is
+   * behind it.
+   */
+  const keepEntry = useMemo(
+    () => ({ replace: true, state: location.state }),
+    [location.state],
+  );
   const dismissInviteFailure = useCallback(
     (thenGoTo?: string) => {
       setInviteFailure(null);
@@ -142,10 +172,10 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         const next = new URLSearchParams(prev);
         next.delete("inviteToken");
         return next;
-      });
+      }, keepEntry);
       if (thenGoTo) navigate(thenGoTo);
     },
-    [navigate, setSearchParams],
+    [navigate, setSearchParams, keepEntry],
   );
   // Transient feedback for invite actions (replaces native alert()).
   const [snackbar, setSnackbar] = useState<{
@@ -171,7 +201,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
   const [hasAnyTree, setHasAnyTree] = useState<boolean | null>(null);
   const [createTreeOpen, setCreateTreeOpen] = useState(false);
   /** Mobile speed dial (Create tree / Invite family) expanded state. */
-  const [fabMenuOpen, setFabMenuOpen] = useState(false);
   // The create dialog opens by itself once per visit. Re-opening it every time
   // the effect re-runs would trap someone who deliberately closed it.
   const createTreePromptedRef = useRef(false);
@@ -207,6 +236,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
     isLoading,
     setIsLoading,
     locationId,
+    treeName,
     loadTreeData,
     mergeAffectedNodes,
     isPreview,
@@ -368,7 +398,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }
           next.delete("inviteToken");
           return next;
-        });
+        }, keepEntry);
         // Re-fetch the tree now that access has been granted (the treeId may be
         // unchanged from the link, so a plain treeId change wouldn't reload it).
         setTreeReloadKey((key) => key + 1);
@@ -418,12 +448,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       const next = new URLSearchParams(prev);
       next.delete("createRoot");
       return next;
-    });
+    }, keepEntry);
   }, [
     canCreateRootNode,
     isLoading,
     nodes.length,
     setSearchParams,
+    keepEntry,
     shouldCreateRootFromQuery,
     treeId,
   ]);
@@ -443,12 +474,13 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
       const next = new URLSearchParams(prev);
       next.delete("setup");
       return next;
-    });
+    }, keepEntry);
   }, [
     canCreateRootNode,
     isLoading,
     nodes.length,
     setSearchParams,
+    keepEntry,
     shouldRunSetupFromQuery,
     treeId,
   ]);
@@ -833,11 +865,11 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           next.set("personId", personId);
           return next;
         },
-        { replace: true },
+        keepEntry,
       );
       setAutoExpandNodeId(personId);
     },
-    [setSearchParams],
+    [setSearchParams, keepEntry],
   );
 
   // A pending full-tree access request for the current tree (target person is null),
@@ -1281,9 +1313,19 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
         onSearchSelect={handleSearchSelect}
         pendingRequestsCount={pendingLinkRequests.length}
         onPendingRequestsClick={() => setPendingRequestsDialogOpen(true)}
+        treeName={treeName}
+        onBack={isCompactNav ? handleBackToList : undefined}
       />
       )}
-      {(isSuperAdmin() || isApproved) && (
+      {/*
+        Floating action, by layout:
+        - phone: Invite, when you can invite. Creating a tree lives on the tree
+          list (the Families tab), so a tree doesn't offer to start another.
+        - tablet with the tree list: nothing — the canvas has its own Invite
+          button at this width, and the list has New tree.
+        - desktop: Create tree, since there is no tree list there.
+      */}
+      {(isSuperAdmin() || isApproved) && (isMobile ? showCanvasInvite : !isCompactNav) && (
         <Box
           sx={{
             position: "fixed",
@@ -1295,44 +1337,17 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
             transition: "opacity 0.2s ease",
           }}
         >
-          {/* On phones the canvas "Invite family" pill fights the chart
-              controls for space, so it moves into the + button, which expands
-              like an Android speed dial. */}
-          {isMobile && showCanvasInvite ? (
-            <SpeedDial
-              ariaLabel="Tree actions"
-              open={fabMenuOpen}
-              onOpen={(_, reason) => {
-                if (reason === "toggle") setFabMenuOpen(true);
-              }}
-              onClose={(_, reason) => {
-                if (reason !== "mouseLeave") setFabMenuOpen(false);
-              }}
-              icon={<SpeedDialIcon icon={<AddIcon />} />}
-              sx={{
-                "& .MuiSpeedDialAction-staticTooltipLabel": {
-                  whiteSpace: "nowrap",
-                  fontWeight: 600,
-                },
-              }}
+          {isMobile ? (
+            <Fab
+              variant="extended"
+              color="primary"
+              aria-label="Invite family"
+              onClick={handleOpenInviteDialog}
+              sx={{ textTransform: "none", fontWeight: 700 }}
             >
-              <SpeedDialAction
-                icon={<PersonAddAltOutlinedIcon />}
-                slotProps={{ tooltip: { title: "Invite family", open: true } }}
-                onClick={() => {
-                  setFabMenuOpen(false);
-                  handleOpenInviteDialog();
-                }}
-              />
-              <SpeedDialAction
-                icon={<AccountTreeOutlinedIcon />}
-                slotProps={{ tooltip: { title: "Create tree", open: true } }}
-                onClick={() => {
-                  setFabMenuOpen(false);
-                  setCreateTreeOpen(true);
-                }}
-              />
-            </SpeedDial>
+              <PersonAddAltOutlinedIcon sx={{ mr: 0.75 }} />
+              Invite
+            </Fab>
           ) : (
             <AddTree
               variant="fab"
@@ -1349,11 +1364,6 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           )}
         </Box>
       )}
-      <Backdrop
-        open={isMobile && fabMenuOpen}
-        onClick={() => setFabMenuOpen(false)}
-        sx={{ zIndex: 1199 }}
-      />
       <Box
         sx={{
           position: "relative",
@@ -1759,6 +1769,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           (userProfile as any)?.displayName || (userProfile as any)?.name || ""
         }
         defaultSelfGender={(userProfile as any)?.gender || ""}
+        defaultSelfDob={(userProfile as any)?.dob || ""}
         onClose={() => setShowSetupWizard(false)}
         onComplete={(createdAnyone) => {
           setShowSetupWizard(false);
@@ -2025,6 +2036,7 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
           }}
           onAdd={onAdd}
           onUpdate={onUpdate}
+          onAccountUnlinked={() => setTreeReloadKey((key) => key + 1)}
           onChangeOtherParent={onChangeOtherParent}
           onDelete={onDelete}
           canEditNode={canEditNode}

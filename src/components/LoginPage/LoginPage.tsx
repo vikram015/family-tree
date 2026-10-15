@@ -388,9 +388,10 @@ export const LoginPage: React.FC = () => {
                   <Stack direction="row" spacing={1.25} alignItems="center">
                     <Box
                       component="img"
-                      src="/favic_no_background.png"
+                      src="/logo192.png"
                       alt=""
-                      sx={{ width: 38, height: 38, display: "block" }}
+                      // The installed app's icon, as in the header.
+                      sx={{ width: 38, height: 38, display: "block", borderRadius: 2.5 }}
                     />
                     <Box>
                       <Typography

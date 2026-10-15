@@ -16,35 +16,34 @@
     <meta name="apple-mobile-web-app-title" content="Kinvia" />
 
     <!-- Primary Meta Tags -->
-    <title>
-      Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online
-    </title>
+    <title>Kinvia – Your Family Tree, Celebrations &amp; Family Business Directory</title>
     <meta
       name="title"
-      content="Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online"
+      content="Kinvia – Your Family Tree, Celebrations &amp; Family Business Directory"
     />
     <meta
       name="description"
-      content="Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details. Free online genealogy tool for Indian families."
+      content="Build your family tree together with relatives, link yourself to your own profile, and keep everyone close: birthdays, anniversaries and remembrances, family businesses and careers, photos, and village family trees. Free, in English and Hindi."
     />
     <meta
       name="keywords"
-      content="family tree, genealogy, family history, family tree maker, Indian family tree, वंशावली, परिवार वृक्ष, family heritage, ancestry, lineage, family tree builder, online family tree, free family tree"
+      content="family tree, family tree maker, Indian family tree, वंशावली, परिवार वृक्ष, family tree in Hindi, gotra, village family tree, family birthdays and anniversaries, family business directory, family professions, genealogy, ancestry, lineage, free family tree app"
     />
     <meta name="author" content="Kinvia" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://kinvia.in/" />
+    <!-- No static canonical / og:url: every route is served from this file, so
+         a fixed "https://kinvia.in/" here told search engines every page was a
+         copy of the home page. The app sets both per page (see App.tsx). -->
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://kinvia.in/" />
     <meta
       property="og:title"
-      content="Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online"
+      content="Kinvia – Your Family Tree, Celebrations &amp; Family Business Directory"
     />
     <meta
       property="og:description"
-      content="Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details. Free online genealogy tool for Indian families."
+      content="Build your family tree together with relatives, link yourself to your own profile, and keep everyone close: birthdays, anniversaries and remembrances, family businesses and careers, photos, and village family trees. Free, in English and Hindi."
     />
     <!-- Must be a file that actually exists in public/: the SPA catch-all rewrite
          answers missing paths with index.html (200 text/html), so a wrong path
@@ -60,11 +59,11 @@
     <meta name="twitter:url" content="https://kinvia.in/" />
     <meta
       name="twitter:title"
-      content="Kinvia - Digital Family Tree Builder | Create Your Family Heritage Online"
+      content="Kinvia – Your Family Tree, Celebrations &amp; Family Business Directory"
     />
     <meta
       name="twitter:description"
-      content="Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details. Free online genealogy tool for Indian families."
+      content="Build your family tree together with relatives, link yourself to your own profile, and keep everyone close: birthdays, anniversaries and remembrances, family businesses and careers, photos, and village family trees. Free, in English and Hindi."
     />
     <meta name="twitter:image" content="https://kinvia.in/logo512.png" />
 
@@ -90,24 +89,40 @@
     />
 
     <!-- Structured Data / JSON-LD -->
+    <!-- Structured data. No aggregateRating: a rating with no real reviews
+         behind it is a "self-serving review" under Google's rules, and can cost
+         the site its rich results. Add one only from genuine, visible reviews. -->
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "Kinvia",
-        "description": "Build and preserve your family history with Kinvia. Create interactive family trees, document relationships, add photos and custom details.",
         "url": "https://kinvia.in/",
+        "description": "Build your family tree together with relatives, link yourself to your own profile, and keep everyone close: birthdays, anniversaries and remembrances, family businesses and careers, photos, and village family trees.",
         "applicationCategory": "LifestyleApplication",
-        "operatingSystem": "Any",
+        "operatingSystem": "Any (web, Android, iPhone)",
+        "inLanguage": ["en", "hi"],
+        "image": "https://kinvia.in/logo512.png",
         "offers": {
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "INR"
         },
-        "aggregateRating": {
-          "@type": "AggregateRating",
-          "ratingValue": "4.8",
-          "ratingCount": "150"
+        "featureList": [
+          "Shared, interactive family tree that relatives build together",
+          "Invite family members and link your account to your own profile",
+          "Birthdays, anniversaries and remembrances with family wishes",
+          "Family business and profession directory",
+          "Family photo albums",
+          "Explore family trees by village",
+          "Names in English and Hindi",
+          "Installable app for phones"
+        ],
+        "publisher": {
+          "@type": "Organization",
+          "name": "Kinvia",
+          "url": "https://kinvia.in/",
+          "logo": "https://kinvia.in/logo512.png"
         }
       }
     </script>

@@ -119,9 +119,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <Stack direction="row" spacing={1.25} alignItems="center">
             <Box
               component="img"
-              src="/favic_no_background.png"
+              src="/logo192.png"
               alt="Kinvia"
-              sx={{ width: 34, height: 34, display: "block" }}
+              // The installed app's icon, as in the header.
+              sx={{ width: 34, height: 34, display: "block", borderRadius: 2.5 }}
             />
             <Typography
               sx={{

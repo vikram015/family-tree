@@ -9,19 +9,15 @@ import {
 } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import EventRepeatOutlinedIcon from "@mui/icons-material/EventRepeatOutlined";
+import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
 
 import EventCard from "../Events/EventCard";
 import { Carousel } from "./Carousel";
 import { SendWishDialog, SendWishTarget } from "./SendWishDialog";
 import type { FamilyEvents, UpcomingFamilyEvent } from "../../services/apiService";
 import { brand } from "../../theme/brand";
-import {
-  heroSurface,
-  memorialSurface,
-  panelSx,
-  scrollStripSx,
-  tone,
-} from "./homeTheme";
+import { scrollStripSx } from "./homeTheme";
 
 export interface TodayStripProps {
   events: FamilyEvents | null;
@@ -106,40 +102,31 @@ function daysAwayLabel(daysAway: number): string {
 /**
  * Section shell.
  *
- * The day's events get the gold ground from the design — the one warm surface
- * on the page, and the reason a remembrance doesn't get announced in the same
- * bright blue as everything else. Quiet days fall back to a plain panel.
+ * Deliberately not a card. The event cards are cards — tinted per occasion —
+ * and wrapping them in a panel made a card inside a card. The heading sits on
+ * the page and the cards swipe edge to edge beneath it, as in the mobile design.
  */
-/**
- * Section shell.
- *
- * Three grounds, because the same layout carries three moods: the plain panel
- * while loading, the cool page wash for birthdays and anniversaries, and the
- * gold wash on a day that holds only remembrance — a memorial announced in the
- * same bright blue as a birthday reads wrong.
- */
-type ShellTone = "plain" | "celebration" | "memorial";
-
-const SectionShell: React.FC<{ tone?: ShellTone; children: React.ReactNode }> = ({
-  tone: shellTone = "plain",
-  children,
-}) => (
-  <Box
-    component="section"
-    sx={{
-      ...(panelSx as object),
-      ...(shellTone === "memorial"
-        ? { background: memorialSurface, borderColor: tone.attention.border }
-        : shellTone === "celebration"
-          ? { background: heroSurface }
-          : {}),
-      p: { xs: 2, md: 2.5 },
-      overflow: "hidden",
-    }}
-  >
+const SectionShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <Box component="section" sx={{ minWidth: 0 }}>
     {children}
   </Box>
 );
+
+/** Icon + title, the design's section heading. */
+const SectionTitle: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({
+  icon,
+  children,
+}) => (
+  <Stack direction="row" alignItems="center" spacing={0.875} sx={{ minWidth: 0 }}>
+    <Box sx={{ display: "flex", color: brand.primary, "& svg": { fontSize: 22 } }}>{icon}</Box>
+    <Typography component="h2" sx={{ fontWeight: 800, fontSize: { xs: 19, md: 20 }, color: brand.ink }}>
+      {children}
+    </Typography>
+  </Stack>
+);
+
+/** Phones snap each card to the gutter, not to the bleed edge. */
+const stripGutterSx = { scrollPaddingInline: { xs: "16px", md: 0 } } as const;
 
 /** One filter chip. Rendered as a button so keyboard users can tab the set. */
 const FilterChip: React.FC<{
@@ -151,17 +138,17 @@ const FilterChip: React.FC<{
     onClick={onClick}
     aria-pressed={active}
     sx={{
-      px: 1.25,
-      py: 0.5,
-      borderRadius: 1.5,
-      fontSize: 12,
+      px: 1.5,
+      py: 0.625,
+      borderRadius: 999,
+      fontSize: 12.5,
       fontWeight: 700,
       whiteSpace: "nowrap",
       border: "1px solid",
       transition: "background-color 140ms ease, border-color 140ms ease",
       ...(active
-        ? { bgcolor: brand.surface, borderColor: tone.attention.borderStrong, color: tone.attention.ink }
-        : { bgcolor: "transparent", borderColor: "transparent", color: tone.attention.text }),
+        ? { bgcolor: brand.primary, borderColor: brand.primary, color: "#fff" }
+        : { bgcolor: brand.surface, borderColor: brand.border, color: brand.slate }),
     }}
   >
     {label}
@@ -317,54 +304,20 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
         : []),
     ];
 
-    // Gold only when the day holds nothing but remembrance; one birthday in
-    // the mix makes it a celebration again.
-    const memorial = deceased.length > 0 && birthdays.length + anniversaries.length === 0;
-
     todaySection = (
-      <SectionShell tone={memorial ? "memorial" : "celebration"}>
+      <SectionShell>
         <Stack
-          direction={{ xs: "column", md: "row" }}
-          alignItems={{ xs: "flex-start", md: "center" }}
+          direction="row"
+          alignItems="center"
           justifyContent="space-between"
           spacing={1.5}
-          sx={{ mb: 2 }}
+          sx={{ mb: filters.length > 2 ? 1.25 : 1.5 }}
         >
-          <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
-            <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mr: 0.5 }}>
-              <Typography
-                component="h2"
-                sx={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: tone.attention.ink,
-                }}
-              >
-                Today in your family
-              </Typography>
-              <Box
-                aria-hidden
-                sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#f59e0b" }}
-              />
-            </Stack>
-
-            {/* Only the kinds that actually occur today get a chip. */}
-            {filters.length > 2 &&
-              filters.map((item) => (
-                <FilterChip
-                  key={item.id}
-                  label={item.label}
-                  active={filter === item.id}
-                  onClick={() => setFilter(item.id)}
-                />
-              ))}
-          </Stack>
+          <SectionTitle icon={<EventRepeatOutlinedIcon />}>Today in your family</SectionTitle>
 
           {visible.length > 1 && (
             // Arrows are a desktop affordance; on a touch screen the strip is
-            // swiped, and a third header row for two buttons is wasted height.
+            // swiped, and two buttons there only crowd the title.
             <Stack
               direction="row"
               alignItems="center"
@@ -375,7 +328,7 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
                 size="small"
                 aria-label="Previous events"
                 onClick={() => page(-1)}
-                sx={{ border: "1px solid", borderColor: tone.attention.border, bgcolor: brand.surface }}
+                sx={{ border: "1px solid", borderColor: brand.border, bgcolor: brand.surface }}
               >
                 <ChevronLeftIcon sx={{ fontSize: 18 }} />
               </IconButton>
@@ -383,7 +336,7 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
                 size="small"
                 aria-label="More events"
                 onClick={() => page(1)}
-                sx={{ border: "1px solid", borderColor: tone.attention.border, bgcolor: brand.surface }}
+                sx={{ border: "1px solid", borderColor: brand.border, bgcolor: brand.surface }}
               >
                 <ChevronRightIcon sx={{ fontSize: 18 }} />
               </IconButton>
@@ -391,15 +344,41 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
           )}
         </Stack>
 
+        {/* Only the kinds that actually occur today get a chip. */}
+        {filters.length > 2 && (
+          <Stack
+            direction="row"
+            spacing={0.75}
+            sx={{
+              mb: 1.5,
+              overflowX: "auto",
+              mx: { xs: -2, md: 0 },
+              px: { xs: 2, md: 0 },
+              scrollbarWidth: "none",
+              "&::-webkit-scrollbar": { display: "none" },
+            }}
+          >
+            {filters.map((item) => (
+              <FilterChip
+                key={item.id}
+                label={item.label}
+                active={filter === item.id}
+                onClick={() => setFilter(item.id)}
+              />
+            ))}
+          </Stack>
+        )}
+
         <Box
           ref={stripRef}
           sx={{
             ...(scrollStripSx as object),
+            ...stripGutterSx,
             // Feature cards are taller than the compact ones. Three fit across
             // the main column even when the rail is taking a third of the page,
             // which is what the design shows — so the count is fixed rather
             // than auto-filled off a min width that only holds two.
-            gridAutoColumns: { xs: "minmax(268px, 86%)", sm: "minmax(300px, 48%)" },
+            gridAutoColumns: { xs: "minmax(268px, 88%)", sm: "minmax(300px, 48%)" },
             gridTemplateColumns: { md: "repeat(3, minmax(0, 1fr))" },
           }}
         >
@@ -426,36 +405,20 @@ export const TodayStrip: React.FC<TodayStripProps> = ({
 
   if (upcomingItems.length > 0) {
     upcomingSection = (
-      <SectionShell tone="celebration">
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-          <Typography
-            sx={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: brand.primary,
-            }}
-          >
-            Coming up
-          </Typography>
-          <Box
-            aria-hidden
-            sx={{ width: 5, height: 5, borderRadius: "50%", bgcolor: brand.primary }}
-          />
-        </Stack>
-        <Stack spacing={0.5} sx={{ mb: 2 }}>
-          <Typography component="h2" sx={{ fontWeight: 800, fontSize: 19, color: brand.ink }}>
-            The days ahead
-          </Typography>
-        </Stack>
+      <SectionShell>
+        <Box sx={{ mb: 1.5 }}>
+          <SectionTitle icon={<CalendarMonthOutlinedIcon />}>Coming up this week</SectionTitle>
+        </Box>
 
         {/* A carousel rather than a grid. The week ahead is a variable number
             of cards, and reflowing them into fixed rows either wrapped onto a
             second line that unbalanced the section or cut the tail off at three.
             The track always scrolls; the arrows appear only when the cards
             genuinely overflow their box. */}
-        <Carousel aria-label="Upcoming birthdays and anniversaries">
+        <Carousel
+          aria-label="Upcoming birthdays and anniversaries"
+          itemWidth={{ xs: "88%", sm: "48%", md: "calc((100% - 32px) / 3)" }}
+        >
           {upcomingItems.map((item) => (
             /* The same card as today's events: an upcoming birthday is the
                same object with a different date, and it carries the same

@@ -37,6 +37,7 @@ import {
   selectCastes,
   selectSubCastes,
 } from "../../store/slices/casteSlice";
+import { routerHistoryState } from "../hooks/useCloseOnBack";
 
 interface AddTreeProps {
   onCreate?: (treeId: string) => void;
@@ -365,7 +366,7 @@ export const AddTree: React.FC<AddTreeProps> = ({
     if (!isModalOpen || isControlledOpen) return;
 
     if (!modalHistoryRef.current) {
-      window.history.pushState({ modal: "create-tree" }, "");
+      window.history.pushState({ ...routerHistoryState(), modal: "create-tree" }, "");
       modalHistoryRef.current = true;
     }
 

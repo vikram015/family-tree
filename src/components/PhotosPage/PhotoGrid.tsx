@@ -29,6 +29,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import dayjs from "dayjs";
 import type { FamilyPhoto, PhotoVisibility } from "../../services/apiService";
 import { brand } from "../../theme/brand";
+import { routerHistoryState } from "../hooks/useCloseOnBack";
 
 const VISIBILITY_META: Record<PhotoVisibility, { label: string; icon: React.ReactElement }> = {
   private: { label: "Private", icon: <LockOutlinedIcon fontSize="inherit" /> },
@@ -129,7 +130,7 @@ export function PhotoGrid({
   const historyPushedRef = useRef(false);
   useEffect(() => {
     if (previewPhoto && !historyPushedRef.current) {
-      window.history.pushState({ kinviaPhotoPreview: true }, "");
+      window.history.pushState({ ...routerHistoryState(), kinviaPhotoPreview: true }, "");
       historyPushedRef.current = true;
     }
   }, [Boolean(previewPhoto)]); // eslint-disable-line react-hooks/exhaustive-deps

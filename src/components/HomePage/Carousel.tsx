@@ -114,6 +114,8 @@ export const Carousel: React.FC<CarouselProps> = ({
           // Bleed to the container edge on phones so cards don't look clipped.
           mx: { xs: -2, md: 0 },
           px: { xs: 2, md: 0 },
+          // Snap cards to the gutter, not the bleed edge.
+          scrollPaddingInline: { xs: "16px", md: 0 },
           pb: { xs: 1, md: 0 },
           "& > *": { scrollSnapAlign: "start" },
           scrollbarWidth: "none",

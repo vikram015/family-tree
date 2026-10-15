@@ -540,7 +540,11 @@ export function PhotosPage() {
           sx={{
             position: "fixed",
             right: { xs: 16, sm: 24 },
-            bottom: { xs: 16, sm: 24 },
+            // Clears the phone's bottom tab bar (0 when there is none).
+            bottom: {
+              xs: "calc(16px + var(--kinvia-bottom-nav, 0px))",
+              sm: "calc(24px + var(--kinvia-bottom-nav, 0px))",
+            },
             zIndex: 1200,
           }}
         >

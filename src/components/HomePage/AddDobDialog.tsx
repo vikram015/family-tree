@@ -21,8 +21,10 @@ import { FNode } from "../model/FNode";
 import { brand } from "../../theme/brand";
 import { avatarTint, initialsOf } from "./homeTheme";
 
+// Desktop picker on every device: the responsive one turns read-only on touch
+// screens (calendar only), so typing a date failed on some phones.
 const DatePicker = React.lazy(() =>
-  import("@mui/x-date-pickers/DatePicker").then((m) => ({ default: m.DatePicker })),
+  import("@mui/x-date-pickers/DesktopDatePicker").then((m) => ({ default: m.DesktopDatePicker })),
 );
 
 /**

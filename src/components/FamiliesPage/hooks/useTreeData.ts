@@ -65,6 +65,8 @@ export function useTreeData({
   const [isLoading, setIsLoading] = useState(false);
   const [rootId, setRootId] = useState("");
   const [locationId, setLocationId] = useState<string | undefined>(undefined);
+  /** For the mobile tree's top bar, which names the tree in place of a picker. */
+  const [treeName, setTreeName] = useState("");
   const loadRequestIdRef = useRef(0);
 
   const loadTreeData = useCallback(
@@ -120,6 +122,7 @@ export function useTreeData({
         setIsPreview(false);
         setPreviewPeopleCount(0);
         setLocationId(treeData.tree?.location?.id);
+        setTreeName(treeData.tree?.name || "");
 
         // Convert tree data to FNode format
         const items: Readonly<FNode>[] = (treeData.members || []).map(
@@ -438,6 +441,7 @@ export function useTreeData({
     isLoading,
     setIsLoading,
     locationId,
+    treeName,
     loadTreeData,
     mergeAffectedNodes,
     isPreview,

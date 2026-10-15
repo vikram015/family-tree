@@ -56,6 +56,16 @@ export const theme = createTheme({
     MuiToggleButton: {
       styleOverrides: { root: { borderRadius: 999 } },
     },
+    // Bottom snackbars sit above the phone's tab bar rather than on it. The
+    // variable is only set while the tab bar is showing, so elsewhere this is 0.
+    MuiSnackbar: {
+      styleOverrides: {
+        root: {
+          "&.MuiSnackbar-anchorOriginBottomCenter, &.MuiSnackbar-anchorOriginBottomLeft, &.MuiSnackbar-anchorOriginBottomRight":
+            { marginBottom: "var(--kinvia-bottom-nav, 0px)" },
+        },
+      },
+    },
   },
 });
 

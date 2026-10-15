@@ -1,8 +1,22 @@
 # https://www.robotstxt.org/robotstxt.html
+#
+# Public: the landing page, Explore (/locations), About, FAQ, the legal pages,
+# and shared business / career / celebration pages.
+# Everything below needs an account, so a crawler would only find a sign-in
+# prompt — or is the API.
 User-agent: *
 Allow: /
-Disallow: /login
 Disallow: /api/
+Disallow: /login
+Disallow: /onboarding
+Disallow: /families
+Disallow: /photos
+Disallow: /profile
+Disallow: /requests
+Disallow: /admin
+Disallow: /debug
+# The business directory itself needs an account; individual business pages
+# (/business/<id>) are public and stay crawlable.
+Disallow: /business$
 
-# Sitemap
 Sitemap: https://kinvia.in/sitemap.xml

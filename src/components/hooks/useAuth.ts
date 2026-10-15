@@ -9,8 +9,8 @@ import {
   selectIsSuperAdmin,
   selectIsAdmin,
   logout as logoutAction,
-  linkUserToNode as linkUserToNodeAction,
   updateUserProfile as updateUserProfileAction,
+  refreshUserProfile as refreshUserProfileAction,
 } from "../../store/slices/authSlice";
 import { UserRole } from "../model/User";
 
@@ -26,9 +26,9 @@ export function useAuth() {
 
   const logout = useCallback(() => dispatch(logoutAction()).unwrap(), [dispatch]);
 
-  const linkUserToNode = useCallback(
-    (personId: string, treeId: string) =>
-      dispatch(linkUserToNodeAction({ personId, treeId })).unwrap(),
+  /** Re-read the profile after the server changed it (e.g. linked to a person). */
+  const refreshUserProfile = useCallback(
+    () => dispatch(refreshUserProfileAction()).unwrap(),
     [dispatch],
   );
 
@@ -126,7 +126,6 @@ export function useAuth() {
       initialized,
       hadSession,
       logout,
-      linkUserToNode,
       hasPermission,
       isSuperAdmin,
       isAdmin,
@@ -135,6 +134,7 @@ export function useAuth() {
       canManageLocation,
       canEditProfessionProfile,
       updateUserProfile,
+      refreshUserProfile,
     }),
     [
       currentUser,
@@ -143,7 +143,6 @@ export function useAuth() {
       initialized,
       hadSession,
       logout,
-      linkUserToNode,
       hasPermission,
       isSuperAdmin,
       isAdmin,
@@ -152,6 +151,7 @@ export function useAuth() {
       canManageLocation,
       canEditProfessionProfile,
       updateUserProfile,
+      refreshUserProfile,
     ],
   );
 }

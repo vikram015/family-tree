@@ -34,27 +34,56 @@ import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import PhotoLibraryOutlinedIcon from "@mui/icons-material/PhotoLibraryOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import { FeedbackDialog } from "../Feedback/FeedbackDialog";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSkipOnboarding } from "../hooks/useSkipOnboarding";
 import { useAuth } from "../hooks/useAuth";
+import InstallMobileOutlinedIcon from "@mui/icons-material/InstallMobileOutlined";
+import { promptInstall, useInstallPrompt } from "../../utils/pwaInstall";
+import { canOfferInstall, InstallGuideDialog } from "../HomePage/InstallAppCard";
 import { ApiService } from "../../services/apiService";
 import { resolveDefaultFamilyTreePath } from "../../utils/defaultFamilyTreeNavigation";
 import { setPostLoginRedirect } from "../../utils/postLoginRedirect";
+import { isOverlayEntry, useCloseOnBack } from "../hooks/useCloseOnBack";
 import { brand, brandGradient } from "../../theme/brand";
 
 // Nav destinations that require an authenticated user.
 const AUTH_REQUIRED_PATHS = new Set<string>(["/business"]);
+
+/** The nav pages a signed-out visitor can open. */
+const PUBLIC_NAV_PATHS = new Set<string>(["/", "/locations", "/about"]);
 
 interface HeaderProps {
   /** Locked mode: show only the brand (no nav, location picker, or account menu). */
   locked?: boolean;
 }
 
+/** History marker for the ☰ menu's entry (see useCloseOnBack). */
+const DRAWER_HISTORY_MARKER = "kinviaNavDrawer";
+
 export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   console.log("Header: Rendering");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // "Install app" in the menu: the browser's own dialog where it has one, the
+  // how-to (iOS, in-app browsers…) where it doesn't. Gone once installed.
+  const installState = useInstallPrompt();
+  const showInstall = canOfferInstall(installState);
+  const [installGuideOpen, setInstallGuideOpen] = useState(false);
+  const handleInstallClick = () => {
+    setDrawerOpen(false);
+    if (installState.canPrompt) {
+      // Called straight from the tap: the browser only opens its install
+      // dialog in response to a user gesture.
+      void promptInstall();
+    } else {
+      setInstallGuideOpen(true);
+    }
+  };
+  // The phone's Back closes the menu instead of leaving the page behind it.
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  useCloseOnBack(drawerOpen, closeDrawer, DRAWER_HISTORY_MARKER);
   const [linkedPersonPhoto, setLinkedPersonPhoto] = useState<string>("");
   const [avatarMenuAnchorEl, setAvatarMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [actionableRequestCount, setActionableRequestCount] = useState(0);
@@ -72,6 +101,9 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
    * else.
    */
   const isOnboarding = location.pathname.startsWith("/onboarding");
+  // On the login page itself the header offers neither a way in (you're there)
+  // nor the menu — the page is the one task in front of the user.
+  const isLoginPage = location.pathname === "/login";
   const { skip: skipOnboarding, skipping: skippingOnboarding } = useSkipOnboarding();
   const navigate = useNavigate();
   const { currentUser, userProfile, logout, isSuperAdmin, initialized, hadSession } = useAuth();
@@ -185,14 +217,25 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
   // Emptied during onboarding so the links disappear from the drawer as well as
   // the bar — otherwise the mobile menu would still offer every destination the
   // stripped header exists to withhold.
+  //
+  // Signed out, only the pages a visitor can actually open: Business, Families
+  // and Photos are all sign-in walls for them, so offering them just leads to
+  // the login page.
   const allNavLinks = isOnboarding
     ? []
-    : isSuperAdmin()
+    : !showAuthed
+      ? navLinks.filter((link) => PUBLIC_NAV_PATHS.has(link.path))
+      : isSuperAdmin()
       ? [
           ...navLinks,
           { label: "Admin", path: "/admin", icon: <AdminPanelSettingsOutlinedIcon fontSize="small" /> },
         ]
       : navLinks;
+  // The menu has room for one more public page than the desktop bar.
+  const drawerNavLinks =
+    !showAuthed && !isOnboarding
+      ? [...allNavLinks, { label: "FAQ", path: "/faq", icon: <HelpOutlineIcon fontSize="small" /> }]
+      : allNavLinks;
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -201,22 +244,30 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
 
   const handleNavLinkClick = useCallback(
     async (path: string) => {
+      // Picked from the open menu: the destination takes the menu's history
+      // entry, so Back from it returns to the page the menu was opened on
+      // rather than to a dead copy of it.
+      const replace = isOverlayEntry(DRAWER_HISTORY_MARKER);
+
       // Auth-gated destinations: send guests to login and remember where they
       // were headed so they land back here after login (and onboarding).
       if (AUTH_REQUIRED_PATHS.has(path) && !currentUser) {
         setPostLoginRedirect(path);
-        navigate("/login", { state: { from: { pathname: path } } });
+        navigate("/login", { state: { from: { pathname: path } }, replace });
         return;
       }
 
-      if (path === "/families" && currentUser) {
-        navigate(await resolveDefaultFamilyTreePath());
+      // Phones choose a tree from the tree list, the same as the Families tab.
+      if (path === "/families" && currentUser && !isMobile) {
+        const target = await resolveDefaultFamilyTreePath();
+        // Checked again after the wait: the menu's entry is gone by now.
+        navigate(target, { replace: isOverlayEntry(DRAWER_HISTORY_MARKER) });
         return;
       }
 
-      navigate(path);
+      navigate(path, { replace });
     },
-    [currentUser, navigate],
+    [currentUser, navigate, isMobile],
   );
 
 
@@ -229,7 +280,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
       </Box>
 
       <List>
-        {allNavLinks.map((link) => (
+        {drawerNavLinks.map((link) => (
           <ListItem key={link.path}>
             <Button
               fullWidth
@@ -245,6 +296,19 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
             </Button>
           </ListItem>
         ))}
+        {showInstall && (
+          <ListItem>
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<InstallMobileOutlinedIcon fontSize="small" />}
+              sx={{ justifyContent: "flex-start" }}
+              onClick={handleInstallClick}
+            >
+              Install app
+            </Button>
+          </ListItem>
+        )}
       </List>
 
       {/* Auth Section for Mobile */}
@@ -288,6 +352,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 <ListItemButton
                   component={Link}
                   to="/requests"
+                  replace
                   onClick={() => setDrawerOpen(false)}
                 >
                   <ListItemText
@@ -319,6 +384,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 <ListItemButton
                   component={Link}
                   to="/profile"
+                  replace
                   onClick={() => setDrawerOpen(false)}
                 >
                   <ListItemText primary="Profile" />
@@ -367,6 +433,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               startIcon={<LoginIcon />}
               component={Link}
               to="/login"
+              replace
               onClick={() => setDrawerOpen(false)}
               sx={{
                 textTransform: "none",
@@ -408,14 +475,16 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 justifyContent: "center",
                 width: { xs: 38, md: 42 },
                 height: { xs: 38, md: 42 },
-                p: "5px",
+                // The installed app's icon (manifest logo192/512). It carries
+                // its own white margin, so no padding around it here.
+                p: 0,
                 borderRadius: 2.5,
                 overflow: "hidden",
                 backgroundColor: "#ffffff",
               }}
             >
               <img
-                src="/favic_no_background.png"
+                src="/logo192.png"
                 alt="Kinvia"
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
@@ -443,6 +512,27 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
         }}
       >
         <Toolbar sx={{ px: { xs: 2, md: 2.5 }, gap: 1 }}>
+          {/* Phones: the bottom tabs cover the four main sections; ☰ holds the
+              rest. Top-left, where people look for a menu — the avatar alone
+              didn't read as one. Carries the pending-requests dot, since
+              Requests lives in the drawer. */}
+          {isMobile && !isOnboarding && !isLoginPage && (
+            <IconButton
+              color="inherit"
+              edge="start"
+              aria-label="Open menu"
+              onClick={() => setDrawerOpen(true)}
+              sx={{ mr: -0.5 }}
+            >
+              <Badge
+                color="error"
+                variant="dot"
+                invisible={!(showAuthed && hasPendingActionRequests)}
+              >
+                <MenuIcon />
+              </Badge>
+            </IconButton>
+          )}
           <Box
             component={Link}
             to="/"
@@ -468,7 +558,9 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 justifyContent: "center",
                 width: { xs: 38, md: 42 },
                 height: { xs: 38, md: 42 },
-                p: "5px",
+                // The installed app's icon (manifest logo192/512). It carries
+                // its own white margin, so no padding around it here.
+                p: 0,
                 borderRadius: 2.5,
                 overflow: "hidden",
                 boxShadow: "none",
@@ -476,7 +568,7 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
               }}
             >
               <img
-                src="/favic_no_background.png"
+                src="/logo192.png"
                 alt="Kinvia"
                 style={{ width: "100%", height: "100%", display: "block" }}
               />
@@ -690,30 +782,32 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                   >
                     Feedback
                   </Button>
-                  <Button
-                    startIcon={<LoginIcon />}
-                    component={Link}
-                    to="/login"
-                    variant="contained"
-                    disableElevation
-                    sx={{
-                      textTransform: "none",
-                      fontWeight: 700,
-                      px: 2.25,
-                      py: 0.75,
-                      color: "#fff",
-                      background: brandGradient,
-                      boxShadow: "0 4px 14px rgba(15,118,110,0.28)",
-                      transition: "transform 160ms ease, box-shadow 160ms ease",
-                      "&:hover": {
+                  {!isLoginPage && (
+                    <Button
+                      startIcon={<LoginIcon />}
+                      component={Link}
+                      to="/login"
+                      variant="contained"
+                      disableElevation
+                      sx={{
+                        textTransform: "none",
+                        fontWeight: 700,
+                        px: 2.25,
+                        py: 0.75,
+                        color: "#fff",
                         background: brandGradient,
-                        boxShadow: "0 6px 18px rgba(15,118,110,0.38)",
-                        transform: "translateY(-1px)",
-                      },
-                    }}
-                  >
-                    Login
-                  </Button>
+                        boxShadow: "0 4px 14px rgba(15,118,110,0.28)",
+                        transition: "transform 160ms ease, box-shadow 160ms ease",
+                        "&:hover": {
+                          background: brandGradient,
+                          boxShadow: "0 6px 18px rgba(15,118,110,0.38)",
+                          transform: "translateY(-1px)",
+                        },
+                      }}
+                    >
+                      Login
+                    </Button>
+                  )}
                 </Box>
               )}
             </Box>
@@ -726,65 +820,54 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
                 <IconButton
                   color="inherit"
                   edge="end"
-                  onClick={() => setDrawerOpen(!drawerOpen)}
+                  aria-label="Your profile"
+                  component={Link}
+                  to="/profile"
                   sx={{ p: 0.25, ml: 1 }}
                 >
-                  <Badge
-                    color="error"
-                    overlap="circular"
-                    variant={hasPendingActionRequests ? "dot" : undefined}
+                  <Avatar
+                    src={linkedPersonPhoto || undefined}
+                    sx={{
+                      width: 34,
+                      height: 34,
+                      border: "1px solid rgba(15,23,42,0.12)",
+                      bgcolor: "#f8fafc",
+                      color: "#0f172a",
+                      fontSize: 14,
+                      fontWeight: 700,
+                    }}
                   >
-                    <Avatar
-                      src={linkedPersonPhoto || undefined}
-                      sx={{
-                        width: 34,
-                        height: 34,
-                        border: "1px solid rgba(15,23,42,0.12)",
-                        bgcolor: "#f8fafc",
-                        color: "#0f172a",
-                        fontSize: 14,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {(userProfile?.displayName || currentUser?.email || "U")
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Avatar>
-                  </Badge>
+                    {(userProfile?.displayName || currentUser?.email || "U")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Avatar>
                 </IconButton>
               ) : (
                 <>
-                  {/* Guests: an explicit Login CTA (so it's discoverable without
-                      opening the menu) plus a clear menu button for nav. */}
-                  <Button
-                    variant="contained"
-                    size="small"
-                    disableElevation
-                    startIcon={<LoginIcon fontSize="small" />}
-                    component={Link}
-                    to="/login"
-                    sx={{
-                      ml: 1,
-                      textTransform: "none",
-                      fontWeight: 700,
-                      px: 1.5,
-                      whiteSpace: "nowrap",
-                      color: "#fff",
-                      background: brandGradient,
-                      "&:hover": { background: brandGradient },
-                    }}
-                  >
-                    Login
-                  </Button>
-                  <IconButton
-                    color="inherit"
-                    edge="end"
-                    aria-label="Open menu"
-                    onClick={() => setDrawerOpen(!drawerOpen)}
-                    sx={{ p: 0.5, ml: 0.5 }}
-                  >
-                    <MenuIcon />
-                  </IconButton>
+                  {/* Guests: an explicit Login CTA, so it's discoverable without
+                      opening the menu (☰ is at the top-left). */}
+                  {!isLoginPage && (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disableElevation
+                      startIcon={<LoginIcon fontSize="small" />}
+                      component={Link}
+                      to="/login"
+                      sx={{
+                        ml: 1,
+                        textTransform: "none",
+                        fontWeight: 700,
+                        px: 1.5,
+                        whiteSpace: "nowrap",
+                        color: "#fff",
+                        background: brandGradient,
+                        "&:hover": { background: brandGradient },
+                      }}
+                    >
+                      Login
+                    </Button>
+                  )}
                 </>
               )}
             </>
@@ -793,12 +876,19 @@ export const Header: React.FC<HeaderProps> = ({ locked = false }) => {
       </AppBar>
 
       <Drawer
-        anchor="right"
+        // Slides from the side its ☰ is on.
+        anchor={isMobile ? "left" : "right"}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       >
         {drawerContent}
       </Drawer>
+
+      <InstallGuideDialog
+        open={installGuideOpen}
+        onClose={() => setInstallGuideOpen(false)}
+        platform={installState.platform}
+      />
 
 
       <FeedbackDialog

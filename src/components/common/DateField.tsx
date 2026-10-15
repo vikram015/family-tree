@@ -16,8 +16,13 @@ import dayjs, { Dayjs } from "dayjs";
  * meaningful chunk and most screens never show a date field.
  */
 
+// The desktop picker on every device: the responsive DatePicker becomes its
+// mobile variant on touch screens, where the field is read-only and only the
+// calendar dialog can set it — so typing a date "sometimes" didn't work,
+// depending on the phone. This one always takes typing; the calendar still
+// opens from its icon.
 const DatePicker = React.lazy(() =>
-  import("@mui/x-date-pickers/DatePicker").then((m) => ({ default: m.DatePicker })),
+  import("@mui/x-date-pickers/DesktopDatePicker").then((m) => ({ default: m.DesktopDatePicker })),
 );
 
 export interface DateFieldProps {
@@ -78,6 +83,9 @@ export const DateField: React.FC<DateFieldProps> = ({
         // Day-first, like the rest of the app's pickers and like the audience
         // this is built for.
         format="DD/MM/YYYY"
+        // A plain <input>, which phone keyboards type into reliably, rather
+        // than v8's per-section editor; it also styles like every other field.
+        enableAccessibleFieldDOMStructure={false}
         onChange={(next: Dayjs | null) =>
           onChange(next && next.isValid() ? next.format("YYYY-MM-DD") : "")
         }

@@ -31,7 +31,7 @@ const faqs: FaqItem[] = [
   },
   {
     q: "How does linking my profile work?",
-    a: "When you pick the person that represents you, Kinvia sends a request to the tree owner for approval. Your account stays unlinked until they approve it. Once approved, that profile becomes yours and you can keep your own details up to date.",
+    a: "Pick the person that represents you in one of your family trees, and check the details shown — their parents and spouse — to make sure it's really you. If you can already edit that part of the tree, it links straight away. Otherwise the tree's editors approve it first. Picked the wrong person? Unlink it from your profile page and link the right one.",
   },
   {
     q: "How do I request edit access to a branch of the tree?",

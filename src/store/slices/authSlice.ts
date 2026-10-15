@@ -126,14 +126,18 @@ export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValu
   }
 });
 
-export const linkUserToNode = createAsyncThunk(
-  "auth/linkUserToNode",
-  async ({ personId, treeId }: { personId: string; treeId: string }, { rejectWithValue }) => {
+/**
+ * Re-read the signed-in user's profile — after something on the server changed
+ * it, such as linking or unlinking their account to a person.
+ */
+export const refreshUserProfile = createAsyncThunk(
+  "auth/refreshUserProfile",
+  async (_, { rejectWithValue }) => {
     try {
-      await backendApi.post("/api/auth/link-node", { personId, treeId });
-      return { personId };
+      const row = await backendApi.get<BackendUserProfile>("/api/auth/me");
+      return row ? mapBackendUserToAppUser(row) : null;
     } catch (error: any) {
-      return rejectWithValue(error?.message || "Failed to link user to node");
+      return rejectWithValue(error?.message || "Failed to refresh profile");
     }
   },
 );
@@ -221,10 +225,8 @@ const authSlice = createSlice({
         state.userProfile = null;
         state.error = null;
       })
-      .addCase(linkUserToNode.fulfilled, (state, action) => {
-        if (state.userProfile) {
-          state.userProfile.peopleId = action.payload.personId;
-        }
+      .addCase(refreshUserProfile.fulfilled, (state, action) => {
+        if (action.payload) state.userProfile = action.payload;
       })
       .addCase(updateUserProfile.fulfilled, (state, action) => {
         state.userProfile = action.payload;

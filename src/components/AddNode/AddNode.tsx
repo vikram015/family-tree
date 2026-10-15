@@ -56,10 +56,10 @@ import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { ProfessionFormDialog } from "../ProfessionProfilePage/ProfessionFormDialog";
 import { phoneFromCustomFields } from "../Business/businessContact";
+// Desktop picker on every device: the responsive one turns read-only on touch
+// screens (calendar only), so typing a date failed on some phones.
 const DatePicker = React.lazy(() =>
-  import("@mui/x-date-pickers/DatePicker").then((m) => ({
-    default: m.DatePicker,
-  })),
+  import("@mui/x-date-pickers/DesktopDatePicker").then((m) => ({ default: m.DesktopDatePicker })),
 );
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
 

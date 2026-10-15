@@ -63,7 +63,6 @@ import PersonAddAlt1OutlinedIcon from "@mui/icons-material/PersonAddAlt1Outlined
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import HowToRegOutlinedIcon from "@mui/icons-material/HowToRegOutlined";
 import HourglassTopOutlinedIcon from "@mui/icons-material/HourglassTopOutlined";
-import WarningAmberRoundedIcon from "@mui/icons-material/WarningAmberRounded";
 import { Relations } from "./Relations";
 import { AdditionalDetails } from "../AdditionalDetails/AdditionalDetails";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
@@ -80,10 +79,14 @@ import { LocationPicker } from "../LocationPicker/LocationPicker";
 import { PlacePicker, PlaceValue } from "../PlacePicker/PlacePicker";
 import { PersonSearchField } from "../BusinessPage/PersonSearchField";
 import { brand } from "../../theme/brand";
+import { useCloseOnBack } from "../hooks/useCloseOnBack";
+import { SelfLinkConfirmDialog } from "../SelfLink/SelfLinkConfirmDialog";
+import LinkOffIcon from "@mui/icons-material/LinkOff";
+import { readableProfessionProfile } from "../../utils/professionProfile";
+// Desktop picker on every device: the responsive one turns read-only on touch
+// screens (calendar only), so typing a date failed on some phones.
 const DatePicker = React.lazy(() =>
-  import("@mui/x-date-pickers/DatePicker").then((m) => ({
-    default: m.DatePicker,
-  })),
+  import("@mui/x-date-pickers/DesktopDatePicker").then((m) => ({ default: m.DesktopDatePicker })),
 );
 
 const ImageCropper = React.lazy(() => import("../ImageCropper/ImageCropper"));
@@ -172,6 +175,11 @@ interface NodeDetailsProps {
   onInviteCollaborator?: (personId: string) => void;
   /** Invite this person themselves: accepting links the invitee to the profile. */
   onInvitePerson?: (personId: string) => void;
+  /**
+   * After an editor unlinks the account attached to this person (the fix for
+   * "someone linked themselves to the wrong person"), so the tree reloads.
+   */
+  onAccountUnlinked?: () => void;
   /** Open directly in a specific view (e.g. "add" when clicking a placeholder) */
   initialView?: "details" | "edit" | "add";
   /** Pre-selected relation info when opening in "add" view from a placeholder */
@@ -202,6 +210,7 @@ const drawerActionsSx = {
   pb: { xs: "calc(12px + env(safe-area-inset-bottom))", sm: 1.5 },
 } as const;
 
+
 export const NodeDetails = memo(function NodeDetails({
   node,
   nodes,
@@ -220,6 +229,7 @@ export const NodeDetails = memo(function NodeDetails({
     treeId,
     onInviteCollaborator,
     onInvitePerson,
+    onAccountUnlinked,
   } = props;
   const formatDisplayDate = (value?: string) => {
     if (!value) return "";
@@ -409,7 +419,6 @@ export const NodeDetails = memo(function NodeDetails({
     Record<string, string>
   >({});
   const [businesses, setBusinesses] = useState<any[]>([]);
-  const [professions, setProfessions] = useState<any[]>([]);
   const [businessDialogOpen, setBusinessDialogOpen] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<any | null>(null);
   const [professionDialogOpen, setProfessionDialogOpen] = useState(false);
@@ -430,7 +439,8 @@ export const NodeDetails = memo(function NodeDetails({
   // can request the tree owner to link their account to this profile.
   const isUnlinkedUser = Boolean(currentUser && !userProfile?.peopleId);
   const [selfLinkConfirmOpen, setSelfLinkConfirmOpen] = useState(false);
-  const [selfLinkRequesting, setSelfLinkRequesting] = useState(false);
+  const [unlinkAccountOpen, setUnlinkAccountOpen] = useState(false);
+  const [unlinkingAccount, setUnlinkingAccount] = useState(false);
   // The signed-in user's own pending link requests (self-link + branch-access),
   // used to reflect already-requested state on the relevant buttons.
   const [myPendingRequests, setMyPendingRequests] = useState<LinkRequest[]>([]);
@@ -484,16 +494,14 @@ export const NodeDetails = memo(function NodeDetails({
         setDisplayCustomFields(fields);
       });
 
-      // Fetch businesses & professions so we know whether the person has any to
-      // reveal; the details themselves stay behind the login prompt for guests.
+      // Fetch businesses & the career profile so we know whether the person has
+      // any to reveal; the details themselves stay behind the login prompt for
+      // guests.
       ApiService.getBusinessesByPerson(node.id)
         .then((biz) => setBusinesses(biz || []))
         .catch(() => setBusinesses([]));
-      ApiService.getProfessionsByPerson(node.id)
-        .then((profs) => setProfessions(profs || []))
-        .catch(() => setProfessions([]));
       ApiService.getProfessionProfile(node.id)
-        .then((profile) => setProfessionProfile(profile))
+        .then((profile) => setProfessionProfile(readableProfessionProfile(profile)))
         .catch(() => setProfessionProfile(null));
     }
   }, [node, initialView, parsePickerValue, currentUser]);
@@ -511,13 +519,7 @@ export const NodeDetails = memo(function NodeDetails({
   const refreshProfessions = useCallback(async () => {
     if (!node) return;
     try {
-      const profs = await ApiService.getProfessionsByPerson(node.id);
-      setProfessions(profs || []);
-    } catch {
-      setProfessions([]);
-    }
-    try {
-      setProfessionProfile(await ApiService.getProfessionProfile(node.id));
+      setProfessionProfile(readableProfessionProfile(await ApiService.getProfessionProfile(node.id)));
     } catch {
       setProfessionProfile(null);
     }
@@ -578,58 +580,59 @@ export const NodeDetails = memo(function NodeDetails({
     setSelfLinkConfirmOpen(true);
   }, [node, currentUser, openLoginModal]);
 
-  const handleConfirmSelfLink = useCallback(async () => {
+  // An editor undoing someone else's link to this person.
+  const handleUnlinkAccount = useCallback(async () => {
     if (!node) return;
-    setSelfLinkRequesting(true);
+    setUnlinkingAccount(true);
     try {
-      const created = await ApiService.createUserNodeLinkRequest({
-        targetPersonId: node.id,
-      });
-      setMyPendingRequests((prev) => [...prev, created]);
+      await ApiService.unlinkAccount(node.id);
+      setUnlinkAccountOpen(false);
+      showSnackbar(`Unlinked the account from ${node.name}.`, "success");
+      onAccountUnlinked?.();
+    } catch (error: any) {
+      showSnackbar(error?.message || "Couldn't unlink the account.", "error");
+    } finally {
+      setUnlinkingAccount(false);
+    }
+  }, [node, showSnackbar, onAccountUnlinked]);
+
+  // After the "Is this you?" dialog: either linked on the spot (they could
+  // already edit this person) or sent to the editors.
+  const handleSelfLinkDone = useCallback(
+    (created: LinkRequest & { autoLinked?: boolean }) => {
       setSelfLinkConfirmOpen(false);
+      if (created.autoLinked) {
+        showSnackbar(
+          `Linked — ${node?.name || "this profile"} is now your profile. You can unlink it from your profile page.`,
+          "success",
+        );
+        return;
+      }
+      setMyPendingRequests((prev) => [...prev, created]);
       offerNotifications(
         "We'll let you know as soon as your profile link request is reviewed.",
       );
-      showSnackbar(
-        "Profile link request sent. It's pending owner approval.",
-        "success",
-      );
-    } catch (error: any) {
-      showSnackbar(
-        error?.message || "Failed to send profile link request.",
-        "error",
-      );
-    } finally {
-      setSelfLinkRequesting(false);
-    }
-  }, [node, showSnackbar, offerNotifications]);
+      showSnackbar("Profile link request sent. It's pending approval.", "success");
+    },
+    [node?.name, showSnackbar, offerNotifications],
+  );
 
   const isOpen = !!node;
-  useEffect(() => {
-    if (isOpen) {
-      window.history.pushState({ nodeDetailsOpen: true }, "");
-
-      const handlePopState = () => {
-        onSelect(undefined);
-        setView("details");
-      };
-
-      window.addEventListener("popstate", handlePopState);
-
-      return () => {
-        window.removeEventListener("popstate", handlePopState);
-      };
-    }
-  }, [isOpen, onSelect]);
-
-  const closeHandler = useCallback(() => {
-    if (window.history.state?.nodeDetailsOpen) {
-      window.history.back();
-    } else {
-      onSelect(undefined);
-      setView("details");
-    }
+  const dismiss = useCallback(() => {
+    onSelect(undefined);
+    setView("details");
   }, [onSelect]);
+  // The phone's Back closes the drawer. One history entry for as long as it is
+  // open: the hook keys on `isOpen` alone and reads `dismiss` through a ref.
+  // Keying on `onSelect` (a new function on every parent render) pushed an
+  // extra entry per render, so closing landed on another of the drawer's own
+  // entries and took several presses — or, on iOS, never closed at all.
+  // Opened from the person sheet's View/Edit, it takes over the sheet's entry.
+  useCloseOnBack(isOpen, dismiss, "nodeDetailsOpen");
+
+  // Closing pops the entry for us (see useCloseOnBack), so ✕ and Back end in
+  // the same place.
+  const closeHandler = dismiss;
 
   const handleEditClick = useCallback(() => {
     if (!currentUser) {
@@ -1265,6 +1268,23 @@ export const NodeDetails = memo(function NodeDetails({
                           Invite {inviteFirstName}
                         </Button>
                       )}
+                    {/* Someone's account is linked to this person. Editors can
+                        undo it when it isn't them — what the "linked their
+                        account" notification points to. Your own link is
+                        undone from your profile page instead. */}
+                    {canEditCurrentNode &&
+                      node.hasAccount &&
+                      node.id !== userProfile?.peopleId && (
+                        <Button
+                          variant="text"
+                          color="inherit"
+                          startIcon={<LinkOffIcon />}
+                          onClick={() => setUnlinkAccountOpen(true)}
+                          sx={{ height: 48, px: 1.5, fontWeight: 600, textTransform: "none", color: "text.secondary" }}
+                        >
+                          Unlink account
+                        </Button>
+                      )}
                     {isUnlinkedUser && (
                       <Tooltip
                         title={
@@ -1272,7 +1292,7 @@ export const NodeDetails = memo(function NodeDetails({
                             ? myPendingSelfLinkRequest.targetPersonId === node.id
                               ? "Your request to link this profile is pending owner approval."
                               : "You already have a profile link request pending owner approval."
-                            : "This is me — request to link this profile to my account"
+                            : "This is me — link this profile to my account"
                         }
                       >
                         {/* span wrapper lets the tooltip show while the button is disabled */}
@@ -1282,8 +1302,7 @@ export const NodeDetails = memo(function NodeDetails({
                             color="primary"
                             onClick={handleSelfLinkClick}
                             disabled={
-                              Boolean(myPendingSelfLinkRequest) ||
-                              selfLinkRequesting
+                              Boolean(myPendingSelfLinkRequest)
                             }
                             sx={{
                               border: 1,
@@ -1489,7 +1508,7 @@ export const NodeDetails = memo(function NodeDetails({
                   </Stack>
                 </Paper>
 
-                {(currentUser || businesses.length > 0 || professions.length > 0) && (
+                {(currentUser || businesses.length > 0 || Boolean(professionProfile)) && (
                 <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
                   {!currentUser ? (
                     <Box sx={{ textAlign: "center", py: 1.5 }}>
@@ -1607,9 +1626,7 @@ export const NodeDetails = memo(function NodeDetails({
                       <Divider />
 
                       {/* Profession: one career profile per person, so the
-                          control is "edit the one you have", not "add another".
-                          Legacy profession tags still render underneath until
-                          they have been migrated into a profile. */}
+                          control is "edit the one you have", not "add another". */}
                       <Box>
                         <Stack
                           direction="row"
@@ -1663,31 +1680,6 @@ export const NodeDetails = memo(function NodeDetails({
                               </Typography>
                             )}
                           </Box>
-                        ) : professions.length > 0 ? (
-                          <Stack spacing={1}>
-                            {professions.map((prof) => (
-                              <Box
-                                key={prof.id}
-                                sx={{
-                                  p: 1,
-                                  borderRadius: 2,
-                                  bgcolor: "action.hover",
-                                  minWidth: 0,
-                                }}
-                              >
-                                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                                  {prof.name}
-                                </Typography>
-                                {(prof.category || prof.description) && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {[prof.category, prof.description]
-                                      .filter(Boolean)
-                                      .join(" • ")}
-                                  </Typography>
-                                )}
-                              </Box>
-                            ))}
-                          </Stack>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
                             No profession added yet.
@@ -2739,83 +2731,57 @@ export const NodeDetails = memo(function NodeDetails({
         </DialogActions>
       </Dialog>
 
-      {node && (
-        <Dialog
-          open={selfLinkConfirmOpen}
-          onClose={() => !selfLinkRequesting && setSelfLinkConfirmOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {selfLinkNameMismatch && (
-              <WarningAmberRoundedIcon fontSize="small" color="warning" />
-            )}
-            <Typography
-              variant="h6"
-              component="div"
-              sx={{ flexGrow: 1, color: selfLinkNameMismatch ? "warning.main" : undefined }}
-            >
-              {selfLinkNameMismatch ? "Name doesn't match" : "Link this profile?"}
-            </Typography>
-            <IconButton
-              onClick={() => setSelfLinkConfirmOpen(false)}
-              size="small"
-              disabled={selfLinkRequesting}
-            >
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent>
-            <Box sx={{ mt: 1, mb: 2 }}>
-              <Typography variant="h6" color="text.primary">
-                {node.name}
-              </Typography>
-            </Box>
-            {selfLinkNameMismatch && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                <strong>{node.name}</strong> doesn't match your name
-                {userProfile?.name ? (
-                  <>
-                    {" "}
-                    (<strong>{userProfile.name}</strong>)
-                  </>
-                ) : null}
-                .
-              </Alert>
-            )}
-            <Typography>Are you sure this is you?</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              We'll send a request to the tree owner to link your account to this
-              profile. You'll be able to manage your branch once it's approved.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => setSelfLinkConfirmOpen(false)}
-              disabled={selfLinkRequesting}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmSelfLink}
-              variant="contained"
-              color={selfLinkNameMismatch ? "warning" : "primary"}
-              disabled={selfLinkRequesting}
-              startIcon={
-                selfLinkRequesting ? (
-                  <CircularProgress size={16} color="inherit" />
-                ) : undefined
-              }
-            >
-              {selfLinkRequesting
-                ? "Sending…"
-                : selfLinkNameMismatch
-                  ? "Yes, link anyway"
-                  : "Yes, this is me"}
-            </Button>
-          </DialogActions>
-        </Dialog>
-      )}
+      <Dialog
+        open={unlinkAccountOpen}
+        onClose={() => !unlinkingAccount && setUnlinkAccountOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 800 }}>Unlink this account?</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2">
+            The account linked to <strong>{node?.name}</strong> will be unlinked. Use this when
+            someone linked themselves to the wrong person. Edit access that came with the link is
+            removed; anything they were given separately stays.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setUnlinkAccountOpen(false)} disabled={unlinkingAccount}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disableElevation
+            onClick={() => void handleUnlinkAccount()}
+            disabled={unlinkingAccount}
+            startIcon={unlinkingAccount ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            Unlink
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <SelfLinkConfirmDialog
+        open={selfLinkConfirmOpen}
+        personId={node?.id || null}
+        onClose={() => setSelfLinkConfirmOpen(false)}
+        onDone={handleSelfLinkDone}
+        warning={
+          node && selfLinkNameMismatch ? (
+            <>
+              <strong>{node.name}</strong> doesn't match your name
+              {userProfile?.name ? (
+                <>
+                  {" "}
+                  (<strong>{userProfile.name}</strong>)
+                </>
+              ) : null}
+              . Make sure this is really you.
+            </>
+          ) : undefined
+        }
+      />
 
       {node && (
         <BusinessFormDialog

@@ -7,10 +7,9 @@ import { store } from "./store";
 import App from "./components/App/App";
 import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
 // Imported for its side effect: catches `beforeinstallprompt`, which fires
-// once during load, before any component that offers "Install" has mounted.
-// Off while the install card is hidden: it preventDefault()s the event, which
-// would also suppress the browser's own install prompt.
-// import "./utils/pwaInstall";
+// once during load, before any component that offers "Install" (the menu's
+// "Install app") has mounted. It leaves the browser's own prompt alone.
+import "./utils/pwaInstall";
 
 console.log("Index.tsx: App starting to render");
 

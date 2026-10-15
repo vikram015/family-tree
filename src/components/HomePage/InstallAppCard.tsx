@@ -177,19 +177,150 @@ function stepsFor(platform: InstallPlatform): { intro: string; steps: Step[] } {
   };
 }
 
+/**
+ * The how-to for platforms with no install button of their own: iOS (Share →
+ * Add to Home Screen), in-app browsers (open in a real browser first), and
+ * Android browsers without an install prompt. Used by the dashboard card and
+ * the menu's "Install app".
+ */
+export const InstallGuideDialog: React.FC<{
+  open: boolean;
+  onClose: () => void;
+  platform: InstallPlatform;
+}> = ({ open, onClose, platform }) => {
+  const [copied, setCopied] = useState(false);
+  const guide = stepsFor(platform);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.origin);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle component="div" sx={{ pr: 6 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: 18, color: brand.ink }}>
+          Install Kinvia
+        </Typography>
+        <Typography sx={{ fontSize: 13, color: brand.slateMuted, mt: 0.5 }}>
+          {guide.intro}
+        </Typography>
+        <IconButton
+          onClick={onClose}
+          aria-label="Close"
+          sx={{ position: "absolute", right: 8, top: 8 }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      {/* MUI drops a content area's top padding when it follows a title, and
+          the first step's number badge sits 6px above its icon — so it was
+          clipped under the title. "&&" outranks MUI's rule. */}
+      <DialogContent sx={{ "&&": { pt: 1.5 } }}>
+        <Stack component="ol" spacing={2} sx={{ listStyle: "none", p: 0, m: 0 }}>
+          {guide.steps.map((step, index) => (
+            <Stack component="li" key={index} direction="row" spacing={1.5} alignItems="flex-start">
+              <Box
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2,
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  bgcolor: brand.primarySoft,
+                  color: brand.primary,
+                  position: "relative",
+                }}
+              >
+                {step.icon}
+                <Box
+                  component="span"
+                  sx={{
+                    position: "absolute",
+                    top: -6,
+                    left: -6,
+                    width: 18,
+                    height: 18,
+                    borderRadius: "50%",
+                    bgcolor: brand.primary,
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {index + 1}
+                </Box>
+              </Box>
+              <Box sx={{ minWidth: 0, pt: 0.25 }}>
+                <Typography sx={{ color: brand.ink, fontSize: 15 }}>{step.title}</Typography>
+                {step.detail && (
+                  <Typography sx={{ color: brand.slateMuted, fontSize: 13, mt: 0.25 }}>
+                    {step.detail}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+          ))}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        {platform === "in-app" && (
+          <Button
+            onClick={() => void handleCopy()}
+            startIcon={copied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
+            sx={{ textTransform: "none", mr: "auto" }}
+          >
+            {copied ? "Link copied" : "Copy link"}
+          </Button>
+        )}
+        <Button
+          variant="contained"
+          onClick={onClose}
+          sx={{ textTransform: "none", fontWeight: 700, bgcolor: brand.primary }}
+        >
+          Got it
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+/**
+ * Whether this device can install the app — a live browser prompt, or a
+ * platform the guide covers. Desktop Safari/Firefox get no offer rather than
+ * instructions that don't apply. False once installed or running installed.
+ */
+export function canOfferInstall(state: {
+  standalone: boolean;
+  canPrompt: boolean;
+  platform: InstallPlatform;
+}): boolean {
+  if (state.standalone) return false;
+  return (
+    state.canPrompt ||
+    state.platform === "ios" ||
+    state.platform === "in-app" ||
+    state.platform === "android"
+  );
+}
+
 export const InstallAppCard: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { standalone, canPrompt, platform } = useInstallPrompt();
   const [dismissed, setDismissed] = useState(wasDismissedRecently);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
 
-  // Only offer it where there is actually a way to install: a live browser
-  // prompt, or a platform we can walk through by hand. Desktop Safari/Firefox
-  // get nothing rather than instructions that don't apply.
-  const installable = canPrompt || platform === "ios" || platform === "in-app" || platform === "android";
-  if (standalone || dismissed || !installable) return null;
+  if (dismissed || !canOfferInstall({ standalone, canPrompt, platform })) return null;
 
   const handleInstall = async () => {
     if (canPrompt) {
@@ -203,17 +334,6 @@ export const InstallAppCard: React.FC = () => {
     rememberDismissal();
     setDismissed(true);
   };
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.origin);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
-
-  const guide = stepsFor(platform);
 
   return (
     <>
@@ -278,93 +398,11 @@ export const InstallAppCard: React.FC = () => {
         </Stack>
       </Box>
 
-      <Dialog open={guideOpen} onClose={() => setGuideOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle component="div" sx={{ pr: 6 }}>
-          <Typography sx={{ fontWeight: 800, fontSize: 18, color: brand.ink }}>
-            Install Kinvia
-          </Typography>
-          <Typography sx={{ fontSize: 13, color: brand.slateMuted, mt: 0.5 }}>
-            {guide.intro}
-          </Typography>
-          <IconButton
-            onClick={() => setGuideOpen(false)}
-            aria-label="Close"
-            sx={{ position: "absolute", right: 8, top: 8 }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent>
-          <Stack component="ol" spacing={2} sx={{ listStyle: "none", p: 0, m: 0 }}>
-            {guide.steps.map((step, index) => (
-              <Stack component="li" key={index} direction="row" spacing={1.5} alignItems="flex-start">
-                <Box
-                  sx={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 2,
-                    flexShrink: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    bgcolor: brand.primarySoft,
-                    color: brand.primary,
-                    position: "relative",
-                  }}
-                >
-                  {step.icon}
-                  <Box
-                    component="span"
-                    sx={{
-                      position: "absolute",
-                      top: -6,
-                      left: -6,
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      bgcolor: brand.primary,
-                      color: "#fff",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {index + 1}
-                  </Box>
-                </Box>
-                <Box sx={{ minWidth: 0, pt: 0.25 }}>
-                  <Typography sx={{ color: brand.ink, fontSize: 15 }}>{step.title}</Typography>
-                  {step.detail && (
-                    <Typography sx={{ color: brand.slateMuted, fontSize: 13, mt: 0.25 }}>
-                      {step.detail}
-                    </Typography>
-                  )}
-                </Box>
-              </Stack>
-            ))}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          {platform === "in-app" && (
-            <Button
-              onClick={() => void handleCopy()}
-              startIcon={copied ? <CheckCircleOutlineIcon /> : <ContentCopyIcon />}
-              sx={{ textTransform: "none", mr: "auto" }}
-            >
-              {copied ? "Link copied" : "Copy link"}
-            </Button>
-          )}
-          <Button
-            variant="contained"
-            onClick={() => setGuideOpen(false)}
-            sx={{ textTransform: "none", fontWeight: 700, bgcolor: brand.primary }}
-          >
-            Got it
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <InstallGuideDialog
+        open={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        platform={platform}
+      />
     </>
   );
 };

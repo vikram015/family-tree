@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { routerHistoryState } from "../hooks/useCloseOnBack";
 
 /**
  * Distraction-free mode for the family tree.
@@ -103,8 +104,11 @@ export const TreeFullscreenProvider: React.FC<{ children: React.ReactNode }> = (
   // history trick the dialogs use.
   useEffect(() => {
     if (!isFullscreen) return;
-    window.history.pushState({ treeFullscreen: true }, "");
+    window.history.pushState({ ...routerHistoryState(), treeFullscreen: true }, "");
     const onPopState = () => {
+      // Back that only closed a sheet or drawer over the tree lands on this
+      // entry again; stay in fullscreen for that.
+      if (window.history.state?.treeFullscreen) return;
       setIsFullscreen(false);
       void exitNativeFullscreen();
     };

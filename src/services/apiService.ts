@@ -733,6 +733,48 @@ export interface DefaultUserTreeTarget {
   locationId?: string | null;
 }
 
+/** One of the caller's trees, as a card on the mobile tree list. */
+export interface MyTree {
+  id: string;
+  name: string;
+  createdAt: string;
+  locationName: string | null;
+  districtName: string | null;
+  casteName: string | null;
+  subCasteName: string | null;
+  /** The strongest thing the caller can do in this tree. */
+  access: "owner" | "admin" | "editor" | "branch" | "viewer";
+  /** The tree their own profile lives in (or the app's default tree). */
+  isPrimary: boolean;
+  peopleCount: number;
+  generations: number;
+  updatedAt: string | null;
+  /** Up to three member photo URLs. */
+  photos: string[];
+}
+
+/** See the backend's SelfLinkPreview. */
+export interface SelfLinkPreview {
+  person: {
+    id: string;
+    name: string;
+    nameHindi: string | null;
+    gender: string | null;
+    birthYear: number | null;
+    isAlive: boolean;
+    photoUrl: string | null;
+    treeId: string;
+    treeName: string;
+    fatherName: string | null;
+    motherName: string | null;
+    spouseNames: string[];
+  };
+  /** instant: links on confirm · request: editors review · blocked: can't. */
+  mode: "instant" | "request" | "blocked";
+  concerns: string[];
+  blockedReason: string | null;
+}
+
 export interface TreeInvite {
   id: string;
   treeId: string;
@@ -1190,6 +1232,10 @@ export const ApiService = {
 
   async getTreeWriteScope(treeId: string): Promise<TreeWriteScope> {
     return backendApi.get<TreeWriteScope>(`/api/tree/${treeId}/write-scope`);
+  },
+
+  async getMyTrees(): Promise<MyTree[]> {
+    return backendApi.get<MyTree[]>("/api/tree/my");
   },
 
   async getDefaultUserTree(): Promise<DefaultUserTreeTarget> {
@@ -1669,33 +1715,9 @@ export const ApiService = {
     return backendApi.get<any[]>('/api/feedback');
   },
 
-  /**
-   * Get professions for a person
-   */
-  async getProfessionsByPerson(peopleId: string): Promise<any[]> {
-    return backendApi.get<any[]>(`/api/profession/people/${peopleId}`);
-  },
 
-  /**
-   * Add profession to a person
-   */
-  async addProfessionToPerson(peopleId: string, professionId: string): Promise<any> {
-    return backendApi.post<any>(`/api/profession/people/${peopleId}/${professionId}`);
-  },
 
-  /**
-   * Remove profession from a person
-   */
-  async removeProfessionFromPerson(peopleId: string, professionId: string): Promise<void> {
-    await backendApi.delete(`/api/profession/people/${peopleId}/${professionId}`);
-  },
 
-  /**
-   * Get people with a specific profession
-   */
-  async getPeopleWithProfession(professionId: string): Promise<any[]> {
-    return backendApi.get<any[]>(`/api/profession/${professionId}/people`);
-  },
 
   /**
    * Create sub-caste
@@ -1764,11 +1786,26 @@ export const ApiService = {
     });
   },
 
+  /** What "This is me" on this person would show and do. */
+  async getSelfLinkPreview(personId: string): Promise<SelfLinkPreview> {
+    return backendApi.get<SelfLinkPreview>(`/api/link-requests/self-link-preview/${personId}`);
+  },
+
+  /**
+   * Undo an account ↔ person link. Your own, or (as an editor of the person)
+   * someone else's.
+   */
+  async unlinkAccount(personId: string): Promise<{ success: boolean; removedBranchAccess: boolean }> {
+    return backendApi.post("/api/link-requests/unlink", { personId });
+  },
+
   async createUserNodeLinkRequest(payload: {
     targetPersonId: string;
     requestMessage?: string | null;
-  }): Promise<LinkRequest> {
-    return backendApi.post<LinkRequest>("/api/link-requests/user-node", payload);
+  }): Promise<LinkRequest & { autoLinked?: boolean }> {
+    // `autoLinked`: you could already edit this person, so the link was made
+    // on the spot rather than sent for review.
+    return backendApi.post<LinkRequest & { autoLinked?: boolean }>("/api/link-requests/user-node", payload);
   },
 
   async createBranchAccessRequest(payload: {
