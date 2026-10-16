@@ -525,11 +525,13 @@ const adornment = (icon: React.ReactNode) => (
     }
   }, [onComplete, onCancel, targetId, applyDefaultOtherParent]);
 
+  // "Add another son/daughter": another child of the same parent, starting on
+  // the gender of the one just added.
   const handleContinueWithSon = useCallback(() => {
     setName("");
     setDob(null);
     setNameHindi("");
-    setGender("male");
+    setGender((current) => (current === "female" ? "female" : "male"));
     setRelation("child");
     setRelationStartDate(null);
     setRelationEndDate(null);
@@ -942,16 +944,20 @@ const adornment = (icon: React.ReactNode) => (
                 Skip
               </Button>
             )}
-            <Button
-              onClick={() => {
-                if (savedNodeId) {
-                  handleContinueWithSon();
-                }
-              }}
-              variant="outlined"
-            >
-              Add Another Son
-            </Button>
+            {/* Only after adding a child: another spouse, mother or father is
+                not a "next one" of the same kind. */}
+            {relation === "child" && !isFirstNode && (
+              <Button
+                onClick={() => {
+                  if (savedNodeId) {
+                    handleContinueWithSon();
+                  }
+                }}
+                variant="outlined"
+              >
+                {gender === "female" ? "Add Another Daughter" : "Add Another Son"}
+              </Button>
+            )}
             {/* Both dialogs save as soon as they close, so there is nothing
                 left to write here — this only ends the flow. */}
             <Button onClick={handleFlowComplete} variant="contained">

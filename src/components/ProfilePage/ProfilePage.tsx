@@ -963,7 +963,7 @@ export const ProfilePage: React.FC = () => {
         {/* Tree Linking Section — logged-in user not yet linked to a person. */}
         {isOwnAccountView && currentUser && !userProfile?.peopleId && (
         <Grid size={{ xs: 12, md: 8 }} ref={linkSectionRef}>
-          <Paper elevation={2} sx={{ p: 3, height: "100%" }}>
+          <Paper elevation={2} sx={{ p: { xs: 2, sm: 3 }, height: "100%", minWidth: 0 }}>
             <Box
               sx={{
                 display: "flex",
@@ -1060,7 +1060,7 @@ export const ProfilePage: React.FC = () => {
                             const parents = (candidate.parentHierarchy || [])
                               .map((p: any) => p?.name)
                               .filter(Boolean)
-                              .join(" • ");
+                              .join(" › ");
                             return (
                               <Paper
                                 key={candidate.id}
@@ -1072,8 +1072,9 @@ export const ProfilePage: React.FC = () => {
                                 sx={{
                                   p: 1.5,
                                   display: "flex",
-                                  alignItems: "center",
+                                  alignItems: "flex-start",
                                   gap: 1.5,
+                                  minWidth: 0,
                                   cursor: "pointer",
                                   borderColor: isChosen ? "primary.main" : "divider",
                                   borderWidth: isChosen ? 2 : 1,
@@ -1084,16 +1085,26 @@ export const ProfilePage: React.FC = () => {
                                 <Avatar src={candidate.photoUrl || undefined}>
                                   {(candidate.name || "?").charAt(0).toUpperCase()}
                                 </Avatar>
-                                <Box sx={{ minWidth: 0, flex: 1 }}>
-                                  <Typography sx={{ fontWeight: 600 }} noWrap>
+                                {/* Everything wraps: on a phone one-line rows cut off
+                                    the parents, which are what tell two people with
+                                    the same name apart. */}
+                                <Box sx={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
+                                  <Typography sx={{ fontWeight: 600, lineHeight: 1.3 }}>
                                     {candidate.name}
                                     {candidate.nameHindi ? ` (${candidate.nameHindi})` : ""}
                                   </Typography>
-                                  <Typography variant="body2" color="text.secondary" noWrap>
-                                    {[candidate.treeName, candidate.locationName, parents]
-                                      .filter(Boolean)
-                                      .join(" · ")}
-                                  </Typography>
+                                  {parents && (
+                                    <Typography variant="body2" sx={{ color: "primary.main", mt: 0.25 }}>
+                                      {parents}
+                                    </Typography>
+                                  )}
+                                  {(candidate.treeName || candidate.locationName) && (
+                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                                      {[candidate.treeName, candidate.locationName]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </Typography>
+                                  )}
                                 </Box>
                                 {isChosen && <CheckCircleIcon color="primary" />}
                               </Paper>

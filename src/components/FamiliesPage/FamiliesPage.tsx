@@ -1591,8 +1591,21 @@ export const FamiliesPage: React.FC<FamiliesPageProps> = ({
               />
             ) : rootId && nodes.find((n) => n.id === rootId) ? (
               (() => {
-                const initialFocusId = highlightedPersonId || userProfile?.peopleId;
-                const isInitialFocusInTree = Boolean(initialFocusId && nodes.find((n) => n.id === initialFocusId));
+                // Where the tree opens: the person a link asked for; else
+                // yourself, when your profile is in this tree; else the top of
+                // the branch you were given access to; else the whole tree.
+                const isInTree = (id?: string | null) =>
+                  Boolean(id && nodes.some((n) => n.id === id));
+                const branchRootId =
+                  treeWriteScope?.treeId === treeId && !treeWriteScope.canWriteAll
+                    ? treeWriteScope.rootPersonIds.find((id) => isInTree(id))
+                    : undefined;
+                const initialFocusId = [
+                  highlightedPersonId,
+                  userProfile?.peopleId,
+                  branchRootId,
+                ].find((id) => isInTree(id));
+                const isInitialFocusInTree = Boolean(initialFocusId);
 
                 return (
                   <DTreeComponent
