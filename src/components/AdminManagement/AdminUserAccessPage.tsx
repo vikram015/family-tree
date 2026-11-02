@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -14,6 +14,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -22,18 +24,36 @@ import { ApiService, AdminUserTreeAccess } from "../../services/apiService";
 import { useAuth } from "../hooks/useAuth";
 import { formatDate, formatDateTime } from "../../utils/dateFormatter";
 
+type TreeRow = AdminUserTreeAccess["trees"][number];
+
+const OWNER_ROLES = ["owner", "admin"];
+const WRITE_ROLES = ["owner", "admin", "editor", "write"];
+
+/**
+ * What the toggle can switch: "read" or "write", null when nothing is held yet,
+ * and "owner" when it is not ours to change (creator, or an owner/admin grant).
+ */
+function currentAccess(tree: TreeRow): "owner" | "write" | "read" | null {
+  const perms = tree.permissions || [];
+  if (tree.isOwner || perms.some((p) => OWNER_ROLES.includes(p.role))) return "owner";
+  if (perms.some((p) => WRITE_ROLES.includes(p.role))) return "write";
+  return perms.length > 0 ? "read" : null;
+}
+
 /** How the user reaches one tree, in words. */
-function accessLabel(tree: AdminUserTreeAccess["trees"][number]): {
+function accessLabel(tree: TreeRow): {
   label: string;
   color: "success" | "primary" | "default" | "warning";
 } {
   if (tree.isOwner) return { label: "Owner", color: "success" };
   const perms = tree.permissions || [];
   if (perms.length === 0) return { label: "No current access", color: "warning" };
-  const full = perms.find((p) => !p.personId);
+  const writes = perms.filter((p) => WRITE_ROLES.includes(p.role));
+  if (writes.length === 0) return { label: "View only", color: "default" };
+  const full = writes.find((p) => !p.personId);
   if (full) return { label: `Full tree · ${full.role}`, color: "primary" };
-  const branches = perms.map((p) => p.personName || "Unnamed").join(", ");
-  return { label: `Branch: ${branches} · ${perms[0].role}`, color: "default" };
+  const branches = writes.map((p) => p.personName || "Unnamed").join(", ");
+  return { label: `Branch: ${branches} · ${writes[0].role}`, color: "primary" };
 }
 
 /**
@@ -46,6 +66,26 @@ export const AdminUserAccessPage: React.FC = () => {
   const [data, setData] = useState<AdminUserTreeAccess | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Bumped after an access change to refetch the list. */
+  const [reloadKey, setReloadKey] = useState(0);
+  const [savingTreeId, setSavingTreeId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleAccessChange = useCallback(
+    async (treeId: string, access: "read" | "write") => {
+      setSavingTreeId(treeId);
+      setActionError(null);
+      try {
+        await ApiService.setAdminUserTreeAccess(userId, treeId, access);
+        setReloadKey((key) => key + 1);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSavingTreeId(null);
+      }
+    },
+    [userId],
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -55,7 +95,8 @@ export const AdminUserAccessPage: React.FC = () => {
       return;
     }
     let cancelled = false;
-    setLoading(true);
+    // A refetch after a change keeps the table on screen.
+    if (reloadKey === 0) setLoading(true);
     ApiService.getAdminUserTreeAccess(userId)
       .then((result) => {
         if (!cancelled) setData(result);
@@ -69,7 +110,7 @@ export const AdminUserAccessPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [userId, authLoading, isSuperAdmin]);
+  }, [userId, authLoading, isSuperAdmin, reloadKey]);
 
   const user = data?.user;
 
@@ -122,16 +163,23 @@ export const AdminUserAccessPage: React.FC = () => {
             )}
           </Paper>
 
+          {actionError && (
+            <Alert severity="error" onClose={() => setActionError(null)}>
+              {actionError}
+            </Alert>
+          )}
+
           {data.trees.length === 0 ? (
             <Alert severity="info">This user has no access to any tree and hasn't added anyone.</Alert>
           ) : (
             <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 3, overflowX: "auto" }}>
-              <Table size="small" sx={{ minWidth: 720 }}>
+              <Table size="small" sx={{ minWidth: 860 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Tree</TableCell>
                     <TableCell>Location</TableCell>
                     <TableCell>Access</TableCell>
+                    <TableCell>Change access</TableCell>
                     <TableCell align="right">People added</TableCell>
                     <TableCell>Last added</TableCell>
                   </TableRow>
@@ -139,6 +187,7 @@ export const AdminUserAccessPage: React.FC = () => {
                 <TableBody>
                   {data.trees.map((tree) => {
                     const access = accessLabel(tree);
+                    const current = currentAccess(tree);
                     return (
                       <TableRow key={tree.treeId} hover>
                         <TableCell>
@@ -155,6 +204,30 @@ export const AdminUserAccessPage: React.FC = () => {
                             variant={access.color === "default" ? "outlined" : "filled"}
                             sx={{ maxWidth: 320 }}
                           />
+                        </TableCell>
+                        <TableCell>
+                          {current === "owner" ? (
+                            <Typography variant="caption" color="text.secondary">
+                              Owner — can't change
+                            </Typography>
+                          ) : (
+                            <ToggleButtonGroup
+                              size="small"
+                              exclusive
+                              value={current}
+                              disabled={savingTreeId === tree.treeId}
+                              onChange={(_e, value) => {
+                                if (value && value !== current) void handleAccessChange(tree.treeId, value);
+                              }}
+                            >
+                              <ToggleButton value="read" sx={{ textTransform: "none", px: 1.5 }}>
+                                View only
+                              </ToggleButton>
+                              <ToggleButton value="write" sx={{ textTransform: "none", px: 1.5 }}>
+                                Edit
+                              </ToggleButton>
+                            </ToggleButtonGroup>
+                          )}
                         </TableCell>
                         <TableCell align="right" sx={{ fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>
                           {tree.nodesAdded}

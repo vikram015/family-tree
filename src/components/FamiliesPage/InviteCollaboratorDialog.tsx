@@ -19,13 +19,16 @@ import {
   Select,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
 } from "@mui/material";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import PersonSearchOutlinedIcon from "@mui/icons-material/PersonSearchOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
@@ -102,6 +105,8 @@ export function InviteCollaboratorDialog({
 }: InviteCollaboratorDialogProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  // View access is always the whole tree, so there is no branch to choose.
+  const viewOnly = inviteRole === "read" || inviteRole === "viewer";
 
   // Close on the mobile/browser Back button: push a history entry while open so
   // Back pops it (firing popstate) instead of navigating away from the tree.
@@ -153,7 +158,8 @@ export function InviteCollaboratorDialog({
         const result = await ApiService.lookupTreeInviteUser(
           treeId,
           `+91${phoneDigits}`,
-          inviteScope === "branch" ? invitePersonId : undefined,
+          inviteScope === "branch" && !viewOnly ? invitePersonId : undefined,
+          inviteRole,
         );
         if (controller.signal.aborted) return;
         if (result.exists) {
@@ -174,7 +180,7 @@ export function InviteCollaboratorDialog({
       controller.abort();
       window.clearTimeout(timeoutId);
     };
-  }, [open, phoneDigits, treeId, inviteScope, invitePersonId]);
+  }, [open, phoneDigits, treeId, inviteScope, invitePersonId, inviteRole, viewOnly]);
 
   // Pick the invitee from the device's contacts instead of typing the number.
   // Only offered where the browser supports it (Android Chromium) — everyone
@@ -332,20 +338,46 @@ export function InviteCollaboratorDialog({
             </Typography>
           )}
 
-          <FormControl fullWidth>
-            <InputLabel>Access Scope</InputLabel>
-            <Select
-              label="Access Scope"
-              value={inviteScope}
-              onChange={(e) => onInviteScopeChange(e.target.value as "full" | "branch")}
-              startAdornment={iconAdornment(<AccountTreeOutlinedIcon fontSize="small" />)}
+          <Stack spacing={1}>
+            <ToggleButtonGroup
+              value={viewOnly ? "read" : "write"}
+              exclusive
+              fullWidth
+              size="small"
+              onChange={(_e, value) => value && onInviteRoleChange(value)}
             >
-              {allowFullTree && <MenuItem value="full">Full tree</MenuItem>}
-              <MenuItem value="branch">Selected person branch</MenuItem>
-            </Select>
-          </FormControl>
+              <ToggleButton value="write" sx={{ textTransform: "none", flexDirection: "column", py: 1 }}>
+                <EditOutlinedIcon fontSize="small" />
+                <Typography variant="caption" sx={{ mt: 0.3 }}>Can edit</Typography>
+              </ToggleButton>
+              <ToggleButton value="read" sx={{ textTransform: "none", flexDirection: "column", py: 1 }}>
+                <VisibilityOutlinedIcon fontSize="small" />
+                <Typography variant="caption" sx={{ mt: 0.3 }}>View only</Typography>
+              </ToggleButton>
+            </ToggleButtonGroup>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {viewOnly
+                ? "They can see the whole tree, everyone's details and the birthday and anniversary cards, but can't add, edit or delete anyone. They can ask you for edit access later."
+                : "They can add, edit and delete people in the tree or branch you choose below."}
+            </Typography>
+          </Stack>
 
-          {inviteScope === "branch" && (
+          {!viewOnly && (
+            <FormControl fullWidth>
+              <InputLabel>Access Scope</InputLabel>
+              <Select
+                label="Access Scope"
+                value={inviteScope}
+                onChange={(e) => onInviteScopeChange(e.target.value as "full" | "branch")}
+                startAdornment={iconAdornment(<AccountTreeOutlinedIcon fontSize="small" />)}
+              >
+                {allowFullTree && <MenuItem value="full">Full tree</MenuItem>}
+                <MenuItem value="branch">Selected person branch</MenuItem>
+              </Select>
+            </FormControl>
+          )}
+
+          {inviteScope === "branch" && !viewOnly && (
             <Stack spacing={1.5} sx={{ mb: 1 }}>
               {!lockBranchPerson && (
                 <PersonSearchField
@@ -388,20 +420,6 @@ export function InviteCollaboratorDialog({
             </Stack>
           )}
 
-          <FormControl fullWidth sx={{ mt: inviteScope === "branch" ? 1 : 0 }}>
-            <InputLabel>Role</InputLabel>
-            <Select
-              label="Role"
-              value={inviteRole}
-              onChange={(e) => onInviteRoleChange(e.target.value)}
-              startAdornment={iconAdornment(<AdminPanelSettingsOutlinedIcon fontSize="small" />)}
-            >
-              <MenuItem value="write">Write</MenuItem>
-              <MenuItem value="editor">Editor</MenuItem>
-              <MenuItem value="read">Read</MenuItem>
-              <MenuItem value="viewer">Viewer</MenuItem>
-            </Select>
-          </FormControl>
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>

@@ -793,6 +793,8 @@ export interface TreeInvite {
   user?: { id: string; name: string | null; phone: string | null };
   /** True when the invitee's account was also linked to the invited person. */
   linked?: boolean;
+  /** Granted, but they already held stronger access — e.g. an editor sent a view-only invite. */
+  unchanged?: boolean;
 }
 
 export const ApiService = {
@@ -1265,10 +1267,11 @@ export const ApiService = {
     treeId: string,
     phone: string,
     personId?: string | null,
+    role?: string,
   ): Promise<{ exists: boolean; name: string | null }> {
     return backendApi.post<{ exists: boolean; name: string | null }>(
       `/api/tree/${treeId}/invites/lookup`,
-      { phone, personId: personId || null },
+      { phone, personId: personId || null, role },
     );
   },
 
@@ -1280,6 +1283,18 @@ export const ApiService = {
   /** Superadmin: which trees a user can reach and how many people they added. */
   async getAdminUserTreeAccess(userId: string): Promise<AdminUserTreeAccess> {
     return backendApi.get<AdminUserTreeAccess>(`/api/admin/users/${encodeURIComponent(userId)}/trees`);
+  },
+
+  /** Superadmin: switch a user between view-only and edit access on one tree. */
+  async setAdminUserTreeAccess(
+    userId: string,
+    treeId: string,
+    access: "read" | "write",
+  ): Promise<{ userId: string; treeId: string; access: "read" | "write" }> {
+    return backendApi.put(
+      `/api/admin/users/${encodeURIComponent(userId)}/trees/${encodeURIComponent(treeId)}/access`,
+      { access },
+    );
   },
 
   async getInvitePreview(token: string): Promise<{

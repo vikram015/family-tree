@@ -83,7 +83,7 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
   /** Set once the invite exists: either a link to send, or access granted. */
   const [result, setResult] = useState<
     | { kind: "link"; link: string; text: string; phone: string; personName: string }
-    | { kind: "granted"; name: string; linked: boolean }
+    | { kind: "granted"; name: string; linked: boolean; unchanged: boolean }
     | null
   >(null);
   const [copied, setCopied] = useState(false);
@@ -124,7 +124,14 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
 
   const handleCreate = useCallback(async () => {
     if (!treeId) return;
-    const branchId = scope === "branch" ? personId || null : null;
+    const viewOnly = role === "read";
+    // View access is the whole tree; the person only matters when the invite
+    // also links their account to that profile.
+    const branchId = viewOnly
+      ? (linkToPerson && personId) || null
+      : scope === "branch"
+        ? personId || null
+        : null;
     const digits = localDigits(phone);
     // The number is required: it ties the link to one person, so a forwarded
     // invite can't be used by someone else.
@@ -134,7 +141,7 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         ? "Enter all 10 digits of the mobile number."
         : null;
     setPhoneError(phoneProblem);
-    if (scope === "branch" && !branchId) {
+    if (!viewOnly && scope === "branch" && !branchId) {
       setError("Choose the person whose branch they can edit.");
       return;
     }
@@ -149,7 +156,12 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         linkToPerson: Boolean(linkToPerson && branchId),
       });
       if (invite.granted) {
-        setResult({ kind: "granted", name: invite.user?.name || "They", linked: Boolean(invite.linked) });
+        setResult({
+          kind: "granted",
+          name: invite.user?.name || "They",
+          linked: Boolean(invite.linked),
+          unchanged: Boolean(invite.unchanged),
+        });
         return;
       }
       // Build the link on this site's domain; the backend's host is fixed.
@@ -169,7 +181,9 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         link,
         phone: digits,
         personName: personName || "",
-        text: `You're invited to help build ${branchId ? `${who}'s branch of ` : ""}our family tree on Kinvia. Open this link to join:\n${link}`,
+        text: viewOnly
+          ? `You're invited to see our family tree on Kinvia — everyone's details, birthdays and anniversaries. Open this link to join:\n${link}`
+          : `You're invited to help build ${branchId ? `${who}'s branch of ` : ""}our family tree on Kinvia. Open this link to join:\n${link}`,
       });
       offerNotifications("We'll let you know as soon as your invite is accepted.");
     } catch (err) {
@@ -213,7 +227,9 @@ export const InviteToTreeDialog: React.FC<InviteToTreeDialogProps> = ({
         <DialogContent>
           {result.kind === "granted" ? (
             <Alert severity="success">
-              {result.name} already has an account and can open this tree now
+              {result.unchanged
+                ? `${result.name} already has edit access to this tree, so nothing changed`
+                : `${result.name} already has an account and can open this tree now${role === "read" ? " (view only)" : ""}`}
               {result.linked ? `, linked to ${personName || "this"}'s profile.` : "."}
             </Alert>
           ) : (
