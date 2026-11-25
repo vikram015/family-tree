@@ -52,6 +52,7 @@ import {
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
 import { DeleteAccountPage } from "../DeleteAccount/DeleteAccountPage";
+import { ChildSafetyPage } from "../ChildSafetyPage/ChildSafetyPage";
 import { TermsPage } from "../TermsPage/TermsPage";
 import { LocationsPage } from "../LocationsPage/LocationsPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
@@ -383,6 +384,7 @@ function AppContent() {
               <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
               <Route path="/delete-account" element={<DeleteAccountPage />} />
+              <Route path="/child-safety" element={<ChildSafetyPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/locations" element={<LocationsPage />} />
             </Routes>

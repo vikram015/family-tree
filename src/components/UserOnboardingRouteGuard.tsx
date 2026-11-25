@@ -87,7 +87,7 @@ export const UserOnboardingRouteGuard: React.FC = () => {
 
     // Legal pages and account deletion stay reachable mid-onboarding: someone
     // who signed up and changed their mind must be able to leave.
-    const exempt = ["/onboarding", "/delete-account", "/privacy-policy", "/terms"];
+    const exempt = ["/onboarding", "/delete-account", "/privacy-policy", "/terms", "/child-safety"];
     if (needsOnboarding && !exempt.includes(location.pathname)) {
       navigate("/onboarding", { replace: true });
       return;
