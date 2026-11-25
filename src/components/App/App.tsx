@@ -51,6 +51,7 @@ import {
 } from "../context/TreeFullscreenContext";
 import { ProfilePage } from "../ProfilePage/ProfilePage";
 import { PrivacyPolicyPage } from "../PrivacyPolicyPage/PrivacyPolicyPage";
+import { DeleteAccountPage } from "../DeleteAccount/DeleteAccountPage";
 import { TermsPage } from "../TermsPage/TermsPage";
 import { LocationsPage } from "../LocationsPage/LocationsPage";
 import { PendingRequestsPage } from "../PendingRequestsPage";
@@ -381,6 +382,7 @@ function AppContent() {
               <Route path="/profile/person/:personId" element={<ProfilePage />} />
               <Route path="/requests" element={<PendingRequestsPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+              <Route path="/delete-account" element={<DeleteAccountPage />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/locations" element={<LocationsPage />} />
             </Routes>

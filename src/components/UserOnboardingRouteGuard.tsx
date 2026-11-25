@@ -85,7 +85,10 @@ export const UserOnboardingRouteGuard: React.FC = () => {
     // A user who has completed OR explicitly skipped it may roam freely.
     const needsOnboarding = needsBasicDetails || onboarding.status === "in_progress";
 
-    if (needsOnboarding && location.pathname !== "/onboarding") {
+    // Legal pages and account deletion stay reachable mid-onboarding: someone
+    // who signed up and changed their mind must be able to leave.
+    const exempt = ["/onboarding", "/delete-account", "/privacy-policy", "/terms"];
+    if (needsOnboarding && !exempt.includes(location.pathname)) {
       navigate("/onboarding", { replace: true });
       return;
     }

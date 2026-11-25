@@ -30,6 +30,7 @@ import {
 import { businessCategoryIcon } from "../Business/businessCategoryIcon";
 import { BusinessFormDialog } from "../Business/BusinessFormDialog";
 import { useAuth } from "../hooks/useAuth";
+import { ReportContentButton } from "../ReportContent/ReportContentButton";
 import { RichText } from "../common/RichText";
 import { hasRichTextContent, richTextToPlain } from "../common/richText";
 import { brand } from "../../theme/brand";
@@ -437,6 +438,9 @@ export const BusinessProfilePage: React.FC = () => {
                     </Stack>
                   </Box>
 
+                  {!canEdit && businessId && (
+                    <ReportContentButton target={`business:${businessId}`} label="business" variant="text" />
+                  )}
                   {canEdit && (
                     <Button
                       variant="contained"

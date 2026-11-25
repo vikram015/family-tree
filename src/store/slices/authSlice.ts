@@ -127,6 +127,31 @@ export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValu
 });
 
 /**
+ * Permanently delete the signed-in account, then sign out locally. No API call
+ * may follow the DELETE: the Firebase ID token stays valid for up to an hour,
+ * and the server would treat it as a brand-new sign-up.
+ */
+export const deleteAccount = createAsyncThunk("auth/deleteAccount", async (_, { rejectWithValue }) => {
+  try {
+    await backendApi.delete<{ success: boolean }>("/api/auth/me");
+  } catch (error: any) {
+    return rejectWithValue(error?.message || "Failed to delete account");
+  }
+  try {
+    await pushNotifications.unregister({ skipServer: true });
+  } catch {
+    // Best-effort.
+  }
+  try {
+    await signOut(firebaseAuth);
+  } catch {
+    // The Firebase user is already deleted server-side.
+  }
+  writeSessionHint(false);
+  return null;
+});
+
+/**
  * Re-read the signed-in user's profile — after something on the server changed
  * it, such as linking or unlinking their account to a person.
  */
@@ -221,6 +246,11 @@ const authSlice = createSlice({
         state.error = action.payload as string;
       })
       .addCase(logout.fulfilled, (state) => {
+        state.currentUser = null;
+        state.userProfile = null;
+        state.error = null;
+      })
+      .addCase(deleteAccount.fulfilled, (state) => {
         state.currentUser = null;
         state.userProfile = null;
         state.error = null;

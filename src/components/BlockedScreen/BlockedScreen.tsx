@@ -3,6 +3,7 @@ import { Box, Button, Link, Paper, Typography } from "@mui/material";
 import BlockIcon from "@mui/icons-material/Block";
 import { useAuth } from "../hooks/useAuth";
 import { brand } from "../../theme/brand";
+import { DeleteAccountButton } from "../DeleteAccount/DeleteAccountButton";
 
 interface BlockedScreenProps {
   reason?: string | null;
@@ -44,6 +45,9 @@ export const BlockedScreen: React.FC<BlockedScreenProps> = ({ reason }) => {
         <Button variant="contained" color="primary" onClick={() => void logout()}>
           Sign out
         </Button>
+        <Box sx={{ mt: 2 }}>
+          <DeleteAccountButton variant="text" size="small" />
+        </Box>
       </Paper>
     </Box>
   );

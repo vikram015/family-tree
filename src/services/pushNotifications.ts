@@ -180,11 +180,14 @@ export const pushNotifications = {
    * Drops this device's token. Called on sign-out so the next person to use
    * the browser doesn't receive the previous user's notifications.
    */
-  async unregister(): Promise<void> {
+  async unregister(options: { skipServer?: boolean } = {}): Promise<void> {
     const token = getStoredToken();
     storeToken(null);
 
-    if (token) {
+    // skipServer: after account deletion the server has already dropped the
+    // tokens, and any API call with the still-valid ID token would recreate
+    // an account for it.
+    if (token && !options.skipServer) {
       try {
         await ApiService.unregisterDeviceToken(token);
       } catch {

@@ -45,6 +45,7 @@ import PhoneIcon from "@mui/icons-material/Phone";
 import VerifiedUserIcon from "@mui/icons-material/VerifiedUser";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import { NotificationSettingsCard } from "./NotificationSettingsCard";
+import { DeleteAccountButton } from "../DeleteAccount/DeleteAccountButton";
 import { useNotificationPrompt } from "../context/NotificationPromptContext";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -1427,6 +1428,20 @@ export const ProfilePage: React.FC = () => {
           <Grid size={{ xs: 12 }} sx={{ mt: { xs: 1, md: 2 } }}>
             <SectionHeading title="Notifications" subtitle="Requests to join your branch, birthdays and wishes from family." />
             <NotificationSettingsCard />
+          </Grid>
+        )}
+
+        {isOwnAccountView && currentUser && (
+          <Grid size={{ xs: 12 }} sx={{ mt: { xs: 1, md: 2 } }}>
+            <SectionHeading title="Account" subtitle="Permanently delete your Kinvia account and the personal data tied to it." />
+            <Paper elevation={2} sx={{ p: 3 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Family trees stay for your relatives; your sign-in, contact details,
+                career profile, photos and wishes are removed.{" "}
+                <Link component={RouterLink} to="/delete-account">What exactly is deleted</Link>
+              </Typography>
+              <DeleteAccountButton />
+            </Paper>
           </Grid>
         )}
 

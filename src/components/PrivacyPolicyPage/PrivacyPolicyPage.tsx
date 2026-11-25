@@ -58,7 +58,7 @@ const SECTIONS: LegalSection[] = [
   {
     heading: "8. How long we keep it",
     paragraphs: [
-      "Account data is kept while your account exists. If you delete your account we remove your account record and your login history.",
+      "Account data is kept while your account exists. You can delete your account at any time from your Profile page, or at kinvia.in/delete-account. Deletion is immediate: we remove your sign-in, your phone number, name and email, your login history, notification devices and settings, your tree access, your career profile and business listings, wishes you wrote, and photos you uploaded. We keep an anonymous placeholder with no personal details so that records of who edited an entry stay consistent.",
       "Family-tree records may remain after your account is deleted, because a tree is shared work and removing one contributor's entries would break the family structure for everyone else. If you want specific entries removed rather than just your account, tell us and we will deal with them individually.",
     ],
   },
@@ -108,7 +108,7 @@ export const PrivacyPolicyPage: React.FC = () => (
 
     <LegalDocument
       title="Privacy Policy"
-      lastUpdated="29 August 2026"
+      lastUpdated="25 November 2026"
       intro="This policy explains what Kinvia collects, who can see it, and what you can ask us to do about it. It covers your own account details and — just as importantly — the details you record about your relatives."
       sections={SECTIONS}
       siblingLabel="Terms of Use"

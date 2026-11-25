@@ -22,6 +22,7 @@ import {
 import { brand } from "../../theme/brand";
 import { avatarTint, initialsOf } from "../HomePage/homeTheme";
 import { cardSx, timeAgo, toneFor } from "./celebrationTheme";
+import { ReportContentButton } from "../ReportContent/ReportContentButton";
 
 /**
  * The guestbook: messages, the replies under them, and reactions on both.
@@ -356,6 +357,9 @@ const WishBody: React.FC<{
             </IconButton>
           )}
 
+          {!wish.canEdit && !wish.canDelete && (
+            <ReportContentButton target={`wish:${wish.id}`} label="message" />
+          )}
           {mayDelete && (
             <Tooltip
               title={

@@ -9,6 +9,7 @@ import {
   selectIsSuperAdmin,
   selectIsAdmin,
   logout as logoutAction,
+  deleteAccount as deleteAccountAction,
   updateUserProfile as updateUserProfileAction,
   refreshUserProfile as refreshUserProfileAction,
 } from "../../store/slices/authSlice";
@@ -25,6 +26,7 @@ export function useAuth() {
   const isAdminValue = useAppSelector(selectIsAdmin);
 
   const logout = useCallback(() => dispatch(logoutAction()).unwrap(), [dispatch]);
+  const deleteAccount = useCallback(() => dispatch(deleteAccountAction()).unwrap(), [dispatch]);
 
   /** Re-read the profile after the server changed it (e.g. linked to a person). */
   const refreshUserProfile = useCallback(
@@ -126,6 +128,7 @@ export function useAuth() {
       initialized,
       hadSession,
       logout,
+      deleteAccount,
       hasPermission,
       isSuperAdmin,
       isAdmin,
@@ -143,6 +146,7 @@ export function useAuth() {
       initialized,
       hadSession,
       logout,
+      deleteAccount,
       hasPermission,
       isSuperAdmin,
       isAdmin,
